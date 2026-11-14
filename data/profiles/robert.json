@@ -1,0 +1,24 @@
+{
+  "name": "Robert",
+  "age": 58,
+  "horizon_years": 4,
+  "capacity_for_loss": "low",
+  "risk_tolerance": "low",
+  "behavioral_scores": {
+    "loss_aversion": 8,
+    "overconfidence": 8,
+    "herding": 2
+  },
+  "constraints": {
+    "max_crypto": 0.0,
+    "max_single_asset": 0.15,
+    "max_equity": 0.35,
+    "min_cash": 0.18,
+    "esg_required": false
+  },
+  "goals": [
+    "retirement_income",
+    "liquidity",
+    "capital_preservation"
+  ]
+}

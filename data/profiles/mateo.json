@@ -1,0 +1,24 @@
+{
+  "name": "Matéo",
+  "age": 38,
+  "horizon_years": 10,
+  "capacity_for_loss": "medium",
+  "risk_tolerance": "balanced",
+  "behavioral_scores": {
+    "loss_aversion": 6,
+    "overconfidence": 4,
+    "herding": 4
+  },
+  "constraints": {
+    "max_crypto": 0.0,
+    "max_single_asset": 0.2,
+    "max_equity": 0.65,
+    "min_cash": 0.08,
+    "esg_required": true,
+    "exclude_carbon_intensity": "high"
+  },
+  "goals": [
+    "education",
+    "capital_preservation"
+  ]
+}

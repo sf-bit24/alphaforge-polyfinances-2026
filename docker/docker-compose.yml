@@ -1,0 +1,7 @@
+services:
+  alphaforge:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports: ["8501:8501"]
+    env_file: ../.env

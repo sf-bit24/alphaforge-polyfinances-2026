@@ -17,7 +17,8 @@ def emit(L, crypto_tilt=True):
          "conc.etf_equity_each": (None, round(max(0.10, 0.6 * e1), 4)), "conc.etf_bond_each": (None, round(c5(0.65 * (1 - e0)), 4)),
          "conc.single_each": (None, ws), "conc.single_total": (None, wst), "exp.tech": (None, tech),
          "risk.cvar_m": (None, round(p["cvar_m"] - wc * S["crypto"]["cvar_m_proxy"], 4)), "risk.cvar_12m": (None, p["cvar_12m"]),
-         "risk.mdd": (None, p["mdd"]), "risk.vol": (None, p["vol"]), "risk.cdar_m": (None, p["cvar_m"])}
+         "risk.mdd": (None, p["mdd"]), "risk.vol": (None, p["vol"]), "risk.cdar_m": (None, p["cvar_m"]),
+         "risk.stress_2022": (None, p["s2022"])}
     out = []
     for t in Y["limits_template"]:
         if t["rule_id"] == "sat.sandbox": continue

@@ -243,8 +243,10 @@ limits_template:
   - {rule_id: risk.mdd,            kind: risk, selector: {measure: MDD},     max: "{mdd}", blocking: true, derived_from: "level", source: "#levels.<L>.mdd"}
   - {rule_id: risk.vol,            kind: risk, selector: {measure: VOL},     max: "{vol}", blocking: false, derived_from: "level", source: "#levels.<L>.vol"}
   - {rule_id: risk.cdar_m,         kind: risk, selector: {measure: CDAR},    max: "{cvar_m}", blocking: true, derived_from: "profile.biases[aversion_perte] | composure<40", source: "#biases.aversion_perte"}  # conditionnelle
-judge_extra_checks:   # hors Limit tant que RiskMeasure n'a pas STRESS_2022 (extension de contrat demandee)
-  - {check_id: stress.y2022, measure: "rendement civil 2022 en CAD, tickers REELS (tous existent en 2022)", max: "{s2022}", blocking: true, source: "#levels.<L>.s2022"}
+  - {rule_id: risk.stress_2022,    kind: risk, selector: {measure: STRESS_2022}, max: "{s2022}", blocking: true, derived_from: "level", source: "#levels.<L>.s2022"}  # Judge seulement : rendement civil 2022 en CAD, tickers REELS ; non vérifiable = refus prudent
+# Actifs sans proxy long : exclus de la série raccordée, borne + sum_j w_j * delta_j sur CVAR12M et MDD (PolicySpec.loss_bounds).
+loss_bounds: {BTC-USD: 0.90, ETH-USD: 0.90}
+loss_bounds_source: "planification : pires baisses observées BTC 0.744, ETH 0.898 (research/calibration/out/tails_monthly.csv) arrondies à 0.90"
 
 # Exemple developpe (N3 plein, l_star = 0.349, sans crypto, pas de sandbox) — valeurs que l'emetteur doit produire :
 example_N3:
@@ -262,4 +264,4 @@ example_N3:
   risk.cvar_12m: 0.140
   risk.mdd: 0.310
   risk.vol: 0.095
-  stress.y2022: 0.145
+  risk.stress_2022: 0.145

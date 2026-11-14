@@ -1,1 +1,0 @@
-"""AlphaForge decision brain."""

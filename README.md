@@ -6,6 +6,14 @@ Aide à la décision d'investissement agentique et explicable, construite pour l
 
 La mémoire du produit (besoin, personas, décisions, architecture) est le Brain de l'équipe : [`sf-bit24/brain`](https://github.com/sf-bit24/brain). Le contrat entre les composants est dans [`app/CONTRACTS.md`](app/CONTRACTS.md).
 
+## Démo vidéo
+
+https://github.com/user-attachments/assets/b2629c28-754f-4717-b255-53ac79fe743f
+
+*2 min 19 s, en français, sous-titres incrustés.* Robert, 59 ans (FICTION), demande 50 000 $ dans l'action TSLA. On suit sa demande de bout en bout : son profil, l'optimisation sous les limites de ce profil, quatre lentilles critiques sur Amazon Bedrock, le Judge et ses 28 contrôles, puis le refus encadré, expliqué en quatre questions. Amira, 26 ans, sert de contrepoint. Enfin, Step Functions rejoue cinq ans de marché, mois par mois. Les chiffres du portefeuille et du rejeu viennent d'exécutions AWS du 2026-11-15. Simulation éducative : aucune transaction, aucun conseil.
+
+<sub>Crédits du film : voix de synthèse Microsoft (fr-CA-SylvieNeural, via edge-tts) ; batterie « MuldjordKit » de Lars Muldjord (drumgizmo.org), version FreePats, sous licence [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) ; échantillons CC0 : Karoryfer Samples, Versilian Community Sample Library (Versilian Studios) ; polices Inter et JetBrains Mono (SIL OFL 1.1) ; icônes Lucide (ISC) ; mascotte « Braise » originale.</sub>
+
 ## Architecture
 
 ```mermaid

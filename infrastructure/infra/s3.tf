@@ -180,7 +180,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
 # Base generale de depart (methodologie, notions, societes), versionnee dans app/knowledge/general
 # et copiee dans infra/build/knowledge/ par le job package_agents. Les
 # documents ecrits par A6 vivent sous d'autres prefixes (actualites/,
-# donnees/) et ne sont pas geres par Terraform.
+# donnees/...) et ne sont pas geres par Terraform, sauf societes/ : A6 y
+# ecrit les fondamentaux EDGAR a cote des seeds (ATD, CSU), qu'un refus
+# explicite lui interdit d'ecraser (knowledge_seed_supervisor_keys,
+# agentcore.tf).
 # Les fichiers compagnons <document>.md.metadata.json (metadonnees
 # filtrables de la Knowledge Base, app/CONTRACTS.md section 5.1) suivent
 # leur document s'ils sont versionnes ; les cles des .md ne changent pas.
@@ -189,6 +192,10 @@ locals {
     fileset("${path.module}/build/knowledge", "**/*.md"),
     fileset("${path.module}/build/knowledge", "**/*.md.metadata.json"),
   )
+  knowledge_seed_supervisor_keys = sort(flatten([
+    for f in fileset("${path.module}/build/knowledge", "societes/*.md") :
+    ["general/${f}", "general/${f}.metadata.json"]
+  ]))
 }
 
 resource "aws_s3_object" "knowledge_seed" {

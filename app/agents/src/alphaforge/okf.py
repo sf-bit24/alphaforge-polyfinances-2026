@@ -299,6 +299,11 @@ def _doc_published_epoch(doc_type: str, data: dict[str, Any]) -> int | None:
         ]
         known = [epoch for epoch in epochs if epoch is not None]
         return max(known) if known else None
+    if doc_type == "Company Fundamentals":
+        # Même règle : la plus récente des publications de ses périodes et de ses bilans.
+        entries = [e for name in ("periods", "balance_sheets") for e in data.get(name) or [] if isinstance(e, dict)]
+        known = [epoch for epoch in (published_epoch(e.get("published_at")) for e in entries) if epoch is not None]
+        return max(known) if known else None
     return published_epoch(data.get("published_at"))
 
 

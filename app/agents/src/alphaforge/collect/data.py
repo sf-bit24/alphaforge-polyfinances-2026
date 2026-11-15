@@ -12,6 +12,7 @@ est une borne supérieure sûre (``data.published_at_basis = "retrieved_at_upper
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
@@ -21,11 +22,11 @@ from typing import Any
 
 from strands import tool
 
-from .. import clock
+from .. import clock, market
 from ..agentkit import AgentSpec, ModelFactory, run_agent, tool_result
 from ..store import Store
 from ..trace import Trace
-from . import fetchers, staging
+from . import edgar, fetchers, staging
 
 UNITS_FR = {"percent": "%", "CAD per USD": "CAD pour 1 USD", "index": "points d'indice"}
 PROVIDER_NAMES = {
@@ -352,6 +353,44 @@ def quote_item(quote: fetchers.Quote, note: str, run_id: str) -> dict[str, Any] 
     )
 
 
+EDGAR_KINDS = ("equity",)  # seules les actions ont des fondamentaux (pas les FNB, la crypto ni l'or)
+EDGAR_BUDGET_SECONDS = 120.0
+
+
+def stage_edgar_fundamentals(run: DataRun, trace: Trace, *, budget_seconds: float) -> dict[str, Any] | None:
+    """Étape déterministe, avant l'agent : fondamentaux EDGAR des actions du run (``collect.edgar``).
+
+    Sans ``ALPHAFORGE_CONTACT_EMAIL``, la SEC répond 403 : l'étape est sautée, avec un avertissement."""
+    if not (os.environ.get("ALPHAFORGE_CONTACT_EMAIL") or "").strip():
+        run.warnings.append("fondamentaux EDGAR non lus : ALPHAFORGE_CONTACT_EMAIL absent (la SEC répondrait 403)")
+        return None
+    universe = market.universe()
+    tickers = [t for t in run.tickers if t in universe and universe[t].asset_class in EDGAR_KINDS]
+    if not tickers:
+        return None
+
+    def stage(item: dict[str, Any]) -> None:
+        key = staging.item_key(run.run_id, "data", item["id"])
+        run.store.put_json(key, item)
+        run.staged[item["id"]] = key
+
+    report = edgar.stage_fundamentals(
+        run_id=run.run_id,
+        tickers={t: universe[t].market for t in tickers},
+        stage=stage,
+        deadline=min(run.deadline, time.monotonic() + budget_seconds),
+    )
+    run.warnings += [f"EDGAR : {e}" for e in report["errors"][:10]]
+    trace.add(
+        "tool",
+        "A5",
+        "Fondamentaux SEC EDGAR",
+        f"{len(report['staged'])} société(s) mises en attente, {len(report['absent'])} absente(s) d'EDGAR",
+        outputs={"staged": report["staged"], "absent": report["absent"], "errors": len(report["errors"])},
+    )
+    return report
+
+
 def collect(  # noqa: PLR0913 - même signature que press.collect : le service les appelle avec les mêmes arguments
     *,
     run_id: str,
@@ -364,6 +403,7 @@ def collect(  # noqa: PLR0913 - même signature que press.collect : le service l
     budget_seconds: float = 240,
 ) -> dict[str, Any]:
     run = DataRun(run_id=run_id, since=since, tickers=tickers, store=store, deadline=time.monotonic() + budget_seconds)
+    stage_edgar_fundamentals(run, trace, budget_seconds=min(EDGAR_BUDGET_SECONDS, budget_seconds / 2))
     spec = AgentSpec(
         actor="A5",
         name="DataSpecialist",

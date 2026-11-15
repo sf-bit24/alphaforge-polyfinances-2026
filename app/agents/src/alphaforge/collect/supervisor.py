@@ -13,6 +13,9 @@ Contrôles du code (toujours appliqués, avec leur raison) :
 Puis l'agent relit les éléments retenus comme un éditeur (hors sujet, promotionnel, même événement en double) et
 peut en rejeter, avec une raison. Les marqueurs absents ou en erreur de A4 ou A5 n'empêchent pas la curation.
 A6 ne lance pas l'ingestion de la Knowledge Base : Step Functions s'en charge après le marqueur.
+Les fondamentaux EDGAR (type ``fundamentals``, construits par le code d'A5) ne passent pas par la revue éditoriale :
+``collect.fundamentals`` les relit avec le lecteur du volet finance et ne les écrit sous ``general/societes/`` que
+s'ils changent, sans jamais écraser un seed.
 Chaque document qu'A6 écrit (actualité, donnée, et ceux de la recherche : fait, signal, dépôt, synthèse) l'est avec
 son fichier compagnon ``<clé>.metadata.json`` (type, ticker, kind, published_epoch : filtres de la Knowledge Base,
 CONTRACTS.md 5.1), par ``general.write_document``.
@@ -36,7 +39,7 @@ from ..errors import AppError
 from ..research import checks as research_checks
 from ..store import Store
 from ..trace import Trace
-from . import general, staging
+from . import edgar, fundamentals, general, staging
 
 MAX_ITEMS = 200
 NEWS_STALE_DAYS = 90
@@ -104,7 +107,7 @@ class _ItemRejectedError(Exception):
 def _require_identified_source(item: Any) -> None:
     if not isinstance(item, dict) or not item.get("id") or not item.get("title"):
         raise _ItemRejectedError("élément mal formé (id ou titre manquant)")
-    if item.get("kind") not in staging.ITEM_KINDS:
+    if item.get("kind") not in staging.ITEM_KINDS + staging.CODE_KINDS:
         raise _ItemRejectedError("type d'élément inconnu")
     url = item.get("url")
     if not item.get("source") or not isinstance(url, str) or not url.startswith("https://"):
@@ -137,6 +140,18 @@ def _data_placement(item: dict[str, Any], published: datetime, existing: dict[st
     return target, [target]
 
 
+def _fundamentals_placement(item: dict[str, Any], published: datetime) -> tuple[str, list[str]]:
+    """Document cible des fondamentaux EDGAR d'une société (``general/societes/<ticker>.md``)."""
+    observed = clock.parse_datetime(item.get("observed_at"))
+    if observed is None or observed > published:
+        raise _ItemRejectedError("date d'observation manquante ou postérieure à la publication")
+    tickers = item.get("tickers") or []
+    if len(tickers) != 1 or not isinstance(tickers[0], str):
+        raise _ItemRejectedError("fondamentaux : un seul titre attendu")
+    target = edgar.target_key(tickers[0])
+    return target, [target]
+
+
 def _news_placement(item: dict[str, Any], existing: dict[str, set[str]]) -> tuple[str, list[str]]:
     """Document cible d'une actualité, et ses clés de doublon (adresse canonique et titre)."""
     target, url_hash, title = _news_target(item)
@@ -156,6 +171,8 @@ def _checked_candidate(key: str, item: Any, existing: dict[str, set[str]], first
     published = _publication_date(item)
     if item["kind"] in DATA_KINDS:
         target, dedupe_keys = _data_placement(item, published, existing)
+    elif item["kind"] in staging.CODE_KINDS:
+        target, dedupe_keys = _fundamentals_placement(item, published)
     else:
         target, dedupe_keys = _news_placement(item, existing)
     duplicate_of = next((first_keys[k] for k in dedupe_keys if k in first_keys), None)
@@ -669,6 +686,12 @@ def _without_orphan_briefs(
     return candidates
 
 
+def _split_code_built(candidates: list[Candidate]) -> tuple[list[Candidate], list[Candidate]]:
+    """(à relire par l'éditeur, construits par le code) : les fondamentaux EDGAR ne passent pas par la revue."""
+    reviewed = [c for c in candidates if c.item["kind"] not in staging.CODE_KINDS]
+    return reviewed, [c for c in candidates if c.item["kind"] in staging.CODE_KINDS]
+
+
 def _document_for(candidate: Candidate, now: str, by_id: dict[str, Candidate]) -> okf.OkfDoc:
     kind = candidate.item["kind"]
     if kind == "news":
@@ -703,7 +726,7 @@ def curate(  # noqa: PLR0913 - signature gardée : le service de collecte et les
     started = time.monotonic()
     warnings = _marker_warnings(store, run_id)
     intake = _checked_intake(store, run_id, trace)
-    candidates, rejected = intake.candidates, intake.rejected
+    candidates, code_built, rejected = *_split_code_built(intake.candidates), intake.rejected
     if candidates:
         review = _run_editorial_review(
             candidates, warnings, model_factory=model_factory, model_id=model_id, trace=trace
@@ -724,16 +747,22 @@ def curate(  # noqa: PLR0913 - signature gardée : le service de collecte et les
             continue
         general.write_document(store, candidate.target, doc)
         written.append(candidate.target)
+    unchanged = fundamentals.write_all(store, code_built, now, written, rejected, deadline=started + budget_seconds)
     trace.add(
         "storage",
         "store",
         "Documents écrits dans la base générale",
         None,
-        outputs={"written": len(written), "rejected": len(rejected)},
+        outputs={"written": len(written), "rejected": len(rejected), "unchanged": len(unchanged)},
     )
     if written:
         write_general_index(store, now)
-    result: dict[str, Any] = {"written": written, "rejected": rejected, "warnings": warnings}
+    result: dict[str, Any] = {
+        "written": written,
+        "rejected": rejected,
+        "warnings": warnings,
+        **({"unchanged": unchanged} if unchanged else {}),
+    }
     if intake.has_research:
         result.update(_quarantine_report(store, run_id, intake.quarantined, now))
     return result

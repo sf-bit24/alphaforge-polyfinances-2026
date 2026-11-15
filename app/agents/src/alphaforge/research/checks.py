@@ -469,7 +469,7 @@ def _research_data(candidate: ResearchCandidate, kind: str, data: dict[str, Any]
         "item_id": item["id"],
         **{name: value for name, value in data.items() if name not in ("run_id",)},
         "url": item["url"],
-        "tickers": list(item.get("tickers") or []),
+        "tickers": list(item.get("tickers") or []),  # lu par okf_facts.parse_filing (sujet « filings »)
         "published_at": item.get("published_at"),
         "observed_at": item.get("observed_at"),
         "retrieved_at": item.get("retrieved_at"),

@@ -12,6 +12,8 @@ RUN_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 ITEM_KINDS = ("news", "series", "quote")
 # Types ajoutés par la recherche par experts (CONTRACTS.md, section 11).
 RESEARCH_KINDS = ("fact", "signal", "filing", "brief")
+# Types produits par du code déterministe seulement (jamais par un agent) : fondamentaux EDGAR (collect.edgar).
+CODE_KINDS = ("fundamentals",)
 _TRACKING = re.compile(r"^(utm_|oc$|ncid$|guccounter$|soc_|cmpid$|guce_)")
 
 
@@ -73,7 +75,7 @@ def new_item(  # noqa: PLR0913 - un champ nommé par clé de l'élément collect
     summary: str,
     data: dict[str, Any],
 ) -> dict[str, Any]:
-    if kind not in ITEM_KINDS + RESEARCH_KINDS:
+    if kind not in ITEM_KINDS + RESEARCH_KINDS + CODE_KINDS:
         raise ValueError(kind)
     return {
         "id": item_id,

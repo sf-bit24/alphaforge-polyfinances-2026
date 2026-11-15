@@ -7,6 +7,8 @@ Règles :
 3. Garde anti-cliquet : on n'applique pas un amendement qui rend le mandat infaisable ; on n'abaisse
    pas une limite de risque sous ``floor_ratio`` fois sa valeur d'origine (défaut 0,6), pour ne pas
    pousser vers le quasi-encaisse à force de resserrements successifs.
+4. Garde des actualités : un amendement autre que ``flag_only`` qui cite une actualité (``okf.news.*``) est
+   rejeté. Une nouvelle peut être signalée, jamais changer le mandat (rumeur ≠ fait).
 """
 
 from __future__ import annotations
@@ -14,11 +16,13 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from alphaforge.finance.contracts.policy import Limit, PolicySpec, Selector
+from alphaforge.finance.strategy.okf_facts import NEWS_FACT_PREFIX
 from alphaforge.finance.strategy.rules import clamp_strategy_floors
 
 from .schemas import PRIORITY, AppliedAmendment, LensReport
 
 FLOOR_RATIO = 0.6
+NEWS_REJECT_FR = "une actualité ne justifie jamais un changement du mandat (rumeur ≠ fait)"
 _MEASURE_ORDER = {"VARIANCE": 0, "CVAR": 1, "CDAR": 2}  # CDaR = plus prudente (drawdown)
 
 
@@ -45,6 +49,9 @@ def apply_amendments(
         log.append(AppliedAmendment(lens=lens, amendment=a, status="rejete", why_fr=why))
 
     for lens, a in items:
+        if a.kind != "flag_only" and any(f.startswith(NEWS_FACT_PREFIX) for f in a.evidence_fact_ids):
+            reject(lens, a, NEWS_REJECT_FR)
+            continue
         missing = [f for f in a.evidence_fact_ids if f not in known_fact_ids]
         if missing:
             reject(lens, a, f"preuve inconnue : {missing}")

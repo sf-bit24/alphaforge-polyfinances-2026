@@ -9,7 +9,7 @@ from alphaforge.profile.questionnaire import (
     KINDS,
     TYPE_TO_KIND,
     YAML_PATH,
-    InvalidValue,
+    InvalidValueError,
     Questionnaire,
     default_questionnaire,
     evaluate,
@@ -229,7 +229,7 @@ def test_tranche_numbers_are_the_prudent_bound(q, question_id, option, number):
     question = q.question(question_id)
     assert q.validate_answer(question, option) == option
     assert question.option_number(option) == number
-    with pytest.raises(InvalidValue):
+    with pytest.raises(InvalidValueError):
         q.validate_answer(question, number)  # le nombre n'est pas une réponse : seul l'identifiant l'est
 
 
@@ -312,7 +312,7 @@ def test_validation_accepts_typed_values(kind, value, kwargs, expected):
     ],
 )
 def test_validation_rejects_wrong_values(kind, value, kwargs, reason):
-    with pytest.raises(InvalidValue) as exc:
+    with pytest.raises(InvalidValueError) as exc:
         validate_value(kind, value, **kwargs)
     assert exc.value.reason == reason
 

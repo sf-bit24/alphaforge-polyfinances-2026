@@ -64,8 +64,12 @@ export const portfolioFr = {
     refus_encadre: "La demande ou le portefeuille tel quel dépasse une limite bloquante du profil : le Judge le refuse et propose une version encadrée.",
     position_attente: "Le profil ne permet pas encore une proposition : une position d’attente prudente s’applique.",
     incomplet: "Des informations manquent : aucune allocation n’est calculée tant que le profil n’est pas complété.",
-    protection: "Des signaux de vulnérabilité appellent une protection : aucune allocation n’est proposée.",
+    // Every cause of a protection (dollar rule: acceptable loss, horizon, withdrawals; profile status): the
+    // statement « Pourquoi ce choix ? » below names it.
+    protection: "Aucune allocation ne respecte les limites de votre profil : voyez ci-dessous pourquoi et ce qui changerait la réponse.",
   } satisfies Record<DecisionKind, string>,
+  /** Header of a protection whose only cause is the vulnerability signals of the profile (`protection.profile_status`). */
+  protectionSignals: "Des signaux de vulnérabilité appellent une protection : aucune allocation n’est proposée.",
   labels: { FAIT: "FAIT", HYPOTHESE: "HYPOTHÈSE", FICTION: "FICTION" } satisfies Record<FactLabel, string>,
   labelHelp: {
     FAIT: "Calculé par le code sur des données sourcées.",
@@ -298,8 +302,9 @@ export const portfolioEn: PortfolioStrings = {
     refus_encadre: "The request or the portfolio as is exceeds a blocking limit of the profile: the Judge refuses it and proposes a framed version.",
     position_attente: "The profile does not allow a proposal yet: a cautious holding position applies.",
     incomplet: "Information is missing: no allocation is computed until the profile is complete.",
-    protection: "Vulnerability signals call for protection: no allocation is proposed.",
+    protection: "No allocation fits the limits of your profile: see below why, and what would change the answer.",
   },
+  protectionSignals: "Vulnerability signals call for protection: no allocation is proposed.",
   labels: { FAIT: "FACT", HYPOTHESE: "ASSUMPTION", FICTION: "FICTION" },
   labelHelp: {
     FAIT: "Computed by code on sourced data.",

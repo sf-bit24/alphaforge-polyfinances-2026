@@ -20,17 +20,18 @@
 #           "start"?: "AAAA-MM", "end"?: "AAAA-MM", "months"?: ["AAAA-MM"],
 #           "run_id"?: string}. run_id vaut par defaut le nom de l'execution.
 #
-# Le runtime portfolio n'existe pas encore (issue #29) : son ARN vient de
-# var.evolution_portfolio_runtime_arn, et rien n'est deploye tant que
-# evolution_enabled = false ou que l'ARN est vide.
-#
-# Coordination (fichiers geles par une autre session) :
-#   s3.tf, local.s3_kms_user_role_arns : ajouter aws_iam_role.evolution[*].arn
-#   (la machine lit des marqueurs chiffres par aws_kms_key.s3).
+# L'ARN du runtime vient de var.evolution_portfolio_runtime_arn, sinon du
+# runtime portfolio de agentcore.tf (portfolio_enabled). Rien n'est deploye tant
+# que evolution_enabled = false ou que l'ARN est vide. Le role de la machine est
+# dans local.s3_kms_user_role_arns (s3.tf) : elle lit des marqueurs chiffres.
 # =============================================================================
 
 locals {
-  evolution_count = var.evolution_enabled && var.evolution_portfolio_runtime_arn != "" ? 1 : 0
+  # ARN du runtime : variable explicite, sinon le runtime portfolio de agentcore.tf (s'il est deploye)
+  evolution_runtime_arn = var.evolution_portfolio_runtime_arn != "" ? var.evolution_portfolio_runtime_arn : try(
+  aws_bedrockagentcore_agent_runtime.this["portfolio"].agent_runtime_arn, "")
+  # count ne depend que de variables (pas de l'ARN, attribut d'une ressource) : sinon cycle via la cle KMS du bucket
+  evolution_count = var.evolution_enabled && (var.evolution_portfolio_runtime_arn != "" || var.portfolio_enabled) ? 1 : 0
 
   evolution_name         = "${local.prefix}-evolution"
   evolution_poll_seconds = 10
@@ -56,7 +57,7 @@ locals {
       Comment  = "Le runtime portfolio accepte le tick du mois et travaille en arriere-plan."
       Resource = "arn:aws:states:::aws-sdk:bedrockagentcore:invokeAgentRuntime"
       Arguments = {
-        AgentRuntimeArn  = var.evolution_portfolio_runtime_arn
+        AgentRuntimeArn  = local.evolution_runtime_arn
         RuntimeSessionId = "{% $pad($states.input.run_id & '-evolution-' & $states.input.month, 48, '0') %}"
         ContentType      = "application/json"
         Accept           = "application/json"
@@ -194,7 +195,7 @@ locals {
           Comment  = "Le runtime portfolio accepte le rejeu de la periode et travaille en arriere-plan."
           Resource = "arn:aws:states:::aws-sdk:bedrockagentcore:invokeAgentRuntime"
           Arguments = {
-            AgentRuntimeArn  = var.evolution_portfolio_runtime_arn
+            AgentRuntimeArn  = local.evolution_runtime_arn
             RuntimeSessionId = "{% $pad($runId & '-evolution-replay', 48, '0') %}"
             ContentType      = "application/json"
             Accept           = "application/json"
@@ -322,8 +323,8 @@ data "aws_iam_policy_document" "evolution" {
     sid     = "InvokePortfolio"
     actions = ["bedrock-agentcore:InvokeAgentRuntime"]
     resources = [
-      var.evolution_portfolio_runtime_arn,
-      "${var.evolution_portfolio_runtime_arn}/*",
+      local.evolution_runtime_arn,
+      "${local.evolution_runtime_arn}/*",
     ]
   }
 

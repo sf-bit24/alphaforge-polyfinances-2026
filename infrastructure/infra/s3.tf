@@ -26,6 +26,8 @@ locals {
     # Scenarios (scenarios.tf) : job SageMaker et machine Step Functions.
     aws_iam_role.scenarios_job[*].arn,
     aws_iam_role.scenarios[*].arn,
+    # Evolution du portefeuille (evolution.tf) : la machine lit les marqueurs.
+    aws_iam_role.evolution[*].arn,
   )
 }
 

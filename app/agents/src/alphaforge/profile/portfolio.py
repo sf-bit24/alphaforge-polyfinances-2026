@@ -74,6 +74,8 @@ _EXPOSURE_GROUPS = (
     ("by_sector", "sector"),
 )
 _TOP_POSITION_COUNT = 5
+# Longueur des notes d'une position, à la lecture comme à l'écriture : une note relue est celle écrite.
+MAX_NOTES_CHARS = 300
 # Clé d'une exposition sans valeur (secteur ou marché absent). Clé brute du contrat : l'interface affiche
 # « Non classé » ou « Unclassified », et ``finance/policy/from_profile_view.py`` l'écarte des secteurs.
 UNCLASSIFIED = "Unknown"
@@ -153,7 +155,7 @@ def raw_from_dict(item: dict[str, Any]) -> RawPosition:
         currency=currency,
         account_type=normalize_account(item.get("account_type")),
         asset_class=asset_class if asset_class in ASSET_CLASSES else None,
-        notes=text("notes", 300),
+        notes=text("notes", MAX_NOTES_CHARS),
     )
 
 
@@ -183,12 +185,13 @@ def _text(key: str, locale: str, **values: str) -> str:
 
 def _add_note(position: dict[str, Any], key: str, locale: str) -> None:
     """Ajoute une note du code aux notes de la position, sauf si elle y est déjà, dans l'une ou l'autre langue :
-    ``portfolio.confirm`` relit les notes écrites par ``portfolio.submit``."""
+    ``portfolio.confirm`` relit les notes écrites par ``portfolio.submit``. Le tout est tronqué comme à la
+    relecture : une note coupée qu'on ajoute à nouveau à une note pleine la laisse inchangée."""
     current = position["notes"]
     if current and any(text in current for text in _TEXTS[key]):
         return
     extra = _text(key, locale)
-    position["notes"] = f"{current}; {extra}" if current else extra
+    position["notes"] = (f"{current}; {extra}" if current else extra)[:MAX_NOTES_CHARS]
 
 
 def _unresolved_position(position_id: str, raw: RawPosition) -> dict[str, Any]:

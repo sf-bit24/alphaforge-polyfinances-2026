@@ -47,6 +47,21 @@ def test_confirming_keeps_one_copy_of_each_code_note(confirm_locale):
     assert confirmed["positions"][0]["notes"] == NOTES["en"]
 
 
+def test_a_long_note_is_cut_at_300_characters_and_stays_the_same_at_confirmation():
+    """La relecture tronque les notes à 300 caractères : la note finale l'est aussi dès le brouillon, pour que la
+    confirmation rende la même note au lieu d'ajouter une seconde fois une note du code coupée."""
+    model_note = ("Même position décrite aussi dans le texte collé (CELI); " * 5)[:250]
+    long_fund = RawPosition(
+        raw="Fonds maison ABC 5 000", ticker="ZZQX", name="Fonds maison ABC", market_value=5000, notes=model_note
+    )
+    draft = build_view([long_fund], status="draft")
+    note = draft["positions"][0]["notes"]
+    assert len(note) == 300
+    assert note.startswith(model_note + "; devise supposée CAD (non précisée); titre non id")
+    confirmed = build_view(positions_to_raws(draft["positions"]), status="confirmed")
+    assert confirmed["positions"][0]["notes"] == note
+
+
 NOTES_INSTRUCTION = "Write every `notes` and every `unparsed` reason in the language given by `language`"
 
 

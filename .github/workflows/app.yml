@@ -15,6 +15,9 @@
 # Pas de logique shell inline : un step installe ses outils et appelle un
 # script ou une commande du projet.
 #
+# astral-sh/setup-uv ne publie pas d'etiquette majeure mobile (pas de v10) :
+# on fixe une version complete.
+#
 # Contrat d'inputs (ne pas renommer, pipeline.yml les passe) :
 #   build          "true" sur un push qui deploie
 #   deploy         "true" -> construire le zip et publier release-tfvars
@@ -51,7 +54,7 @@ jobs:
         working-directory: app/agents
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           python-version: "3.13"
           enable-cache: true
@@ -87,7 +90,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           python-version: "3.13"
           enable-cache: true

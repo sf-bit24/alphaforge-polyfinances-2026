@@ -29,7 +29,7 @@ l'autre n'est encore sur `master`.**
 
 ## Décisions humaines encore ouvertes
 
-Le détail est dans l'en-tête de `policy/risk_levels.yaml` et dans `docs/portfolio/README.md`.
+Le détail est dans l'en-tête de `policy/risk_levels.yaml` et dans `research/calibration/docs/README.md`.
 
 1. **Marge de 4 points pour l'écart quotidien sur la perte planifiée.** Elle fait passer Mateo de
    N3 à N2 et Robert de N1 à N0.

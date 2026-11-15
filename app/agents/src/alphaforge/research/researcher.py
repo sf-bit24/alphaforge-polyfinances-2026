@@ -20,13 +20,13 @@ from typing import Any
 
 from strands import tool
 
-from .. import clock
+from .. import clock, okf
 from ..agentkit import AgentSpec, ModelFactory, run_agent, tool_result
 from ..errors import AppError
 from ..store import Store
 from ..trace import Trace
 from . import documents, search
-from .items import MARKET_HOSTS
+from .items import ESG_HOSTS, MARKET_HOSTS
 from .packs import (
     HOSTS,
     RESEARCHER_BUDGET_S,
@@ -126,7 +126,10 @@ STATCAN_DATA_SCHEMA = {
 RECORD_FINDING_DESCRIPTION = (
     "Record one finding from a fetched response by locators. kind: news (fields title, link), "
     "fact or signal or quote (field value; markets also resolution_rules, bid, ask, volume), filing (fields "
-    "form, accession). The code reads every value and date."
+    "form, accession). The code reads every value and date. ESG evidence (funds-sustainability hosts only, "
+    "kind fact): esg_kind (emissions, incident, index_exclusion, sector_activity), esg_metric (snake_case; "
+    "for sector_activity one of tobacco, weapons, fossil_fuels, gambling, alcohol), esg_period (YYYY, "
+    "YYYY-MM or YYYY-MM-DD; defaults to the observation date)."
 )
 RECORD_FINDING_SCHEMA = {
     "json": {
@@ -142,6 +145,9 @@ RECORD_FINDING_SCHEMA = {
             "publication_locator": {"type": "string"},
             "unit": {"type": "string"},
             "issuers": {"type": "array", "items": {"type": "string"}},
+            "esg_kind": {"type": "string", "enum": list(okf.ESG_KINDS)},
+            "esg_metric": {"type": "string"},
+            "esg_period": {"type": "string"},
         },
         "required": ["kind", "label", "claim", "response_id", "fields"],
     }
@@ -196,6 +202,26 @@ TOOL_SUMMARIES = {
 
 class ResearchError(Exception):
     pass
+
+
+def _esg_block(args: dict[str, Any], kind: str, host: str, observation: str | None) -> dict[str, str] | None:
+    """Bloc ``data.esg`` d'un fait ESG (CONTRACTS.md, section 11.5) : liste fermée, hôtes du paquet
+    ``funds-sustainability`` seulement. Le modèle choisit la catégorie; la valeur reste lue au localisateur."""
+    if not args.get("esg_kind"):
+        return None
+    if kind != "fact":
+        raise ResearchError("esg_kind ne s'applique qu'à un constat fact")
+    if host not in ESG_HOSTS:
+        raise ResearchError(f"esg_kind exige un hôte du paquet funds-sustainability (pas {host})")
+    esg = {
+        "kind": str(args.get("esg_kind")),
+        "metric": str(args.get("esg_metric") or ""),
+        "period": str(args.get("esg_period") or (observation or "")[:10]),
+    }
+    problems = okf.esg_problems(esg)
+    if problems:
+        raise ResearchError("fait ESG refusé : " + "; ".join(problems))
+    return esg
 
 
 @dataclass
@@ -585,10 +611,13 @@ class ResearcherRun:
         )
         if kind in ("fact", "signal", "quote") and observation is None:
             raise ResearchError("une valeur exige sa date d'observation (observation_locator ou observation_date)")
+        esg = _esg_block(args, kind, archived.host, observation)
         label = str(args.get("label") or values.get("title") or kind)
         claim = _required_claim(args)
         self._ground(f"{label} {claim}", list(values.values()), _dates_pool(observation, publication))
         finding = self._base(archived, kind, label, claim, args.get("issuers") or self.brief.issuers)
+        if esg is not None:
+            finding["esg"] = esg
         link = values.get("link") or values.get("url")
         finding.update(
             values=values,
@@ -750,8 +779,14 @@ class ResearcherRun:
             publication_locator: str | None = None,
             unit: str | None = None,
             issuers: list[str] | None = None,
+            esg_kind: str | None = None,
+            esg_metric: str | None = None,
+            esg_period: str | None = None,
         ) -> str:
             args = {
+                "esg_kind": esg_kind,
+                "esg_metric": esg_metric,
+                "esg_period": esg_period,
                 "kind": kind,
                 "label": label,
                 "claim": claim,

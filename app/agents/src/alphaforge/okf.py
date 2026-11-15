@@ -44,6 +44,34 @@ KEY_ORDER = (*REQUIRED_KEYS[:8], "stale_after", "sources", "data")
 STATUSES = ("draft", "stable")
 SENSITIVITIES = ("client", "public")
 
+# Preuves ESG (CONTRACTS.md, section 11.5) : un fait de la recherche porte ``data.esg = {kind, metric, period}``.
+# Listes fermées, vérifiées par le chercheur, par A6 et par le lecteur du volet finance.
+ESG_KINDS = ("emissions", "incident", "index_exclusion", "sector_activity")
+# ``sector_activity`` relie un titre à une catégorie d'exclusion du questionnaire (preferences.exclusions).
+ESG_ACTIVITIES = ("tobacco", "weapons", "fossil_fuels", "gambling", "alcohol")
+_ESG_METRIC = re.compile(r"^[a-z0-9_]{1,40}$")
+_ESG_PERIOD = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")
+
+
+def esg_problems(esg: Any) -> list[str]:
+    """Raisons de refuser un bloc ``data.esg`` ; liste vide s'il est conforme."""
+    if not isinstance(esg, dict):
+        return ["data.esg doit être un objet {kind, metric, period}"]
+    problems = []
+    extra = sorted(set(esg) - {"kind", "metric", "period"})
+    if extra:
+        problems.append(f"champs ESG inconnus : {extra}")
+    kind, metric, period = esg.get("kind"), esg.get("metric"), esg.get("period")
+    if kind not in ESG_KINDS:
+        problems.append(f"esg.kind {kind!r} hors de la liste {ESG_KINDS}")
+    if not isinstance(metric, str) or not _ESG_METRIC.match(metric):
+        problems.append(f"esg.metric {metric!r} : minuscules, chiffres et _ (40 au plus)")
+    elif kind == "sector_activity" and metric not in ESG_ACTIVITIES:
+        problems.append(f"esg.metric {metric!r} : une activité sectorielle est l'une de {ESG_ACTIVITIES}")
+    if not isinstance(period, str) or not _ESG_PERIOD.match(period):
+        problems.append(f"esg.period {period!r} : AAAA, AAAA-MM ou AAAA-MM-JJ")
+    return problems
+
 
 class OkfError(ValueError):
     pass

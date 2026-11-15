@@ -594,13 +594,32 @@ requête, archive, localisateurs, licence, attribution, robots, `as_of`, `adjust
 `brief-<hash>.json`, de type `brief` : `data.text`, `data.citations` (identifiants d'éléments), `data.subjects`,
 `data.gaps`, `data.as_of`.
 
+**Preuves ESG.** Un fait ESG est un élément `fact` qui porte en plus `data.esg = {kind, metric, period}` :
+
+- `kind` est l'un de `emissions`, `incident`, `index_exclusion`, `sector_activity` (`okf.ESG_KINDS`), une liste
+  fermée vérifiée par le code. Le chercheur choisit la catégorie (`esg_kind` de `record_finding`) ; la valeur reste
+  lue au localisateur, comme pour tout fait.
+- `metric` : minuscules, chiffres et `_` (40 au plus). Pour `sector_activity`, c'est une catégorie d'exclusion du
+  questionnaire : `tobacco`, `weapons`, `fossil_fuels`, `gambling`, `alcohol` (`okf.ESG_ACTIVITIES`).
+- `period` : `AAAA`, `AAAA-MM` ou `AAAA-MM-JJ` ; par défaut, la date d'observation.
+- Seuls les hôtes du paquet `funds-sustainability` peuvent en produire. Le document reste rangé sous
+  `general/faits/<source>/` (section 5), avec le tag `esg`. Comme tout document de la recherche, son `data` porte
+  `tickers`.
+- Le runtime `portfolio` les lit (`OkfMarketStore`, sujet `esg`) : faits publiés au plus tard à `as_of`, statut
+  FAIT, identifiants `okf.esg.<TICKER>.<n>`, et leurs (clé, ETag) entrent dans la version des données. Avant
+  l'étape 0, un titre qu'un fait `sector_activity` relie à une catégorie exclue par l'investisseur est exclu, avec
+  le fait comme raison, sauf s'il fait l'objet de la demande précise. Dans la fusion, un amendement autre que
+  `flag_only` qui cite un fait ESG n'est appliqué que si l'investisseur a des exclusions ou `esg_required`, et un
+  `exclude_asset` doit citer un fait ESG du titre visé.
+
 ### 11.6 Contrôles d'A6
 
 En plus de ceux de la section 4, avec une raison pour chaque rejet : réponse archivée relue et chaque valeur (chaque
 observation d'une série) identique; `licence` et `attribution_text` présents; robots.txt respecté sauf exception;
 éléments en quarantaine retenus dans `staging/<run_id>/supervisor/quarantine.json` avec les hôtes proposés; nombres
 du titre et du résumé fondés; rien de publié après `as_of`; cotes avec leurs règles; synthèse dont chaque citation
-renvoie à un élément retenu et chaque nombre à un élément cité. Types OKF : `Fact`, `Market Signal`,
+renvoie à un élément retenu et chaque nombre à un élément cité; bloc `data.esg` conforme, sur un `fact`, venu d'un
+hôte du paquet `funds-sustainability`. Types OKF : `Fact`, `Market Signal`,
 `Regulatory Filing`, `Research Brief`. Le marqueur d'A6 ajoute `quarantined` et `proposed_hosts`.
 
 ### 11.7 Machine `alphaforge-sandbox-recherche`

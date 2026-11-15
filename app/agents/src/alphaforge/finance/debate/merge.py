@@ -9,6 +9,9 @@ Règles :
    pousser vers le quasi-encaisse à force de resserrements successifs.
 4. Garde des actualités : un amendement autre que ``flag_only`` qui cite une actualité (``okf.news.*``) est
    rejeté. Une nouvelle peut être signalée, jamais changer le mandat (rumeur ≠ fait).
+5. Garde ESG : un amendement autre que ``flag_only`` qui cite une preuve ESG (``okf.esg.*``) n'est appliqué que si
+   l'investisseur a des exclusions ou une préférence ESG (``esg_preference``). Un ``exclude_asset`` qui cite une
+   preuve ESG doit en citer une du titre visé.
 """
 
 from __future__ import annotations
@@ -16,13 +19,15 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from alphaforge.finance.contracts.policy import Limit, PolicySpec, Selector
-from alphaforge.finance.strategy.okf_facts import NEWS_FACT_PREFIX
+from alphaforge.finance.strategy.okf_facts import ESG_FACT_PREFIX, NEWS_FACT_PREFIX
 from alphaforge.finance.strategy.rules import clamp_strategy_floors
 
 from .schemas import PRIORITY, AppliedAmendment, LensReport
 
 FLOOR_RATIO = 0.6
 NEWS_REJECT_FR = "une actualité ne justifie jamais un changement du mandat (rumeur ≠ fait)"
+ESG_NO_PREFERENCE_FR = "une preuve ESG ne change le mandat que si l'investisseur a des exclusions ou une préférence ESG"
+ESG_OTHER_ASSET_FR = "la preuve ESG citée concerne un autre titre que celui à exclure"
 _MEASURE_ORDER = {"VARIANCE": 0, "CVAR": 1, "CDAR": 2}  # CDaR = plus prudente (drawdown)
 
 
@@ -38,6 +43,7 @@ def apply_amendments(
     original: PolicySpec | None = None,
     feasible: Callable[[PolicySpec], bool] | None = None,
     floor_ratio: float = FLOOR_RATIO,
+    esg_preference: bool = False,
 ) -> tuple[PolicySpec, list[AppliedAmendment]]:
     original = original or policy
     items = [(r.lens, a) for r in reports for a in r.amendments]
@@ -51,6 +57,17 @@ def apply_amendments(
     for lens, a in items:
         if a.kind != "flag_only" and any(f.startswith(NEWS_FACT_PREFIX) for f in a.evidence_fact_ids):
             reject(lens, a, NEWS_REJECT_FR)
+            continue
+        esg_ids = [f for f in a.evidence_fact_ids if f.startswith(ESG_FACT_PREFIX)]
+        if a.kind != "flag_only" and esg_ids and not esg_preference:
+            reject(lens, a, ESG_NO_PREFERENCE_FR)
+            continue
+        if (
+            a.kind == "exclude_asset"
+            and esg_ids
+            and not any(f.startswith(f"{ESG_FACT_PREFIX}{a.target}.") for f in esg_ids)
+        ):
+            reject(lens, a, ESG_OTHER_ASSET_FR)
             continue
         missing = [f for f in a.evidence_fact_ids if f not in known_fact_ids]
         if missing:

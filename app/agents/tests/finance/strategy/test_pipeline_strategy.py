@@ -22,8 +22,8 @@ def amira():
     return build_portfolio(P.amira(), P.AS_OF, strategy=True, style_inputs=StyleInputs(amount_cad=100_000))
 
 
-def test_strategy_off_by_default_keeps_master_behaviour():
-    off = build_portfolio(P.mateo(), P.AS_OF)
+def test_strategy_false_keeps_master_behaviour():
+    off = build_portfolio(P.mateo(), P.AS_OF, strategy=False)
     assert off.strategy is None
     assert not any(f.fact_id.startswith("strat.") for f in off.decision.facts)
 
@@ -51,6 +51,10 @@ def test_positions_cite_rank_and_floor(amira):
     pos = {p.asset_id: p for p in amira.decision.positions}
     for t in amira.strategy.shortlist:
         assert {f"strat.rank.{t}", f"strat.floor.{t}"} <= set(pos[t].rationale_fact_ids)
+
+
+def test_strategy_is_on_by_default_on_this_branch():
+    assert build_portfolio(P.mateo(), P.AS_OF).strategy is not None
 
 
 def test_deterministic_three_runs():

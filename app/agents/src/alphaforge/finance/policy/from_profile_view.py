@@ -145,3 +145,62 @@ def investor_profile_from_view(
         missing_info=missing,
         consistency_flags=[],
     )
+
+
+# --------------------------------------------------------------------------- étape 0 (style et sélection)
+CONCENTRATION_SECTOR_SHARE = 0.40  # même seuil que profile/portfolio.py (constat concentration_sector)
+
+
+def _tuple(x) -> tuple[str, ...]:
+    if not x:
+        return ()
+    vals = x if isinstance(x, list | tuple) else [x]
+    return tuple(str(v) for v in vals if v not in (None, "none"))
+
+
+def style_inputs_from_view(view: dict[str, Any], portfolio: dict[str, Any] | None = None):
+    """Variables du profil court (Brain 3993936) → ``StyleInputs`` de l'étape 0, sans changer ``InvestorProfile``.
+
+    Ne fait que lire : aucune valeur n'est inventée (une variable absente reste vide et ne déclenche rien).
+    Les codes absents de ``questionnaire.yaml`` sur master (behavior.hype_*, exclusion_strictness,
+    employment_sector, sell_threshold_pct, quiz_*) sont lus s'ils existent : à aligner avec le volet profil.
+    """
+    from alphaforge.finance.strategy.style import StyleInputs
+
+    f = _facts(view)
+    g = lambda key: f.get(key)  # noqa: E731
+    quiz = {k: str(g(f"knowledge.{k}")) for k in ("quiz_diversification", "quiz_bond_rates") if g(f"knowledge.{k}")}
+    port = portfolio or view.get("portfolio") or {}
+    exposures = (port.get("exposures") or {}) if isinstance(port, dict) else {}
+    flags = _tuple(g("context.portfolio_flags")) or _tuple(exposures.get("flags"))
+    concentrated: tuple[str, ...] = ()
+    if "concentration_sector" in flags:
+        concentrated = tuple(
+            s for s, w in sorted((exposures.get("by_sector") or {}).items()) if (w or 0) >= CONCENTRATION_SECTOR_SHARE
+        )
+    amount = g("context.amount_cad")
+    esg = g("preferences.esg_importance")
+    return StyleInputs(
+        goal=g("objective.goal"),
+        approach=g("preferences.approach"),
+        interests=_tuple(g("preferences.interests")),
+        exclusions=_tuple(g("preferences.exclusions")),
+        exclusion_strictness=g("preferences.exclusion_strictness"),
+        esg_importance=int(esg) if isinstance(esg, int | float) else None,
+        employment_sector=g("risk_capacity.employment_sector"),
+        currency_preference=g("constraints.currency_preference"),
+        account_types=_tuple(g("constraints.account_types")),
+        amount_cad=float(amount) if isinstance(amount, int | float) and amount > 0 else None,
+        portfolio_flags=flags,
+        concentrated_sectors=concentrated,
+        knowledge_level=view.get("knowledge_level") or g("knowledge.level"),
+        self_assessment=g("knowledge.self_assessment"),
+        quiz=quiz,
+        products_known=_tuple(g("knowledge.products_known")),
+        news_frequency=g("knowledge.news_frequency"),
+        hype_reaction=g("behavior.hype_reaction"),
+        hype_position_share=g("behavior.hype_position_share"),
+        drop_reaction=g("risk_tolerance.drop_reaction"),
+        past_drop_behavior=g("risk_tolerance.past_drop_behavior"),
+        sell_threshold_pct=g("risk_tolerance.sell_threshold_pct"),
+    )

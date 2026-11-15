@@ -127,7 +127,7 @@ def build_portfolio(
     guardrail_id: str | None = None,
     guardrail_version: str | None = None,
     decision_id: str | None = None,
-    strategy: bool = False,
+    strategy: bool = True,
     style_preference: str | None = None,
     style_inputs=None,
 ) -> BuildResult:

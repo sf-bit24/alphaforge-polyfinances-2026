@@ -474,6 +474,7 @@ const fr = {
     noIndex: "Pas encore d'index : A6 écrit general/index.md à la première collecte.",
     groups: {
       methodologie: "Méthodologie",
+      societes: "Sociétés",
       actualites: "Actualités",
       donnees: "Données",
       index: "Index",
@@ -1033,6 +1034,7 @@ const en: Dictionary = {
     noIndex: "No index yet: A6 writes general/index.md on the first collection.",
     groups: {
       methodologie: "Methodology",
+      societes: "Companies",
       actualites: "News",
       donnees: "Data",
       index: "Index",

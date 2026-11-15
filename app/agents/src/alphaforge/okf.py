@@ -19,6 +19,7 @@ DOC_TYPES = (
     "News",
     "Data Series",
     "Methodology",
+    "Company Fundamentals",
     "Index",
     # Fonctionnalité vidéo tldoole.
     "Concept Gaps",

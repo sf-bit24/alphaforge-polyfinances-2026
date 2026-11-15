@@ -13,7 +13,7 @@ Un seul zip de code (`app/agents`, Python 3.13, linux/arm64) alimente quatre run
 | `alphaforge_sandbox_profile` | `profile` | serveur Next.js | lit `general/`, lit et écrit `clients/` |
 | `alphaforge_sandbox_press` | `press` | Step Functions | lit et écrit `staging/<run_id>/press/` |
 | `alphaforge_sandbox_data` | `data` | Step Functions | lit et écrit `staging/<run_id>/data/` |
-| `alphaforge_sandbox_supervisor` | `supervisor` | Step Functions | lit `staging/` et `general/`; écrit `staging/<run_id>/supervisor/`, `general/actualites/`, `general/donnees/` et `general/index.md`, jamais `general/methodologie/` (géré par Terraform). L'ingestion de la Knowledge Base est lancée par Step Functions, pas par A6. |
+| `alphaforge_sandbox_supervisor` | `supervisor` | Step Functions | lit `staging/` et `general/`; écrit `staging/<run_id>/supervisor/`, `general/actualites/`, `general/donnees/` et `general/index.md`, jamais `general/methodologie/` ni `general/societes/` (gérés par Terraform). L'ingestion de la Knowledge Base est lancée par Step Functions, pas par A6. |
 
 Chaque rôle n'a `s3:ListBucket` que sous ses propres préfixes. Pour un objet absent, S3 répond donc 403 (`AccessDenied`) et non 404 : le magasin vérifie alors l'absence par `ListObjectsV2` sur la clé exacte, et ne conclut à un refus que si l'objet existe.
 
@@ -253,6 +253,7 @@ Les trois collecteurs acceptent leur tâche aussitôt, travaillent en arrière-p
 ```text
 general/index.md                            écrit par A6 seulement, absent avant la première collecte
 general/methodologie/<slug>.md              seed versionné dans app/knowledge/general/, poussé par Terraform
+general/societes/<ticker>.md                seed versionné : chiffres publiés d'une société absente d'EDGAR (ATD, CSU), relevés à la main
 general/actualites/<AAAA>/<MM>/<slug>.md    écrit par A6
 general/donnees/<serie>/<slug>.md           écrit par A6
 clients/<client_id>/index.md
@@ -268,7 +269,7 @@ runtime/agents-<release>.zip                code des runtimes, poussé par Terra
 Chaque document `.md` est un document OKF : un frontmatter YAML puis un corps Markdown.
 
 ```yaml
-type: Investor Profile            # Investor Profile, Existing Portfolio, Profile Journal, News, Data Series, Methodology, Index
+type: Investor Profile            # Investor Profile, Existing Portfolio, Profile Journal, News, Data Series, Methodology, Company Fundamentals, Index
 title: Profil investisseur
 description: Profil en cinq dimensions, niveau de connaissances et complétude.
 tags: [profil-investisseur]
@@ -340,6 +341,8 @@ Accès S3, en motifs de clés exacts (comme `agentcore.tf`) :
 - écriture : `clients/*/tldoole/*`.
 
 S'y ajoutent `polly:SynthesizeSpeech`, `states:StartExecution` sur la machine, `bedrock:Retrieve` et `bedrock:ApplyGuardrail`.
+
+Le rôle MediaConvert de tldoole a `GetObject`, `GetObjectVersion` et `PutObject` sur `clients/*/tldoole/*`. Le bucket est versionné, et les téléchargeurs d'incrustations et de polices de MediaConvert lisent une version précise de l'objet : sans `GetObjectVersion`, le job échoue (erreur 1404 sur la police, 1010 sur une image).
 
 Sessions AgentCore : `<client_id>-detect` pour `detect`, `<client_id>-<video_id>` pour `produce` et `finalize`, `<client_id>-feed` pour l'interface.
 

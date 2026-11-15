@@ -1,7 +1,7 @@
 """ReplayModel : un BedrockModel de Strands dont chaque appel est enregistré puis rejouable.
 
 Usage dans un graphe Strands :
-    model = ReplayModel(node_id="lentille_risque", store=FileStore("llm_records"), mode="replay",
+    model = ReplayModel(node_id="lentille_risque", store=FileStore("tests/finance/fixtures/llm_records"), mode="replay",
                         versions={"data": data_sha, "policy": "risk_levels@0.2.0"},
                         model_id="us.anthropic.claude-sonnet-5-5",
                         additional_request_fields={"output_config": {"effort": "medium"}})

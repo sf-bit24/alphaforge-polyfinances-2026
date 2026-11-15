@@ -8,7 +8,8 @@ Destinations (cumulables) :
   conservée après la suppression du compte AWS ;
 - AWS X-Ray / CloudWatch Transaction Search via OTLP HTTP signé SigV4 (``ALPHAFORGE_OTLP_XRAY=1``) ;
 - console (``ALPHAFORGE_TRACE_CONSOLE=1``).
-Journaux applicatifs structurés : ``log_event`` → JSONL local et CloudWatch Logs ``/alphaforge/app``.
+Journaux applicatifs structurés : ``log_event`` → JSONL local et CloudWatch Logs ``ALPHAFORGE_LOG_GROUP``
+(output Terraform ``finance_log_group``).
 """
 from __future__ import annotations
 
@@ -182,7 +183,8 @@ def _jsonable(x: Any) -> Any:
 # --------------------------------------------------------------------------- journaux structurés
 
 class _CloudWatchSink:
-    def __init__(self, group: str = "/alphaforge/app"):
+    def __init__(self, group: str | None = None):
+        group = group or os.environ.get("ALPHAFORGE_LOG_GROUP", "/alphaforge/app")
         import boto3
         self.logs, self.group = boto3.client("logs", region_name=REGION), group
         self.stream = f"{SERVICE}-{datetime.now(UTC):%Y%m%dT%H%M%S}-{os.getpid()}"

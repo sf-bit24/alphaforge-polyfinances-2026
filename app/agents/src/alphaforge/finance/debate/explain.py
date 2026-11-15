@@ -470,7 +470,8 @@ def _incomplete_statements(
         )
         why.append(
             Statement(
-                text_fr=f"La confiance du profil ({fmt(cause.confidence, '%')}) est sous le minimum requis pour une "
+                text_fr=f"La confiance du profil ({fmt(cause.confidence, '%')}) est "
+                f"{_under(fmt(cause.confidence, '%'), fmt(cause.completeness_min, '%'))} le minimum requis pour une "
                 f"proposition ({fmt(cause.completeness_min, '%')}).",
                 fact_ids=[conf, need],
             )
@@ -568,9 +569,25 @@ def _protection_explanation(
     return Explanation(data_used=data_used, why=why, limits=limits, what_would_change=change)
 
 
-def _duration(years: float) -> tuple[float, str]:
-    """Horizon affiché : en mois sous deux ans (« 12,0 mois »), en années au-delà."""
-    return (round(years * 12, 4), "mois") if years < 2 else (years, "ans")
+# fmt et son port web (app/web/src/lib/portfolio/format.ts) écrivent toujours une décimale en « mois » et en « ans ».
+# Une durée entière prend donc une unité que les deux écrivent sans décimale (« 12 ») ; la phrase ajoute le mot.
+WHOLE_UNITS = {"mois": "nombre de mois", "ans": "nombre d'années"}
+WHOLE_UNIT_WORDS = {whole: word for word, whole in WHOLE_UNITS.items()}
+
+
+def _duration(years: float) -> tuple[float | int, str]:
+    """Horizon affiché : en mois sous deux ans, en années au-delà ; sans décimale s'il est entier (« 12 mois »,
+    « 5 ans », mais « 5,1 ans »)."""
+    value, unit = (round(years * 12, 4), "mois") if years < 2 else (years, "ans")
+    if abs(value - round(value)) < 1e-9:
+        return int(round(value)), WHOLE_UNITS[unit]
+    return value, unit
+
+
+def _under(shown: str, limit: str) -> str:
+    """« sous », ou « juste sous » quand les deux valeurs s'écrivent pareil une fois arrondies (12,98 % et 12,99 %
+    s'écrivent tous deux 13,0 %) : l'écart reste lisible sans écrire de chiffre non sourcé."""
+    return "juste sous" if shown == limit else "sous"
 
 
 def _covered(book: FactBook, text: str, fact_ids: list[str]) -> bool:
@@ -630,12 +647,15 @@ class _ProtectionFacts:
 
     def v(self, fid: str) -> str:
         fact = self.book.facts[fid]
-        return fmt(fact.value, fact.unit)
+        word = WHOLE_UNIT_WORDS.get(fact.unit)  # durée entière : « 12 » + « mois »
+        return f"{fmt(fact.value, fact.unit)} {word}" if word else fmt(fact.value, fact.unit)
 
-    def below(self, said: str, ids: list[str]) -> Statement:
+    def below(self, said: str, ids: list[str], compared: str) -> Statement:
+        """« <said> est sous min_L_plan » ; ``compared`` est le Fact de la perte comparée."""
+        under = _under(self.v(compared), self.v(self.floor))
         return Statement(
-            text_fr=f"{said} est sous {PLANNING_LOSS_FR} ({self.v(self.floor)}) : aucune allocation ne respecte cette "
-            "limite.",
+            text_fr=f"{said} est {under} {PLANNING_LOSS_FR} ({self.v(self.floor)}) : aucune allocation ne respecte "
+            "cette limite.",
             fact_ids=[*ids, self.floor],
         )
 
@@ -659,7 +679,7 @@ class _ProtectionFacts:
             )
             if part is not None
         ]
-        return found or [self.below(f"La perte admissible retenue ({self.v(self.star)})", [self.star])]
+        return found or [self.below(f"La perte admissible retenue ({self.v(self.star)})", [self.star], self.star)]
 
     def _declared(self) -> Statement:
         rule = self.rule
@@ -679,8 +699,8 @@ class _ProtectionFacts:
                 dataset="profil : max_acceptable_loss_cad",
             )
             said = f"La perte que vous dites pouvoir absorber ({self.v(cad)}, soit {self.v(pct)} du montant)"
-            return self.below(said, [cad, pct])
-        return self.below(f"La perte que vous dites pouvoir absorber ({self.v(pct)} du montant)", [pct])
+            return self.below(said, [cad, pct], pct)
+        return self.below(f"La perte que vous dites pouvoir absorber ({self.v(pct)} du montant)", [pct], pct)
 
     def _horizon(self) -> Statement:
         rule = self.rule
@@ -707,7 +727,8 @@ class _ProtectionFacts:
         else:
             text = f"L'horizon de placement retenu est de {self.v(horizon)}."
         return Statement(
-            text_fr=f"{text} La perte que cet horizon permet d'absorber ({self.v(loss)}) est sous {PLANNING_LOSS_FR} "
+            text_fr=f"{text} La perte que cet horizon permet d'absorber ({self.v(loss)}) est "
+            f"{_under(self.v(loss), self.v(self.floor))} {PLANNING_LOSS_FR} "
             f"({self.v(self.floor)}) : aucune allocation ne respecte cette limite.",
             fact_ids=[horizon, loss, self.floor],
         )
@@ -731,7 +752,7 @@ class _ProtectionFacts:
             f"La perte que vos retraits prévus permettent d'absorber ({self.v(loss)}, pour des retraits de "
             f"{self.v(rate)} du montant par an)"
         )
-        return self.below(said, [loss, rate])
+        return self.below(said, [loss, rate], loss)
 
     # ------------------------------------------------------------------ leviers vérifiés par compilation
     def lever_statements(self, others: int) -> list[Statement]:

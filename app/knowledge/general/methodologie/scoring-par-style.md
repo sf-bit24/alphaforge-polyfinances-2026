@@ -6,7 +6,7 @@ tags: [methodologie, construction-portefeuille, style, selection, explicabilite]
 status: draft
 owners: [alphaforge-a1]
 sensitivity: public
-generated: { by: "agent:claude-code", at: "2026-11-15T05:00:00Z" }
+generated: { by: "agent:claude-code", at: "2026-11-15T19:15:00Z" }
 stale_after: "2027-02-15T00:00:00Z"
 sources:
   - id: strategie-etape-0
@@ -234,6 +234,10 @@ mensuelle dû au style, jamais un rendement.
 ## 9. Ce que l'étape 0 ne fait jamais
 
 - Elle ne modifie ni le score de risque R, ni le niveau, ni e_cap, ni la perte acceptable l*, ni un budget `risk.*`.
+- Le style ne relève jamais la part d'actions visée : π (section 2) ne dépend que de la tolérance, de la capacité et
+  des garde-fous de comportement, et le repli (section 8) peut seulement l'abaisser. Le style règle la composition
+  (titres retenus, planchers des satellites, plafonds sectoriels); il peut donc ajouter du risque, toujours sous ces
+  budgets (`strat.risk_cost`).
 - Elle ne relâche aucune limite : elle n'ajoute que des planchers et des plafonds plus stricts.
 - Elle ne retire jamais une exclusion de valeurs du mandat de base.
 - Elle n'utilise ni la momentum ni le rendement passé dans le score : « Celui qui a le meilleur rendement historique

@@ -10,7 +10,13 @@
 from __future__ import annotations
 
 import json
+import math
 import re
+import threading
+import time
+from collections.abc import Iterable, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 from alphaforge.finance.contracts.decision import Explanation, Statement
 
@@ -233,8 +239,11 @@ def strategy_statements(book: FactBook, final: dict | None = None) -> dict[str, 
         )
     for fid in final.get("clamped", []) if final else []:
         out["limits"].append(
-            Statement(text_fr="Le débat a abaissé ou retiré un choix du style : la prudence l'emporte.",
-                      fact_ids=[fid], label="HYPOTHESE")
+            Statement(
+                text_fr="Le débat a abaissé ou retiré un choix du style : la prudence l'emporte.",
+                fact_ids=[fid],
+                label="HYPOTHESE",
+            )
         )
     for fid in [k for k in f if k.startswith("strat.fallback.")]:
         out["limits"].append(
@@ -292,33 +301,198 @@ def rephrase(
     return Explanation(**out), report
 
 
+SECTIONS = ("data_used", "why", "limits", "what_would_change")
+GROUNDING_QUERY = "Expliquer la proposition de portefeuille"
+GROUNDING_SOURCE_MAX = 100_000  # limites d'ApplyGuardrail : source d'ancrage, puis contenu vérifié
+GROUNDING_CONTENT_MAX = 5_000
+# Quota du compte pour l'ancrage contextuel : 106 unités de texte par seconde, rafale comprise (1 unité = 1 000
+# caractères de source, de question et de contenu). Un appel isolé prend moins d'une seconde ; au-delà du quota, les
+# reprises font attendre bien plus. On étale donc les appels avec de la marge, et les reprises restent un filet.
+GROUNDING_TEXT_UNITS_PER_SECOND = 80.0
+GROUNDING_WORKERS = 2
+
+
+class _TextUnitPacer:
+    """Réserve à chaque appel un créneau proportionnel à sa taille, partagé entre les fils."""
+
+    def __init__(self, units_per_second: float):
+        self.rate, self.lock, self.next_start = units_per_second, threading.Lock(), 0.0
+
+    def wait(self, chars: int) -> None:
+        units = max(1, math.ceil(chars / 1000))
+        with self.lock:
+            now = time.monotonic()
+            start = max(now, self.next_start)
+            self.next_start = start + units / self.rate
+        if start > now:
+            time.sleep(start - now)
+
+
+def grounding_context(book: FactBook, checks: Iterable[Any], verdicts: dict[str, str]) -> str:
+    """Ce que la décision enregistre elle-même : limites vérifiées par le Judge (description, dérivation),
+    étapes tracées qui ont un message, verdicts des lentilles au second tour. Jamais un texte écrit pour l'ancrage."""
+    lines = [f"Limite {c.rule_id} : {c.description_fr} ; dérivée de : {c.derived_from}" for c in checks]
+    for ev in book.trace:
+        text = " ".join(x for x in (ev.message, ev.output_summary) if x)
+        if text:
+            lines.append(f"Étape {ev.tool or ev.agent} : {text}")
+    lines += [f"Verdict de la lentille « {lens} » au second tour : {v}" for lens, v in sorted(verdicts.items())]
+    return "\n".join(lines)
+
+
+def grounding_source(
+    book: FactBook, st: Statement | Sequence[Statement], context: str, docs: Sequence[tuple[str, str]]
+) -> str:
+    """Source d'un énoncé (ou d'une section) : faits cités, puis la décision, puis les fiches de méthode (coupées en
+    dernier, à la limite d'ApplyGuardrail)."""
+    statements = [st] if isinstance(st, Statement) else list(st)
+    fids = list(dict.fromkeys(fid for x in statements for fid in x.fact_ids))
+    cited = "\n".join(
+        f"{f.label_fr} : {fmt(f.value, f.unit)} ({f.status})" for fid in fids if (f := book.facts.get(fid))
+    )
+    parts = [
+        f"Faits cités :\n{cited}" if cited else "",
+        f"Décision :\n{context}" if context else "",
+        "Méthodologie :\n" + "\n\n".join(f"# {key}\n{text}" for key, text in docs) if docs else "",
+    ]
+    return "\n\n".join(x for x in parts if x)[:GROUNDING_SOURCE_MAX] or "(aucune source)"
+
+
 def grounding_check(
     book: FactBook,
     expl: Explanation,
     guardrail_id: str | None,
     guardrail_version: str | None,
     region: str = "us-east-1",
+    *,
+    context: str = "",
+    docs: Sequence[tuple[str, str]] = (),
+    only: set[tuple[str, int]] | None = None,
+    client: Any = None,
+    workers: int = GROUNDING_WORKERS,
+    units_per_second: float | None = GROUNDING_TEXT_UNITS_PER_SECOND,
 ) -> dict | None:
-    """Filet final : ancrage contextuel Bedrock Guardrails (si un guardrail est configuré)."""
+    """Filet final : ancrage contextuel Bedrock Guardrails, avec un résultat par énoncé.
+
+    Une section entière est d'abord vérifiée en un appel (source : les faits cités par ses énoncés, la décision,
+    les fiches de méthode) ; si le guardrail l'ancre, chacun de ses énoncés l'est. Sinon ses énoncés sont revérifiés
+    un par un, pour savoir lequel ne l'est pas. Avec ``only`` (gabarits remis), on vérifie directement énoncé par
+    énoncé. L'action est celle que rend le guardrail (son seuil fait foi) ; une erreur d'appel est rapportée sans
+    faire échouer la décision.
+    """
     if not guardrail_id:
         return None
     if not guardrail_version or str(guardrail_version).upper() == "DRAFT":
         raise ValueError("guardrail : version numérotée requise (jamais DRAFT)")
-    import boto3
+    if client is None:
+        import boto3
+        from botocore.config import Config
 
-    src = json.dumps(
-        [{"id": k, "label": x.label_fr, "value": fmt(x.value, x.unit)} for k, x in book.facts.items()],
-        ensure_ascii=False,
-    )[:100_000]
-    text = " ".join(s.text_fr for sec in (expl.data_used, expl.why, expl.limits, expl.what_would_change) for s in sec)
-    r = boto3.client("bedrock-runtime", region_name=region).apply_guardrail(
-        guardrailIdentifier=guardrail_id,
-        guardrailVersion=guardrail_version,
-        source="OUTPUT",
-        content=[
-            {"text": {"text": src, "qualifiers": ["grounding_source"]}},
-            {"text": {"text": "Expliquer la proposition de portefeuille", "qualifiers": ["query"]}},
-            {"text": {"text": text[:5000], "qualifiers": ["guard_content"]}},
-        ],
-    )
-    return {"action": r.get("action"), "assessments": r.get("assessments")}
+        client = boto3.client(
+            "bedrock-runtime", region_name=region, config=Config(retries={"mode": "standard", "max_attempts": 6})
+        )
+    pacer = _TextUnitPacer(units_per_second) if units_per_second else None
+
+    def call(statements: list[Statement]) -> dict[str, Any]:
+        src = grounding_source(book, statements, context, docs)
+        text = "\n".join(x.text_fr for x in statements)[:GROUNDING_CONTENT_MAX]
+        if pacer is not None:
+            pacer.wait(len(src) + len(GROUNDING_QUERY) + len(text))
+        try:
+            r = client.apply_guardrail(
+                guardrailIdentifier=guardrail_id,
+                guardrailVersion=guardrail_version,
+                source="OUTPUT",
+                content=[
+                    {"text": {"text": src, "qualifiers": ["grounding_source"]}},
+                    {"text": {"text": GROUNDING_QUERY, "qualifiers": ["query"]}},
+                    {"text": {"text": text, "qualifiers": ["guard_content"]}},
+                ],
+            )
+        except Exception as exc:  # réseau, droits, quota : rapporté, la décision continue
+            return {"action": "ERROR", "error": type(exc).__name__}
+        filters = {
+            x.get("type"): x
+            for a in r.get("assessments") or []
+            for x in (a.get("contextualGroundingPolicy") or {}).get("filters", [])
+        }
+        g, rel = filters.get("GROUNDING", {}), filters.get("RELEVANCE", {})
+        return {
+            "action": r.get("action"),
+            "score": g.get("score"),
+            "threshold": g.get("threshold"),
+            "relevance": rel.get("score"),
+            "retries": (r.get("ResponseMetadata") or {}).get("RetryAttempts", 0),
+        }
+
+    sections = {
+        sec: [(i, st) for i, st in enumerate(getattr(expl, sec)) if only is None or (sec, i) in only]
+        for sec in SECTIONS
+    }
+    sections = {sec: items for sec, items in sections.items() if items}
+    rows: dict[tuple[str, int], dict[str, Any]] = {}
+    redo: list[tuple[str, int, Statement]] = []
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        if only is None:
+            names = list(sections)
+            for sec, res in zip(names, pool.map(lambda sec: call([st for _, st in sections[sec]]), names), strict=True):
+                items = sections[sec]
+                if res["action"] == "NONE" or len(items) == 1:
+                    scope = "section" if len(items) > 1 else "statement"
+                    rows.update({(sec, i): {"section": sec, "index": i, **res, "scope": scope} for i, _ in items})
+                else:
+                    redo += [(sec, i, st) for i, st in items]
+        else:
+            redo = [(sec, i, st) for sec, items in sections.items() for i, st in items]
+        for (sec, i, _), res in zip(redo, pool.map(lambda item: call([item[2]]), redo), strict=True):
+            rows[(sec, i)] = {"section": sec, "index": i, **res, "scope": "statement"}
+    ordered = [rows[(sec, i)] for sec in SECTIONS for i, _ in sections.get(sec, []) if (sec, i) in rows]
+    return summarize_grounding(ordered, [key for key, _ in docs])
+
+
+def summarize_grounding(rows: list[dict[str, Any]], sources: list[str]) -> dict[str, Any]:
+    """Résultat d'ensemble : ``GUARDRAIL_INTERVENED`` si un énoncé l'est, ``ERROR`` si aucun n'a pu être vérifié."""
+    ok = [r for r in rows if r.get("action") != "ERROR"]
+    below = [r for r in ok if r.get("action") == "GUARDRAIL_INTERVENED"]
+    scores = [r["score"] for r in ok if r.get("score") is not None]
+    thresholds = {r["threshold"] for r in ok if r.get("threshold") is not None}
+    return {
+        "action": "ERROR" if rows and not ok else ("GUARDRAIL_INTERVENED" if below else "NONE"),
+        "method": "per_statement",
+        "checked": len(ok),
+        "below": len(below),
+        "errors": len(rows) - len(ok),
+        "retries": sum(r.get("retries") or 0 for r in rows),
+        "min_score": min(scores) if scores else None,
+        "threshold": thresholds.pop() if len(thresholds) == 1 else None,
+        "sources": sources,
+        "statements": rows,
+    }
+
+
+def keep_grounded(
+    expl: Explanation, template: Explanation, grounding: dict[str, Any] | None
+) -> tuple[Explanation, list[tuple[str, int]]]:
+    """Un énoncé reformulé que le guardrail n'ancre pas reprend son gabarit (même règle que ``verify``)."""
+    if not grounding:
+        return expl, []
+    out = {sec: list(getattr(expl, sec)) for sec in SECTIONS}
+    reverted = []
+    for r in grounding.get("statements", []):
+        sec, i = r["section"], r["index"]
+        if r.get("action") != "GUARDRAIL_INTERVENED" or i >= len(getattr(template, sec)):
+            continue
+        tpl = getattr(template, sec)[i]
+        if out[sec][i].text_fr != tpl.text_fr:
+            out[sec][i] = tpl
+            reverted.append((sec, i))
+    return Explanation(**out), reverted
+
+
+def merge_grounding(first: dict[str, Any], again: dict[str, Any] | None) -> dict[str, Any]:
+    """Remplace les lignes revérifiées (gabarits remis) et recalcule le résultat d'ensemble."""
+    if not again:
+        return first
+    redo = {(r["section"], r["index"]): r for r in again["statements"]}
+    rows = [redo.get((r["section"], r["index"]), r) for r in first["statements"]]
+    return summarize_grounding(rows, first["sources"])

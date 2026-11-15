@@ -222,8 +222,10 @@ resource "aws_dynamodb_table" "trace" {
   tags = local.common_tags
 }
 
-# Les runtimes AgentCore lisent et ajoutent (ecritures conditionnelles, jamais
-# de suppression : le journal est en ajout seul).
+# Seuls les runtimes qui executent le volet finance lisent et ajoutent (ecritures
+# conditionnelles cote code, jamais de suppression ni de mise a jour). IAM ne
+# peut pas imposer la condition d'ecriture : l'inviolabilite repose sur la
+# chaine de hachage, l'Object Lock des blobs et le PITR des tables.
 data "aws_iam_policy_document" "agentcore_traces" {
   statement {
     sid = "ReplayAndAudit"
@@ -233,13 +235,12 @@ data "aws_iam_policy_document" "agentcore_traces" {
       "dynamodb:Query",
       "dynamodb:ConditionCheckItem",
       "dynamodb:TransactWriteItems",
-      "dynamodb:UpdateItem",
     ]
     resources = [for t in aws_dynamodb_table.trace : t.arn]
   }
   statement {
     sid       = "ReplayAndDecisionBlobs"
-    actions   = ["s3:GetObject", "s3:PutObject"]
+    actions   = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"]
     resources = ["${aws_s3_bucket.traces.arn}/llm-replay/*", "${aws_s3_bucket.traces.arn}/decisions/*"]
   }
   statement {
@@ -250,7 +251,7 @@ data "aws_iam_policy_document" "agentcore_traces" {
 }
 
 resource "aws_iam_role_policy" "agentcore_traces" {
-  for_each = aws_iam_role.agentcore
+  for_each = { for k, r in aws_iam_role.agentcore : k => r if contains(var.finance_trace_runtimes, k) }
 
   name   = "finance-traces"
   role   = each.value.id

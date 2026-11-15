@@ -22,3 +22,9 @@ variable "xray_indexing_percentage" {
     error_message = "xray_indexing_percentage doit etre dans ]0, 100]."
   }
 }
+
+variable "finance_trace_runtimes" {
+  description = "Runtimes AgentCore autorises a ecrire le rejeu LLM et le journal des decisions (les collecteurs press et data n'y ont pas acces)."
+  type        = list(string)
+  default     = ["supervisor"]
+}

@@ -23,6 +23,10 @@ kms_admin_principal_arns = ["arn:aws:iam::024848478575:role/WSParticipantRole"]
 # n'est pas posee (cas de la CI). Aucun declencheur : l'equipe lance chaque run.
 scenarios_enabled = true
 
+# Courriel de contact declare a la SEC (User-Agent d'EDGAR), sur les runtimes
+# press, data et researcher seulement. Courriel du volet recherche.
+sec_contact_email = "sacha.burelle.1@ens.etsmtl.ca"
+
 # Veille : collecte toutes les 6 heures.
 collecte_schedule_expression = "rate(6 hours)"
 collecte_schedule_enabled    = true

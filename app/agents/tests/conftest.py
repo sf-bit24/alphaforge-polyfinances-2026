@@ -93,8 +93,12 @@ class ScriptedFactory:
         self.models: list[ScriptedModel] = []
         self.requests: list[dict[str, Any]] = []
 
-    def __call__(self, *, effort: str, guardrail: bool = False, max_tokens: int = 8000) -> ScriptedModel:
+    def __call__(
+        self, *, effort: str, guardrail: bool = False, max_tokens: int = 8000, guard_tagged: bool = False
+    ) -> ScriptedModel:
         self.requests.append({"effort": effort, "guardrail": guardrail, "max_tokens": max_tokens})
+        if guard_tagged:
+            self.requests[-1]["guard_tagged"] = True
         model = ScriptedModel(self.scripts.pop(0) if self.scripts else [])
         self.models.append(model)
         return model

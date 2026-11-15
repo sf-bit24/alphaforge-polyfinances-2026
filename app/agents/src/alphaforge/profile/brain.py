@@ -28,7 +28,7 @@ import yaml
 from strands import tool
 
 from .. import clock, okf
-from ..agentkit import AgentSpec, ModelFactory, run_agent, tool_result
+from ..agentkit import AgentSpec, ModelFactory, guarded, run_agent, tool_result
 from ..store import Store
 from ..trace import Trace
 from . import rules
@@ -156,7 +156,6 @@ def build_context(
         "facts": facts,
         "derived": derived,
         "missing_fields": score["missing"],
-        "investor_messages": [str(e.get("text") or "")[:500] for e in journal if e.get("kind") == "message"][-6:],
     }
     if skill == UPDATE_SKILL:
         state = brain_state(session)
@@ -434,12 +433,23 @@ def run_brain(
     structure = load_skill(INIT_SKILL, directory) if skill_name == UPDATE_SKILL else None
     state = BrainTurn(q, session, store, skill=skill_name, version=version)
     context = build_context(q, session, store, skill=skill_name, changed=changed, version=version, journal=journal)
-    prompt = (
-        "<context>\n"
-        + json.dumps(context, ensure_ascii=False, indent=1, default=str).replace("<", "‹").replace(">", "›")
-        + "\n</context>\n"
-        + f"Follow the skill {skill_name} now, then call finish."
-    )
+    messages = [str(e.get("text") or "")[:500] for e in journal if e.get("kind") == "message"][-6:]
+    # Contexte et consignes du code dans un bloc; les messages de l'investisseur, seuls évalués par le garde-fou,
+    # dans un bloc guardContent.
+    prompt = [
+        {
+            "text": "<context>\n"
+            + json.dumps(context, ensure_ascii=False, indent=1, default=str).replace("<", "‹").replace(">", "›")
+            + "\n</context>\n"
+            + f"Follow the skill {skill_name} now, then call finish. The investor's own messages follow, inside "
+            "<investor_messages> tags."
+        },
+        guarded(
+            "<investor_messages>\n"
+            + ("\n---\n".join(m.replace("<", "‹").replace(">", "›") for m in messages) or "(none)")
+            + "\n</investor_messages>"
+        ),
+    ]
     spec = AgentSpec(
         actor="A1",
         name="clientBrain-Agent",
@@ -449,6 +459,7 @@ def run_brain(
         max_turns=12,
         max_tokens=16000,
         guardrail=guardrail,
+        guard_tagged=True,
         tool_summaries={
             "write_document": lambda i: {
                 "path": i.get("path"),

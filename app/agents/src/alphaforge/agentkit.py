@@ -34,7 +34,13 @@ ModelFactory = Callable[..., Any]
 def bedrock_model_factory(settings: Settings) -> ModelFactory:
     """Fabrique de modèles Bedrock pour tous les agents (profil d'inférence ``ALPHAFORGE_MODEL_ID``)."""
 
-    def factory(*, effort: str, guardrail: bool = False, max_tokens: int = 8000) -> BedrockModel:
+    def factory(
+        *, effort: str, guardrail: bool = False, max_tokens: int = 8000, guard_tagged: bool = False
+    ) -> BedrockModel:
+        """``guard_tagged`` : le garde-fou n'évalue que les blocs ``guardContent`` que l'agent pose lui-même
+        (le texte de l'investisseur), pas le contexte ni les consignes écrits par le code. Sans lui, Strands
+        enveloppe tout le dernier message utilisateur, et le filtre d'attaque de prompt prend nos consignes
+        pour une attaque."""
         if effort not in EFFORTS:
             raise ValueError(f"invalid effort {effort!r}")
         config: dict[str, Any] = {
@@ -48,7 +54,7 @@ def bedrock_model_factory(settings: Settings) -> ModelFactory:
                 guardrail_id=settings.guardrail_id,
                 guardrail_version=settings.guardrail_version or "DRAFT",
                 guardrail_trace="enabled",
-                guardrail_latest_message=True,
+                guardrail_latest_message=not guard_tagged,
                 guardrail_redact_input=True,
             )
         return BedrockModel(
@@ -72,7 +78,14 @@ class AgentSpec:
     max_turns: int = 6
     max_tokens: int = 8000
     guardrail: bool = False
+    # Vrai quand le prompt marque lui-même le texte de l'investisseur (blocs guardContent, voir guarded()).
+    guard_tagged: bool = False
     tool_summaries: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = field(default_factory=dict)
+
+
+def guarded(text: str) -> dict[str, Any]:
+    """Bloc évalué par le garde-fou : seulement du texte venu de l'investisseur."""
+    return {"guardContent": {"text": {"text": text}}}
 
 
 class TraceHooks(HookProvider):
@@ -200,7 +213,8 @@ def run_agent(
     model_id: str,
     trace: Trace,
 ) -> AgentRun:
-    model = model_factory(effort=spec.effort, guardrail=spec.guardrail, max_tokens=spec.max_tokens)
+    extra = {"guard_tagged": True} if spec.guard_tagged else {}
+    model = model_factory(effort=spec.effort, guardrail=spec.guardrail, max_tokens=spec.max_tokens, **extra)
     hooks = TraceHooks(trace, spec, model_id)
     agent = Agent(
         model=model,

@@ -22,7 +22,7 @@ from typing import Any
 
 from strands import tool
 
-from ..agentkit import AgentSpec, ModelFactory, run_agent, tool_result
+from ..agentkit import AgentSpec, ModelFactory, guarded, run_agent, tool_result
 from ..errors import pick
 from ..trace import Emitter, Trace
 from . import rules
@@ -992,19 +992,22 @@ def run_a1(
         q, session, locale=locale, turn=turn, journal=journal, new_answers=new_answers, portfolio=portfolio
     )
     message_text = (investor_message or "").replace("<", "‹").replace(">", "›").strip()
-    prompt = (
-        "<context>\n"
-        + json.dumps(context, ensure_ascii=False, indent=1, default=str)
-        + "\n</context>\n"
-        + "<investor_message>\n"
-        + (message_text or "(no message this turn)")
-        + "\n</investor_message>\n"
-        + (
-            "This is the first follow-up turn: ask about the heaviest missing fields."
-            if turn and not session.data.get("asked")
-            else "Continue the follow-up."
-        )
-    )
+    # Le contexte et les consignes viennent du code; seul le message de l'investisseur, dans son propre bloc,
+    # passe par le garde-fou (guardContent).
+    prompt = [
+        {
+            "text": "<context>\n"
+            + json.dumps(context, ensure_ascii=False, indent=1, default=str)
+            + "\n</context>\n"
+            + (
+                "This is the first follow-up turn: ask about the heaviest missing fields."
+                if turn and not session.data.get("asked")
+                else "Continue the follow-up."
+            )
+            + " The investor's message follows, inside <investor_message> tags."
+        },
+        guarded("<investor_message>\n" + (message_text or "(no message this turn)") + "\n</investor_message>"),
+    ]
     spec = AgentSpec(
         actor="A1",
         name="createProfile-Agent",
@@ -1014,6 +1017,7 @@ def run_a1(
         max_turns=6,
         max_tokens=8000,
         guardrail=guardrail,
+        guard_tagged=True,
         tool_summaries={
             "finish_turn": lambda i: {
                 "message_chars": len(str(i.get("message", ""))),

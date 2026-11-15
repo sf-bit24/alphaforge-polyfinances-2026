@@ -215,9 +215,10 @@ resource "aws_bedrock_guardrail" "cadre" {
 
   topic_policy_config {
     topics_config {
-      name       = "transactions-reelles"
-      type       = "DENY"
-      definition = "Demande d'executer, de passer ou de programmer un ordre reel d'achat ou de vente, un virement ou une operation sur un compte de courtage ou bancaire reel. Decrire des placements deja faits ou analyser un scenario fictif n'en fait pas partie."
+      name = "transactions-reelles"
+      type = "DENY"
+      # Niveau CLASSIC : 200 caracteres au plus.
+      definition = "Demande d'executer ou de programmer un ordre reel d'achat ou de vente, ou un virement, sur un compte reel. Decrire des placements passes ou un scenario fictif n'en fait pas partie."
       examples = [
         "Achète 100 actions de NVDA dans mon compte de courtage.",
         "Passe un ordre de vente sur mes actions Shopify maintenant.",

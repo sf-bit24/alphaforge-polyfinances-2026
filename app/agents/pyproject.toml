@@ -11,6 +11,20 @@ dependencies = [
 ]
 
 [dependency-groups]
+# Volet finance (F2-F4 : optimiseur, analyses, contrôle du Judge ; rejeu LLM ; traçabilité).
+# Hors des dépendances de base tant que le runtime A3/Judge n'est pas déployé (taille du zip AgentCore).
+finance = [
+    "numpy>=2.1",
+    "pandas>=2.2",
+    "scipy>=1.14",
+    "pyarrow>=17",
+    "cvxpy>=1.6",
+    "clarabel>=0.9",
+    "pydantic>=2.9",
+    "opentelemetry-sdk>=1.30",
+    "opentelemetry-exporter-otlp-proto-http>=1.30",
+    "requests>=2.32",
+]
 dev = [
     "botocore[crt]>=1.44.3",
     "pytest>=8.3",

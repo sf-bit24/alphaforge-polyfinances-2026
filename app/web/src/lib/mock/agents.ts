@@ -30,8 +30,10 @@ const PII_PATTERNS: RegExp[] = [
   // Account numbers, before the phone pattern can take a part of them.
   // Digit groups joined by dashes: 123-45678-9, transit-institution-account 12345-003-1234567.
   /\b\d{3,5}-\d{3,5}-\d{1,12}\b/g,
-  // Digits right after an account word: "compte no 123 45678 9", "account #12345"; not an amount ("compte : 25 000 $").
-  /(?<=\b(?:compte|account|acct|folio|transit)\s*(?:n[o°º]\.?|#|num[ée]ro|number)?\s*:?\s*)\d[\d -]{3,}\d(?![\d ,.]*\$)/gi,
+  // Digits after an account word with its number marker, on the same line: "compte no 123 45678 9",
+  // "no de compte : 12345", "account #12345", "transit 12345". Without the marker ("mon compte : 50 000",
+  // "compte 2 500 parts"), the number is an amount or a quantity; only the 123 45678 9 form may hold spaces.
+  /(?<=\b(?:(?:compte|account|acct)[ \t]*(?:n[o°º]\.?|#|num[ée]ro|number)|(?:n[o°º]\.?|num[ée]ro)[ \t]*(?:de[ \t]*)?compte|transit|folio)[ \t]*:?[ \t]*)(?:\d{3} \d{5} \d\b|\d[\d-]{3,}\d)(?!\d|[,.]\d)/gi,
   // Social insurance number (NAS).
   /\b\d{3}[ -]?\d{3}[ -]?\d{3}\b/g,
   // Phone number.

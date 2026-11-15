@@ -96,6 +96,9 @@ describe("issue #82: account numbers in the pasted text", () => {
     expect(screenMessage("Transit-institution-compte : 12345-003-1234567").text).toBe("Transit-institution-compte : [masqué]");
     expect(screenMessage("Compte no 123 45678 9 chez BMO").text).toBe("Compte no [masqué] chez BMO");
     expect(screenMessage("account #12345678").masked).toBe(1);
+    expect(screenMessage("No de compte : 12345, CELI").text).toBe("No de compte : [masqué], CELI");
+    // The quantity after the account number stays.
+    expect(screenMessage("Compte no 98765 150 XIU.TO").text).toBe("Compte no [masqué] 150 XIU.TO");
     expect(screenMessage("Mon NAS est 123 456 789").text).toBe("Mon NAS est [masqué]");
   });
 
@@ -109,6 +112,23 @@ describe("issue #82: account numbers in the pasted text", () => {
     const screened = screenMessage(text);
     expect(screened.text).toBe(text);
     expect(screened.masked).toBe(0);
+  });
+
+  it.each([
+    "Dans mon compte 2 500 parts de XIU.TO",
+    "Voici mon compte :\n1 500 XIU.TO\n200 ZAG.TO",
+    "Mon compte : 50 000",
+    "Mon compte : 50 000 CAD",
+    "account 10000 shares of AAPL",
+    "Quantité\tSymbole\tValeur\tCompte\n2 500\tXIU.TO\t95 500 $\tCELI",
+    "Compte 98765 150 XIU.TO",
+  ])("does not mask a quantity or an amount after the word account: %j", (text) => {
+    expect(screenMessage(text)).toMatchObject({ text, masked: 0 });
+  });
+
+  it("keeps the quantity of a pasted line after an account word", () => {
+    const { positions } = extractPositions({ text: screenMessage("Voici mon compte :\n12000 XIU.TO").text }, "fr");
+    expect(positions).toEqual([expect.objectContaining({ ticker: "XIU.TO", quantity: 12000, value_cad: 12000 * close("XIU.TO") })]);
   });
 });
 

@@ -37,12 +37,13 @@ INTERESTS = {"technology": "IA", "crypto": "crypto"}
 
 
 def _facts(view: dict[str, Any]) -> dict[str, Any]:
+    """Valeur de chaque champ du profil : les faits de la vue, puis les champs des dimensions qu'ils n'ont pas."""
     out: dict[str, Any] = {}
-    for f in view.get("facts", []) or []:
-        out[f["field"]] = f.get("value")
-    for dim in (view.get("dimensions") or {}).values():
-        for k, v in (dim.get("fields") or {}).items():
-            out.setdefault(k if "." in k else k, v)
+    for fact in view.get("facts", []) or []:
+        out[fact["field"]] = fact.get("value")
+    for dimension in (view.get("dimensions") or {}).values():
+        for key, value in (dimension.get("fields") or {}).items():
+            out.setdefault(key, value)
     return out
 
 
@@ -54,107 +55,169 @@ def investor_profile_from_view(
     created_utc: datetime | None = None,
     completeness: dict[str, Any] | None = None,
 ) -> InvestorProfile:
-    f = _facts(view)
-    g = lambda key: f.get(key)  # noqa: E731
-    missing: list[str] = []
+    """Profil F1 de la vue ; ``completeness`` (sinon celle de la vue) ajoute ses champs manquants à ``missing_info``.
 
-    years = g("horizon.horizon_years")
-    if years is None and g("horizon.horizon_band") in HORIZON_BAND_YEARS:
-        years = HORIZON_BAND_YEARS[g("horizon.horizon_band")]
-    if years is None:
-        years, _ = 1.0, missing.append("horizon")
-    goal = g("objective.goal") or "growth"
+    Le profil est COMPLETE seulement si ``missing_info`` est vide.
+    """
+    facts = _facts(view)
+    horizon_years = _horizon_years(facts)
+    goals = _goals(facts, horizon_years)
+    risk = view.get("risk") or {}
+    tolerance, capacity = risk.get("tolerance"), risk.get("capacity")
+    declared_gaps = _declared_gaps(facts, horizon_years, tolerance, capacity)
+    debts = _debts(facts)
+    preferences = _preferences(facts)
+    missing = sorted(set(declared_gaps + _completeness_gaps(completeness or view.get("completeness") or {})))
+    return InvestorProfile(
+        profile_id=client_id,
+        version=version,
+        created_utc=created_utc or datetime.now(UTC),
+        status="COMPLETE" if not missing else "INCOMPLETE",
+        mode="saisi",
+        knowledge_level=KNOWLEDGE.get(view.get("knowledge_level") or ""),
+        goals=goals,
+        tolerance_declared=_score(tolerance),
+        capacity_assessed=_score(capacity),
+        max_acceptable_loss_cad=_amount_or_none(facts.get("risk_capacity.max_loss_cad")),
+        investable_wealth=_amount_or_none(facts.get("context.amount_cad")),
+        emergency_fund_months=_float_or_none(facts.get("risk_capacity.emergency_fund")),
+        income=_income(facts.get("risk_capacity.income_stability")),
+        debts=debts,
+        preferences=preferences,
+        missing_info=missing,
+        consistency_flags=[],
+    )
+
+
+def _horizon_years(facts: dict[str, Any]) -> Any:
+    """Horizon en années déclaré, sinon borne basse de la bande d'horizon, sinon None (horizon manquant)."""
+    years = facts.get("horizon.horizon_years")
+    band = facts.get("horizon.horizon_band")
+    if years is None and band in HORIZON_BAND_YEARS:
+        return HORIZON_BAND_YEARS[band]
+    return years
+
+
+def _goals(facts: dict[str, Any], horizon_years: Any) -> list[Goal]:
+    """Objectif principal (horizon d'un an s'il manque), plus un objectif de liquidité si des retraits sont prévus."""
+    goal = facts.get("objective.goal") or "growth"
     goals = [
         Goal(
             goal_id="g-main",
             label=f"objectif : {goal}",
             priority=GOAL_PRIORITY.get(goal, "envie"),
-            horizon_years=float(years),
+            horizon_years=float(1.0 if horizon_years is None else horizon_years),
         )
     ]
-    wealth = g("context.amount_cad")
-    pct12 = g("constraints.withdrawal_pct_12m")
-    if pct12 and wealth:
+    wealth = facts.get("context.amount_cad")
+    withdrawal_pct = facts.get("constraints.withdrawal_pct_12m")
+    if withdrawal_pct and wealth:
         goals.append(
             Goal(
                 goal_id="g-liquidity",
                 label="retraits prévus sous 12 mois",
                 priority="besoin",
                 horizon_years=1.0,
-                amount=float(pct12) / 100 * float(wealth) if pct12 > 1 else float(pct12) * float(wealth),
+                amount=_withdrawal_amount(withdrawal_pct, wealth),
             )
         )
+    return goals
 
-    risk = view.get("risk") or {}
-    tol, cap = risk.get("tolerance"), risk.get("capacity")
-    if tol not in RISK_SCORE:
-        missing.append("risk_tolerance")
-    if cap not in RISK_SCORE:
-        missing.append("risk_capacity")
 
-    debts = []
-    if g("risk_capacity.high_interest_debt"):
-        debts.append(
-            Debt(
-                label="dette à taux élevé (déclarée)",
-                balance=float(g("risk_capacity.high_interest_debt")),
-                annual_rate=0.20,
-            )
+def _withdrawal_amount(withdrawal_pct: Any, wealth: Any) -> float:
+    """Retraits prévus sous 12 mois, en dollars : la part est lue en pourcentage au-dessus de 1, en fraction sinon."""
+    if withdrawal_pct > 1:
+        return float(withdrawal_pct) / 100 * float(wealth)
+    return float(withdrawal_pct) * float(wealth)
+
+
+def _declared_gaps(facts: dict[str, Any], horizon_years: Any, tolerance: Any, capacity: Any) -> list[str]:
+    """Données que l'adaptateur lui-même exige : horizon, catégories de risque, montant et fonds d'urgence."""
+    gaps = {
+        "horizon": horizon_years is None,
+        "risk_tolerance": tolerance not in RISK_SCORE,
+        "risk_capacity": capacity not in RISK_SCORE,
+        "context.amount_cad": facts.get("context.amount_cad") is None,
+        "risk_capacity.emergency_fund": facts.get("risk_capacity.emergency_fund") is None,
+    }
+    return [name for name, missing in gaps.items() if missing]
+
+
+def _completeness_gaps(completeness: dict[str, Any]) -> list[str]:
+    """Champs que la complétude du profil déclare manquants (``field``, sinon ``label``, sinon « ? »)."""
+    return [item.get("field") or item.get("label", "?") for item in completeness.get("missing", []) or []]
+
+
+def _debts(facts: dict[str, Any]) -> list[Debt]:
+    """Dette à taux élevé déclarée (``risk_capacity.high_interest_debt``), au taux annuel de 0,20."""
+    balance = facts.get("risk_capacity.high_interest_debt")
+    if not balance:
+        return []
+    return [Debt(label="dette à taux élevé (déclarée)", balance=float(balance), annual_rate=0.20)]
+
+
+def _preferences(facts: dict[str, Any]) -> Preferences:
+    """Exclusions (filtre de valeurs et titres exclus), intérêts (inclinaisons) et ESG exigé dès l'importance 3."""
+    value_filters = [
+        ValueFilter(
+            rule=f"exclure : {exclusion}", per_ticker=dict.fromkeys(EXCLUSION_TICKERS.get(exclusion, []), "exclu")
         )
-    if wealth is None:
-        missing.append("context.amount_cad")
-    if g("risk_capacity.emergency_fund") is None:
-        missing.append("risk_capacity.emergency_fund")
+        for exclusion in facts.get("preferences.exclusions") or []
+    ]
+    tilts = [INTERESTS[interest] for interest in (facts.get("preferences.interests") or []) if interest in INTERESTS]
+    esg_required = (facts.get("preferences.esg_importance") or 0) >= 3
+    return Preferences(tilts=tilts, value_filters=value_filters, esg_required=esg_required, reference_currency="CAD")
 
-    filters = []
-    for ex in g("preferences.exclusions") or []:
-        filters.append(
-            ValueFilter(rule=f"exclure : {ex}", per_ticker={t: "exclu" for t in EXCLUSION_TICKERS.get(ex, [])})
-        )
-    tilts = [INTERESTS[i] for i in (g("preferences.interests") or []) if i in INTERESTS]
-    esg = (g("preferences.esg_importance") or 0) >= 3
 
-    comp = completeness or view.get("completeness") or {}
-    missing += [m.get("field") or m.get("label", "?") for m in comp.get("missing", []) or []]
-    missing = sorted(set(missing))
-    status = "COMPLETE" if not missing else "INCOMPLETE"
+def _score(category: Any) -> Score | None:
+    """Score d'une catégorie de risque de l'app (``RISK_SCORE``), ou None si la catégorie est inconnue."""
+    if category not in RISK_SCORE:
+        return None
+    return Score(value=RISK_SCORE[category], label=category, method="app/profile rules")
 
-    income_stab = g("risk_capacity.income_stability")
-    return InvestorProfile(
-        profile_id=client_id,
-        version=version,
-        created_utc=created_utc or datetime.now(UTC),
-        status=status,
-        mode="saisi",
-        knowledge_level=KNOWLEDGE.get(view.get("knowledge_level") or ""),
-        goals=goals,
-        tolerance_declared=Score(value=RISK_SCORE[tol], label=tol, method="app/profile rules")
-        if tol in RISK_SCORE
-        else None,
-        capacity_assessed=Score(value=RISK_SCORE[cap], label=cap, method="app/profile rules")
-        if cap in RISK_SCORE
-        else None,
-        max_acceptable_loss_cad=float(g("risk_capacity.max_loss_cad")) if g("risk_capacity.max_loss_cad") else None,
-        investable_wealth=float(wealth) if wealth else None,
-        emergency_fund_months=float(g("risk_capacity.emergency_fund"))
-        if g("risk_capacity.emergency_fund") is not None
-        else None,
-        income=Income(variability=INCOME.get(income_stab)) if income_stab else None,
-        debts=debts,
-        preferences=Preferences(tilts=tilts, value_filters=filters, esg_required=esg, reference_currency="CAD"),
-        missing_info=missing,
-        consistency_flags=[],
-    )
+
+def _amount_or_none(value: Any) -> float | None:
+    """Montant en dollars ; une valeur vide ou nulle (0) donne None."""
+    return float(value) if value else None
+
+
+def _float_or_none(value: Any) -> float | None:
+    """Nombre déclaré, 0 compris ; None s'il est absent."""
+    return float(value) if value is not None else None
+
+
+def _income(stability: Any) -> Income | None:
+    """Variabilité du revenu dans le vocabulaire du contrat (``INCOME``), ou None si la stabilité n'est pas déclarée."""
+    if not stability:
+        return None
+    return Income(variability=INCOME.get(stability))
 
 
 # --------------------------------------------------------------------------- étape 0 (style et sélection)
 
 
-def _tuple(x) -> tuple[str, ...]:
-    if not x:
+def _tuple(value) -> tuple[str, ...]:
+    """Codes d'une réponse (liste ou valeur seule) en chaînes, sans None ni « none »."""
+    if not value:
         return ()
-    vals = x if isinstance(x, list | tuple) else [x]
-    return tuple(str(v) for v in vals if v not in (None, "none"))
+    values = value if isinstance(value, list | tuple) else [value]
+    return tuple(str(item) for item in values if item not in (None, "none"))
+
+
+def _concentrated_sectors(flags: tuple[str, ...], exposures: dict[str, Any]) -> tuple[str, ...]:
+    """Secteur déjà concentré du portefeuille existant, quand le constat ``concentration_sector`` est levé.
+
+    ``by_sector`` est une part du portefeuille entier, alors que le constat porte sur les titres individuels :
+    on retient le secteur le plus lourd (celui qui a déclenché le constat), sans recalculer de seuil.
+    """
+    if "concentration_sector" not in flags or not exposures.get("by_sector"):
+        return ()
+    weights = {
+        sector: (weight or 0) for sector, weight in exposures["by_sector"].items() if sector not in (None, "Unknown")
+    }
+    if not weights:
+        return ()
+    return (max(sorted(weights), key=lambda sector: weights[sector]),)
 
 
 def style_inputs_from_view(view: dict[str, Any], portfolio: dict[str, Any] | None = None):
@@ -166,19 +229,13 @@ def style_inputs_from_view(view: dict[str, Any], portfolio: dict[str, Any] | Non
     """
     from alphaforge.finance.strategy.style import StyleInputs
 
-    f = _facts(view)
-    g = lambda key: f.get(key)  # noqa: E731
+    # g(champ) : valeur du champ, ou None. Nom court gardé : le test des champs déclarés relève ses appels ici.
+    g = _facts(view).get
     quiz = {k: str(g(f"knowledge.{k}")) for k in ("quiz_diversification", "quiz_bond_rates") if g(f"knowledge.{k}")}
-    port = portfolio or view.get("portfolio") or {}
-    exposures = (port.get("exposures") or {}) if isinstance(port, dict) else {}
+    existing = portfolio or view.get("portfolio") or {}
+    exposures = (existing.get("exposures") or {}) if isinstance(existing, dict) else {}
     flags = _tuple(g("context.portfolio_flags")) or _tuple(exposures.get("flags"))
-    concentrated: tuple[str, ...] = ()
-    if "concentration_sector" in flags and exposures.get("by_sector"):
-        # by_sector est une part du portefeuille entier, alors que le constat porte sur les titres individuels :
-        # on retient le secteur le plus lourd (celui qui a déclenché le constat), sans recalculer de seuil.
-        by = {k: (w or 0) for k, w in exposures["by_sector"].items() if k not in (None, "Unknown")}
-        if by:
-            concentrated = (max(sorted(by), key=lambda k: by[k]),)
+    concentrated = _concentrated_sectors(flags, exposures)
     amount = g("context.amount_cad")
     esg = g("preferences.esg_importance")
     return StyleInputs(

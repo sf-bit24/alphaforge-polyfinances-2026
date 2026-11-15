@@ -187,7 +187,7 @@ def test_short_horizon_names_the_goal_that_fixes_it_and_a_verified_lever():
     rule = no_mandate_cause(comp).dollar_rule
     assert comp.decision_kind == "protection" and not rule.is_below(rule.declared_loss)
     why = " ".join(_texts(expl, "why"))
-    assert "Votre objectif « retraits prévus sous 12 mois » fixe l'horizon de placement à 12,0 mois." in why
+    assert "Votre objectif « retraits prévus sous 12 mois » fixe l'horizon de placement à 12 mois." in why
     assert "La perte que cet horizon permet d'absorber (3,8 %)" in why
     assert "vous dites" not in why and "ans)" not in why
     assert _texts(expl, "what_would_change") == [
@@ -275,7 +275,7 @@ def test_real_e2e_profile_names_both_causes_and_only_verified_levers():
     assert _texts(expl, "why") == [
         "La perte que vous dites pouvoir absorber (250 $, soit 2,5 % du montant) est sous la plus petite perte de "
         "planification des portefeuilles possibles (13,0 %) : aucune allocation ne respecte cette limite.",
-        "Votre objectif « retraits prévus sous 12 mois » fixe l'horizon de placement à 12,0 mois. La perte que cet "
+        "Votre objectif « retraits prévus sous 12 mois » fixe l'horizon de placement à 12 mois. La perte que cet "
         "horizon permet d'absorber (3,8 %) est sous la plus petite perte de planification des portefeuilles possibles "
         "(13,0 %) : aucune allocation ne respecte cette limite.",
     ]
@@ -283,7 +283,7 @@ def test_real_e2e_profile_names_both_causes_and_only_verified_levers():
         "Une perte admissible d'au moins 1 299 $ sur ce montant serait nécessaire pour qu'une allocation soit "
         "possible.",
         "Un horizon de placement plus long serait nécessaire pour qu'une allocation soit possible. Par exemple : sans "
-        "votre objectif « retraits prévus sous 12 mois », l'horizon passerait à 5,0 ans ; ou un horizon d'au moins "
+        "votre objectif « retraits prévus sous 12 mois », l'horizon passerait à 5 ans ; ou un horizon d'au moins "
         "5,1 ans pour votre objectif principal.",
         "Ensemble, ces changements rendraient une allocation possible : une nouvelle compilation du profil modifié le "
         "vérifie.",
@@ -389,7 +389,7 @@ def test_truly_incomplete_profile_keeps_complete_and_names_the_missing_field():
         "Le profil ne permet pas encore une proposition : il manque une information indispensable au calcul (le "
         "montant à investir) ; aucune allocation n'est calculée."
     ]
-    assert _texts(expl, "what_would_change") == ["Compléter : context.amount_cad."]
+    assert _texts(expl, "what_would_change") == ["Compléter : montant à investir."]
     assert _texts(expl, "limits") == ["Aucune allocation n'est calculée tant que le profil n'est pas complété."]
     _assert_number_rule(book, expl)
 
@@ -397,7 +397,7 @@ def test_truly_incomplete_profile_keeps_complete_and_names_the_missing_field():
 def test_waiting_position_keeps_complete_with_the_missing_fields():
     comp, book, expl = _explain(_profile(max_loss=5_000, emergency=None))
     assert comp.decision_kind == "position_attente"
-    assert _texts(expl, "what_would_change") == ["Compléter : risk_capacity.emergency_fund."]
+    assert _texts(expl, "what_would_change") == ["Compléter : fonds d'urgence."]
     assert "position d'attente prudente" in _texts(expl, "why")[0]
     _assert_number_rule(book, expl)
 
@@ -420,11 +420,11 @@ def test_protection_with_a_missing_must_have_keeps_complete_and_a_necessary_leve
     assert profile.missing_info == ["context.amount_cad"]
     comp, book, expl = _explain(profile)
     assert comp.decision_kind == "protection"
-    assert _texts(expl, "why")[0].startswith("Votre objectif principal fixe l'horizon de placement à 12,0 mois.")
+    assert _texts(expl, "why")[0].startswith("Votre objectif principal fixe l'horizon de placement à 12 mois.")
     assert _texts(expl, "why")[-1] == "Il manque aussi une information indispensable au calcul (le montant à investir)."
     _assert_no_raw_goal_code(book, expl)
     changes = _texts(expl, "what_would_change")
-    assert changes[0] == "Compléter : context.amount_cad."
+    assert changes[0] == "Compléter : montant à investir."
     assert changes[1] == (
         "Un horizon de placement plus long serait nécessaire pour qu'une allocation soit possible. Par exemple : un "
         "horizon d'au moins 3,6 ans pour votre objectif principal."
@@ -443,7 +443,7 @@ def test_protection_with_missing_info_keeps_complete():
     assert comp.decision_kind == "protection"
     changes = _texts(expl, "what_would_change")
     assert changes == [
-        "Compléter : risk_capacity.emergency_fund.",
+        "Compléter : fonds d'urgence.",
         "Une perte admissible d'au moins 1 299 $ sur ce montant serait nécessaire pour qu'une allocation soit "
         "possible.",
     ]

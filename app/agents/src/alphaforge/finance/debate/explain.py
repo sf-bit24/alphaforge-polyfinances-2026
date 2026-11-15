@@ -343,6 +343,68 @@ NECESSARY_FR = " serait nécessaire pour qu'une allocation soit possible"
 # Libellé de l'objectif principal du questionnaire (from_profile_view) : « objectif : <code de l'option> », code
 # anglais brut (« retirement ») ; l'explication le nomme « votre objectif principal ».
 MAIN_GOAL_PREFIX = "objectif : "
+# Entrées de missing_info qui ne sont pas des champs du questionnaire : champs obligatoires du mandat (status.must_have)
+# et dimensions que l'adaptateur (from_profile_view) ajoute quand le profil n'en dit rien.
+MISSING_ALIASES = {
+    "investable_wealth": "context.amount_cad",
+    "goals.horizon": "horizon.horizon_band",
+    "horizon": "horizon.horizon_band",
+}
+DIMENSION_FR = {"risk_tolerance": "tolérance au risque", "risk_capacity": "capacité à prendre des risques"}
+# Mots de liaison retirés en fin de libellé quand on coupe ses nombres (« Réaction à une baisse de 20 % »).
+LINK_WORDS_FR = {"de", "des", "du", "dans", "les", "la", "le", "sous", "sur", "en", "à", "au", "aux", "par"}
+
+
+def _without_numbers(label: str) -> str:
+    """Libellé coupé avant son premier nombre : « Réaction à une baisse de 20 % » → « Réaction à une baisse ». Une
+    phrase sans Fact n'écrit aucun chiffre (règle des nombres du volet)."""
+    match = re.search(r"\d", label)
+    if match is None:
+        return label
+    head = label[: match.start()]
+    if "," in head or "(" in head:  # « …, en hausse de 60 % », « … (3 dernières années) »
+        head = head[: max(head.rfind(","), head.rfind("("))]
+    words = head.split()
+    while words and words[-1].lower() in LINK_WORDS_FR:
+        words.pop()
+    return " ".join(words)
+
+
+def _lower_first(label: str) -> str:
+    """Minuscule initiale dans une liste (« Montant à investir » → « montant à investir »), sauf pour un sigle."""
+    if len(label) > 1 and label[1].isupper():
+        return label
+    return label[:1].lower() + label[1:]
+
+
+def missing_fields_fr(missing: list[str]) -> list[str]:
+    """Champs manquants nommés en français, sans doublon, dans l'ordre du questionnaire.
+
+    Une entrée de ``missing_info`` est un identifiant complet (``context.amount_cad``), le nom court d'un champ de
+    ``completeness.missing`` (``approach``), un champ obligatoire du mandat (``investable_wealth``) ou une dimension
+    (``risk_tolerance``). Elle prend le libellé français de profile/questionnaire.yaml, sans ses nombres. Une entrée
+    inconnue reste lisible : « foo_bar » devient « foo bar ». ``missing_info`` lui-même garde les identifiants.
+    """
+    from alphaforge.profile.questionnaire import default_questionnaire  # import local : l'en-tête reste inchangé
+
+    fields = default_questionnaire().fields
+    rank = {field_id: index for index, field_id in enumerate(fields)}
+    by_name = {spec.name: field_id for field_id, spec in fields.items()}
+    first_of_dimension: dict[str, int] = {}
+    for field_id, index in rank.items():
+        first_of_dimension.setdefault(field_id.split(".", 1)[0], index)
+    named: dict[str, int] = {}
+    for entry in missing:
+        alias = MISSING_ALIASES.get(entry, entry)
+        field_id = alias if alias in fields else by_name.get(alias)
+        if field_id is not None:
+            label, index = fields[field_id].label_text("fr"), rank[field_id]
+        else:
+            label = DIMENSION_FR.get(entry) or entry.rsplit(".", 1)[-1].replace("_", " ")
+            index = first_of_dimension.get(entry, len(rank))
+        text = _lower_first(_without_numbers(label)) or "un champ du profil"
+        named[text] = min(index, named.get(text, index))
+    return sorted(named, key=lambda text: named[text])
 
 
 def no_allocation_explanation(
@@ -408,7 +470,8 @@ def _incomplete_statements(
         )
         why.append(
             Statement(
-                text_fr=f"La confiance du profil ({fmt(cause.confidence, '%')}) est sous le minimum requis pour une "
+                text_fr=f"La confiance du profil ({fmt(cause.confidence, '%')}) est "
+                f"{_under(fmt(cause.confidence, '%'), fmt(cause.completeness_min, '%'))} le minimum requis pour une "
                 f"proposition ({fmt(cause.completeness_min, '%')}).",
                 fact_ids=[conf, need],
             )
@@ -421,7 +484,7 @@ def _incomplete_statements(
                 label="HYPOTHESE",
             )
         )
-    missing = list(missing_info) or must
+    missing = missing_fields_fr(list(missing_info) or cause.must_have_missing)
     if missing or not change:  # sans cause connue, le statut INCOMPLETE vient du profil lui-même
         change.insert(
             0, Statement(text_fr="Compléter : " + ", ".join(missing or ["le profil"]) + ".", label="HYPOTHESE")
@@ -439,7 +502,7 @@ def _protection_explanation(
     why: list[Statement] = []
     change: list[Statement] = []
     must = [MUST_HAVE_FR.get(name, name) for name in cause.must_have_missing]
-    missing = list(missing_info) or must
+    missing = missing_fields_fr(list(missing_info) or cause.must_have_missing)
     if missing:
         change.append(Statement(text_fr="Compléter : " + ", ".join(missing) + ".", label="HYPOTHESE"))
     limits = [
@@ -506,9 +569,25 @@ def _protection_explanation(
     return Explanation(data_used=data_used, why=why, limits=limits, what_would_change=change)
 
 
-def _duration(years: float) -> tuple[float, str]:
-    """Horizon affiché : en mois sous deux ans (« 12,0 mois »), en années au-delà."""
-    return (round(years * 12, 4), "mois") if years < 2 else (years, "ans")
+# fmt et son port web (app/web/src/lib/portfolio/format.ts) écrivent toujours une décimale en « mois » et en « ans ».
+# Une durée entière prend donc une unité que les deux écrivent sans décimale (« 12 ») ; la phrase ajoute le mot.
+WHOLE_UNITS = {"mois": "nombre de mois", "ans": "nombre d'années"}
+WHOLE_UNIT_WORDS = {whole: word for word, whole in WHOLE_UNITS.items()}
+
+
+def _duration(years: float) -> tuple[float | int, str]:
+    """Horizon affiché : en mois sous deux ans, en années au-delà ; sans décimale s'il est entier (« 12 mois »,
+    « 5 ans », mais « 5,1 ans »)."""
+    value, unit = (round(years * 12, 4), "mois") if years < 2 else (years, "ans")
+    if abs(value - round(value)) < 1e-9:
+        return int(round(value)), WHOLE_UNITS[unit]
+    return value, unit
+
+
+def _under(shown: str, limit: str) -> str:
+    """« sous », ou « juste sous » quand les deux valeurs s'écrivent pareil une fois arrondies (12,98 % et 12,99 %
+    s'écrivent tous deux 13,0 %) : l'écart reste lisible sans écrire de chiffre non sourcé."""
+    return "juste sous" if shown == limit else "sous"
 
 
 def _covered(book: FactBook, text: str, fact_ids: list[str]) -> bool:
@@ -568,12 +647,15 @@ class _ProtectionFacts:
 
     def v(self, fid: str) -> str:
         fact = self.book.facts[fid]
-        return fmt(fact.value, fact.unit)
+        word = WHOLE_UNIT_WORDS.get(fact.unit)  # durée entière : « 12 » + « mois »
+        return f"{fmt(fact.value, fact.unit)} {word}" if word else fmt(fact.value, fact.unit)
 
-    def below(self, said: str, ids: list[str]) -> Statement:
+    def below(self, said: str, ids: list[str], compared: str) -> Statement:
+        """« <said> est sous min_L_plan » ; ``compared`` est le Fact de la perte comparée."""
+        under = _under(self.v(compared), self.v(self.floor))
         return Statement(
-            text_fr=f"{said} est sous {PLANNING_LOSS_FR} ({self.v(self.floor)}) : aucune allocation ne respecte cette "
-            "limite.",
+            text_fr=f"{said} est {under} {PLANNING_LOSS_FR} ({self.v(self.floor)}) : aucune allocation ne respecte "
+            "cette limite.",
             fact_ids=[*ids, self.floor],
         )
 
@@ -597,7 +679,7 @@ class _ProtectionFacts:
             )
             if part is not None
         ]
-        return found or [self.below(f"La perte admissible retenue ({self.v(self.star)})", [self.star])]
+        return found or [self.below(f"La perte admissible retenue ({self.v(self.star)})", [self.star], self.star)]
 
     def _declared(self) -> Statement:
         rule = self.rule
@@ -617,8 +699,8 @@ class _ProtectionFacts:
                 dataset="profil : max_acceptable_loss_cad",
             )
             said = f"La perte que vous dites pouvoir absorber ({self.v(cad)}, soit {self.v(pct)} du montant)"
-            return self.below(said, [cad, pct])
-        return self.below(f"La perte que vous dites pouvoir absorber ({self.v(pct)} du montant)", [pct])
+            return self.below(said, [cad, pct], pct)
+        return self.below(f"La perte que vous dites pouvoir absorber ({self.v(pct)} du montant)", [pct], pct)
 
     def _horizon(self) -> Statement:
         rule = self.rule
@@ -645,7 +727,8 @@ class _ProtectionFacts:
         else:
             text = f"L'horizon de placement retenu est de {self.v(horizon)}."
         return Statement(
-            text_fr=f"{text} La perte que cet horizon permet d'absorber ({self.v(loss)}) est sous {PLANNING_LOSS_FR} "
+            text_fr=f"{text} La perte que cet horizon permet d'absorber ({self.v(loss)}) est "
+            f"{_under(self.v(loss), self.v(self.floor))} {PLANNING_LOSS_FR} "
             f"({self.v(self.floor)}) : aucune allocation ne respecte cette limite.",
             fact_ids=[horizon, loss, self.floor],
         )
@@ -669,7 +752,7 @@ class _ProtectionFacts:
             f"La perte que vos retraits prévus permettent d'absorber ({self.v(loss)}, pour des retraits de "
             f"{self.v(rate)} du montant par an)"
         )
-        return self.below(said, [loss, rate])
+        return self.below(said, [loss, rate], loss)
 
     # ------------------------------------------------------------------ leviers vérifiés par compilation
     def lever_statements(self, others: int) -> list[Statement]:

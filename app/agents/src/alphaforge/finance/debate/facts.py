@@ -136,6 +136,17 @@ class FactBook:
             ids.append(f.fact_id)
         return ids
 
+    def absorb_report(self, rep) -> list[str]:
+        """Intègre un ``JudgeReport`` : sa trace, puis ses traces enfants (outil scenario_risk de PROB_LOSS), puis ses
+        Facts. Sans trace enfant, identique à ``absorb(rep.facts, rep.trace)``."""
+        children = tuple(getattr(rep, "child_traces", ()) or ())
+        if not children:
+            return self.absorb(rep.facts, rep.trace)
+        self.absorb([], rep.trace)
+        for ev in children:
+            self.absorb([], ev)
+        return self.absorb(rep.facts)
+
     def show(self, fact_ids) -> list[dict]:
         """Vue compacte pour un prompt : id, libellé, valeur formatée, statut."""
         out = []

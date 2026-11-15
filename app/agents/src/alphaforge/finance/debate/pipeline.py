@@ -131,6 +131,8 @@ def build_portfolio(
     strategy: bool = True,
     style_preference: str | None = None,
     style_inputs=None,
+    scenarios: bool | None = None,
+    scenario_tool=None,
 ) -> BuildResult:
     if compile_fn is None:
         from alphaforge.finance.policy import compile_profile as compile_fn
@@ -316,14 +318,14 @@ def build_portfolio(
         req_fids += lens_evidence("risk", ctxq)
         with book.step("judge", tool="check", inputs={"variant": "demande"}):
             repq = check(target, pol2, as_of, trace_id=f"{book.current}:demande")
-            req_fids += book.absorb(repq.facts, repq.trace)
+            req_fids += book.absorb_report(repq)
         if repq.approved:
             final_w = target
         else:
             kind = "refus_encadre"
             with book.step("judge", tool="framed_alternative"):
                 alt, rep_alt, method = framed_alternative(target, pol2, as_of)
-                book.absorb(rep_alt.facts, rep_alt.trace)
+                book.absorb_report(rep_alt)
                 req_fids.append(
                     book.add(
                         "request.framed_method",
@@ -339,7 +341,7 @@ def build_portfolio(
     # ---------------------------------------------------------------- Judge final (déterministe)
     with book.step("judge", tool="check", inputs={"variant": "final"}):
         rep = check(final_w, final_policy, as_of, trace_id=f"{book.current}:final")
-        book.absorb(rep.facts, rep.trace)
+        book.absorb_report(rep)
     if not rep.approved:
         kind = "refus_encadre"
 
@@ -449,6 +451,11 @@ def build_portfolio(
     )
     if holding_fids:
         expl.data_used.insert(1, _holding_statement(book, holding_fids))
+    # Scénarios probabilistes (outil scenario_risk) : par défaut seulement avec une limite PROB_LOSS, voir scenarios.py
+    from .scenarios import ScenarioContext, attach_scenarios
+
+    scenario_context = ScenarioContext(final_w, final_policy, profile, mode, scenario_tool)
+    expl = attach_scenarios(book, expl, scenario_context, enabled=scenarios)
     report: list[str] = []
     if rephrase_explanation if rephrase_explanation is not None else mode == "llm":
         try:

@@ -514,6 +514,14 @@ FROM alphaforge_sandbox_scenarios.scenarios
 WHERE run_id = '<run_id de latest.json>' AND family = 'CAD77' AND metric = 'p_loss_gt_20';
 ```
 
+### 10.5 Branchement dans le volet finance (débat du runtime `portfolio`)
+
+- **Judge (F4), mesure `PROB_LOSS`** (contrôle seulement, `finance/portfolio/scenario_risk.py`, proposition `scenarios/PROPOSAL_PROB_LOSS.md`) : P(perte cumulée à l'horizon H > L) ≤ α, avec `Limit.max` = α, `selector.loss_level` = L, `selector.horizon_years` = H ; la borne haute `ci_hi` de l'IC à 90 % décide. Champs facultatifs du `PolicySpec` : `scenario_blocks`, `scenario_family`, `scenario_model_id`, `scenario_run_id`. F1 n'émet pas encore de limite `PROB_LOSS` : sans elle, le Judge ne lit jamais la table et son rapport est inchangé.
+- Non vérifiable (actif sans bloc, table absente, magasin refusé, scénarios désactivés, refus de l'outil, seuil sous le plus petit palier) = **violée** (refus prudent, comme `STRESS_2022` sans 2022), Fact à `-1`, raison dans `Source.processing` et `JudgeReport.warnings`. Le `TraceEvent` de l'outil est un enfant de celui du Judge (`JudgeReport.child_traces`, absorbé par `FactBook.absorb_report`).
+- **Explication** (`finance/debate/scenarios.py`, `attach_scenarios`, appelé par `build_portfolio(..., scenarios=None)`) : par défaut, l'étape ne tourne que si le mandat final déclare une limite `PROB_LOSS` ; sans elle, l'explication, les Facts et la trace de la décision sont inchangés (`scenarios=True` force l'étape, `scenarios=False` l'interdit). L'outil est appelé sur le portefeuille final (gabarits en mode `rules`, agent `explainer_scenarios` avec l'outil Strands `scenario_risk` en mode `llm`) ; ses Facts entrent dans `Decision.facts`, le rapport de l'étape (phrases rejetées, repli sur les gabarits) dans le `TraceEvent.message` de l'étape `explainer.scenarios`. Table absente, AccessDenied ou `ALPHAFORGE_SCENARIOS=0` : une limite « scénarios indisponibles », aucun appel au modèle, jamais d'erreur.
+- Sérialisation : les champs `PROB_LOSS` restés à leur valeur par défaut (`selector.loss_level`, `selector.horizon_years`, `scenario_*`) ne sont pas écrits ; un mandat sans `PROB_LOSS` se sérialise comme avant (`policy.json`).
+- Variable lue : `ALPHAFORGE_SCENARIOS` (`0`, `off`, `false`, `no` : désactivés ; sinon lecture du magasin `ALPHAFORGE_STORE`). Le rôle du runtime `portfolio` doit avoir le droit de lecture sur `scenarios/latest.json` et `scenarios/output/` (section 1) ; sans ce droit, les scénarios sont simplement indisponibles.
+
 ## 11. Recherche par experts de sujet
 
 Un expert par sujet lance lui-même n chercheurs, un par session AgentCore (une microVM chacun), et juge ce qu'ils

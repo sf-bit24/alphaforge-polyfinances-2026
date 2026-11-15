@@ -33,6 +33,7 @@ from .analysis import (
 )
 from .compile import LinearRow, RiskRow, compile_policy
 from .market import ReturnWindow, returns_window
+from .scenario_risk import evaluate_prob_loss
 
 TOL = 1e-4
 
@@ -46,6 +47,9 @@ class JudgeReport:
     blocking_violations: tuple[str, ...]
     warnings: tuple[str, ...] = ()
     superseded: dict = field(default_factory=dict)  # rule_id -> rule_id plus strict qui s'applique
+    # TraceEvent enfants (outil scenario_risk de PROB_LOSS) : leurs Facts sont dans ``facts`` avec leur propre
+    # trace_id ; à absorber avec ``trace`` (FactBook.absorb_report). Vide sans limite PROB_LOSS.
+    child_traces: tuple[TraceEvent, ...] = ()
 
     @property
     def approved(self) -> bool:
@@ -75,6 +79,7 @@ class _Control:
     active: bool = False
     blocking: bool = True
     status: str = "FAIT"
+    source: Source | None = None  # None : la fenêtre de rendements ; PROB_LOSS : la table de scénarios
 
 
 @dataclass
@@ -86,6 +91,8 @@ class _Ledger:
     checks: list[ConstraintCheck] = field(default_factory=list)
     facts: list[Fact] = field(default_factory=list)
     blocking: list[str] = field(default_factory=list)
+    child_traces: list[TraceEvent] = field(default_factory=list)  # outil scenario_risk (PROB_LOSS)
+    warnings: list[str] = field(default_factory=list)  # avertissements des contrôles (PROB_LOSS)
 
     @property
     def verdict(self) -> str:
@@ -101,7 +108,7 @@ class _Ledger:
                 unit=control.unit,
                 as_of=self.window.as_of.date(),
                 status=control.status,
-                sources=[_source(self.window, control.processing)],
+                sources=[control.source or _source(self.window, control.processing)],
                 trace_id=self.trace_id,
             )
         )
@@ -135,7 +142,7 @@ class _Ledger:
                 "weights": {asset: round(x, 6) for asset, x in weights.items() if abs(x) > MIN_HELD_WEIGHT},
             },
             output_summary=f"{verdict} ; {len(self.blocking)} violation(s) bloquante(s)",
-            fact_ids=[fact.fact_id for fact in self.facts],
+            fact_ids=[fact.fact_id for fact in self.facts if fact.trace_id == self.trace_id],
             started_utc=started,
             ended_utc=datetime.now(UTC),
             status="ok" if not self.blocking else "refus",
@@ -303,6 +310,35 @@ def _risk_control(row: RiskRow, measurement: _Measurement) -> _Control:
     )
 
 
+def _check_prob_loss(ledger: _Ledger, row: RiskRow, held: dict[str, float], policy: PolicySpec) -> None:
+    """PROB_LOSS : contrôle seulement, lu dans la table de scénarios précalculée (sans LLM). Non vérifiable = violé ;
+    les Facts et le TraceEvent de l'outil suivent le contrôle, avec leur propre trace_id."""
+    result = evaluate_prob_loss(row.limit, held, policy, ledger.trace_id)
+    selector = row.limit.selector
+    description = row.limit.description_fr or (
+        f"P(perte > {selector.loss_level:.0%} sur {selector.horizon_years} ans), borne haute IC 90 %"
+    )
+    ledger.record(
+        _Control(
+            f"{row.rule_id}:max",
+            description,
+            row.limit.derived_from,
+            row.hi,
+            result.value if result.unverifiable is None else -1.0,
+            result.processing,
+            unit="probabilité (fraction)",
+            violated=result.violated,
+            active=result.active,
+            blocking=row.limit.blocking,
+            status="HYPOTHESE",
+            source=result.source.model_copy(update={"processing": result.processing}),
+        )
+    )
+    ledger.facts.extend(result.facts)
+    ledger.child_traces.extend(result.traces)
+    ledger.warnings.extend(result.warnings)
+
+
 def _risk_value(measure: str, r: np.ndarray, beta: float) -> float:
     if measure == "CVAR":
         return bt_metrics.var_cvar(r, alpha=1 - beta)[1]
@@ -353,7 +389,10 @@ def check(weights: dict[str, float], policy: PolicySpec, as_of,
     held = {asset: float(x) for asset, x in zip(compiled.assets, vector, strict=True) if x > MIN_HELD_WEIGHT}
     meter = _RiskMeter(policy, as_of, window, portfolio_returns, held)
     for row in compiled.risk_rows:
-        ledger.record(_risk_control(row, meter.measure(row)))
+        if row.measure == "PROB_LOSS":  # sans limite PROB_LOSS, la table de scénarios n'est jamais lue
+            _check_prob_loss(ledger, row, held, policy)
+        else:
+            ledger.record(_risk_control(row, meter.measure(row)))
     trace = ledger.trace_event(policy, weights, started)
     return JudgeReport(
         ledger.verdict,
@@ -361,8 +400,9 @@ def check(weights: dict[str, float], policy: PolicySpec, as_of,
         tuple(ledger.facts),
         trace,
         tuple(ledger.blocking),
-        tuple(compiled.warnings),
+        tuple(compiled.warnings) + tuple(ledger.warnings),
         superseded,
+        tuple(ledger.child_traces),
     )
 
 

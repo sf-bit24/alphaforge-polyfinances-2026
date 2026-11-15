@@ -71,11 +71,47 @@ target-version = "py313"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "S"]
+# E, F, I, B, UP, S : socle. Les familles suivantes portent les règles de code propre du projet :
+#   N                 nommage PEP 8 (snake_case, CapWords, exceptions en ...Error)
+#   C90               complexité cyclomatique d'une fonction (mccabe)
+#   PLR0912/0913/0915 branches, arguments et instructions par fonction
+#   FBT001/FBT002     pas d'argument booléen positionnel (argument drapeau)
+#   SIM, RET, C4, PIE simplifications ; ERA code commenté ; RUF100 noqa devenus inutiles
+select = [
+    "E", "F", "I", "B", "UP", "S",
+    "N", "C90", "PLR0912", "PLR0913", "PLR0915", "FBT001", "FBT002", "SIM", "RET", "C4", "PIE", "ERA", "RUF100",
+]
 ignore = ["S101", "S311"]
 
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 5
+max-branches = 10
+max-statements = 30
+
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S", "B"]
+# Les tests gardent le socle (E, F, I, UP) : les règles de code propre visent le code de production.
+"tests/**" = ["S", "B", "N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
+# Scripts de calibration : pièces de recherche figées, citées par risk_levels.yaml comme source des seuils.
+# Ils ne tournent qu'avec les données longues ; les réécrire sans pouvoir les rejouer changerait la preuve.
+"scripts/calibration/**" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
+# Fichiers gelés : des PR ouvertes les modifient (#43 feat/strategy-step0, #9 collect/open-feeds-declared-ua).
+# Les réécrire maintenant créerait des conflits de fusion. À mettre aux règles après la fusion de ces PR,
+# puis retirer ces lignes.
+"src/alphaforge/finance/debate/**" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
+"src/alphaforge/finance/policy/from_profile_view.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
+"src/alphaforge/collect/fetchers.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
+"src/alphaforge/collect/http.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
+"src/alphaforge/collect/press.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
+"src/alphaforge/profile/kb.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
+"src/alphaforge/okf.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
+"src/alphaforge/starter.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
+# Fichiers que la PR #43 ajoute (absents de master) : même délai.
+"src/alphaforge/finance/strategy/**" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
+"src/alphaforge/portfolio_service.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
+"src/alphaforge/collect/general.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
 # Les tests du moteur appellent pytest.importorskip (numpy, pandas, scipy) avant leurs imports, pour sauter proprement
 # quand le groupe finance n'est pas installé (CI : uv sync --frozen).
 "tests/finance/backtest/**" = ["E402"]

@@ -1,4 +1,5 @@
 """Prise de profit sur les satellites : poids courant > ``multiple`` × cible → la cible rend la moitié de l'excédent."""
+
 from __future__ import annotations
 
 import math
@@ -27,8 +28,18 @@ class TakeProfit:
             t, w = ctx.target.get(a, 0.0), ctx.weights.get(a, 0.0)
             if t <= 0 or not core:
                 continue
-            facts.append(fact(ctx, self.name, f"ratio_{a}", f"Poids courant / cible de {a}", w / t, "ratio",
-                              params=("multiple",), processing="poids courants après dérive"))
+            facts.append(
+                fact(
+                    ctx,
+                    self.name,
+                    f"ratio_{a}",
+                    f"Poids courant / cible de {a}",
+                    w / t,
+                    "ratio",
+                    params=("multiple",),
+                    processing="poids courants après dérive",
+                )
+            )
             if w > mult * t:
                 cut = min(t, (w - t) / 2)
                 delta[a] = delta.get(a, 0.0) - cut
@@ -36,5 +47,10 @@ class TakeProfit:
                 for c in core:
                     delta[c] = delta.get(c, 0.0) + cut * ctx.target[c] / tc
                 reasons.append(f"{a} à {w / t:.2f} × sa cible : −{cut:.1%} vers le cœur")
-        return OverlaySignal(self.name, float(len(reasons)), clean(delta),
-                             " ; ".join(reasons) or "aucun satellite au-delà du multiple", facts)
+        return OverlaySignal(
+            self.name,
+            float(len(reasons)),
+            clean(delta),
+            " ; ".join(reasons) or "aucun satellite au-delà du multiple",
+            facts,
+        )

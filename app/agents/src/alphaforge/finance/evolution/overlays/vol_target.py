@@ -1,4 +1,5 @@
 """Ciblage de volatilité : part actions × (vol cible / vol réalisée de la cible), sans levier (borné ensuite)."""
+
 from __future__ import annotations
 
 import math
@@ -26,10 +27,25 @@ class VolTarget:
             return OverlaySignal(self.name, None, {}, "volatilité réalisée nulle ou indéfinie")
         eq = equity_share(ctx.target, ctx.equity_assets)
         shift = eq * (min(tv / vol, 1.0 / max(eq, 1e-9)) - 1)
-        facts = [fact(ctx, self.name, "realized_vol", f"Volatilité réalisée {lb} mois (annualisée)", vol, "ratio",
-                      params=("lookback",)),
-                 fact(ctx, self.name, "scale", "Rapport vol cible / vol réalisée", tv / vol, "ratio",
-                      params=("target_vol",))]
+        facts = [
+            fact(
+                ctx,
+                self.name,
+                "realized_vol",
+                f"Volatilité réalisée {lb} mois (annualisée)",
+                vol,
+                "ratio",
+                params=("lookback",),
+            ),
+            fact(
+                ctx, self.name, "scale", "Rapport vol cible / vol réalisée", tv / vol, "ratio", params=("target_vol",)
+            ),
+        ]
         delta = clean(move_equity(ctx.target, shift, ctx.equity_assets, ctx.cash_like))
-        return OverlaySignal(self.name, tv / vol, delta, f"vol réalisée {vol:.1%} vs cible {tv:.1%} : "
-                             f"{shift:+.1%} d'actions demandé", facts)
+        return OverlaySignal(
+            self.name,
+            tv / vol,
+            delta,
+            f"vol réalisée {vol:.1%} vs cible {tv:.1%} : {shift:+.1%} d'actions demandé",
+            facts,
+        )

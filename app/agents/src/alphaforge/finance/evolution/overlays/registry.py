@@ -1,4 +1,5 @@
 """Registre des overlays (nom YAML → classe) et construction dans l'ordre de ``cfg.overlays.order``."""
+
 from __future__ import annotations
 
 from ..config import EvolutionConfig
@@ -12,9 +13,20 @@ from .trend import TrendTilt
 from .tsmom import TimeSeriesMomentum
 from .vol_target import VolTarget
 
-REGISTRY: dict[str, type] = {c.name: c for c in (
-    DrawdownControl, TrendTilt, TimeSeriesMomentum, DualMomentum, RelativeStrength, StopLoss, TrailingStop,
-    TakeProfit, VolTarget)}
+REGISTRY: dict[str, type] = {
+    c.name: c
+    for c in (
+        DrawdownControl,
+        TrendTilt,
+        TimeSeriesMomentum,
+        DualMomentum,
+        RelativeStrength,
+        StopLoss,
+        TrailingStop,
+        TakeProfit,
+        VolTarget,
+    )
+}
 
 
 def build_overlays(cfg: EvolutionConfig, params: dict[str, dict] | None = None) -> list[Overlay]:

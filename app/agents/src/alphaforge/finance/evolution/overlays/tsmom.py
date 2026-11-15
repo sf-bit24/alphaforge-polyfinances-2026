@@ -1,4 +1,5 @@
 """Momentum temporel (time-series momentum) : signe du rendement 12-1 du panier actions, et de l'or s'il est détenu."""
+
 from __future__ import annotations
 
 import math
@@ -34,8 +35,17 @@ class TimeSeriesMomentum:
             return OverlaySignal(self.name, None, {}, f"historique insuffisant (< {lb + skip} mois)")
         sig = 1.0 if m > 0 else -1.0
         delta = move_equity(ctx.target, sig * shift, ctx.equity_assets, ctx.cash_like)
-        facts = [fact(ctx, self.name, "mom_equity", f"Rendement {lb}-{skip} du panier actions", m, "ratio",
-                      params=("lookback", "skip"))]
+        facts = [
+            fact(
+                ctx,
+                self.name,
+                "mom_equity",
+                f"Rendement {lb}-{skip} du panier actions",
+                m,
+                "ratio",
+                params=("lookback", "skip"),
+            )
+        ]
         reason = f"rendement {lb}-{skip} des actions {m:+.1%} : {sig * shift:+.0%} d'actions demandé"
         gold = [a for a, w in ctx.target.items() if w > 0 and (a == "GLD" or ctx.asset_class.get(a) in GOLD_CLASSES)]
         cash = [a for a in sorted(ctx.cash_like) if a in ctx.target]
@@ -45,8 +55,17 @@ class TimeSeriesMomentum:
             mg = momentum_12_1(ctx.returns_upto[g], lb, skip)
             if mg is None:
                 continue
-            facts.append(fact(ctx, self.name, f"mom_{g}", f"Rendement {lb}-{skip} de {g}", mg, "ratio",
-                              params=("lookback", "skip")))
+            facts.append(
+                fact(
+                    ctx,
+                    self.name,
+                    f"mom_{g}",
+                    f"Rendement {lb}-{skip} de {g}",
+                    mg,
+                    "ratio",
+                    params=("lookback", "skip"),
+                )
+            )
             if mg < 0 and cash:
                 cut = min(shift, ctx.target[g] + delta.get(g, 0.0))
                 delta[g] = delta.get(g, 0.0) - cut

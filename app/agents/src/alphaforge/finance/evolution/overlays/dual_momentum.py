@@ -1,4 +1,5 @@
 """Double momentum (absolu) : actions contre quasi-liquidités sur 12-1 ; perdant → actions au plancher borné."""
+
 from __future__ import annotations
 
 from .base import (
@@ -32,15 +33,39 @@ class DualMomentum:
         cash_r = basket_returns(ctx.returns_upto, ctx.target, ctx.cash_like)
         mc = momentum_12_1(cash_r, lb, skip) if len(cash_r) else None
         mc_v = 0.0 if mc is None else mc
-        facts = [fact(ctx, self.name, "mom_equity", f"Rendement {lb}-{skip} du panier actions", me, "ratio",
-                      params=("lookback", "skip")),
-                 fact(ctx, self.name, "mom_cash", f"Rendement {lb}-{skip} des quasi-liquidités", mc_v, "ratio",
-                      params=("lookback", "skip"), status="FAIT" if mc is not None else "HYPOTHESE",
-                      processing=None if mc is not None else "aucune quasi-liquidité avec historique : 0 supposé")]
+        facts = [
+            fact(
+                ctx,
+                self.name,
+                "mom_equity",
+                f"Rendement {lb}-{skip} du panier actions",
+                me,
+                "ratio",
+                params=("lookback", "skip"),
+            ),
+            fact(
+                ctx,
+                self.name,
+                "mom_cash",
+                f"Rendement {lb}-{skip} des quasi-liquidités",
+                mc_v,
+                "ratio",
+                params=("lookback", "skip"),
+                status="FAIT" if mc is not None else "HYPOTHESE",
+                processing=None if mc is not None else "aucune quasi-liquidité avec historique : 0 supposé",
+            ),
+        ]
         if me >= mc_v:
-            return OverlaySignal(self.name, 1.0, {}, f"actions {me:+.1%} ≥ quasi-liquidités {mc_v:+.1%} : aucun "
-                                 "déplacement", facts)
-        delta = clean(move_equity(ctx.target, -equity_share(ctx.target, ctx.equity_assets), ctx.equity_assets,
-                                  ctx.cash_like))
-        return OverlaySignal(self.name, -1.0, delta, f"actions {me:+.1%} < quasi-liquidités {mc_v:+.1%} : sortie "
-                             "des actions demandée (bornée par le profil)", facts)
+            return OverlaySignal(
+                self.name, 1.0, {}, f"actions {me:+.1%} ≥ quasi-liquidités {mc_v:+.1%} : aucun déplacement", facts
+            )
+        delta = clean(
+            move_equity(ctx.target, -equity_share(ctx.target, ctx.equity_assets), ctx.equity_assets, ctx.cash_like)
+        )
+        return OverlaySignal(
+            self.name,
+            -1.0,
+            delta,
+            f"actions {me:+.1%} < quasi-liquidités {mc_v:+.1%} : sortie des actions demandée (bornée par le profil)",
+            facts,
+        )

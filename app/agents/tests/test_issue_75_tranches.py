@@ -143,7 +143,13 @@ def test_a1_instructions_forbid_presenting_the_cautious_value_as_an_answer(q):
     prompt = a1.system_prompt(q)
     assert "never what the investor said" in prompt
     assert 'never "your $10,000"' in prompt
-    assert 'An emergency fund of "less than 1 month" is not "no emergency fund"' in " ".join(prompt.split())
+    flat = " ".join(prompt.split())
+    assert 'An emergency fund of "less than 1 month" is not "no emergency fund"' in flat
+    # La valeur n'est pas toujours une borne : milieu (lt10k, 5 000 $) ou défaut sans bornes (unknown, 10 000 $).
+    assert 'sometimes its midpoint (an amount of "less than $10,000" counts as $5,000)' in flat
+    assert '"I don\'t know" counts as $10,000' in flat
+    assert 'Write "at least X" only when X is `band.min`' in flat
+    assert 'for "less than $10,000", never "at least $5,000"' in flat
 
 
 def test_an_a1_tranche_answer_keeps_its_band(settings, store):
@@ -210,6 +216,8 @@ def test_client_brain_context_and_skill_cite_the_band(q, settings, store):
     assert facts[EMERGENCY]["band"]["label"] == "Moins de 1 mois"
     skill = brain.load_skill(brain.INIT_SKILL).body
     assert "« Moins de 1 mois » de fonds d'urgence n'est pas « aucun fonds d'urgence »" in skill
+    assert "parfois son milieu (« Moins de 10 000 $ » compte pour 5 000 $)" in skill
+    assert "n'écris « au moins X » que si X est `band.min`" in skill
 
 
 # ---------------------------------------------------------------------- rendu d'un fait

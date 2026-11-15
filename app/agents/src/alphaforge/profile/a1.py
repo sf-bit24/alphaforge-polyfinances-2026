@@ -121,14 +121,17 @@ explanation; advanced = precise and concise vocabulary.
 the investor gave). Do not compute new figures. To mention the completeness, copy `completeness.shown` and \
 `completeness.threshold_shown` exactly as written (for example 75 % and 70 %), never the raw `score` or \
 `threshold`, which are only for your decisions. Distinguish what the investor said (facts) from your assumptions.
-- Several answers are ranges (tranches): such a fact or answer carries `band`, and its `shown_as` cites the range. \
-Its `value` is only the cautious figure the code computes with (the lower bound of an amount or a reserve, the \
-upper bound of a withdrawal), never what the investor said. Never present that value as an exact answer, in the \
-message, a prompt or a help: cite the range as `shown_as` or `band.label` gives it. For an amount of "$10,000 to \
-less than $50,000", write "an amount of at least $10,000" or the range, never "your $10,000" or "these $10,000"; \
-for withdrawals of "10% to less than 25%", write that range, not "about 25%". An emergency fund of "less than \
-1 month" is not "no emergency fund": only the option `none` means there is none. When dollar tranches are \
-computed on such a cautious figure, `choices_note` says so.
+- Several answers are ranges (tranches): such a fact or answer carries `band` (`option`, `label`, `min`, `max`), \
+and its `shown_as` cites the range. Its `value` is only the figure the code computes with, never what the investor \
+said: usually the cautious bound of the range (`band.min` for an amount or a reserve, `band.max` for a withdrawal), \
+sometimes its midpoint (an amount of "less than $10,000" counts as $5,000) or a default with no bounds ("I don't \
+know" counts as $10,000). Never present that value as an exact answer, in the message, a prompt or a help: cite \
+the range as `shown_as` or `band.label` gives it. Write "at least X" only when X is `band.min`, and "less than Y" \
+only when Y is `band.max`. For an amount of "$10,000 to less than $50,000", write "an amount of at least $10,000" \
+or the range, never "your $10,000" or "these $10,000"; for "less than $10,000", never "at least $5,000"; for \
+withdrawals of "10% to less than 25%", write that range, not "about 25%". An emergency fund of "less than 1 month" \
+is not "no emergency fund": only the option `none` means there is none. When dollar tranches are computed on such \
+a figure, `choices_note` says so.
 - The message is 2 to 5 sentences: acknowledge what was learned, then say why the next questions matter. No \
 greeting formulas, no lists of everything known.
 - You choose the variable to ask about: a field of missing_fields (heaviest first, unless the conversation makes \
@@ -230,7 +233,8 @@ def system_prompt(questionnaire: Questionnaire) -> str:
 
 def _choices_note(frame: TurnFrame, field_id: str) -> str | None:
     """Avertissement à A1 quand des tranches en dollars sont des parts d'un montant répondu par tranche : ce
-    montant n'est que le chiffre prudent du calcul, pas celui de l'investisseur."""
+    montant n'est que le chiffre du calcul (borne prudente, milieu ou valeur par défaut), pas celui de
+    l'investisseur."""
     spec = frame.questionnaire.fields[field_id]
     reference = (spec.choices or {}).get("relative_to")
     band = frame.bands.get(reference) if reference else None
@@ -240,7 +244,7 @@ def _choices_note(frame: TurnFrame, field_id: str) -> str | None:
     base = format_money(amount, frame.locale)
     shown = format_fact(frame.questionnaire.fields[reference], {"value": amount, "band": band}, frame.locale)
     return (
-        f"These dollar tranches are shares of {base}, the cautious figure kept for {reference}; the investor "
+        f"These dollar tranches are shares of {base}, the figure the code keeps for {reference}; the investor "
         f'chose the range {shown}. {base} is not their exact amount: cite the range, never "your {base}".'
     )
 

@@ -703,6 +703,33 @@ def format_fact(spec: FieldSpec, fact: dict[str, Any] | None, locale: str) -> st
     return f"{text[:-1]}; {note})" if text.endswith(")") else f"{text} ({note})"
 
 
+def _plain_text(value: Any) -> str:
+    """Un code ou une liste de codes tels quels, jamais leur repr : « tfsa, rrsp »."""
+    if isinstance(value, list):
+        return ", ".join(_plain_text(item) for item in value) or "—"
+    return "—" if value is None else str(value)
+
+
+def fact_label(spec: FieldSpec, fact: dict[str, Any], locale: str) -> str:
+    """Libellé autonome de la valeur d'un fait, dans la langue ``locale`` (liste « Faits » du panneau Profil) :
+    la tranche choisie (« Moins de 1 mois »), l'option ou les options (« CELI, REER »), « Oui » ou « Non », un
+    nombre avec son unité. Un code sans libellé connu reste tel quel; une valeur mal formée est écrite telle
+    quelle, sans erreur."""
+    band = fact_band(fact)
+    label = localized(band["label"], locale) if band else None
+    if label:
+        return label
+    value = fact.get("value")
+    if spec.type == "multi_enum" and not isinstance(value, list):
+        value = [value]
+    elif spec.type != "multi_enum" and isinstance(value, list):
+        return _plain_text(value)
+    try:
+        return format_field_value(spec, value, locale)
+    except (TypeError, ValueError):
+        return _plain_text(value)
+
+
 def label_separator(locale: str) -> str:
     """Séparateur d'un libellé et de sa valeur : « : » en anglais, espace insécable puis « : » en français."""
     return ": " if locale == "en" else "\u00a0: "

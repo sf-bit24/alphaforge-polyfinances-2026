@@ -187,6 +187,7 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
 - `status` : `known`, `partial`, `missing`. `provenance` : `base:<question_id>`, `a1:<numéro de tour>`, `a2:<numéro de tour>`, `settings`. Le numéro de tour est commun à A1 et A2 dans la session : un tour d'A1 qui suit A2 est `a1:2`.
 - `documents` n'est rempli que par `profile.get`.
 - `facts[].band` (facultatif) : la tranche choisie quand une question à choix renseigne un champ numérique (`number`, `money`, `percent`), `{option, label, min, max}`, avec `label` dans la langue de la vue et des bornes `null` quand la tranche n'en a pas. `value` reste le nombre que le code calcule et que lit le volet finance (section 5, `data.facts.<champ>.band`) ; l'interface affiche `label` (« Moins de 1 mois », pas « 0 »). Le web écarte une `band` mal formée sans rejeter la réponse.
+- `facts[].label` (facultatif) : la valeur telle que l'investisseur la lit, dans la langue de la vue, tirée de `questionnaire.yaml` par le code : le libellé de l'option choisie (« Plutôt stables »), des options choisies séparées par des virgules (« CELI, REER »), « Oui » ou « Non », un nombre avec son unité, ou la tranche d'une réponse numérique (« Moins de 1 mois », comme `band.label`). Un code sans libellé connu y reste tel quel, jamais en JSON. `value` reste le code ou le nombre que lit le volet finance. Le web montre `band.label`, sinon `label`, sinon la valeur (une liste de codes séparés par des virgules) ; il écarte un `label` mal formé sans rejeter la réponse.
 
 `Position` et `PortfolioView` :
 

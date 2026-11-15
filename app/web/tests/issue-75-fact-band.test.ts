@@ -50,7 +50,7 @@ describe("factValueText", () => {
   it("falls back to the value when there is no band", () => {
     expect(factValueText({ value: 0 })).toBe("0");
     expect(factValueText({ value: "gt10" })).toBe("gt10");
-    expect(factValueText({ value: ["tfsa", "rrsp"] })).toBe('["tfsa","rrsp"]');
+    expect(factValueText({ value: ["tfsa", "rrsp"] })).toBe("tfsa, rrsp"); // codes, never JSON (suite of #75)
     const long = factValueText({ value: Array.from({ length: 30 }, (_, index) => `option_${index}`) });
     expect(long).toHaveLength(58);
     expect(long.endsWith("…")).toBe(true);

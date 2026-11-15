@@ -204,6 +204,8 @@ export const Fact = z.object({
   provenance: z.string(),
   at: timestamp,
   band: FactBand.optional().catch(undefined),
+  /** The value as the investor reads it, in the language of the view (optional, CONTRACTS.md 3.3); dropped if malformed. */
+  label: z.string().min(1).optional().catch(undefined),
 });
 export type Fact = z.infer<typeof Fact>;
 

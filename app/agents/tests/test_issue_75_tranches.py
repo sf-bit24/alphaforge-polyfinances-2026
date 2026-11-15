@@ -71,9 +71,10 @@ def test_the_value_is_unchanged_and_the_band_is_kept_with_the_fact(settings, sto
     # Le journal garde l'identifiant de la tranche, comme avant.
     entries = okf.parse(store.get(journal_key(client_id)).text).data["entries"]
     assert next(e for e in entries if e.get("field") == EMERGENCY)["option"] == "lt1"
-    # ProfileView garde les nombres que lit le volet finance; la tranche s'y ajoute en champ facultatif.
+    # ProfileView garde les nombres que lit le volet finance; la tranche et le libellé s'y ajoutent en champs
+    # facultatifs.
     view = response["profile"]
-    assert all(set(fact) - {"band"} == {"field", "value", "provenance", "at"} for fact in view["facts"])
+    assert all(set(fact) - {"band", "label"} == {"field", "value", "provenance", "at"} for fact in view["facts"])
     profile = investor_profile_from_view(view, client_id)
     assert (profile.emergency_fund_months, profile.investable_wealth) == (0.0, 10000.0)
 

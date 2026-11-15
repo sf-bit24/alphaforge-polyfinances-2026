@@ -60,9 +60,6 @@ filterwarnings = [
 line-length = 120
 target-version = "py313"
 src = ["src", "tests"]
-# Études ponctuelles du moteur de backtest (scripts de recherche repris de research/backtest, PR #4) : leurs résultats
-# sont figés dans scripts/backtest/results et cités par les rapports du Brain ; on ne les réécrit pas pour le lint.
-extend-exclude = ["scripts/backtest"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "S"]

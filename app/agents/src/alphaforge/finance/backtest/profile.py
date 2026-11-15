@@ -1,8 +1,8 @@
 """Investor-profile configuration (YAML) -> validated dict with defaults.
 
 See finance/backtest/profiles/example.yaml for a fully commented example. A profile given by id is looked up in
-``paths.profile_dirs()`` (packaged profiles, then the studies of ``app/agents/scripts/backtest/profiles`` in a source
-checkout; ``ALPHAFORGE_BT_PROFILES`` or ``profiles_dir`` override the list).
+``paths.profile_dirs()`` (the packaged ``profiles/`` folder; ``ALPHAFORGE_BT_PROFILES`` or ``profiles_dir`` override
+it).
 """
 from __future__ import annotations
 

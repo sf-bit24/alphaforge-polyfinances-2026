@@ -3,15 +3,12 @@
 - processed monthly dataset: ``alphaforge/data/long/`` (parquets not versioned, see SOURCES.md there);
   override ``ALPHAFORGE_BT_DATA``. Raw downloads (untrusted, not versioned) go to ``<data dir>/raw/``.
 - official starter dataset: ``alphaforge/data/starter/``; override ``ALPHAFORGE_STARTER_DIR``.
-- profile YAML files given by id: ``finance/backtest/profiles/``, then (source checkout only) the studies'
-  ``app/agents/scripts/backtest/profiles/``; override ``ALPHAFORGE_BT_PROFILES`` (``os.pathsep``-separated
-  list) or ``load_profile(..., profiles_dir=...)`` / ``--profiles-dir``.
-- run traces: ``app/agents/scripts/backtest/results/<profile id>/`` in a source checkout, else
-  ``./backtest-results/<profile id>/``; override ``ALPHAFORGE_BT_RESULTS`` or ``out_dir`` / ``--out``.
-
-A "source checkout" is detected when ``app/agents/pyproject.toml`` and ``app/agents/scripts/backtest/`` sit where
-they are in the repository (``uv sync`` installs the project in editable mode). In the AgentCore zip they do not,
-so the engine never writes inside the package.
+- profile YAML files given by id: ``finance/backtest/profiles/`` (``example.yaml``); override
+  ``ALPHAFORGE_BT_PROFILES`` (``os.pathsep``-separated list) or ``load_profile(..., profiles_dir=...)`` /
+  ``--profiles-dir``.
+- run traces: ``./backtest-results/<profile id>/``, relative to the current directory and ignored by git;
+  override ``ALPHAFORGE_BT_RESULTS`` or ``run_profile(..., out_dir=...)`` / ``--out``. The engine never writes
+  inside the package.
 """
 
 from __future__ import annotations
@@ -22,9 +19,6 @@ from pathlib import Path
 
 PACKAGE_DIR = Path(__file__).resolve().parent  # alphaforge/finance/backtest
 ALPHAFORGE_DIR = PACKAGE_DIR.parents[1]  # alphaforge
-APP_DIR = PACKAGE_DIR.parents[3]  # app/agents (meaningful in a source checkout only)
-STUDIES_DIR = APP_DIR / "scripts" / "backtest"
-IN_CHECKOUT = (APP_DIR / "pyproject.toml").is_file() and STUDIES_DIR.is_dir()
 
 DEFAULT_DATA_DIR = ALPHAFORGE_DIR / "data" / "long"
 DEFAULT_STARTER_DIR = ALPHAFORGE_DIR / "data" / "starter"
@@ -36,7 +30,7 @@ LONG_PARQUETS = ("monthly_returns.parquet", "inflation_monthly.parquet", "fx_mon
 
 def data_dir() -> Path:
     """Processed dataset directory. Read at each call: ``data.DATA_DIR`` and ``build_data`` read it once, when they
-    are first imported (a study may set ``ALPHAFORGE_BT_DATA`` before importing the engine, see scripts/backtest)."""
+    are first imported (a script may set ``ALPHAFORGE_BT_DATA`` before importing the engine to use a derived copy)."""
     return Path(os.environ.get("ALPHAFORGE_BT_DATA") or DEFAULT_DATA_DIR)
 
 
@@ -50,10 +44,7 @@ def profile_dirs() -> list[Path]:
     env = os.environ.get("ALPHAFORGE_BT_PROFILES")
     if env:
         return [Path(p) for p in env.split(os.pathsep) if p]
-    dirs = [PROFILES_DIR]
-    if IN_CHECKOUT:
-        dirs.append(STUDIES_DIR / "profiles")
-    return dirs
+    return [PROFILES_DIR]
 
 
 def results_dir() -> Path:
@@ -61,7 +52,7 @@ def results_dir() -> Path:
     env = os.environ.get("ALPHAFORGE_BT_RESULTS")
     if env:
         return Path(env)
-    return STUDIES_DIR / "results" if IN_CHECKOUT else Path.cwd() / "backtest-results"
+    return Path.cwd() / "backtest-results"
 
 
 def long_data_available(modules: tuple[str, ...] = ("numpy", "pandas")) -> bool:

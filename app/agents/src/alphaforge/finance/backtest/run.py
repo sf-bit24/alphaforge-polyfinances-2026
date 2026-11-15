@@ -193,7 +193,7 @@ def main(argv=None) -> None:
     ap.add_argument(
         "--profiles-dir",
         help="directory searched for the profile id (default: ALPHAFORGE_BT_PROFILES, "
-        "else the packaged profiles then scripts/backtest/profiles)",
+        "else the packaged profiles/ folder)",
     )
     ap.add_argument("--mode", choices=["rolling", "non_overlapping"])
     ap.add_argument("--horizon", type=float, help="horizon in years (overrides the profile)")
@@ -202,7 +202,7 @@ def main(argv=None) -> None:
     ap.add_argument("--no-oracle", action="store_true")
     ap.add_argument(
         "--out",
-        help="output directory (default: ALPHAFORGE_BT_RESULTS or scripts/backtest/results, then /<profile id>)",
+        help="output directory (default: ALPHAFORGE_BT_RESULTS or ./backtest-results, then /<profile id>)",
     )
     a = ap.parse_args(argv)
     prof = load_profile(a.profile, a.profiles_dir)

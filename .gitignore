@@ -6,6 +6,9 @@
 # Documents du Datathon, copies dans le Brain : non versionnes ici.
 /docs/
 
+# Traces du moteur de backtest (défaut ./backtest-results, où qu'on le lance)
+backtest-results/
+
 # Python
 __pycache__/
 *.py[cod]

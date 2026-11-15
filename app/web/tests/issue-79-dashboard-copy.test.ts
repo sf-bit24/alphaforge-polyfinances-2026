@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ClientState } from "@/lib/contract/schemas";
-import { composeHints } from "@/components/dashboard/assistant-offer";
+import { composeHints, introCopy, offersFollowups } from "@/components/dashboard/assistant-offer";
 import { dictionaries } from "@/lib/i18n/dictionary";
 
 const nbsp = (text: string) => text.replace(/[  ]/g, " ");
@@ -35,5 +35,39 @@ describe("hint under Yan's input (#79)", () => {
     expect(locked).toBe("You can stop the questions from 60% completeness (currently 50%).");
     const [, ready] = composeHints(dictionaries.fr, "fr", true, completeness(1));
     expect(nbsp(ready!)).toBe("Votre profil atteint le seuil de 70 % : vous pouvez arrêter les questions.");
+  });
+});
+
+describe("follow-ups chip of Yan's assistant (#79)", () => {
+  const waiting = { followups: true, replying: false, started: true, questionCount: 2 };
+
+  it("is offered in the intro while A1's questions, asked in the journey, wait for an answer", () => {
+    expect(offersFollowups("intro", waiting)).toBe(true);
+    // Being written (Yan started them in the journey): offered, disabled until they arrive.
+    expect(offersFollowups("intro", { ...waiting, replying: true, questionCount: 0 })).toBe(true);
+    expect(offersFollowups("intro", { ...waiting, started: false, questionCount: 0 })).toBe(true);
+  });
+
+  it("is not offered once A1 has nothing more to ask, nor outside the follow-ups", () => {
+    expect(offersFollowups("intro", { ...waiting, questionCount: 0 })).toBe(false);
+    expect(offersFollowups("intro", { ...waiting, followups: false })).toBe(false);
+    expect(offersFollowups("thread", { ...waiting, followups: false, started: false })).toBe(false);
+  });
+
+  it("is offered under the thread only before A1 has asked anything: its questions show in the thread", () => {
+    expect(offersFollowups("thread", waiting)).toBe(false);
+    expect(offersFollowups("thread", { ...waiting, started: false, questionCount: 0 })).toBe(true);
+    expect(offersFollowups("thread", { ...waiting, started: false, replying: true, questionCount: 0 })).toBe(false);
+  });
+
+  it("is promised by the intro's lead only when it is offered", () => {
+    for (const t of [dictionaries.fr, dictionaries.en]) {
+      expect(introCopy(t, true, true)).toEqual({ heading: t.assistant.introFollowups, lead: t.assistant.leadFollowups });
+      const write = introCopy(t, true, false);
+      expect(write.heading).toBe(t.assistant.introFollowups);
+      expect(write.lead).not.toBe(t.assistant.leadFollowups);
+      expect(write.lead).not.toMatch(/questions/i);
+      expect(introCopy(t, false, false)).toEqual({ heading: t.assistant.introComplete, lead: t.assistant.leadComplete });
+    }
   });
 });

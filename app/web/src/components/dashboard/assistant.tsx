@@ -8,14 +8,14 @@ import { useI18n } from "@/lib/i18n/provider";
 import { DEMO, DEMO_CHIPS, type DemoKey } from "@/lib/sample/assistant-demo";
 import { tr } from "@/lib/sample/portfolio";
 import { cn } from "@/components/ui/cn";
-import { composeHints } from "./assistant-offer";
+import { composeHints, followupsStatus, introCopy, offersFollowups, type FollowupsStatus } from "./assistant-offer";
 import { PendingReply, Thread, ThreadEntries, ThreadNotices, threadView, type ThreadView } from "./assistant-thread";
 import styles from "./dashboard.module.css";
 import { IntroScene, SuggestionChips, type IntroChip } from "./intro-scene";
 import { isDemoKey, useDemoScript, useFollowupForm, useThreadScroll, type FollowupForm } from "./use-assistant";
 
 interface ChipOffer {
-  /** A1's follow-ups can start: follow-up stage, nothing said yet, no reply pending. */
+  /** « Ask me your follow-up questions » (`offersFollowups`). */
   followups: boolean;
   /** `mock` mode: the draft's demo prompts are offered, except those already played. */
   sample: boolean;
@@ -35,10 +35,9 @@ function suggestedChips(offer: ChipOffer, t: Dictionary, locale: Locale): IntroC
 }
 
 /** The intro asks for the missing details during the follow-ups, and opens the conversation afterwards. */
-function introTexts(t: Dictionary, view: Pick<ThreadView, "followups">) {
+function introTexts(t: Dictionary, view: Pick<ThreadView, "followups">, followupsOffered: boolean) {
   return {
-    heading: view.followups ? t.assistant.introFollowups : t.assistant.introComplete,
-    lead: view.followups ? t.assistant.leadFollowups : t.assistant.leadComplete,
+    ...introCopy(t, view.followups, followupsOffered),
     placeholder: t.assistant.placeholder,
     sendLabel: t.assistant.send,
     hint: t.assistant.hintBirds,
@@ -114,6 +113,21 @@ function Composer({
   );
 }
 
+/** The landing scene, until the investor writes or picks a chip. */
+function AssistantIntro({ view, status, sample, onDone }: { view: ThreadView; status: FollowupsStatus; sample: boolean; onDone: (text: string, chip: string | null) => void }) {
+  const { t, locale } = useI18n();
+  const session = useSession();
+  const followups = offersFollowups("intro", status);
+  return (
+    <IntroScene
+      {...introTexts(t, view, followups)}
+      chips={suggestedChips({ followups, sample, played: [], stop: false }, t, locale)}
+      disabled={Boolean(session.pending)}
+      onDone={onDone}
+    />
+  );
+}
+
 /**
  * Yan, the assistant of the dashboard draft. Its conversation is A1's (`followup.reply`):
  * it asks the follow-ups that complete the profile, and answers within the profile's scope.
@@ -128,21 +142,23 @@ export function Assistant({ state, sample }: { state: ClientState; sample: boole
   const form = useFollowupForm(view.askQuestions ? state.questions : []);
   const readFromStart = view.askQuestions && !demoTyping && view.entries.at(-1) === view.lastAgent;
   const threadRef = useThreadScroll({ entryCount: view.entries.length, replying: view.replying, demoTyping, streamText: session.streamText, readFromStart });
+  const status = followupsStatus(view, session.conversation.length, state.questions.length);
 
   const act = (chip: string, text: string) => {
-    if (chip === "followups") void session.reply({});
-    else if (chip === "stop") void form.send({ stop: true, text: "" });
+    // Already asked (in the journey): leaving the intro shows them in the thread.
+    if (chip === "followups") {
+      if (!status.started) void session.reply({});
+    } else if (chip === "stop") void form.send({ stop: true, text: "" });
     else if (isDemoKey(chip)) playDemo(chip);
     else void form.send({ stop: false, text });
   };
 
-  const offer = { followups: view.followups && session.conversation.length === 0 && !view.replying, sample };
   if (intro) {
     return (
-      <IntroScene
-        {...introTexts(t, view)}
-        chips={suggestedChips({ ...offer, played: [], stop: false }, t, locale)}
-        disabled={Boolean(session.pending)}
+      <AssistantIntro
+        view={view}
+        status={status}
+        sample={sample}
         onDone={(text, chip) => {
           setIntro(false);
           act(chip ?? "", text);
@@ -151,6 +167,7 @@ export function Assistant({ state, sample }: { state: ClientState; sample: boole
     );
   }
 
+  const threadOffer = { followups: offersFollowups("thread", status), sample, played: playedDemos, stop: view.followups && state.completeness.ready };
   return (
     <section className={styles.frame} aria-label={t.assistant.conversation}>
       <Thread threadRef={threadRef} sample={sample}>
@@ -159,7 +176,7 @@ export function Assistant({ state, sample }: { state: ClientState; sample: boole
         <ThreadNotices view={view} questions={state.questions} />
       </Thread>
       <Composer
-        chips={suggestedChips({ ...offer, played: playedDemos, stop: view.followups && state.completeness.ready }, t, locale)}
+        chips={suggestedChips(threadOffer, t, locale)}
         chipsDisabled={Boolean(session.pending) || demoTyping}
         onChip={(chip) => act(chip.key, chip.label)}
         form={form}

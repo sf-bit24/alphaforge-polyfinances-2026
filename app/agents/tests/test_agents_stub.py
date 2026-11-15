@@ -297,6 +297,127 @@ def test_third_open_question_of_the_session_is_refused(settings, store):
     assert counts == {"generated": 3, "open": 2}
 
 
+def test_ninth_generated_question_is_refused_then_fallback_takes_over(settings, store):
+    three = [HORIZON_QUESTION, LOSS_QUESTION, {**APPROACH_QUESTION, "reason": "Préférence encore inconnue."}]
+    factory = ScriptedFactory(
+        [[finish("Un.", three)]],
+        [[finish("Deux.", three)]],
+        [[finish("Trois.", three[:2])]],
+        [[finish("Quatre.", [APPROACH_QUESTION])], [finish("Je n'ai plus de questions.")]],
+    )
+    service = make_service(settings, store, factory)
+    client_id = started(service)
+    for expected in (3, 3, 2):
+        response = service.handle({"action": "followup.reply", "client_id": client_id})
+        assert response["ok"] and len(response["questions"]) == expected
+    stored = okf.parse(store.get(profile_key(client_id)).text).data
+    assert stored["followup_counts"]["generated"] == 8
+    assert stored["asked"][2]["reason"] == "Préférence encore inconnue."
+    assert "reason" not in stored["pending_questions"][0]
+    fourth = service.handle({"action": "followup.reply", "client_id": client_id})
+    assert fourth["ok"] and fourth["message"] == "Je n'ai plus de questions."
+    refused = [s for s in fourth["trace"] if s["kind"] == "tool"][0]["outputs"]["result"]
+    assert "budget of 8 generated questions is reached" in refused["reason"]
+    context = factory.models[3].calls[0]["messages"][0]["content"][0]["text"]
+    assert '"generated": 0' in context
+    assert [q["id"] for q in fourth["questions"]] == ["fb_4_1", "fb_4_2", "fb_4_3"]
+    assert all(q["source"] == "deterministic" for q in fourth["questions"])
+    assert any(s["title"] == "Questions de secours" for s in fourth["trace"])
+    stored = okf.parse(store.get(profile_key(client_id)).text).data
+    assert stored["followup_counts"]["generated"] == 8  # le secours ne compte pas dans le budget
+
+
+def test_reason_is_kept_in_the_trace_not_in_the_question(settings, store):
+    question = {**LOSS_QUESTION, "reason": "La perte admissible manque et pèse lourd."}
+    factory = ScriptedFactory([[finish("Une question.", [question])]])
+    service = make_service(settings, store, factory)
+    client_id = started(service)
+    response = service.handle({"action": "followup.reply", "client_id": client_id})
+    assert "reason" not in response["questions"][0]
+    step = next(s for s in response["trace"] if s["title"] == "Questions de A1 validées par le code")
+    assert step["actor"] == "A1"
+    assert step["outputs"]["questions"] == [
+        {"id": "a1_1_1", "field": "risk_capacity.max_loss_cad", "reason": "La perte admissible manque et pèse lourd."}
+    ]
+    tool = next(s for s in response["trace"] if s["kind"] == "tool")
+    assert tool["inputs"]["reasons"] == ["La perte admissible manque et pèse lourd."]
+
+
+def test_turn_without_question_below_the_threshold_gets_fallback(settings, store):
+    factory = ScriptedFactory([[finish("Rien à demander.")]])
+    service = make_service(settings, store, factory)
+    client_id = started(service)
+    response = service.handle({"action": "followup.reply", "client_id": client_id})
+    assert response["ok"] and response["completeness"]["ready"] is False
+    assert [q["id"] for q in response["questions"]] == ["fb_1_1", "fb_1_2", "fb_1_3"]
+    assert response["stage"] == "followups"
+
+
+def test_a_turn_never_shows_more_than_three_questions(settings, store):
+    message = "J'ajoute 3 000 $ par mois et je préfère un mélange de fonds."
+    updates = (
+        "tool",
+        "update_profile",
+        {
+            "updates": [
+                {"field": MONTHLY, "value": 3000, "evidence": "3 000 $ par mois"},
+                {"field": "preferences.approach", "value": "mixed", "evidence": "un mélange de fonds"},
+                {"field": "objective.goal_detail", "value": "Ajouter chaque mois", "evidence": "j'ajoute"},
+            ]
+        },
+    )
+    factory = ScriptedFactory(
+        [[updates], [finish("Deux questions.", [HORIZON_QUESTION, LOSS_QUESTION])], [finish("Une.", [LOSS_QUESTION])]],
+        [[("text", "rien", None)], [("text", "toujours rien", None)]],
+    )
+    service = make_service(settings, store, factory)
+    client_id = started(service)
+    response = service.handle({"action": "followup.reply", "client_id": client_id, "message": message})
+    assert [q["id"] for q in response["questions"]] == ["cf_1_1", "cf_1_2", "a1_1_1"]
+    refused = [s for s in response["trace"] if s["kind"] == "tool"][1]["outputs"]["result"]
+    assert "at most 1 questions this turn" in refused["reason"]
+    stored = okf.parse(store.get(profile_key(client_id)).text).data
+    assert sum(f.get("confirmed") is False for f in stored["facts"].values()) == 3
+    # Tour suivant sans finish_turn : la troisième valeur se confirme, et le secours est coupé à 3 − 2 = 1.
+    second = service.handle(
+        {"action": "followup.reply", "client_id": client_id, "answers": [{"question_id": "cf_1_1", "value": True}]}
+    )
+    assert [q["id"][:3] for q in second["questions"]] == ["cf_", "cf_", "fb_"]
+    assert len(second["questions"]) == 3
+
+
+def test_click_is_written_even_if_a1_fails_the_same_turn(settings, store):
+    factory = ScriptedFactory([[finish("Question.", [LOSS_QUESTION])]])
+    service = make_service(settings, store, factory)
+    client_id = started(service)
+    assert service.handle({"action": "followup.reply", "client_id": client_id})["ok"]
+
+    def broken(**_):
+        model = ScriptedFactory([])(effort="low")
+
+        async def stream(*args, **kwargs):
+            raise RuntimeError("bedrock down")
+            yield  # noqa: B901
+
+        model.stream = stream
+        return model
+
+    service.model_factory = broken
+    response = service.handle(
+        {
+            "action": "followup.reply",
+            "client_id": client_id,
+            "answers": [{"question_id": "a1_1_1", "value": "5to10pct"}],
+        }
+    )
+    assert response["error"]["code"] == "model_error"
+    stored = okf.parse(store.get(profile_key(client_id)).text).data
+    assert stored["facts"]["risk_capacity.max_loss_cad"]["value"] == 500
+    assert "confirmed" not in stored["facts"]["risk_capacity.max_loss_cad"]
+    entries = okf.parse(store.get(journal_key(client_id)).text).data["entries"]
+    assert any(e.get("question_id") == "a1_1_1" and e["option"] == "5to10pct" and e["value"] == 500 for e in entries)
+
+
 def test_a1_cannot_declare_completion_below_the_threshold(settings, store):
     factory = ScriptedFactory([[finish("Fini.", complete=True)], [finish("Encore une question.", [LOSS_QUESTION])]])
     service = make_service(settings, store, factory)

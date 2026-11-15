@@ -258,3 +258,63 @@ def test_confirmation_questions_are_built_by_the_code(q):
     assert targets == {"cf_4_1": "objective.goal_detail", "cf_4_2": MONTHLY}
     assert questions[1]["prompt"] == "I understood: Planned monthly contribution = $3,000. Is that right?"
     assert all(x["kind"] == "boolean" and x["field"] is None and x["source"] == "deterministic" for x in questions)
+
+
+# ---------------------------------------------------------------------- contexte de A1
+def test_context_shows_choices_values_to_confirm_contradictions_and_budget(q):
+    session = session_with(
+        q,
+        {
+            "objective.goal": "growth",
+            "horizon.horizon_band": "lt3",
+            "horizon.horizon_years": 12,  # contredit la bande lt3
+            "context.amount_cad": 20000,
+            "risk_capacity.max_loss_cad": 30000,  # dépasse le montant
+        },
+    )
+    session.set_fact(MONTHLY, 3000, "a1:2", confirmed=False)
+    session.data["followup_counts"] = {"generated": 5, "open": 2}
+    context = a1.build_context(q, session, locale="fr", turn=3, journal=[], new_answers=[], portfolio=None)
+    assert [item["field"] for item in context["to_confirm"]] == [MONTHLY]
+    assert context["to_confirm"][0]["shown_as"] == "3 000 $"
+    assert MONTHLY not in {item["field"] for item in context["known_fields"]}
+    assert MONTHLY not in {item["field"] for item in context["missing_fields"]}
+    assert [(c["field"], c["value"]) for c in context["contradictions"]] == [
+        ("horizon.horizon_years", 12),
+        ("risk_capacity.max_loss_cad", 30000),
+    ]
+    assert "expected gt10" in context["contradictions"][0]["reason"]
+    # Les tranches proposées pour clarifier l'horizon restent dans la bande connue (lt3).
+    assert [c["value"] for c in context["contradictions"][0]["choices"]] == ["lt1", "1to2", "2to3"]
+    assert context["remaining_questions"] == {"generated": 3, "open": 0, "this_turn": 2}
+    assert context["open_fields"] == ["objective.goal_detail"]
+    goal = next(item for item in context["missing_fields"] if item["field"] == "objective.goal_detail")
+    assert goal["open_field"] is True
+    # Un champ numérique manquant porte ses tranches, calculées par le code.
+    session.set_fact("risk_capacity.max_loss_cad", None, "settings")
+    context = a1.build_context(q, session, locale="fr", turn=3, journal=[], new_answers=[], portfolio=None)
+    loss = next(item for item in context["missing_fields"] if item["field"] == "risk_capacity.max_loss_cad")
+    assert loss["choices"][0] == {"value": "lt2_5pct", "label": "Moins de 500 $ (2,5 % du montant)"}
+    assert "min" not in loss and "max" not in loss
+    assert [c["field"] for c in context["contradictions"]] == ["horizon.horizon_years"]
+
+
+def test_reason_is_optional_and_bounded(q):
+    raw = {**loss(), "reason": "La capacité fixe la perte admissible."}
+    question, error = build(q, raw)
+    assert error is None and "reason" not in question
+    question, error = build(q, {**loss(), "reason": "x" * 201})
+    assert question is None and "reason must be at most 200" in error
+
+
+def test_generated_budget_is_enforced_by_finish(q):
+    session = session_with(q, {"objective.goal": "growth", "horizon.horizon_band": "gt10"})
+    session.data["followup_counts"] = {"generated": 7, "open": 0}
+    turn = a1_turn(q, session, [])
+    approach = {"field": "preferences.approach", "kind": "single_choice", "prompt": "Comment investir ?"}
+    two = turn._finish("x", [approach, loss()], False)
+    assert two["status"] == "error" and "only 1 generated question(s) left" in two["reason"]
+    assert turn._finish("x", [approach], False)["status"] == "ok"
+    session.data["followup_counts"] = {"generated": 8, "open": 0}
+    ninth = a1_turn(q, session, [])._finish("x", [approach], False)
+    assert ninth["status"] == "error" and "budget of 8 generated questions is reached" in ninth["reason"]

@@ -789,7 +789,9 @@ class ProfileService:
                 ),
                 outputs={"questions": [{"id": qid, "field": field} for qid, field in targets.items()]},
             )
-        session.remember_questions(questions, turn, choices=outcome.choices, confirmations=targets)
+        session.remember_questions(
+            questions, turn, choices=outcome.choices, confirmations=targets, reasons=outcome.reasons
+        )
         if outcome.complete:
             session.data["completion"] = {**(session.data.get("completion") or {}), "a1_complete": True}
             session.set_stage("complete", f"a1:{turn}", req.trace, reason="A1 juge le profil complet")

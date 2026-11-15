@@ -49,6 +49,9 @@ MAX_QUESTIONS = 3
 MAX_MESSAGE = 4000
 # Questions de confirmation des valeurs tirées d'un texte libre, ajoutées par le code à la fin d'un tour.
 MAX_CONFIRMATIONS = 2
+MAX_REASON = 200
+# Champs que consistency_warnings() contrôle : leurs écarts sont montrés à A1 à chaque tour (contradictions).
+CHECKED_FIELDS = ("horizon.horizon_years", "risk_capacity.max_loss_cad")
 
 SYSTEM_PROMPT = """You are A1, the createProfile-Agent of AlphaForge AI, a simulation-only decision-support prototype \
 built for the PolyFinances 2026 datathon. After deterministic base questions, you complete a fictitious investor \
@@ -87,15 +90,20 @@ explanation; advanced = precise and concise vocabulary.
 the investor gave). Do not compute new figures. Distinguish what the investor said (facts) from your assumptions.
 - The message is 2 to 5 sentences: acknowledge what was learned, then say why the next questions matter. No \
 greeting formulas, no lists of everything known.
-- Questions target the heaviest missing fields first, or clarify a contradiction. Give each question the `field` it \
-fills, taken from missing_fields or from the writable fields below, so the answer is recorded automatically. Use \
-`help` for one short sentence on why it matters. Do not ask again a question that was already answered, unless \
-the answer contradicts another fact.
+- You choose the variable to ask about: a field of missing_fields (heaviest first, unless the conversation makes \
+another one natural), or a field listed in contradictions to clarify. Give each question the `field` it fills, so \
+the answer is recorded automatically, and a short `reason` (at most 200 characters): why this variable now, given \
+the previous answers. Personalise the wording with what the investor already said. Use `help` for one short \
+sentence on why it matters. Do not ask again a question that was already answered, unless the answer contradicts \
+another fact, and never ask about a field listed in to_confirm.
+- The session has a budget of generated questions (`remaining_questions.generated`). When it is 0, ask no \
+question: set profile_complete to true if completeness is ready; otherwise the code asks its own questions.
 - Offer answer choices by default; the investor answers with one click. The question kind follows the field type: \
 enum: single_choice using the field values; multi_enum: multi_choice; boolean; scale. A number, money or percent \
-field is always asked as single_choice with the tranches listed under `choices` in missing_fields (computed by the \
-code): keep them all, or only a run of adjacent tranches around what the investor already said; never invent a \
-bound, never use the kinds number, money or percent. The code writes the tranche labels.
+field is always asked as single_choice with the tranches listed under `choices` in missing_fields or contradictions \
+(computed by the code): omit options to offer them all, or keep only a run of adjacent tranches around what the \
+investor already said; never invent a bound, never use the kinds number, money or percent. The code writes the \
+tranche labels.
 - An open question (kind text) is the exception: only for a field listed in open_fields, or with no field for a \
 short exploration question, and at most `remaining_questions.open` of them in this session. A field that admits \
 choices is never asked as text.
@@ -176,15 +184,16 @@ def build_context(
     portfolio: dict[str, Any] | None,
 ) -> dict[str, Any]:
     values = session.values()
+    waiting = session.unconfirmed()
     level = rules.knowledge_level(q, values)
     risk = rules.risk_profile(q, values)
     score = rules.completeness(q, values, locale)
-    known = []
+    known, to_confirm = [], []
     for field_id, fact in session.facts.items():
         spec = q.fields.get(field_id)
         if spec is None:
             continue
-        known.append(
+        (to_confirm if field_id in waiting else known).append(
             {
                 "field": field_id,
                 "label": spec.label_text(locale),
@@ -193,7 +202,25 @@ def build_context(
                 "provenance": fact.get("provenance"),
             }
         )
-    missing = [_field_brief(q, field_id, locale, values) for field_id in rules.missing_fields(q, values)]
+    missing = [
+        _field_brief(q, field_id, locale, values)
+        for field_id in rules.missing_fields(q, values)
+        if field_id not in waiting
+    ]
+    contradictions = [
+        {
+            "field": field_id,
+            "value": values[field_id],
+            "reason": warning,
+            "choices": [
+                {"value": t["value"], "label": t["label"]} for t in numeric_choices(q, field_id, values, locale)
+            ],
+        }
+        for field_id in CHECKED_FIELDS
+        if values.get(field_id) is not None
+        for warning in consistency_warnings(q, values, field_id, values[field_id])
+    ]
+    counts = followup_counts(session)
     recent_questions = [item for item in (session.data.get("asked") or [])][-6:]
     recent_journal = []
     for entry in journal[-14:]:
@@ -216,6 +243,14 @@ def build_context(
         "risk": risk,
         "known_fields": known,
         "missing_fields": missing,
+        "to_confirm": to_confirm,
+        "contradictions": contradictions,
+        "open_fields": list(q.open_fields),
+        "remaining_questions": {
+            "generated": max(0, q.max_generated - counts["generated"]),
+            "open": max(0, q.max_open_questions - counts["open"]),
+            "this_turn": MAX_QUESTIONS - min(MAX_CONFIRMATIONS, len(waiting)),
+        },
         "recent_questions": recent_questions,
         "recent_journal": recent_journal,
         "new_answers_this_turn": new_answers,
@@ -250,6 +285,8 @@ class A1Outcome:
     fallback: bool = False
     # Table identifiant de tranche → valeur numérique, par question à tranches (gardée hors de la question).
     choices: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Raison du choix de chaque question de A1 : gardée dans la trace et dans l'historique asked.
+    reasons: dict[str, str] = field(default_factory=dict)
 
 
 def _numeric_options(
@@ -321,6 +358,9 @@ def build_question(
     help_text = raw.get("help")
     if help_text is not None and (not isinstance(help_text, str) or len(help_text) > 400):
         return None, "help must be at most 400 characters"
+    reason = raw.get("reason")
+    if reason is not None and (not isinstance(reason, str) or len(reason) > MAX_REASON):
+        return None, f"reason must be at most {MAX_REASON} characters"
     if kind in CHOICE_NUMBER_TYPES:
         # Pas de saisie libre d'un nombre : un champ numérique se demande par tranches, et une question
         # sans champ est une question d'exploration (text) ou une question à choix.
@@ -623,6 +663,10 @@ class A1Turn:
     def question_limit(self) -> int:
         return MAX_QUESTIONS - self.confirmations()
 
+    def generated_left(self) -> int:
+        """Questions générées que A1 peut encore poser dans la session (``followups.max_generated``)."""
+        return max(0, self.q.max_generated - self.counts().get("generated", 0))
+
     def missing(self) -> list[str]:
         """Champs manquants proposés à A1 : sans ceux qui attendent une confirmation."""
         waiting = set(self.to_confirm())
@@ -699,8 +743,8 @@ class A1Turn:
             name="finish_turn",
             description=(
                 "End the turn: the Markdown message for the investor, 0 to 3 follow-up questions in the Question "
-                "shape (field, kind, prompt, help, options for choices), and profile_complete. The code adds the "
-                "confirmation questions; a turn shows at most 3 questions in all."
+                "shape (field, kind, prompt, help, options for choices, and reason: why this variable now), and "
+                "profile_complete. The code adds the confirmation questions; a turn shows at most 3 questions."
             ),
             inputSchema={
                 "json": {
@@ -730,6 +774,7 @@ class A1Turn:
                                     "max": {"type": "number"},
                                     "unit": {"type": "string"},
                                     "required": {"type": "boolean"},
+                                    "reason": {"type": "string", "maxLength": MAX_REASON},
                                 },
                                 "required": ["kind", "prompt"],
                             },
@@ -823,6 +868,18 @@ class A1Turn:
             return {"status": "error", "reason": f"message must be at most {MAX_MESSAGE} characters"}
         if not isinstance(questions, list):
             return {"status": "error", "reason": "questions must be a list"}
+        left = self.generated_left()
+        if questions and left <= 0:
+            score = rules.completeness(self.q, self.base_values, self.locale)
+            return {
+                "status": "error",
+                "reason": f"the session budget of {self.q.max_generated} generated questions is reached: ask no "
+                "question"
+                + ("; set profile_complete to true" if score["ready"] and not self.to_confirm() else "")
+                + f" (completeness {score['score']}, threshold {score['threshold']})",
+            }
+        if len(questions) > left:
+            return {"status": "error", "reason": f"only {left} generated question(s) left in this session"}
         limit = self.question_limit()
         if len(questions) > limit:
             pending = self.confirmations()
@@ -837,6 +894,7 @@ class A1Turn:
                 ),
             }
         built, errors = [], []
+        reasons: dict[str, str] = {}
         waiting = set(self.to_confirm())
         open_used = self.counts().get("open", 0)
         for index, raw in enumerate(questions, start=1):
@@ -858,6 +916,8 @@ class A1Turn:
             else:
                 built.append(question)
                 open_used += question["kind"] == "text"
+                if isinstance(raw.get("reason"), str) and raw["reason"].strip():
+                    reasons[question["id"]] = raw["reason"].strip()
         if errors:
             return {"status": "error", "errors": errors}
         complete = bool(profile_complete)
@@ -874,7 +934,7 @@ class A1Turn:
             }
         if complete and built:
             return {"status": "error", "reason": "ask no question when profile_complete is true"}
-        self.finished = {"message": message.strip(), "questions": built, "complete": complete}
+        self.finished = {"message": message.strip(), "questions": built, "complete": complete, "reasons": reasons}
         if self.emitter is not None:
             self.emitter.delta(message.strip())
         return {"status": "ok", "questions": len(built), "profile_complete": complete}
@@ -944,6 +1004,8 @@ def run_a1(
             "finish_turn": lambda i: {
                 "message_chars": len(str(i.get("message", ""))),
                 "questions": len(i.get("questions") or []),
+                "fields": [x.get("field") for x in i.get("questions") or [] if isinstance(x, dict)],
+                "reasons": [x.get("reason") for x in i.get("questions") or [] if isinstance(x, dict)],
                 "profile_complete": i.get("profile_complete"),
             },
         },
@@ -992,12 +1054,49 @@ def run_a1(
             choices=_choice_tables(q, questions, state.base_values, locale),
         )
     questions = state.finished["questions"][:limit]
+    reasons = {qid: r for qid, r in state.finished["reasons"].items() if any(x["id"] == qid for x in questions)}
+    if questions:
+        trace.add(
+            "deterministic",
+            "A1",
+            trace.t("Questions de A1 validées par le code", "A1 questions validated by code"),
+            None,
+            outputs={
+                "questions": [{"id": x["id"], "field": x["field"], "reason": reasons.get(x["id"])} for x in questions]
+            },
+        )
+    fallback = False
+    if not questions and not state.finished["complete"]:
+        # Un tour qui finit sans question ni profil complet reçoit les questions de secours des champs manquants
+        # les plus lourds : l'investisseur n'est jamais bloqué, même quand le budget de A1 est épuisé.
+        questions = fallback_questions(
+            q,
+            state.base_values,
+            turn=turn,
+            locale=locale,
+            limit=limit,
+            open_left=q.max_open_questions - state.counts().get("open", 0),
+            skip=set(state.to_confirm()),
+        )
+        fallback = bool(questions)
+        trace.add(
+            "deterministic",
+            "questionnaire",
+            trace.t("Questions de secours", "Fallback questions"),
+            trace.t(
+                "A1 a terminé sans question; questions du questionnaire pour les champs manquants.",
+                "A1 finished without a question; questionnaire questions for the missing fields.",
+            ),
+            outputs={"questions": [item["id"] for item in questions], "generated_left": state.generated_left()},
+        )
     return A1Outcome(
         message=state.finished["message"],
         questions=questions,
         complete=state.finished["complete"],
         updates=updates,
+        fallback=fallback,
         choices=_choice_tables(q, questions, state.base_values, locale),
+        reasons=reasons,
     )
 
 

@@ -282,6 +282,7 @@ class ClientSession:
         *,
         choices: dict[str, dict[str, Any]] | None = None,
         confirmations: dict[str, str] | None = None,
+        reasons: dict[str, str] | None = None,
     ) -> None:
         """Questions envoyées à l'investisseur. Les tables des tranches (identifiant → nombre) restent hors des
         questions, dans ``pending_choices``, et le champ visé par une question de confirmation ``cf_`` dans
@@ -306,6 +307,7 @@ class ClientSession:
                     "prompt": question["prompt"],
                     "answer": None,
                     "answered": False,
+                    **({"reason": reasons[question["id"]]} if reasons and question["id"] in reasons else {}),
                 }
             )
         self.data["asked"] = asked[-ASKED_HISTORY:]

@@ -273,7 +273,7 @@ general/donnees/features/<ticker-slug>/<as_of>.md   Stock Features : caractéris
 general/**/<document>.md.metadata.json      métadonnées filtrables de la Knowledge Base (section 5.1), écrites avec le document
 clients/<client_id>/index.md
 clients/<client_id>/profil.md               profil et ses données structurées
-clients/<client_id>/portefeuille-existant.md
+clients/<client_id>/portefeuille-existant.md   écrit par profile (A2); lu par le runtime portfolio (holdings)
 clients/<client_id>/journal.md              chaque réponse, avec sa provenance et sa date
 clients/<client_id>/<note>.md               notes écrites par A1 avec son skill (Profile Note), par exemple dimensions/horizon.md et synthese.md
 clients/<client_id>/traces/<horodatage>-<action>.json
@@ -347,6 +347,7 @@ data: {}                          # données structurées lues par le code (prof
     inputs: [{ key: "starter:prices_daily.csv", etag: "\"<etag>\"" }]
   ```
 
+- Le runtime `portfolio` lit `portefeuille-existant.md` avec le profil (`finance/debate/okf_bridge.py`, `OkfClientStore.existing_portfolio`). Seule une vue `confirmed` compte : chaque position évaluée par le code (`resolved`, `value_cad`), hors encaisse, devient un `Holding` du profil finance (valeur en CAD, compte). Une position non évaluée, ou une vue non confirmée, est signalée par une `Claim` « déclaré non vérifié », sans effet sur le mandat. La clé et l'ETag du document entrent dans la version des données de la décision; sans ce document, la décision est la même qu'avant.
 - `Portfolio Decision` (`clients/<client_id>/decisions/<decision_id>.md`) : écrit par `finance/debate/okf_bridge.py`, statut `draft`, `data.simulation_only: true`, positions et nombre de faits et de contrôles; la `Decision` complète est dans le `.json` voisin.
 
 ### 5.1 Métadonnées de la Knowledge Base

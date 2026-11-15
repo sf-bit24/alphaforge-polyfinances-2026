@@ -246,8 +246,23 @@ class ClientSession:
             {"actor": actor, "text": text, "locale": locale, "at": clock.iso()} if text else None
         )
 
-    def remember_questions(self, questions: list[dict[str, Any]], turn: int) -> None:
+    def remember_questions(
+        self,
+        questions: list[dict[str, Any]],
+        turn: int,
+        *,
+        choices: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
+        """Questions envoyées à l'investisseur. Les tables des tranches (identifiant → nombre) restent hors des
+        questions, dans ``pending_choices``. ``followup_counts`` compte les questions générées par A1 et les
+        questions ouvertes envoyées dans la session (``asked`` est tronqué et contient aussi le secours)."""
         self.data["pending_questions"] = questions
+        ids = {question["id"] for question in questions}
+        self.data["pending_choices"] = {qid: table for qid, table in (choices or {}).items() if qid in ids}
+        counts = dict(self.data.get("followup_counts") or {})
+        counts["generated"] = int(counts.get("generated") or 0) + sum(q.get("source") == "a1" for q in questions)
+        counts["open"] = int(counts.get("open") or 0) + sum(q.get("kind") == "text" for q in questions)
+        self.data["followup_counts"] = counts
         asked = list(self.data.get("asked") or [])
         for question in questions:
             asked.append(
@@ -262,6 +277,10 @@ class ClientSession:
                 }
             )
         self.data["asked"] = asked[-ASKED_HISTORY:]
+
+    def clear_pending(self) -> None:
+        self.data["pending_questions"] = []
+        self.data["pending_choices"] = {}
 
     def mark_answered(self, question_id: str, value: Any) -> None:
         for item in self.data.get("asked") or []:

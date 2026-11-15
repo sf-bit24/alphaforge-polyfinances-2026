@@ -7,7 +7,8 @@ import pytest
 from alphaforge import okf
 from alphaforge.errors import AppError
 from alphaforge.profile import a2 as a2_agent
-from alphaforge.profile.state import journal_key, portfolio_key
+from alphaforge.profile.questionnaire import default_questionnaire, numeric_choices
+from alphaforge.profile.state import journal_key, portfolio_key, profile_key
 
 from .conftest import ScriptedFactory, answer_base, make_service
 
@@ -22,15 +23,28 @@ def finish(message, questions=(), complete=False):
     return ("tool", "finish_turn", {"message": message, "questions": list(questions), "profile_complete": complete})
 
 
+# Valeurs confirmées après les réponses de base de conftest.BASE_ANSWERS : bande gt10, montant 10 000 $.
+BASE_VALUES = {"horizon.horizon_band": "gt10", "context.amount_cad": 10000}
+
+
+def tranches(field, values=None, locale="fr"):
+    return [
+        {"value": t["value"], "label": t["label"]}
+        for t in numeric_choices(default_questionnaire(), field, values or BASE_VALUES, locale)
+    ]
+
+
 HORIZON_QUESTION = {
     "field": "horizon.horizon_years",
-    "kind": "number",
+    "kind": "single_choice",
     "prompt": "Dans combien d'années prévoyez-vous le premier retrait important ?",
+    "options": tranches("horizon.horizon_years"),
 }
 LOSS_QUESTION = {
     "field": "risk_capacity.max_loss_cad",
-    "kind": "money",
+    "kind": "single_choice",
     "prompt": "Quelle perte en dollars pourriez-vous absorber sans changer vos projets ?",
+    "options": tranches("risk_capacity.max_loss_cad"),
 }
 APPROACH_QUESTION = {
     "field": "preferences.approach",
@@ -79,7 +93,15 @@ def test_a1_first_turn_records_facts_and_asks_questions(settings, store):
     assert response["message"].startswith("Merci.")
     assert [q["id"] for q in response["questions"]] == ["a1_1_1", "a1_1_2", "a1_1_3"]
     assert all(q["source"] == "a1" for q in response["questions"])
-    assert response["questions"][0]["unit"] == "ans" and response["questions"][1]["unit"] == "CAD"
+    horizon, loss = response["questions"][0], response["questions"][1]
+    assert horizon["kind"] == loss["kind"] == "single_choice"
+    assert [o["value"] for o in horizon["options"]] == ["10to15", "15to20", "20to30", "30plus"]
+    assert loss["options"][1] == {"value": "2_5to5pct", "label": "De 250 $ à moins de 500 $ (2,5 à 5 %)"}
+    assert (horizon["min"], horizon["unit"]) == (None, None)
+    # La table des tranches reste hors de la question envoyée.
+    stored = okf.parse(store.get(profile_key(client_id)).text).data
+    assert stored["pending_choices"]["a1_1_2"]["2_5to5pct"] == 250
+    assert all(set(o) == {"value", "label"} for q in stored["pending_questions"] for o in q["options"])
     fact = next(f for f in response["profile"]["facts"] if f["field"] == "objective.goal_detail")
     assert fact["provenance"] == "a1:1"
     assert not any(f["field"] == "horizon.horizon_years" for f in response["profile"]["facts"])
@@ -114,8 +136,8 @@ def test_a1_first_turn_records_facts_and_asks_questions(settings, store):
             "action": "followup.reply",
             "client_id": client_id,
             "answers": [
-                {"question_id": "a1_1_1", "value": 12},
-                {"question_id": "a1_1_2", "value": 5000},
+                {"question_id": "a1_1_1", "value": "10to15"},
+                {"question_id": "a1_1_2", "value": "10to20pct"},
                 {"question_id": "a1_1_3", "value": "passive_funds"},
             ],
         }
@@ -125,6 +147,12 @@ def test_a1_first_turn_records_facts_and_asks_questions(settings, store):
     assert answered["completeness"]["ready"] is True
     provenances = {f["field"]: f["provenance"] for f in answered["profile"]["facts"]}
     assert provenances["horizon.horizon_years"] == "a1:1" and provenances["preferences.approach"] == "a1:1"
+    values = {f["field"]: f["value"] for f in answered["profile"]["facts"]}
+    assert values["horizon.horizon_years"] == 10 and values["risk_capacity.max_loss_cad"] == 1000
+    entries = okf.parse(store.get(journal_key(client_id)).text).data["entries"]
+    loss_entry = next(e for e in entries if e.get("question_id") == "a1_1_2")
+    assert loss_entry["value"] == 1000 and loss_entry["option"] == "10to20pct"
+    assert okf.parse(store.get(profile_key(client_id)).text).data["pending_choices"] == {}
     context = factory.models[1].calls[0]["messages"][0]["content"][0]["text"]
     assert '"new_answers_this_turn"' in context and "a1_1_2" in context
 
@@ -135,9 +163,13 @@ def test_a1_answers_are_validated_against_the_pending_question(settings, store):
     client_id = started(service)
     assert service.handle({"action": "followup.reply", "client_id": client_id})["ok"]
     wrong = service.handle(
-        {"action": "followup.reply", "client_id": client_id, "answers": [{"question_id": "a1_1_1", "value": 99}]}
+        {"action": "followup.reply", "client_id": client_id, "answers": [{"question_id": "a1_1_1", "value": "3to5"}]}
     )
-    assert wrong["error"]["code"] == "invalid_answer" and wrong["error"]["details"]["reason"] == "above_max"
+    assert wrong["error"]["code"] == "invalid_answer" and wrong["error"]["details"]["reason"] == "not_in_options"
+    number = service.handle(
+        {"action": "followup.reply", "client_id": client_id, "answers": [{"question_id": "a1_1_1", "value": 12}]}
+    )
+    assert number["error"]["details"]["reason"] == "not_a_string"
     unknown = service.handle(
         {"action": "followup.reply", "client_id": client_id, "answers": [{"question_id": "a1_9_9", "value": 1}]}
     )
@@ -145,19 +177,42 @@ def test_a1_answers_are_validated_against_the_pending_question(settings, store):
 
 
 def test_a1_invalid_questions_are_sent_back_to_the_model(settings, store):
-    bad = {
-        "field": "horizon.horizon_years",
+    free_number = {"field": "horizon.horizon_years", "kind": "number", "prompt": "Combien d'années ?"}
+    invented = {
+        "field": "risk_capacity.max_loss_cad",
         "kind": "single_choice",
-        "prompt": "Combien d'années ?",
-        "options": [{"value": "a", "label": "A"}, {"value": "b", "label": "B"}],
+        "prompt": "Quelle perte ?",
+        "options": [{"value": "lt2_5pct", "label": "Moins de 250 $"}, {"value": "lt7k", "label": "Moins de 7 000 $"}],
     }
-    factory = ScriptedFactory([[finish("x", [bad])], [finish("Merci.", [HORIZON_QUESTION])]])
+    factory = ScriptedFactory([[finish("x", [free_number, invented])], [finish("Merci.", [HORIZON_QUESTION])]])
     service = make_service(settings, store, factory)
     client_id = started(service)
     response = service.handle({"action": "followup.reply", "client_id": client_id})
-    assert response["ok"] and response["questions"][0]["kind"] == "number"
+    assert response["ok"] and response["questions"][0]["kind"] == "single_choice"
     tool_steps = [s for s in response["trace"] if s["kind"] == "tool"]
-    assert tool_steps[0]["outputs"]["result"]["status"] == "error"
+    refused = tool_steps[0]["outputs"]["result"]
+    assert refused["status"] == "error" and [e["question"] for e in refused["errors"]] == [1, 2]
+    assert "kind number is not allowed" in refused["errors"][0]["reason"]
+    assert "'lt7k' is not a tranche" in refused["errors"][1]["reason"]
+
+
+def test_third_open_question_of_the_session_is_refused(settings, store):
+    goal = {"field": "objective.goal_detail", "kind": "text", "prompt": "Que voulez-vous accomplir ?"}
+    explore = {"kind": "text", "prompt": "Qu'aimeriez-vous ajouter ?", "dimension": "context"}
+    factory = ScriptedFactory(
+        [[finish("Deux questions ouvertes.", [goal, explore])]],
+        [[finish("Encore une ?", [explore])], [finish("Plutôt un choix.", [APPROACH_QUESTION])]],
+    )
+    service = make_service(settings, store, factory)
+    client_id = started(service)
+    first = service.handle({"action": "followup.reply", "client_id": client_id})
+    assert [q["kind"] for q in first["questions"]] == ["text", "text"]
+    second = service.handle({"action": "followup.reply", "client_id": client_id})
+    assert second["ok"] and [q["kind"] for q in second["questions"]] == ["single_choice"]
+    refused = [s for s in second["trace"] if s["kind"] == "tool"][0]["outputs"]["result"]
+    assert "maximum is 2" in refused["errors"][0]["reason"]
+    counts = okf.parse(store.get(profile_key(client_id)).text).data["followup_counts"]
+    assert counts == {"generated": 3, "open": 2}
 
 
 def test_a1_cannot_declare_completion_below_the_threshold(settings, store):
@@ -177,6 +232,22 @@ def test_a1_fallback_when_finish_turn_is_never_called(settings, store):
     assert [q["source"] for q in response["questions"]] == ["deterministic"] * 3
     assert response["questions"][0]["id"].startswith("fb_1_")
     assert any(s["title"] == "Questions de secours" for s in response["trace"])
+    # Les champs numériques du secours se demandent par tranches, comme les relances d'A1.
+    by_field = {q["field"]: q for q in response["questions"]}
+    assert by_field["horizon.horizon_years"]["kind"] == "single_choice"
+    assert by_field["horizon.horizon_years"]["options"] == HORIZON_QUESTION["options"]
+    assert by_field["risk_capacity.max_loss_cad"]["options"] == LOSS_QUESTION["options"]
+    stored = okf.parse(store.get(profile_key(client_id)).text).data
+    numeric = {by_field["horizon.horizon_years"]["id"], by_field["risk_capacity.max_loss_cad"]["id"]}
+    assert set(stored["pending_choices"]) == numeric
+    answered = service.handle(
+        {
+            "action": "followup.reply",
+            "client_id": client_id,
+            "answers": [{"question_id": by_field["risk_capacity.max_loss_cad"]["id"], "value": "30pct_plus"}],
+        }
+    )
+    assert {f["field"]: f["value"] for f in answered["profile"]["facts"]}["risk_capacity.max_loss_cad"] == 3000
 
 
 def test_guardrail_block_keeps_answers_but_not_the_message(settings, store, monkeypatch):
@@ -196,13 +267,15 @@ def test_guardrail_block_keeps_answers_but_not_the_message(settings, store, monk
             "action": "followup.reply",
             "client_id": client_id,
             "message": "achète pour moi",
-            "answers": [{"question_id": "a1_1_1", "value": 15}],
+            "answers": [{"question_id": "a1_1_1", "value": "15to20"}],
         }
     )
     assert response["error"]["code"] == "guardrail_blocked"
     entries = okf.parse(store.get(journal_key(client_id)).text).data["entries"]
     assert not [e for e in entries if e["kind"] == "message"]
-    assert any(e.get("field") == "horizon.horizon_years" and e["value"] == 15 for e in entries)
+    assert any(
+        e.get("field") == "horizon.horizon_years" and e["value"] == 15 and e["option"] == "15to20" for e in entries
+    )
 
 
 def test_guardrail_stop_reason_maps_to_guardrail_blocked(settings, store, monkeypatch):

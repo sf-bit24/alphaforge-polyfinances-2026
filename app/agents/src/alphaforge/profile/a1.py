@@ -4,6 +4,12 @@ A1 est sans état entre deux invocations : chaque tour reconstruit un contexte c
 du client (champs connus et manquants, complétude, risque, journal récent, dernières questions posées).
 Ses outils écrivent par des fonctions validées : champs en liste blanche, valeurs typées, provenance
 ``a1:<tour>``. Il pose au plus trois questions par tour, dans la forme ``Question`` du contrat.
+
+Version courte (décisions de l'équipe, Brain ``product/questionnaire-profil.md``) : des choix de réponses chaque
+fois que c'est possible. Un champ numérique se demande par les tranches que calcule le code
+(``numeric_choices``); A1 peut n'en garder qu'une suite voisine, sans inventer de borne. Une question ouverte
+n'est permise que sur ``followups.open_fields`` ou sans champ (exploration), au plus
+``followups.max_open_questions`` par session.
 """
 
 from __future__ import annotations
@@ -21,6 +27,7 @@ from . import rules
 from .kb import KnowledgeSearch
 from .questionnaire import (
     CHOICE_KINDS,
+    CHOICE_NUMBER_TYPES,
     DIMENSIONS,
     KINDS,
     NUMERIC_KINDS,
@@ -30,6 +37,7 @@ from .questionnaire import (
     default_max,
     default_min,
     localized,
+    numeric_choices,
     reason_text,
     render_question,
 )
@@ -71,10 +79,17 @@ the investor gave). Do not compute new figures. Distinguish what the investor sa
 - The message is 2 to 5 sentences: acknowledge what was learned, then say why the next questions matter. No \
 greeting formulas, no lists of everything known.
 - Questions target the heaviest missing fields first, or clarify a contradiction. Give each question the `field` it \
-fills, taken from missing_fields or from the writable fields below, so the answer is recorded automatically; the \
-question kind must match the field type (enum: single_choice using the field values; multi_enum: multi_choice; \
-boolean; number; money; percent; scale; text). Use `help` for one short sentence on why it matters. Do not ask \
-again a question that was already answered, unless the answer contradicts another fact.
+fills, taken from missing_fields or from the writable fields below, so the answer is recorded automatically. Use \
+`help` for one short sentence on why it matters. Do not ask again a question that was already answered, unless \
+the answer contradicts another fact.
+- Offer answer choices by default; the investor answers with one click. The question kind follows the field type: \
+enum: single_choice using the field values; multi_enum: multi_choice; boolean; scale. A number, money or percent \
+field is always asked as single_choice with the tranches listed under `choices` in missing_fields (computed by the \
+code): keep them all, or only a run of adjacent tranches around what the investor already said; never invent a \
+bound, never use the kinds number, money or percent. The code writes the tranche labels.
+- An open question (kind text) is the exception: only for a field listed in open_fields, or with no field for a \
+short exploration question, and at most `remaining_questions.open` of them in this session. A field that admits \
+choices is never asked as text.
 - Set profile_complete to true only when the context shows completeness ready and no useful question remains; \
 then ask no question.
 
@@ -92,7 +107,11 @@ def field_catalog(q: Questionnaire) -> str:
             continue
         if spec.values:
             detail = "values: " + ", ".join(spec.value_ids)
-        elif spec.type in ("number", "money", "percent", "scale"):
+        elif spec.type in CHOICE_NUMBER_TYPES:
+            detail = "asked as single_choice with the tranches given in missing_fields[].choices"
+            if spec.unit:
+                detail += f", unit {spec.unit.get('en')}"
+        elif spec.type == "scale":
             detail = (
                 f"min {spec.min if spec.min is not None else default_min(spec.kind)}, "
                 f"max {spec.max if spec.max is not None else default_max(spec.kind)}"
@@ -101,6 +120,8 @@ def field_catalog(q: Questionnaire) -> str:
                 detail += f", unit {spec.unit.get('en')}"
         elif spec.type == "text":
             detail = f"max {spec.max_length or 500} characters"
+            if spec.id in q.open_fields:
+                detail += "; open field, may be asked as text"
         else:
             detail = ""
         lines.append(f"- {spec.id} ({spec.type}{'; ' + detail if detail else ''}): {spec.label.get('en')}")
@@ -111,7 +132,7 @@ def system_prompt(q: Questionnaire) -> str:
     return SYSTEM_PROMPT.replace("{fields}", field_catalog(q))
 
 
-def _field_brief(q: Questionnaire, field_id: str, locale: str) -> dict[str, Any]:
+def _field_brief(q: Questionnaire, field_id: str, locale: str, values: dict[str, Any]) -> dict[str, Any]:
     spec = q.fields[field_id]
     brief: dict[str, Any] = {
         "field": field_id,
@@ -121,9 +142,15 @@ def _field_brief(q: Questionnaire, field_id: str, locale: str) -> dict[str, Any]
     }
     if spec.values:
         brief["values"] = {item["value"]: localized(item["label"], locale) for item in spec.values}
-    if spec.type in ("number", "money", "percent", "scale"):
+    if spec.type == "scale":
         brief["min"] = spec.min if spec.min is not None else default_min(spec.kind)
         brief["max"] = spec.max if spec.max is not None else default_max(spec.kind)
+    if spec.type in CHOICE_NUMBER_TYPES:
+        brief["choices"] = [
+            {"value": t["value"], "label": t["label"]} for t in numeric_choices(q, field_id, values, locale)
+        ]
+    if spec.id in q.open_fields:
+        brief["open_field"] = True
     if "a1" not in spec.writable_by:
         brief["writable_by_a1"] = False
     return brief
@@ -157,7 +184,7 @@ def build_context(
                 "provenance": fact.get("provenance"),
             }
         )
-    missing = [_field_brief(q, field_id, locale) for field_id in rules.missing_fields(q, values)]
+    missing = [_field_brief(q, field_id, locale, values) for field_id in rules.missing_fields(q, values)]
     recent_questions = [item for item in (session.data.get("asked") or [])][-6:]
     recent_journal = []
     for entry in journal[-14:]:
@@ -212,12 +239,68 @@ class A1Outcome:
     complete: bool
     updates: list[dict[str, Any]] = field(default_factory=list)
     fallback: bool = False
+    # Table identifiant de tranche → valeur numérique, par question à tranches (gardée hors de la question).
+    choices: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+
+def _numeric_options(
+    q: Questionnaire, spec: Any, raw_options: Any, values: dict[str, Any], locale: str
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """Options d'une question à tranches : toutes les tranches du code, ou une suite de tranches voisines."""
+    tranches = numeric_choices(q, spec.id, values, locale)
+    ids = [t["value"] for t in tranches]
+    if len(tranches) < 2:
+        return None, f"field {spec.id} has no tranches to offer"
+    if not raw_options:
+        if len(tranches) > 8:
+            return None, f"choose 2 to 8 adjacent tranches of {spec.id}: {ids}"
+        return [{"value": t["value"], "label": t["label"]} for t in tranches], None
+    if not isinstance(raw_options, list) or not 2 <= len(raw_options) <= 8:
+        return None, "choice questions need 2 to 8 options"
+    chosen = []
+    for option in raw_options:
+        value = option.get("value") if isinstance(option, dict) else None
+        if value not in ids:
+            return None, (
+                f"option {value!r} is not a tranche of {spec.id}; use only these tranches, computed by the code: {ids}"
+            )
+        chosen.append(ids.index(value))
+    if len(set(chosen)) != len(chosen):
+        return None, "option values must be unique"
+    chosen.sort()
+    if chosen != list(range(chosen[0], chosen[0] + len(chosen))):
+        return None, f"keep a run of adjacent tranches of {spec.id}, without gaps: {ids}"
+    # Les libellés viennent du code : A1 ne peut pas déplacer une borne dans un libellé.
+    return [{"value": tranches[i]["value"], "label": tranches[i]["label"]} for i in chosen], None
+
+
+def choice_numbers(
+    q: Questionnaire, question: dict[str, Any], values: dict[str, Any], locale: str
+) -> dict[str, Any] | None:
+    """Table identifiant → nombre d'une question à tranches sur un champ numérique (``None`` sinon)."""
+    spec = q.fields.get(question.get("field") or "")
+    if spec is None or spec.type not in CHOICE_NUMBER_TYPES or question.get("kind") != "single_choice":
+        return None
+    table = {t["value"]: t["number"] for t in numeric_choices(q, spec.id, values, locale)}
+    return {o["value"]: table[o["value"]] for o in question.get("options") or [] if o["value"] in table}
 
 
 def build_question(
-    q: Questionnaire, raw: Any, *, turn: int, index: int, locale: str
+    q: Questionnaire,
+    raw: Any,
+    *,
+    turn: int,
+    index: int,
+    locale: str,
+    values: dict[str, Any] | None = None,
+    open_used: int = 0,
 ) -> tuple[dict[str, Any] | None, str | None]:
-    """Valide une question proposée par A1 et la met dans la forme ``Question`` du contrat."""
+    """Valide une question proposée par A1 et la met dans la forme ``Question`` du contrat.
+
+    ``values`` : valeurs confirmées, dont dépendent les tranches d'un champ numérique. ``open_used`` : questions
+    ouvertes déjà posées dans la session (et déjà acceptées dans ce tour).
+    """
+    values = values or {}
     if not isinstance(raw, dict):
         return None, "question must be an object"
     kind = raw.get("kind")
@@ -229,19 +312,49 @@ def build_question(
     help_text = raw.get("help")
     if help_text is not None and (not isinstance(help_text, str) or len(help_text) > 400):
         return None, "help must be at most 400 characters"
+    if kind in CHOICE_NUMBER_TYPES:
+        # Pas de saisie libre d'un nombre : un champ numérique se demande par tranches, et une question
+        # sans champ est une question d'exploration (text) ou une question à choix.
+        return None, (
+            f"kind {kind} is not allowed: ask a number, money or percent field as single_choice with the tranches "
+            "listed in missing_fields[].choices"
+        )
     field_id = raw.get("field") or None
     spec = None
     if field_id is not None:
         spec = q.fields.get(field_id)
         if spec is None or "a1" not in spec.writable_by:
             return None, f"field {field_id} is not writable by A1"
-        if spec.kind != kind:
+        if spec.type in CHOICE_NUMBER_TYPES:
+            if kind != "single_choice":
+                return None, (
+                    f"field {field_id} ({spec.type}) is asked with choices: use kind single_choice with the "
+                    "tranches listed in missing_fields[].choices"
+                )
+        elif kind == "text" and spec.kind != "text":
+            return None, f"field {field_id} admits choices: use kind {spec.kind}, not an open question"
+        elif spec.kind != kind:
             return None, f"field {field_id} has type {spec.type}; use kind {spec.kind}"
+    if kind == "text":
+        if spec is not None and spec.id not in q.open_fields:
+            return None, (
+                f"open questions are only allowed on {list(q.open_fields)} or with no field (exploration); "
+                f"ask {field_id} with choices"
+            )
+        if open_used >= q.max_open_questions:
+            return None, (
+                f"the session already has {open_used} open question(s), the maximum is {q.max_open_questions}: "
+                "offer answer choices instead"
+            )
     dimension = spec.dimension if spec else raw.get("dimension")
     if dimension not in DIMENSIONS:
         return None, f"dimension must be one of {list(DIMENSIONS)}"
     options: list[dict[str, Any]] = []
-    if kind in CHOICE_KINDS:
+    if spec is not None and spec.type in CHOICE_NUMBER_TYPES:
+        options, error = _numeric_options(q, spec, raw.get("options"), values, locale)
+        if error:
+            return None, error
+    elif kind in CHOICE_KINDS:
         raw_options = raw.get("options")
         if spec is not None and not raw_options:
             raw_options = [{"value": item["value"], "label": localized(item["label"], locale)} for item in spec.values]
@@ -302,21 +415,48 @@ def build_question(
     return question, None
 
 
-def fallback_questions(q: Questionnaire, values: dict[str, Any], *, turn: int, locale: str) -> list[dict[str, Any]]:
-    """Questions de secours du YAML pour les champs manquants les plus lourds (sans modèle)."""
-    out = []
+def fallback_questions(
+    q: Questionnaire,
+    values: dict[str, Any],
+    *,
+    turn: int,
+    locale: str,
+    limit: int = MAX_QUESTIONS,
+    open_left: int | None = None,
+    skip: set[str] | frozenset[str] = frozenset(),
+) -> list[dict[str, Any]]:
+    """Questions de secours du YAML pour les champs manquants les plus lourds (sans modèle).
+
+    Un champ numérique est demandé par ses tranches (``numeric_choices``). Une question ouverte n'est posée que
+    s'il en reste (``open_left``); ``skip`` écarte des champs, par exemple une valeur qui attend sa confirmation.
+    """
+    out: list[dict[str, Any]] = []
+    open_left = q.max_open_questions if open_left is None else open_left
     for field_id in rules.missing_fields(q, values):
+        if len(out) >= limit:
+            break
         spec = q.fields[field_id]
         template = spec.fallback
-        if not template:
+        if not template or field_id in skip:
             continue
-        options = [{"value": item["value"], "label": localized(item["label"], locale)} for item in spec.values]
+        kind = template.get("kind", spec.kind)
+        if spec.type in CHOICE_NUMBER_TYPES:
+            tranches = numeric_choices(q, field_id, values, locale)
+            if kind != "single_choice" or len(tranches) < 2:
+                continue
+            options = [{"value": t["value"], "label": t["label"]} for t in tranches]
+        else:
+            options = [{"value": item["value"], "label": localized(item["label"], locale)} for item in spec.values]
+        if kind == "text":
+            if open_left <= 0:
+                continue
+            open_left -= 1
         out.append(
             render_question(
                 question_id=f"fb_{turn}_{len(out) + 1}",
                 source="deterministic",
                 field=spec,
-                kind=template.get("kind", spec.kind),
+                kind=kind,
                 prompt=localized(template.get("prompt"), locale) or spec.label_text(locale),
                 help_text=localized(template.get("help"), locale),
                 options=options,
@@ -324,8 +464,6 @@ def fallback_questions(q: Questionnaire, values: dict[str, Any], *, turn: int, l
                 locale=locale,
             )
         )
-        if len(out) >= MAX_QUESTIONS:
-            break
     return out
 
 
@@ -370,6 +508,10 @@ class A1Turn:
 
     def working_values(self) -> dict[str, Any]:
         return {**self.base_values, **{field_id: item["value"] for field_id, item in self.updates.items()}}
+
+    def counts(self) -> dict[str, int]:
+        """Compteurs de la session : questions générées par A1 et questions ouvertes déjà envoyées."""
+        return followup_counts(self.session)
 
     # ------------------------------------------------------------------ outils
     def tools(self) -> list[Any]:
@@ -424,7 +566,8 @@ class A1Turn:
                     "threshold": score["threshold"],
                     "ready": score["ready"],
                     "missing_fields": [
-                        _field_brief(turn.q, f, turn.locale) for f in rules.missing_fields(turn.q, values)
+                        _field_brief(turn.q, f, turn.locale, turn.base_values)
+                        for f in rules.missing_fields(turn.q, values)
                     ],
                 }
             )
@@ -533,12 +676,22 @@ class A1Turn:
         if len(questions) > MAX_QUESTIONS:
             return {"status": "error", "reason": f"at most {MAX_QUESTIONS} questions per turn"}
         built, errors = [], []
+        open_used = self.counts().get("open", 0)
         for index, raw in enumerate(questions, start=1):
-            question, error = build_question(self.q, raw, turn=self.turn, index=index, locale=self.locale)
+            question, error = build_question(
+                self.q,
+                raw,
+                turn=self.turn,
+                index=index,
+                locale=self.locale,
+                values=self.base_values,
+                open_used=open_used,
+            )
             if error:
                 errors.append({"question": index, "reason": error})
             else:
                 built.append(question)
+                open_used += question["kind"] == "text"
         if errors:
             return {"status": "error", "errors": errors}
         complete = bool(profile_complete)
@@ -617,7 +770,13 @@ def run_a1(
     updates = [{"field": f, **item} for f, item in state.updates.items()]
     if state.finished is None:
         values = state.working_values()
-        questions = fallback_questions(q, values, turn=turn, locale=locale)
+        questions = fallback_questions(
+            q,
+            values,
+            turn=turn,
+            locale=locale,
+            open_left=q.max_open_questions - state.counts().get("open", 0),
+        )
         trace.add(
             "deterministic",
             "questionnaire",
@@ -635,13 +794,37 @@ def run_a1(
         )
         if emitter is not None:
             emitter.delta(message)
-        return A1Outcome(message=message, questions=questions, complete=False, updates=updates, fallback=True)
+        return A1Outcome(
+            message=message,
+            questions=questions,
+            complete=False,
+            updates=updates,
+            fallback=True,
+            choices=_choice_tables(q, questions, state.base_values, locale),
+        )
     return A1Outcome(
         message=state.finished["message"],
         questions=state.finished["questions"],
         complete=state.finished["complete"],
         updates=updates,
+        choices=_choice_tables(q, state.finished["questions"], state.base_values, locale),
     )
+
+
+def _choice_tables(
+    q: Questionnaire, questions: list[dict[str, Any]], values: dict[str, Any], locale: str
+) -> dict[str, dict[str, Any]]:
+    tables = {}
+    for question in questions:
+        table = choice_numbers(q, question, values, locale)
+        if table:
+            tables[question["id"]] = table
+    return tables
+
+
+def followup_counts(session: ClientSession) -> dict[str, int]:
+    counts = session.data.get("followup_counts") or {}
+    return {"generated": int(counts.get("generated") or 0), "open": int(counts.get("open") or 0)}
 
 
 def validate_pending_answer(q: Questionnaire, question: dict[str, Any], value: Any) -> Any:

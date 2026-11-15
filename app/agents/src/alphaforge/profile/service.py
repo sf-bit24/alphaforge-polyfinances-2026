@@ -646,6 +646,7 @@ class ProfileService:
             )
         message = (message or "").strip() or None
         pending = {item["id"]: item for item in session.data.get("pending_questions") or []}
+        pending_choices = dict(session.data.get("pending_choices") or {})
         validated = []
         for item in answers:
             question_id = item.get("question_id") if isinstance(item, dict) else None
@@ -670,21 +671,29 @@ class ProfileService:
             match = QUESTION_TURN.match(question["id"])
             provenance = f"a1:{match.group(1) if match else session.turn}"
             spec = self.q.fields.get(question.get("field") or "")
+            table = pending_choices.pop(question["id"], None)
+            option = None
+            if table and isinstance(value, str) and value in table:
+                # Tranche choisie : le code écrit sa valeur numérique et garde l'identifiant au journal.
+                option, value = value, table[value]
             if spec is not None and value is not None and self.q.applicable(spec.when, session.values()):
-                session.set_fact(spec.id, value, provenance, question_id=question["id"])
+                session.set_fact(spec.id, value, provenance, question_id=question["id"], option=option)
             else:
                 session.journal_answer(question["id"], value, provenance)
-            session.mark_answered(question["id"], value)
+            session.mark_answered(question["id"], option if option is not None else value)
             pending.pop(question["id"], None)
             new_answers.append(
                 {
                     "question_id": question["id"],
                     "field": question.get("field"),
+                    "kind": question.get("kind"),
                     "value": value,
+                    **({"option": option} if option is not None else {}),
                     "prompt": question.get("prompt"),
                 }
             )
         session.data["pending_questions"] = list(pending.values())
+        session.data["pending_choices"] = pending_choices
         if validated:
             req.trace.add(
                 "deterministic",
@@ -706,7 +715,7 @@ class ProfileService:
                     {"score": score["score"], "threshold": score["threshold"]},
                 )
             session.data["completion"] = {**(session.data.get("completion") or {}), "stopped": True}
-            session.data["pending_questions"] = []
+            session.clear_pending()
             session.set_stage("complete", "settings", req.trace, reason="l'investisseur s'arrête")
             self._completeness_step(req, session)
             self._commit(req, session)
@@ -747,7 +756,7 @@ class ProfileService:
             session.journal_message(message, locale, f"a1:{turn}")
         for update in outcome.updates:
             session.set_fact(update["field"], update["value"], f"a1:{turn}")
-        session.remember_questions(outcome.questions, turn)
+        session.remember_questions(outcome.questions, turn, choices=outcome.choices)
         if outcome.complete:
             session.data["completion"] = {**(session.data.get("completion") or {}), "a1_complete": True}
             session.set_stage("complete", f"a1:{turn}", req.trace, reason="A1 juge le profil complet")

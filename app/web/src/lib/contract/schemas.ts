@@ -40,6 +40,7 @@ export const DIMENSIONS = [
   "risk_capacity",
   "constraints",
   "preferences",
+  "behavior",
   "context",
 ] as const;
 export const Dimension = z.enum(DIMENSIONS);

@@ -11,13 +11,16 @@
 # ce qu'un portefeuille ne dit pas, diapositive 14) et énoncé officiel (cadre responsable, p. 14 et 17).
 # Les fiches des personas ne fournissent aucun chiffre ni barème à ce fichier.
 
-version: "2026-11-14.2"
+version: "2026-11-15.1"
 review: "À relire par le volet finance de l'équipe larpathon : textes, options, poids et barèmes."
 
 completeness:
   # score = somme des poids des champs applicables connus / somme des poids des champs applicables.
   # Un champ dont la condition « when » est fausse n'est pas applicable et sort du calcul.
   # Les questions de base donnent environ 0,65; les relances d'A1 complètent le profil.
+  # Les variables du profil court lues par l'étape 0 de la finance (quiz, seuil de vente, secteur d'emploi,
+  # force des exclusions, cryptoactifs, comportement) ont un poids de 0 : posées dans le parcours de base,
+  # elles ne comptent pas dans la complétude et ne déplacent ni le seuil ni les relances d'A1 (missing_fields).
   threshold: 0.70
   cap: 0.95
 
@@ -70,6 +73,30 @@ fields:
       - {value: options, label: {fr: "Options ou autres dérivés", en: "Options or other derivatives"}}
       - {value: crypto, label: {fr: "Cryptoactifs", en: "Crypto-assets"}}
       - {value: none, label: {fr: "Aucun de ces produits", en: "None of these"}}
+  # Mini-quiz (banque du Brain CN-03 et CN-04), lu par l'étape 0 : une auto-évaluation « avancé » avec une
+  # réponse fausse ou « je ne sais pas » signale un excès de confiance (strategy.yaml, profile_codes.quiz_correct).
+  # Il ne change pas le barème du niveau de connaissances (rules.knowledge_level).
+  - id: knowledge.quiz_diversification
+    type: enum
+    weight: 0
+    writable_by: [base]
+    label: {fr: "Quiz : une action seule ou un FNB, lequel est le plus risqué", en: "Quiz: a single stock or an ETF, which is riskier"}
+    values:
+      - {value: single_stock, label: {fr: "Une action seule", en: "A single stock"}}
+      - {value: etf, label: {fr: "Un FNB", en: "An ETF"}}
+      - {value: same, label: {fr: "Le même risque", en: "The same risk"}}
+      - {value: dont_know, label: {fr: "Je ne sais pas", en: "I don't know"}}
+  - id: knowledge.quiz_bond_rates
+    type: enum
+    weight: 0
+    writable_by: [base]
+    label: {fr: "Quiz : effet d'une hausse des taux sur le prix d'une obligation", en: "Quiz: effect of rising rates on a bond's price"}
+    values:
+      - {value: rises, label: {fr: "Il monte", en: "It rises"}}
+      - {value: falls, label: {fr: "Il baisse", en: "It falls"}}
+      - {value: same, label: {fr: "Il reste le même", en: "It stays the same"}}
+      - {value: no_link, label: {fr: "Aucun lien", en: "No link"}}
+      - {value: dont_know, label: {fr: "Je ne sais pas", en: "I don't know"}}
   - id: knowledge.self_assessment
     type: enum
     weight: 0
@@ -218,6 +245,20 @@ fields:
     fallback:
       kind: single_choice
       prompt: {fr: "Lors d'une baisse réelle des marchés, par exemple en 2022, qu'avez-vous fait ?", en: "During a real market drop, for example in 2022, what did you do?"}
+  - id: risk_tolerance.sell_threshold_pct
+    # Banque du Brain TR-03. Lu par l'étape 0 (faible sang-froid), hors du barème de la tolérance (rules.risk).
+    type: enum
+    weight: 0
+    writable_by: [base, a1]
+    label: {fr: "Baisse sur un an qui donnerait envie de vendre", en: "One-year drop that would make you want to sell"}
+    values:
+      - {value: none, label: {fr: "Aucune baisse acceptée", en: "No drop accepted"}}
+      - {value: lt5, label: {fr: "Moins de 5 %", en: "Less than 5%"}}
+      - {value: 5to10, label: {fr: "De 5 % à moins de 10 %", en: "5% to less than 10%"}}
+      - {value: 10to20, label: {fr: "De 10 % à moins de 20 %", en: "10% to less than 20%"}}
+      - {value: 20to30, label: {fr: "De 20 % à moins de 30 %", en: "20% to less than 30%"}}
+      - {value: gte30, label: {fr: "30 % ou plus", en: "30% or more"}}
+      - {value: dont_know, label: {fr: "Je ne sais pas", en: "I don't know"}}
 
   # ---------------------------------------------------------------- capacité à prendre du risque
   - id: risk_capacity.emergency_fund
@@ -238,6 +279,23 @@ fields:
       - {value: stable, label: {fr: "Plutôt stables", en: "Fairly stable"}}
       - {value: variable, label: {fr: "Variables ou incertains", en: "Variable or uncertain"}}
       - {value: none, label: {fr: "Pas de revenu régulier", en: "No regular income"}}
+  - id: risk_capacity.employment_sector
+    # Banque du Brain SF-12 (capital humain). Lu par l'étape 0 : un revenu qui suit un secteur plafonne ce
+    # secteur (strategy.yaml, sectors.employment_to_tag). Le nom de l'employeur n'est jamais demandé.
+    type: enum
+    weight: 0
+    writable_by: [base, a1]
+    label: {fr: "Secteur d'emploi", en: "Employment sector"}
+    values:
+      - {value: technology, label: {fr: "Technologie", en: "Technology"}}
+      - {value: finance, label: {fr: "Finance", en: "Finance"}}
+      - {value: energy, label: {fr: "Énergie", en: "Energy"}}
+      - {value: healthcare, label: {fr: "Santé", en: "Health care"}}
+      - {value: public, label: {fr: "Secteur public", en: "Public sector"}}
+      - {value: industry, label: {fr: "Industrie", en: "Industry"}}
+      - {value: retail, label: {fr: "Commerce", en: "Retail"}}
+      - {value: unemployed, label: {fr: "Sans emploi", en: "Not employed"}}
+      - {value: prefer_not, label: {fr: "Préfère ne pas répondre", en: "Prefers not to answer"}}
   - id: risk_capacity.loss_impact
     type: enum
     weight: 6
@@ -370,6 +428,19 @@ fields:
       - {value: gambling, label: {fr: "Jeux de hasard", en: "Gambling"}}
       - {value: alcohol, label: {fr: "Alcool", en: "Alcohol"}}
       - {value: none, label: {fr: "Aucune exclusion", en: "No exclusion"}}
+  - id: preferences.exclusion_strictness
+    # Banque du Brain PR-04, une fois pour l'ensemble des exclusions. Lu par l'étape 0 (strategy.yaml,
+    # profile_codes.exclusion_strictness). Applicable si les exclusions ne sont ni vides ni « aucune ».
+    type: enum
+    weight: 0
+    when: {field: preferences.exclusions, not_in: [[], [none]]}
+    writable_by: [base, a1]
+    label: {fr: "Force des exclusions", en: "Strength of the exclusions"}
+    values:
+      - {value: absolute, label: {fr: "Limite absolue", en: "Absolute limit"}}
+      - {value: small_share_in_fund, label: {fr: "Petite part tolérée dans un fonds", en: "Small share tolerated in a fund"}}
+      - {value: preference, label: {fr: "Simple préférence", en: "Preference only"}}
+      - {value: dont_know, label: {fr: "Je ne sais pas", en: "I don't know"}}
   - id: preferences.interests
     type: multi_enum
     weight: 2
@@ -386,6 +457,31 @@ fields:
       - {value: clean_energy, label: {fr: "Énergie propre", en: "Clean energy"}}
       - {value: gold, label: {fr: "Or", en: "Gold"}}
       - {value: none, label: {fr: "Aucun thème en particulier", en: "No particular theme"}}
+  # Banque du Brain PR-02 et PR-13 : posées seulement si les cryptoactifs sont un thème d'intérêt.
+  - id: preferences.crypto_place
+    type: enum
+    weight: 0
+    when: {field: preferences.interests, contains: crypto}
+    writable_by: [base, a1]
+    label: {fr: "Place voulue pour les cryptoactifs", en: "Desired place for crypto-assets"}
+    values:
+      - {value: none, label: {fr: "Aucune", en: "None"}}
+      - {value: small, label: {fr: "Une petite part", en: "A small share"}}
+      - {value: larger, label: {fr: "Une part plus importante", en: "A larger share"}}
+      - {value: let_system_decide, label: {fr: "Laisser le système décider", en: "Let the system decide"}}
+      - {value: dont_know, label: {fr: "Je ne sais pas ce que c'est", en: "I don't know what they are"}}
+  - id: preferences.crypto_max_pct
+    type: enum
+    weight: 0
+    when: {field: preferences.crypto_place, in: [small, larger]}
+    writable_by: [base, a1]
+    label: {fr: "Part maximale voulue en cryptoactifs", en: "Maximum desired share of crypto-assets"}
+    values:
+      - {value: lt2, label: {fr: "Moins de 2 %", en: "Less than 2%"}}
+      - {value: 2to5, label: {fr: "De 2 % à moins de 5 %", en: "2% to less than 5%"}}
+      - {value: 5to10, label: {fr: "De 5 % à moins de 10 %", en: "5% to less than 10%"}}
+      - {value: gt10, label: {fr: "Plus de 10 %", en: "More than 10%"}}
+      - {value: propose_limit, label: {fr: "Proposez-moi une limite", en: "Suggest a limit to me"}}
   - id: preferences.approach
     type: enum
     weight: 4
@@ -400,6 +496,33 @@ fields:
     fallback:
       kind: single_choice
       prompt: {fr: "Comment préférez-vous investir ?", en: "How do you prefer to invest?"}
+
+  # ---------------------------------------------------------------- comportement
+  # Banque du Brain CB-01 et CB-04. Lu par l'étape 0 (FOMO et achat par attention, strategy.yaml,
+  # profile_codes.fomo_* et attention_*) : un garde-fou, jamais une allocation.
+  - id: behavior.hype_reaction
+    type: enum
+    weight: 0
+    writable_by: [base, a1]
+    label: {fr: "Réaction à une action très médiatisée, en hausse de 60 %", en: "Reaction to a much-talked-about stock up 60%"}
+    values:
+      - {value: buy_a_lot, label: {fr: "En acheter beaucoup", en: "Buy a lot"}}
+      - {value: buy_some, label: {fr: "En acheter un peu", en: "Buy a little"}}
+      - {value: wait, label: {fr: "Attendre", en: "Wait"}}
+      - {value: no_change, label: {fr: "Ne rien changer", en: "Change nothing"}}
+      - {value: dont_know, label: {fr: "Je ne sais pas", en: "I don't know"}}
+  - id: behavior.hype_position_share
+    type: enum
+    weight: 0
+    when: {field: behavior.hype_reaction, in: [buy_a_lot, buy_some]}
+    writable_by: [base, a1]
+    label: {fr: "Part du portefeuille mise dans cette action", en: "Share of the portfolio put in this stock"}
+    values:
+      - {value: lt2, label: {fr: "Moins de 2 %", en: "Less than 2%"}}
+      - {value: 2to5, label: {fr: "De 2 % à moins de 5 %", en: "2% to less than 5%"}}
+      - {value: 5to10, label: {fr: "De 5 % à moins de 10 %", en: "5% to less than 10%"}}
+      - {value: gt10, label: {fr: "Plus de 10 %", en: "More than 10%"}}
+      - {value: dont_know, label: {fr: "Je ne sais pas", en: "I don't know"}}
 
   # ---------------------------------------------------------------- contexte
   - id: context.amount_cad
@@ -451,6 +574,26 @@ questions:
     kind: multi_choice
     prompt: {fr: "Quels produits connaissez-vous assez bien pour expliquer leur fonctionnement ?", en: "Which products do you know well enough to explain how they work?"}
     help: {fr: "Cochez tout ce qui s'applique.", en: "Select all that apply."}
+  - id: q_kn_quiz_diversification
+    field: knowledge.quiz_diversification
+    kind: single_choice
+    prompt: {fr: "En général, lequel de ces placements est le plus risqué ?", en: "In general, which of these investments is the riskiest?"}
+    help: {fr: "Répondez sans chercher : « Je ne sais pas » est une réponse acceptée.", en: "Answer without looking it up: “I don't know” is an accepted answer."}
+    options:
+      - {value: single_stock, label: {fr: "Les actions d'une seule entreprise", en: "Shares of a single company"}}
+      - {value: etf, label: {fr: "Un FNB qui détient les actions de plusieurs centaines d'entreprises", en: "An ETF that holds shares of several hundred companies"}}
+      - {value: same, label: {fr: "Les deux ont le même risque", en: "Both carry the same risk"}}
+      - {value: dont_know, label: {fr: "Je ne sais pas", en: "I don't know"}}
+  - id: q_kn_quiz_bond_rates
+    field: knowledge.quiz_bond_rates
+    kind: single_choice
+    prompt: {fr: "Si les taux d'intérêt montent, qu'arrive-t-il en général au prix d'une obligation déjà émise ?", en: "If interest rates rise, what generally happens to the price of a bond already issued?"}
+    options:
+      - {value: rises, label: {fr: "Il monte", en: "It rises"}}
+      - {value: falls, label: {fr: "Il baisse", en: "It falls"}}
+      - {value: same, label: {fr: "Il reste le même", en: "It stays the same"}}
+      - {value: no_link, label: {fr: "Il n'y a aucun lien entre les deux", en: "There is no link between the two"}}
+      - {value: dont_know, label: {fr: "Je ne sais pas", en: "I don't know"}}
   - id: q_kn_self
     field: knowledge.self_assessment
     kind: single_choice
@@ -495,6 +638,19 @@ questions:
       - {value: small, label: {fr: "J'accepte de petites variations pour un rendement un peu meilleur", en: "I accept small fluctuations for a slightly better return"}}
       - {value: moderate, label: {fr: "J'accepte des variations moyennes pour un meilleur potentiel de croissance", en: "I accept moderate fluctuations for better growth potential"}}
       - {value: large, label: {fr: "J'accepte de fortes variations pour viser la croissance la plus élevée", en: "I accept large fluctuations to aim for the highest growth"}}
+  - id: q_sell_threshold
+    field: risk_tolerance.sell_threshold_pct
+    kind: single_choice
+    prompt: {fr: "Sur une année, à partir de quelle baisse de votre portefeuille seriez-vous assez inquiet pour vouloir vendre, même si votre situation n'a pas changé ?", en: "Over a year, from what drop in your portfolio would you be worried enough to want to sell, even if your situation has not changed?"}
+    help: {fr: "La question porte sur ce que vous ressentiriez; ce que vous pouvez perdre est demandé à part.", en: "This is about how you would feel; what you can afford to lose is asked separately."}
+    options:
+      - {value: none, label: {fr: "Aucune : la moindre baisse me donnerait envie de vendre", en: "None: the slightest drop would make me want to sell"}}
+      - {value: lt5, label: {fr: "Moins de 5 %", en: "Less than 5%"}}
+      - {value: 5to10, label: {fr: "De 5 % à moins de 10 %", en: "5% to less than 10%"}}
+      - {value: 10to20, label: {fr: "De 10 % à moins de 20 %", en: "10% to less than 20%"}}
+      - {value: 20to30, label: {fr: "De 20 % à moins de 30 %", en: "20% to less than 30%"}}
+      - {value: gte30, label: {fr: "30 % ou plus", en: "30% or more"}}
+      - {value: dont_know, label: {fr: "Je ne sais pas", en: "I don't know"}}
 
   # 5. Capacité à prendre du risque (capacité financière à vivre les conséquences d'une perte).
   # Les questions à choix sur un champ numérique (number, money, percent) portent, pour chaque option, un
@@ -523,6 +679,21 @@ questions:
       - {value: stable, label: {fr: "Plutôt stables", en: "Fairly stable"}}
       - {value: variable, label: {fr: "Variables ou incertains (travail autonome, contrats…)", en: "Variable or uncertain (self-employed, contracts…)"}}
       - {value: none, label: {fr: "Pas de revenu régulier", en: "No regular income"}}
+  - id: q_employment_sector
+    field: risk_capacity.employment_sector
+    kind: single_choice
+    prompt: {fr: "Dans quel secteur travaillez-vous ?", en: "Which sector do you work in?"}
+    help: {fr: "Le nom de l'employeur n'est pas demandé. Un revenu et des placements qui dépendent du même secteur peuvent baisser en même temps.", en: "Your employer's name is not asked. Income and investments that depend on the same sector can fall at the same time."}
+    options:
+      - {value: technology, label: {fr: "Technologie, logiciels, semi-conducteurs", en: "Technology, software, semiconductors"}}
+      - {value: finance, label: {fr: "Finance, assurance, immobilier", en: "Finance, insurance, real estate"}}
+      - {value: energy, label: {fr: "Énergie, mines, ressources naturelles", en: "Energy, mining, natural resources"}}
+      - {value: healthcare, label: {fr: "Santé et services sociaux", en: "Health and social services"}}
+      - {value: public, label: {fr: "Fonction publique, éducation", en: "Public service, education"}}
+      - {value: industry, label: {fr: "Industrie, construction, transport", en: "Manufacturing, construction, transportation"}}
+      - {value: retail, label: {fr: "Commerce, services, autre", en: "Retail, services, other"}}
+      - {value: unemployed, label: {fr: "Ne s'applique pas (sans emploi)", en: "Does not apply (not employed)"}}
+      - {value: prefer_not, label: {fr: "Je préfère ne pas répondre", en: "I prefer not to answer"}}
   - id: q_loss_impact
     field: risk_capacity.loss_impact
     kind: single_choice
@@ -573,12 +744,58 @@ questions:
     kind: multi_choice
     when: {field: preferences.esg_importance, gte: 3}
     prompt: {fr: "Y a-t-il des secteurs que vous voulez exclure ?", en: "Are there sectors you want to exclude?"}
+  - id: q_exclusion_strictness
+    field: preferences.exclusion_strictness
+    kind: single_choice
+    when: {field: preferences.exclusions, not_in: [[], [none]]}
+    prompt: {fr: "Pour ces exclusions, prises ensemble : s'agit-il d'une limite absolue, d'une limite qui tolère une très petite part dans un fonds diversifié, ou d'une préférence ?", en: "For these exclusions, taken together: is it an absolute limit, a limit that tolerates a very small share in a diversified fund, or a preference?"}
+    help: {fr: "Un fonds indiciel large contient presque toujours un peu de chaque secteur.", en: "A broad index fund almost always holds a little of every sector."}
+    options:
+      - {value: absolute, label: {fr: "Limite absolue : jamais, même indirectement", en: "Absolute limit: never, not even indirectly"}}
+      - {value: small_share_in_fund, label: {fr: "Limite, mais une très petite part dans un fonds diversifié est acceptable", en: "A limit, but a very small share in a diversified fund is acceptable"}}
+      - {value: preference, label: {fr: "Préférence : en avoir moins si possible", en: "Preference: hold less of them when possible"}}
+      - {value: dont_know, label: {fr: "Je ne sais pas", en: "I don't know"}}
   - id: q_interests
     field: preferences.interests
     kind: multi_choice
     prompt: {fr: "Certains thèmes vous intéressent-ils particulièrement ?", en: "Are you particularly interested in some themes?"}
+  - id: q_crypto_place
+    field: preferences.crypto_place
+    kind: single_choice
+    when: {field: preferences.interests, contains: crypto}
+    prompt: {fr: "Quelle place souhaitez-vous donner aux cryptoactifs (par exemple le bitcoin) dans votre portefeuille ?", en: "What place do you want to give crypto-assets (for example bitcoin) in your portfolio?"}
+    help: {fr: "C'est une préférence, pas une mesure de votre tolérance au risque.", en: "This is a preference, not a measure of your risk tolerance."}
+    options:
+      - {value: none, label: {fr: "Aucune : je n'en veux pas", en: "None: I don't want any"}}
+      - {value: small, label: {fr: "Une petite part, pour essayer", en: "A small share, to try"}}
+      - {value: larger, label: {fr: "Une part plus importante", en: "A larger share"}}
+      - {value: let_system_decide, label: {fr: "Pas d'avis : laissez le système décider dans mes limites", en: "No opinion: let the system decide within my limits"}}
+      - {value: dont_know, label: {fr: "Je ne sais pas ce que c'est", en: "I don't know what they are"}}
+  - id: q_crypto_max
+    field: preferences.crypto_max_pct
+    kind: single_choice
+    when: {field: preferences.crypto_place, in: [small, larger]}
+    prompt: {fr: "Au maximum, quelle part de votre portefeuille voulez-vous en cryptoactifs ?", en: "At most, what share of your portfolio do you want in crypto-assets?"}
 
-  # 8. Contexte, puis le portefeuille existant en dernier.
+  # 8. Comportement : une mise en situation, puis sa relance si l'investisseur achèterait.
+  - id: q_hype_reaction
+    field: behavior.hype_reaction
+    kind: single_choice
+    prompt: {fr: "Une entreprise dont tout le monde parle a vu son action monter de 60 % en trois mois. Elle ne fait pas partie de votre plan. Que faites-vous ?", en: "A company everyone is talking about has seen its stock rise 60% in three months. It is not part of your plan. What do you do?"}
+    help: {fr: "Il n'y a pas de bonne réponse : la question mesure votre réaction, pas vos connaissances.", en: "There is no right answer: the question measures your reaction, not your knowledge."}
+    options:
+      - {value: buy_a_lot, label: {fr: "J'en achète une part importante", en: "I buy a large amount"}}
+      - {value: buy_some, label: {fr: "J'en achète un peu", en: "I buy a little"}}
+      - {value: wait, label: {fr: "J'attends d'en savoir plus avant de décider", en: "I wait to learn more before deciding"}}
+      - {value: no_change, label: {fr: "Je ne change rien à mon plan", en: "I don't change my plan"}}
+      - {value: dont_know, label: {fr: "Je ne sais pas", en: "I don't know"}}
+  - id: q_hype_share
+    field: behavior.hype_position_share
+    kind: single_choice
+    when: {field: behavior.hype_reaction, in: [buy_a_lot, buy_some]}
+    prompt: {fr: "Dans cette situation, quelle part de votre portefeuille mettriez-vous dans cette action ?", en: "In that situation, what share of your portfolio would you put in this stock?"}
+
+  # 9. Contexte, puis le portefeuille existant en dernier.
   - id: q_amount
     field: context.amount_cad
     kind: single_choice

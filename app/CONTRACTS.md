@@ -77,7 +77,7 @@ stateDiagram-v2
     complete --> followups: "followup.reply"
 ```
 
-- `base_questions` : questions déterministes, sans modèle. D'abord le niveau de connaissances, puis les cinq dimensions du profil, puis « avez-vous un portefeuille existant ? ».
+- `base_questions` : questions déterministes, sans modèle. D'abord le niveau de connaissances (dont un mini-quiz), puis les cinq dimensions du profil et une mise en situation de comportement, puis « avez-vous un portefeuille existant ? ».
 - `existing_portfolio` : l'investisseur fournit son portefeuille sous n'importe quelle forme (texte collé, CSV, tableur, PDF, image, JSON).
 - `portfolio_review` : A2 propose des positions normalisées que l'investisseur corrige puis confirme.
 - `followups` : A1 relance sur ce qui manque, sans s'écarter du sujet.
@@ -146,7 +146,7 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
 - `source` : `deterministic` ou `a1`.
 - `field` : champ du profil que la réponse renseigne, sous la même forme que `facts[].field` (`<dimension>.<nom>`), ou `null` (facultatif).
 - `id` : `q_<nom>` pour une question de base (`questionnaire.yaml`), `a1_<tour>_<n>` pour une relance d'A1. Si A1 est indisponible, le code pose des questions de repli `fb_<tour>_<n>`, avec `source: deterministic`. `cf_<tour>_<n>` est une question de confirmation posée par le code quand A1 a tiré une valeur d'un texte libre (`source: deterministic`, `kind: boolean`, `field: null`) : « oui » garde la valeur, « non » la retire. Au plus deux par tour, comptées dans les trois questions du tour.
-- `dimension` : `knowledge`, `objective`, `horizon`, `risk_tolerance`, `risk_capacity`, `constraints`, `preferences`, `context`.
+- `dimension` : `knowledge`, `objective`, `horizon`, `risk_tolerance`, `risk_capacity`, `constraints`, `preferences`, `behavior`, `context`. `behavior` (réaction à un titre très médiatisé) n'a pas d'entrée dans `ProfileView.dimensions` : ses réponses sont dans `facts`.
 - `kind` et type de `value` attendu : `single_choice` (chaîne parmi `options[].value`), `multi_choice` (liste de chaînes), `boolean` (booléen), `number` (nombre, borné par `min` et `max`), `money` (nombre, `unit` = devise, `CAD` par défaut), `percent` (nombre de 0 à 100), `scale` (entier de `min` à `max`), `text` (chaîne de 1 à 2 000 caractères).
 - Les textes (`prompt`, `help`, `label`) sont déjà dans la langue de `locale`; l'interface n'en traduit aucun.
 
@@ -157,6 +157,7 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
 ```
 
 - `score` : part pondérée des champs requis connus, calculée par le code (de 0 à 1). `displayed` = `min(score, cap)`. `ready` = `score >= threshold`.
+- Un champ de poids nul dans `questionnaire.yaml` n'y compte pas et n'est jamais dans `missing`. C'est le cas des variables du profil court que lit l'étape 0 du volet finance (section 9) : `knowledge.quiz_diversification`, `knowledge.quiz_bond_rates`, `risk_tolerance.sell_threshold_pct`, `risk_capacity.employment_sector`, `preferences.exclusion_strictness`, `preferences.crypto_place`, `preferences.crypto_max_pct`, `behavior.hype_reaction` et `behavior.hype_position_share`. Elles sont posées parmi les questions de base, certaines seulement après une réponse qui les déclenche, et leurs codes sont ceux que compare `finance/strategy/strategy.yaml` (`profile_codes`).
 
 `ProfileView` :
 

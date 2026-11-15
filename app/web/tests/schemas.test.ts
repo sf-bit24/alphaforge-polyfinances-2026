@@ -23,6 +23,12 @@ describe("contract examples (CONTRACTS.md 3.3)", () => {
     expect(question.options).toHaveLength(3);
   });
 
+  it("parses a behavior question (short profile, read by step 0)", () => {
+    const question = Question.parse({ ...examples.question, id: "q_hype_reaction", dimension: "behavior", field: "behavior.hype_reaction" });
+    expect(question.dimension).toBe("behavior");
+    expect(() => Question.parse({ ...examples.question, dimension: "mood" })).toThrow();
+  });
+
   it("parses Completeness, ProfileView, PortfolioView and TraceStep", () => {
     expect(Completeness.parse(examples.completeness).ready).toBe(false);
     expect(ProfileView.parse(examples.profileView).dimensions.risk_capacity.status).toBe("missing");

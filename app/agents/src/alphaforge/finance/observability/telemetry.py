@@ -6,7 +6,8 @@ agents, les appels de modèle et les outils) et par notre code (outils F2-F4, ll
 Destinations (cumulables) :
 - fichier JSONL local (``ALPHAFORGE_TRACE_FILE``) : arbre de traces pour l'interface, et preuve
   conservée après la suppression du compte AWS ;
-- AWS X-Ray / CloudWatch Transaction Search via OTLP HTTP signé SigV4 (``ALPHAFORGE_OTLP_XRAY=1``) ;
+- AWS X-Ray / CloudWatch Transaction Search via OTLP HTTP signé SigV4 (``ALPHAFORGE_OTLP_XRAY=1``), sauf si
+  ADOT a déjà posé le provider global (runtime AgentCore, ``alphaforge/otel.py``) : il exporte alors lui-même ;
 - console (``ALPHAFORGE_TRACE_CONSOLE=1``).
 Journaux applicatifs structurés : ``log_event`` → JSONL local et CloudWatch Logs ``ALPHAFORGE_LOG_GROUP``
 (output Terraform ``finance_log_group``).
@@ -108,13 +109,34 @@ def setup(
     console: bool | None = None,  # noqa: FBT001 (signature publique gelée, comme xray)
     attributes: dict | None = None,
 ) -> TracerProvider:
-    """Configure (une seule fois) le TracerProvider global. Idempotent."""
+    """Configure (une seule fois) le TracerProvider global. Idempotent.
+
+    Si un TracerProvider du SDK est déjà global (ADOT sur AgentCore, alphaforge/otel.py), il est réutilisé : il
+    exporte déjà vers X-Ray, donc seules les destinations locales (fichier, console) y sont ajoutées, sans second
+    exportateur X-Ray qui doublerait chaque span. ``attributes`` ne vaut alors pas : la ressource est celle d'ADOT.
+    """
     global _PROVIDER
     if _PROVIDER is not None:
         return _PROVIDER
     trace_file = trace_file or os.environ.get("ALPHAFORGE_TRACE_FILE")
     xray = os.environ.get("ALPHAFORGE_OTLP_XRAY") == "1" if xray is None else xray
     console = os.environ.get("ALPHAFORGE_TRACE_CONSOLE") == "1" if console is None else console
+    current = trace.get_tracer_provider()
+    adopted = isinstance(current, TracerProvider)
+    provider = current if adopted else _new_provider(attributes)
+    if trace_file:
+        provider.add_span_processor(SimpleSpanProcessor(JsonlSpanExporter(trace_file)))
+    if xray and not adopted:
+        provider.add_span_processor(BatchSpanProcessor(_xray_exporter()))
+    if console:
+        provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+    if not adopted:
+        trace.set_tracer_provider(provider)
+    _PROVIDER = provider
+    return provider
+
+
+def _new_provider(attributes: dict | None) -> TracerProvider:
     resource = Resource.create(
         {
             "service.name": SERVICE,
@@ -123,16 +145,7 @@ def setup(
             **(attributes or {}),
         }
     )
-    provider = TracerProvider(resource=resource)
-    if trace_file:
-        provider.add_span_processor(SimpleSpanProcessor(JsonlSpanExporter(trace_file)))
-    if xray:
-        provider.add_span_processor(BatchSpanProcessor(_xray_exporter()))
-    if console:
-        provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
-    trace.set_tracer_provider(provider)
-    _PROVIDER = provider
-    return provider
+    return TracerProvider(resource=resource)
 
 
 def flush() -> None:

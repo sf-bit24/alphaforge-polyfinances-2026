@@ -95,7 +95,8 @@ une simulation éducative, jamais un conseil personnalisé (énoncé, p. 17).
    plafond de la capacité (Wealthsimple).
    - *Dans AlphaForge AI* : l'étape 0 fixe un plancher d'actions dans la bande du niveau, selon la place du score de
      tolérance dans l'intervalle de ce niveau; quand la capacité est la limite, le plancher rejoint le plafond
-     (hypothèse de conception, à valider par l'équipe).
+     (voir [Étape 0 : style et score des titres](scoring-par-style.md); hypothèse de conception, à valider par
+     l'équipe).
 4. **La capacité fixe le plafond.** Tolérance et capacité s'évaluent séparément, et le profil de risque retient la
    plus basse des deux (avis 31-368; atelier BNCD, diapositive 8). L'OCRI demande une capacité définie, comparable
    directement à la tolérance (bulletin 26-0200). Pour la plupart des investisseurs, la capacité compte bien plus que
@@ -107,7 +108,7 @@ une simulation éducative, jamais un conseil personnalisé (énoncé, p. 17).
 5. **Le capital humain ajuste.** Un revenu stable, proche d'une obligation, laisse plus de place aux actions; un
    revenu lié aux marchés en laisse moins, avec des limites sectorielles (Ibbotson et al., 2007).
    - *Dans AlphaForge AI* : la stabilité du revenu entre dans la capacité; l'étape 0 plafonne le secteur d'emploi
-     près de son poids de marché et n'en sélectionne aucun titre (voir [Capital humain](../notions/capital-humain.md)).
+     au poids du marché et n'en sélectionne aucun titre (voir [Capital humain](../notions/capital-humain.md)).
 6. **Le besoin de rendement est vérifié, sans relever le risque.** On ne passe pas outre au risque qu'un client veut
    et peut accepter parce que ses attentes de rendement ne seraient pas atteintes; on explique plutôt d'autres
    leviers : épargner davantage, dépenser moins, prendre sa retraite plus tard (31-103CP). Un objectif inatteignable
@@ -130,14 +131,14 @@ l'allocation de base vers plus de risque : il ajoute un garde-fou ou resserre un
 
 | Signal | Garde-fou | Dans AlphaForge AI |
 | --- | --- | --- |
-| Excès de confiance | Poche satellite réduite, retour sur les coûts | La réponse testée pèse plus que la déclaration; taille visée des satellites réduite à l'étape 0 |
-| Attention et FOMO | Délai de réflexion, contrôle de concentration sur les titres médiatisés | Délai de réflexion du bac à sable; plafonds par titre |
-| Sang-froid faible | Entrée progressive, plan de baisse écrit, contact proactif | Limite de baisse conditionnelle (CDaR) ajoutée; position limitée dans la bande |
-| Littératie faible | Choix diversifiés par défaut | Profil débutant : plafond de 2 % par titre, cryptoactifs par FNB seulement |
+| Excès de confiance | Poche satellite réduite, retour sur les coûts | La réponse testée pèse plus que la déclaration; à l'étape 0, un titre de moins (K − 1) et des planchers divisés par deux |
+| Attention et FOMO | Délai de réflexion, contrôle de concentration sur les titres médiatisés | Délai de réflexion du bac à sable; plafonds par titre; à l'étape 0, aucune montée de style |
+| Sang-froid faible | Entrée progressive, plan de baisse écrit, contact proactif | Limite de baisse conditionnelle (CDaR) ajoutée; à l'étape 0, position dans la bande d'au plus 0,5 et aucune montée de style |
+| Littératie faible | Choix diversifiés par défaut | Profil débutant : plafond de 2 % par titre, cryptoactifs par FNB seulement; à l'étape 0, aucun titre individuel (K = 0) et style au plus dynamique |
 
-Les valeurs sont dans `risk_levels.yaml` (sections `tolerance`, `biases`, `knowledge`, `satellites`) et dans la
-configuration de l'étape 0; ce sont des hypothèses de conception, à valider par l'équipe (voir
-[Noyau et satellites](../notions/noyau-et-satellites.md)).
+Les valeurs sont dans `risk_levels.yaml` (sections `tolerance`, `biases`, `knowledge`, `satellites`) et dans
+`strategy.yaml`, décrit dans [Étape 0 : style et score des titres](scoring-par-style.md); ce sont des hypothèses de
+conception, à valider par l'équipe (voir [Noyau et satellites](../notions/noyau-et-satellites.md)).
 
 ## Les contradictions : la réponse la plus prudente l'emporte
 

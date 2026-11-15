@@ -140,6 +140,13 @@ locals {
     ALPHAFORGE_STORE    = "s3"
     ALPHAFORGE_BUCKET   = aws_s3_bucket.this.bucket
     ALPHAFORGE_MODEL_ID = var.agentcore_model_id
+    # Observabilite d'AgentCore : main.py lance l'instrumentation d'ADOT
+    # (aws-opentelemetry-distro, app/agents/src/alphaforge/otel.py) quand ce
+    # drapeau vaut true. AgentCore Runtime le pose deja avec ses variables
+    # OTEL_* ; il est repete ici pour ne pas dependre de ce defaut. Les spans
+    # vont a X-Ray (Transaction Search, traceability.tf) avec les droits
+    # Tracing, RuntimeLogStreams et Metrics plus bas.
+    AGENT_OBSERVABILITY_ENABLED = "true"
   }
 
   agentcore_profile_env = {

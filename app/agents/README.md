@@ -28,6 +28,7 @@ app/agents/
   src/alphaforge/
     config.py                    variables d'environnement (CONTRACTS.md §1)
     server.py                    application, /invocations (JSON ou SSE), /ping
+    otel.py                      instrumentation ADOT (OpenTelemetry) lancée par main.py sur AgentCore
     errors.py, clock.py, trace.py, okf.py
     agentkit.py                  modèle Bedrock (Strands), boucle d'agent, traces, garde-fou
     starter.py                   lecture du jeu de départ
@@ -145,7 +146,14 @@ les parquets et `raw/` de `alphaforge/data/long/` s'ils existent localement, ret
   1.9.3 n'a pas de roue linux/arm64 `manylinux2014` (le runtime doit donc avoir un glibc d'au moins 2.28). Mesuré le
   2026-11-14 : 167 Mo compressé, 515 Mo décompressé, pyarrow compris (sans ses tests).
 
-Le runtime démarre avec `python main.py` (point d'entrée `["main.py"]`, sans `opentelemetry-instrument`).
+Le runtime démarre avec `python main.py` (point d'entrée `["main.py"]`). Quand `AGENT_OBSERVABILITY_ENABLED=true`
+(posée par AgentCore Runtime et par Terraform), `main.py` lance d'abord l'instrumentation automatique d'ADOT
+(`aws-opentelemetry-distro`, `src/alphaforge/otel.py`), avant tout import de `bedrock_agentcore` : c'est ce que fait
+`opentelemetry-instrument python main.py`, sans le script `bin/opentelemetry-instrument`, que `package.sh` retire.
+Les spans de Strands (`invoke_agent`, `chat`, `execute_tool`, jetons compris), de botocore et de Starlette partent
+vers X-Ray (Transaction Search) et remplissent le tableau de bord Observability d'AgentCore (sessions, traces, coût en
+jetons). La ligne `alphaforge runtime ready` du journal le dit (`otel=on`). Sans la variable (développement local,
+tests), rien n'est chargé. Les spans de Strands contiennent les messages échangés avec le modèle.
 
 ## Variables d'environnement
 
@@ -164,6 +172,7 @@ Le runtime démarre avec `python main.py` (point d'entrée `["main.py"]`, sans `
 | `PORT` | `8080` | Port HTTP. |
 | `ALPHAFORGE_HOST` | `127.0.0.1` en local, `0.0.0.0` avec `s3` | Adresse d'écoute. |
 | `ALPHAFORGE_LOG_LEVEL` | `INFO` | Niveau des journaux. |
+| `AGENT_OBSERVABILITY_ENABLED` | — | `true` : instrumentation ADOT au démarrage (`otel.py`). Les autres variables `OTEL_*` viennent d'AgentCore Runtime. |
 
 ## Modèle
 
@@ -226,7 +235,7 @@ Ressources AWS de traçabilité (Terraform, `infrastructure/infra/traceability.t
 | `ALPHAFORGE_TRACE_BUCKET` | `trace_bucket` | Object Lock : journal complet des invocations Bedrock, blobs du rejeu, `decisions/`. |
 | `ALPHAFORGE_REPLAY_TABLE` | `llm_replay_table` | Index DynamoDB du rejeu LLM. |
 | `ALPHAFORGE_DECISIONS_TABLE` | `decisions_table` | Tête de chaîne et maillons du journal des décisions. |
-| `ALPHAFORGE_OTLP_XRAY=1` | — | Exporte les spans vers X-Ray (Transaction Search, indexation 100 %). |
+| `ALPHAFORGE_OTLP_XRAY=1` | — | Exporte les spans vers X-Ray (Transaction Search, indexation 100 %), sauf si ADOT a déjà posé le provider global (runtime AgentCore) : il exporte alors lui-même. |
 
 ### Moteur de backtest (`finance/backtest/`)
 

@@ -13,7 +13,12 @@ try:
 except ModuleNotFoundError:  # exécution directe depuis app/agents sans installation
     sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
-from alphaforge.server import configure_logging, create_app, serve
+from alphaforge import otel
+
+# Avant tout import de bedrock_agentcore ou de botocore (alphaforge/otel.py) : sans drapeau, ne fait rien.
+otel.start()
+
+from alphaforge.server import configure_logging, create_app, serve  # noqa: E402 (après l'instrumentation)
 
 configure_logging()
 app = create_app()

@@ -9,6 +9,7 @@ import { useSession } from "@/lib/client/session";
 import { useAsync } from "@/lib/client/use-async";
 import type { Dictionary } from "@/lib/i18n/dictionary";
 import { formatDateTime, formatTime } from "@/lib/i18n/locale";
+import { okfTypeLabel } from "@/lib/i18n/okf-types";
 import { useI18n } from "@/lib/i18n/provider";
 import { DocumentDialog } from "@/components/kb/document-view";
 import { Badge } from "@/components/ui/badge";
@@ -137,7 +138,7 @@ interface DocumentRowProps {
 }
 
 function DocumentRow({ item, prefix, json = false, onOpen }: DocumentRowProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   return (
     <li>
       <button
@@ -157,7 +158,7 @@ function DocumentRow({ item, prefix, json = false, onOpen }: DocumentRowProps) {
         </span>
         {item.type && !json ? (
           <Badge tone="outline" className="mt-0.5">
-            {item.type}
+            {okfTypeLabel(item.type, locale)}
           </Badge>
         ) : null}
       </button>

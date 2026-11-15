@@ -100,6 +100,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
 }
 
 data "aws_iam_policy_document" "s3_bucket" {
+  # Tout acces sans TLS est refuse, sauf sur les fichiers de montage de
+  # tldoole (statement suivant).
   statement {
     sid     = "DenyInsecureTransport"
     effect  = "Deny"
@@ -108,11 +110,36 @@ data "aws_iam_policy_document" "s3_bucket" {
       type        = "*"
       identifiers = ["*"]
     }
-    resources = [aws_s3_bucket.this.arn, "${aws_s3_bucket.this.arn}/*"]
+    not_resources = [local.tldoole_media_objects_arn]
     condition {
       test     = "Bool"
       variable = "aws:SecureTransport"
       values   = ["false"]
+    }
+  }
+
+  # Exception ciblee : les telechargeurs d'incrustations et de polices de
+  # MediaConvert lisent sans TLS (erreurs 1010 et 1404 sous la regle
+  # ci-dessus). Seul le role MediaConvert de tldoole y echappe, et seulement
+  # sur clients/*/tldoole/*, ou son role ne permet que GetObject et PutObject.
+  statement {
+    sid     = "DenyInsecureTransportTldooleMedia"
+    effect  = "Deny"
+    actions = ["s3:*"]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    resources = [local.tldoole_media_objects_arn]
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+    condition {
+      test     = "ArnNotEquals"
+      variable = "aws:PrincipalArn"
+      values   = local.tldoole_insecure_transport_role_arns
     }
   }
 }

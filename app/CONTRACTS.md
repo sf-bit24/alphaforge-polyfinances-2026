@@ -341,6 +341,8 @@ Accès S3, en motifs de clés exacts (comme `agentcore.tf`) :
 
 S'y ajoutent `polly:SynthesizeSpeech`, `states:StartExecution` sur la machine, `bedrock:Retrieve` et `bedrock:ApplyGuardrail`.
 
+Le bucket refuse tout accès sans TLS (`DenyInsecureTransport`), avec une seule exception : le rôle MediaConvert de tldoole sur `clients/*/tldoole/*`, où il ne peut que `GetObject` et `PutObject`. Les téléchargeurs d'incrustations et de polices de MediaConvert lisent sans TLS : sous la règle, les jobs échouaient (erreurs 1010 et 1404).
+
 Sessions AgentCore : `<client_id>-detect` pour `detect`, `<client_id>-<video_id>` pour `produce` et `finalize`, `<client_id>-feed` pour l'interface.
 
 Développement local : `AGENT_ROLE=tldoole ALPHAFORGE_STORE=local PORT=8081 uv run python main.py`. Le magasin local sert `detect`, `produce` (écrans, narration Polly réelle, sous-titres), `feed`, `feedback` et `request`. MediaConvert n'existe que sur AWS, donc `produce` y renvoie `settings: null`.

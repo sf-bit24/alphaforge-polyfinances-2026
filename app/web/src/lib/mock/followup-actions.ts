@@ -138,7 +138,7 @@ function requireStopAllowed(record: ClientRecord, input: TurnInput, at: string):
 function readTurn(record: ClientRecord, request: FollowupReplyRequest, trace: Trace): TurnInput {
   const accepted = acceptAnswers(record, request.answers ?? []);
   const text = request.message?.trim() ?? "";
-  const screening = text ? screenMessage(text) : null;
+  const screening = text ? screenMessage(text, record.locale) : null;
   if (screening?.transactionRequest) refuseTransactionRequest(text, record.locale, trace);
   const currentValues = new Map([...record.values].map(([key, fact]) => [key, fact.value]));
   const extracted = screening ? extractFacts(screening.text, currentValues) : [];

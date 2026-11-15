@@ -16,6 +16,9 @@ function both(build: (locale: Locale) => string): L {
   return { fr: build("fr"), en: build("en") };
 }
 
+/** What replaces a personal detail in the screened text, in the investor's language. */
+const MASKED: L = { fr: "[masqué]", en: "[masked]" };
+
 export interface Screening {
   text: string;
   masked: number;
@@ -62,14 +65,14 @@ const OFF_TOPIC = /(météo|meteo|weather|recette|recipe|blague|joke|sport|hocke
  * Guardrail on the investor's free text: refuse a SIN (`guardrail_blocked`, before anything is read or written),
  * mask the other personal data, flag advice requests.
  */
-export function screenMessage(message: string): Screening {
+export function screenMessage(message: string, locale: Locale = "fr"): Screening {
   if (SIN_PATTERN.test(message)) throw new MockError("guardrail_blocked", SIN_REFUSAL, { reason: "personal_data", entity: "CA_SIN" });
   let text = message;
   let masked = 0;
   for (const pattern of PII_PATTERNS) {
     text = text.replace(pattern, () => {
       masked += 1;
-      return "[masqué]";
+      return MASKED[locale];
     });
   }
   return {

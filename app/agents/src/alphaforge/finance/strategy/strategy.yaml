@@ -49,7 +49,7 @@ band:
 # 3. SECTEURS — généralisation de satellites.theme_tech : cap_t = e_cap·s_ref_t·(1+τ) + φ·l*/δ_t
 #    s_ref : look-through US_MKT de data/long/assets.csv (instantané 2026-09) ; tech : risk_levels
 #    satellites.theme_tech.s_ref. δ : MDD longue CAD arrondie au 5 % sup. (tests/finance/fixtures/
-#    calibration/tails_monthly.csv) ; utilities et healthcare : 0,80 provisoire (prudent, à recalculer).
+#    calibration/tails_monthly.csv et tails_sectors.csv, scripts/calibration/tails_sectors.py).
 # ---------------------------------------------------------------------------------------------
 sectors:
   phi: 0.10
@@ -58,8 +58,8 @@ sectors:
     tech:       {s_ref: 0.44,   delta: 0.80, source: "risk_levels.yaml#satellites.theme_tech"}
     energy:     {s_ref: 0.0311, delta: 0.60, source: "data/long/assets.csv US_MKT ; tails_monthly US_IND_ENRGY mdd 0.588"}
     financials: {s_ref: 0.1132, delta: 0.70, source: "data/long/assets.csv US_MKT ; tails_monthly US_IND_MONEY mdd 0.693"}
-    utilities:  {s_ref: 0.024,  delta: 0.80, source: "data/long/assets.csv US_MKT ; delta provisoire"}
-    healthcare: {s_ref: 0.0799, delta: 0.80, source: "data/long/assets.csv US_MKT ; delta provisoire"}
+    utilities:  {s_ref: 0.024,  delta: 0.45, source: "data/long/assets.csv US_MKT ; tails_sectors US_IND_UTILS mdd 0.431"}
+    healthcare: {s_ref: 0.0799, delta: 0.50, source: "data/long/assets.csv US_MKT ; tails_sectors US_IND_HLTH mdd 0.479"}
   tau:
     defensive: {tech: -0.25, energy: -0.25}
     dynamique: {}

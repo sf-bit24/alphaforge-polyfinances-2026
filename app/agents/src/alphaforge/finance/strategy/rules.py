@@ -29,6 +29,7 @@ class Candidate:
     currency: str
     features: dict[str, float | None]
     status: dict[str, str] = field(default_factory=dict)  # FAIT | HYPOTHESE par indicateur
+    details: dict = field(default_factory=dict)  # fenêtre, indice du bêta, proxy de la baisse longue
 
 
 @dataclass(frozen=True)

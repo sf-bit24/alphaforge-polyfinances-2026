@@ -38,26 +38,44 @@ REQUEST_KEYS = {"ticker", "amount_cad", "weight"}
 class FinanceEngine:
     """Accès paresseux au moteur du volet finance (importé au premier ``build``, une seule fois)."""
 
-    def __init__(self) -> None:
+    def __init__(self, store: Store | None = None) -> None:
         self._lock = threading.Lock()
         self._loaded: dict[str, Any] | None = None
+        self._store = store
 
     def load(self) -> dict[str, Any]:
         with self._lock:
             if self._loaded is None:
+                try:
+                    # Dépendances du groupe finance d'abord : sans elles (zip commun), l'erreur doit le dire, même si
+                    # les données longues manquent aussi. Ces imports ne lisent pas encore ALPHAFORGE_BT_DATA.
+                    import cvxpy  # noqa: F401
+                    import numpy  # noqa: F401
+                    import pandas  # noqa: F401
+                except ImportError as exc:
+                    raise self._missing_engine(exc) from exc
+                if self._store is not None:
+                    # Données longues (parquets non versionnés, absents du zip) : déposées sous runtime/data/long/
+                    # par scripts/finance/upload_long_data.py. ALPHAFORGE_BT_DATA doit être posé AVANT le premier
+                    # import du moteur (backtest.data lit ce chemin une seule fois).
+                    from .finance.debate.longdata import LongDataError, ensure_long_data
+
+                    try:
+                        ensure_long_data(self._store)
+                    except LongDataError as exc:
+                        logger.error("long data unavailable: %s", exc)
+                        raise AppError(
+                            "internal",
+                            "Les données de marché du moteur sont indisponibles (runtime/data/long/).",
+                            {"detail": str(exc)},
+                        ) from exc
                 try:
                     from .finance.debate import okf_bridge, pipeline
                     from .finance.observability import telemetry
                     from .finance.policy.from_profile_view import style_inputs_from_view
                     from .finance.strategy import STYLES
                 except ImportError as exc:
-                    # Zip commun (sans le groupe finance) : Terraform s'y replie si agents-portfolio.zip manque.
-                    logger.error("finance engine unavailable: %s", exc)
-                    raise AppError(
-                        "internal",
-                        "Le moteur du volet finance n'est pas dans ce paquet (agents-portfolio.zip attendu).",
-                        {"missing_module": exc.name},
-                    ) from exc
+                    raise self._missing_engine(exc) from exc
 
                 try:
                     # Traces OpenTelemetry : X-Ray si ALPHAFORGE_OTLP_XRAY=1 (posée par Terraform). Idempotent.
@@ -73,6 +91,16 @@ class FinanceEngine:
                 }
             return self._loaded
 
+    @staticmethod
+    def _missing_engine(exc: ImportError) -> AppError:
+        # Zip commun (sans le groupe finance) : Terraform s'y replie si agents-portfolio.zip manque.
+        logger.error("finance engine unavailable: %s", exc)
+        return AppError(
+            "internal",
+            "Le moteur du volet finance n'est pas dans ce paquet (agents-portfolio.zip attendu).",
+            {"missing_module": exc.name},
+        )
+
 
 class PortfolioService:
     def __init__(
@@ -86,7 +114,7 @@ class PortfolioService:
         self.settings = settings
         self.store = store
         self.app = app
-        self._engine = engine or FinanceEngine().load
+        self._engine = engine or FinanceEngine(store).load
         self._questionnaire: Any | None = None
 
     def handle(self, payload: Any) -> dict[str, Any]:

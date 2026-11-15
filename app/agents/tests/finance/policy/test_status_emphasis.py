@@ -137,6 +137,7 @@ CALIB_OUT = Path(__file__).resolve().parents[1] / "fixtures" / "calibration"
 
 @pytest.mark.skipif(not (CALIB_OUT / "calib_grid5.csv").exists(), reason="CSV de calibration absents")
 def test_envelope_regenerates_from_csv():
+    pytest.importorskip("pandas")  # build_from_calibration lit les CSV avec pandas (groupe finance)
     fresh = ENV.build_from_calibration(CALIB_OUT)
     assert fresh["equity_pct"] == ENV.load_envelope()["equity_pct"]
     assert fresh["source_files"] == ENV.load_envelope()["source_files"]

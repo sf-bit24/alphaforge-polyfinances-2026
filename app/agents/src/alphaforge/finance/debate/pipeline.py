@@ -19,24 +19,15 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
-from alphaforge.finance.contracts.decision import Counterfactual, Decision, Position, Statement
+from alphaforge.finance.contracts.decision import Counterfactual, Decision, Explanation, Position, Statement
 from alphaforge.finance.contracts.policy import Limit, PolicySpec, Selector
 from alphaforge.finance.contracts.profile import InvestorProfile
-from alphaforge.finance.policy.compiler import no_mandate_cause
 from alphaforge.finance.portfolio.judge import check, framed_alternative
 from alphaforge.finance.portfolio.optimizer import optimize
 
 from . import roles
 from .esg import esg_exclusions, esg_preference
-from .explain import (
-    grounding_check,
-    grounding_context,
-    keep_grounded,
-    merge_grounding,
-    no_allocation_explanation,
-    rephrase,
-    skeleton,
-)
+from .explain import grounding_check, grounding_context, keep_grounded, merge_grounding, rephrase, skeleton
 from .facts import FactBook, fmt, sha256_json
 from .merge import apply_amendments
 from .schemas import LENS_FR, LENSES, DebateRound
@@ -178,8 +169,28 @@ def build_portfolio(
             status_stmts = _status_statements(book, comp, profile)
     if comp.policy is None:  # filet : mandat impossible à compiler
         kind = comp.decision_kind or "incomplet"
-        cause = no_mandate_cause(comp, profile, as_of, compile_fn)
-        expl = no_allocation_explanation(book, kind, cause, profile.missing_info, level_fid)
+        expl = Explanation(
+            data_used=[
+                Statement(text_fr="Profil analysé selon les règles déterministes du mandat.", fact_ids=[level_fid])
+            ],
+            why=[
+                Statement(
+                    text_fr="Le profil ne permet pas encore une proposition : informations manquantes ou "
+                    "signaux de vulnérabilité ; une position d'attente prudente s'applique.",
+                    fact_ids=[level_fid],
+                )
+            ],
+            limits=[
+                Statement(
+                    text_fr="Aucune allocation n'est calculée tant que le profil n'est pas complété.", label="HYPOTHESE"
+                )
+            ],
+            what_would_change=[
+                Statement(
+                    text_fr="Compléter : " + ", ".join(profile.missing_info or ["le profil"]) + ".", label="HYPOTHESE"
+                )
+            ],
+        )
         d = Decision(
             decision_id=did,
             profile_id=profile.profile_id,

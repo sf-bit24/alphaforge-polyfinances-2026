@@ -40,8 +40,8 @@ def test_code_notes_default_to_french():
 
 @pytest.mark.parametrize("confirm_locale", ["fr", "en"])
 def test_confirming_keeps_one_copy_of_each_code_note(confirm_locale):
-    """La confirmation relit les notes des positions : le code n'en ajoute pas une seconde copie, même dans
-    l'autre langue (``portfolio.confirm`` ne transmet pas encore la langue de la session)."""
+    """La confirmation relit les notes des positions : le code n'en ajoute pas une seconde copie, même si la langue
+    de la session a changé entre la soumission et la confirmation."""
     draft = build_view([HOUSE_FUND], status="draft", locale="en")
     confirmed = build_view(positions_to_raws(draft["positions"]), status="confirmed", locale=confirm_locale)
     assert confirmed["positions"][0]["notes"] == NOTES["en"]
@@ -106,3 +106,25 @@ def test_a2_turn_passes_the_session_language_to_the_model_and_the_code(settings,
     assert view["positions"][1]["notes"] == NOTES[locale]
     fallback = {"fr": "illisible", "en": "unreadable"}[locale]
     assert {"raw": "ligne illisible ###", "reason": fallback} in view["unresolved"]
+
+
+def test_confirming_in_an_english_session_keeps_the_code_text_in_english(settings, store):
+    """``portfolio.confirm`` passe la langue de la session au code : la raison d'un titre introuvable et les notes
+    d'une ligne ajoutée à la relecture restent en anglais."""
+    record = ("tool", "record_positions", {"positions": [{"raw": "fonds maison XYZ", "name": "fonds maison XYZ"}]})
+    factory = ScriptedFactory([[record], [("tool", "finish_turn", {"message": "1 position."})]])
+    service = make_service(settings, store, factory)
+    client_id = service.handle({"action": "session.start", "locale": "en"})["client_id"]
+    answer_base(service, client_id, {"q_existing_portfolio": True})
+    draft = service.handle({"action": "portfolio.submit", "client_id": client_id, "text": "fonds maison XYZ"})
+    assert draft["ok"], draft
+    assert [u["reason"] for u in draft["portfolio"]["unresolved"]] == [REASONS["en"]]
+
+    house_fund = {"raw": "Fonds maison ABC 5 000", "ticker": "ZZQX", "name": "Fonds maison ABC", "market_value": 5000}
+    positions = [*(dict(p) for p in draft["portfolio"]["positions"]), house_fund]
+    confirmed = service.handle({"action": "portfolio.confirm", "client_id": client_id, "positions": positions})
+    assert confirmed["ok"], confirmed
+    view = confirmed["portfolio"]
+    assert view["status"] == "confirmed"
+    assert [u["reason"] for u in view["unresolved"]] == [REASONS["en"]]
+    assert view["positions"][-1]["notes"] == NOTES["en"]

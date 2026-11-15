@@ -783,7 +783,7 @@ class ProfileService:
         with request.trace.step(
             "deterministic", "A2", request.trace.t("Expositions calculées par le code", "Exposures computed by code")
         ) as info:
-            view = build_view(raws, status="confirmed", quote_fetcher=self.quote_fetcher)
+            view = build_view(raws, status="confirmed", quote_fetcher=self.quote_fetcher, locale=locale)
             info["outputs"] = _view_summary(view)
             info["sources"] = view["sources"]
         turn = (session.data.get("portfolio") or {}).get("turn") or session.turn

@@ -13,11 +13,11 @@ sources:
     title: "Atelier BNCD : comprendre l'investisseur avant de bâtir la solution"
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositive 8 (le risque, possibilité d'un résultat négatif important)"
   - id: politique-risque
-    title: "Politique de risque d'AlphaForge AI, niveaux N0 à N5"
+    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), sections measurement, levels et limits_template (risk.cvar_m, risk.cvar_12m)"
   - id: moteur-metriques
     title: "Moteur de backtest AlphaForge AI : métriques sur rendements mensuels"
-    resource: "research/backtest/engine/metrics.py (var_cvar) et app/agents/src/alphaforge/finance/portfolio/analysis.py (cvar_rolling)"
+    resource: "app/agents/src/alphaforge/finance/backtest/metrics.py (var_cvar) et app/agents/src/alphaforge/finance/portfolio/analysis.py (cvar_rolling)"
 data:
   aliases: [VaR, CVaR, valeur à risque, perte attendue extrême, expected shortfall, pire mois, perte en queue]
   related: [volatilite, baisse-maximale, pire-rendement-12-mois, stress-test-2022, cryptoactifs, types-de-risque]

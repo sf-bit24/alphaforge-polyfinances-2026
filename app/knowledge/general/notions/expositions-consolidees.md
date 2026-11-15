@@ -15,8 +15,8 @@ sources:
   - id: enonce-officiel
     title: "Énoncé officiel du défi AlphaForge AI (Datathon PolyFinances 2026)"
     resource: "Énoncé officiel, p. 11 (FNB : titres détenus, pondérations, secteur, pays; expositions sous-jacentes)"
-  - id: regles-composition
-    title: "Barème des niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+  - id: politique-risque
+    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, satellites.theme_tech, exposure_overrides et limits_template (exp.tech)"
 data:
   aliases: [exposition consolidée, expositions consolidées, transparence, look-through, chevauchement, ce que je détiens vraiment]

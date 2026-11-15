@@ -15,7 +15,7 @@ sources:
   - id: enonce-officiel
     title: "Énoncé officiel du défi AlphaForge AI (Datathon PolyFinances 2026)"
     resource: "Énoncé officiel, persona Amira (risque élevé, p. 5) et Encadrement responsable (p. 17)"
-  - id: risk-levels
+  - id: politique-risque
     title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, sections capacity, tolerance, R, biases et status"
 data:

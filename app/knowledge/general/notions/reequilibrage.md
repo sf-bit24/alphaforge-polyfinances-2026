@@ -12,8 +12,8 @@ sources:
   - id: atelier-bncd
     title: "Atelier BNCD : comprendre l'investisseur avant de bâtir la solution"
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositive 9 (diversifier sur plusieurs dimensions) et diapositive 15 (idée 02 : rendement, risque et horizon sont indissociables)"
-  - id: regles-composition
-    title: "Barème des niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+  - id: politique-risque
+    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, reference_portfolios et measurement (séries rééquilibrées chaque mois)"
 data:
   aliases: [rééquilibrage, rééquilibrer, rebalancing, rebalancement, dérive des poids, revenir à la cible]

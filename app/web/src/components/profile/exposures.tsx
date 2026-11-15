@@ -2,7 +2,7 @@
 
 import { ChartBar, Table2, TriangleAlert } from "lucide-react";
 import { useState } from "react";
-import type { Exposures, FxRate, Position, Source } from "@/lib/contract/schemas";
+import type { Exposures, FxRate, Locale, Position, Source } from "@/lib/contract/schemas";
 import type { Dictionary } from "@/lib/i18n/dictionary";
 import { formatDate, formatMoney, formatNumber, formatPercent } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
@@ -11,6 +11,65 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 
 const MAX_ROWS = 6;
+
+type Label = Record<Locale, string>;
+
+/**
+ * Keys the runtime uses for any group: a missing sector or market (`Unknown`), cash, and the `other` key of the
+ * mock. The contract keys stay the raw values; only the label shown changes.
+ */
+const COMMON_LABELS: Record<string, Label> = {
+  Unknown: { fr: "Non classé", en: "Unclassified" },
+  Cash: { fr: "Encaisse", en: "Cash" },
+  other: { fr: "Autre", en: "Other" },
+};
+
+/** `by_sector` keys: the GICS sectors and the fund categories of the starter universe (`assets_universe.csv`). */
+const SECTOR_LABELS: Record<string, Label> = {
+  ...COMMON_LABELS,
+  "Communication Services": { fr: "Services de communication", en: "Communication Services" },
+  "Consumer Discretionary": { fr: "Consommation discrétionnaire", en: "Consumer Discretionary" },
+  "Consumer Staples": { fr: "Consommation de base", en: "Consumer Staples" },
+  Energy: { fr: "Énergie", en: "Energy" },
+  Financials: { fr: "Services financiers", en: "Financials" },
+  "Health Care": { fr: "Soins de santé", en: "Health Care" },
+  Industrials: { fr: "Industrie", en: "Industrials" },
+  "Information Technology": { fr: "Technologies de l’information", en: "Information Technology" },
+  Materials: { fr: "Matériaux", en: "Materials" },
+  "Real Estate": { fr: "Immobilier", en: "Real Estate" },
+  Utilities: { fr: "Services publics", en: "Utilities" },
+  "Bonds (Canada aggregate)": { fr: "Obligations (Canada, ensemble du marché)", en: "Bonds (Canada aggregate)" },
+  "Bonds (Canada ultra short-term)": {
+    fr: "Obligations (Canada, ultra court terme)",
+    en: "Bonds (Canada ultra short-term)",
+  },
+  "Bonds (U.S. aggregate)": { fr: "Obligations (États-Unis, ensemble du marché)", en: "Bonds (U.S. aggregate)" },
+  "Bonds (U.S. long Treasury)": { fr: "Obligations (Trésor américain, long terme)", en: "Bonds (U.S. long Treasury)" },
+  "Broad market (Canada)": { fr: "Ensemble du marché (Canada)", en: "Broad market (Canada)" },
+  "Broad market (U.S.)": { fr: "Ensemble du marché (États-Unis)", en: "Broad market (U.S.)" },
+  "Broad market (U.S. growth/tech-heavy)": {
+    fr: "Ensemble du marché (États-Unis, croissance et techno)",
+    en: "Broad market (U.S. growth/tech-heavy)",
+  },
+  "Broad market (U.S., ESG-screened)": {
+    fr: "Ensemble du marché (États-Unis, filtre ESG)",
+    en: "Broad market (U.S., ESG-screened)",
+  },
+  "Crypto asset": { fr: "Cryptoactif", en: "Crypto asset" },
+  Gold: { fr: "Or", en: "Gold" },
+};
+
+/** `by_market` keys: exchange names (TSX, NASDAQ, NYSE…) are shown as sent; only these are translated. */
+const MARKET_LABELS: Record<string, Label> = {
+  ...COMMON_LABELS,
+  "Crypto (24/7)": { fr: "Crypto (24 h/24, 7 j/7)", en: "Crypto (24/7)" },
+};
+
+/** Label of a raw `by_sector` or `by_market` key in the session language; an unlisted key is shown as sent. */
+export function exposureLabel(group: "sector" | "market", key: string, locale: Locale): string {
+  const labels = group === "sector" ? SECTOR_LABELS : MARKET_LABELS;
+  return labels[key]?.[locale] ?? key;
+}
 
 interface Row {
   name: string;
@@ -151,13 +210,16 @@ export function FxNote({ fx, className }: { fx: FxRate | null | undefined; class
   );
 }
 
-function exposureGroups(exposures: Exposures, t: Dictionary): Group[] {
+/** The four groups of bars, labelled in the session language (the keys are the contract's raw values). */
+export function exposureGroups(exposures: Exposures, t: Dictionary, locale: Locale): Group[] {
   const assetLabel = (name: string) => (t.assetClasses as Record<string, string>)[name] ?? name;
+  const marketLabel = (name: string) => exposureLabel("market", name, locale);
+  const sectorLabel = (name: string) => exposureLabel("sector", name, locale);
   return [
     { title: t.exposures.byAssetClass, rows: rowsOf(exposures.by_asset_class, assetLabel, t.assetClasses.other) },
     { title: t.exposures.byCurrency, rows: rowsOf(exposures.by_currency, (name) => name, t.assetClasses.other) },
-    { title: t.exposures.byMarket, rows: rowsOf(exposures.by_market, (name) => name, t.assetClasses.other) },
-    { title: t.exposures.bySector, rows: rowsOf(exposures.by_sector, (name) => name, t.assetClasses.other) },
+    { title: t.exposures.byMarket, rows: rowsOf(exposures.by_market, marketLabel, t.assetClasses.other) },
+    { title: t.exposures.bySector, rows: rowsOf(exposures.by_sector, sectorLabel, t.assetClasses.other) },
   ];
 }
 
@@ -240,10 +302,10 @@ export function ExposuresView({
   fx?: FxRate | null;
   stale?: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [table, setTable] = useState(false);
   const total = exposures.total_value_cad;
-  const groups = exposureGroups(exposures, t);
+  const groups = exposureGroups(exposures, t, locale);
   return (
     <div className={cn("space-y-6 transition-opacity", stale && "opacity-60")}>
       <ExposuresHeader total={total} fx={fx} table={table} onToggle={() => setTable((value) => !value)} />

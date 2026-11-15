@@ -1,7 +1,7 @@
 ---
 type: Company Fundamentals
 title: Constellation Software (CSU.TO) — chiffres financiers publiés
-description: Chiffres clés publiés par Constellation Software pour le troisième trimestre et les neuf premiers mois de 2026, en millions de dollars américains, avec leurs dates d'observation et de publication.
+description: Chiffres clés publiés par Constellation Software pour le troisième trimestre et les neuf premiers mois de 2026 et pour l'exercice 2025, en millions de dollars américains, avec leurs dates d'observation et de publication.
 tags: [societes, fondamentaux, donnees-marche, csu]
 status: stable
 owners: [alphaforge-a6]
@@ -17,6 +17,10 @@ sources:
     title: "Constellation Software, états financiers consolidés intermédiaires résumés au 30 septembre 2026 (non audités)"
     resource: "https://www.csisoftware.com/wp-content/uploads/2026/11/CSI-Financial-Statement-Q326-Final.pdf"
     retrieved_at: "2026-11-15T01:35:00Z"
+  - id: csu-2025-communique
+    title: "Constellation Software, communiqué des résultats du quatrième trimestre et de l'exercice terminés le 31 décembre 2025 (9 mars 2026)"
+    resource: "https://www.csisoftware.com/constellation-software-inc-announces-results-for-the-fourth-quarter-and-year-ended-december-31-2025-and-declares-quarterly-dividend/"
+    retrieved_at: "2026-11-15T02:05:00Z"
 data:
   ticker: CSU.TO
   issuer: Constellation Software Inc.
@@ -54,6 +58,19 @@ data:
       operating_cash_flow: 2092
       fcfa2s: 1522
       prior_year: { observed_at: "2025-09-30", revenue: 8446, net_income: 420, net_income_attributable: 402, diluted_eps: 18.96, operating_cash_flow: 1944, fcfa2s: 1259 }
+    - period: Exercice 2025
+      kind: fiscal_year
+      months: 12
+      observed_at: "2025-12-31"
+      published_at: "2026-03-09"
+      source: csu-2025-communique
+      revenue: 11623
+      organic_growth_pct: 4
+      net_income_attributable: 512
+      diluted_eps: 24.15
+      operating_cash_flow: 2732
+      fcfa2s: 1683
+      prior_year: { observed_at: "2024-12-31", revenue: 10066, net_income_attributable: 731, diluted_eps: 34.48, operating_cash_flow: 2196, fcfa2s: 1472 }
   balance_sheets:
     - observed_at: "2026-09-30"
       published_at: "2026-11-06"
@@ -100,21 +117,25 @@ La date de publication est celle du communiqué de résultats.
 
 ## Résultats
 
-| | T3 2026 (trimestre au 30 septembre 2026) | T3 2025 | Neuf mois 2026 | Neuf mois 2025 |
-| --- | --- | --- | --- | --- |
-| Publication | 6 novembre 2026 | | 6 novembre 2026 | |
-| Produits | 3 512 | 2 948 | 10 027 | 8 446 |
-| Croissance interne | 2 % | | 4 % | |
-| Bénéfice net | 243 | 162 | 946 | 420 |
-| Bénéfice net attribuable aux actionnaires ordinaires | 212 | 210 | 853 | 402 |
-| Bénéfice net dilué par action ($ US) | 10,01 | 9,89 | 40,26 | 18,96 |
-| Flux de trésorerie liés aux activités d'exploitation | 717 | 685 | 2 092 | 1 944 |
-| Flux de trésorerie disponibles pour les actionnaires (FCFA2S, mesure non IFRS) | 443 | 529 | 1 522 | 1 259 |
+| | T3 2026 (trimestre au 30 septembre 2026) | T3 2025 | Neuf mois 2026 | Neuf mois 2025 | Exercice 2025 | Exercice 2024 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Publication | 6 novembre 2026 | | 6 novembre 2026 | | 9 mars 2026 | |
+| Produits | 3 512 | 2 948 | 10 027 | 8 446 | 11 623 | 10 066 |
+| Croissance interne | 2 % | | 4 % | | 4 % | |
+| Bénéfice net | 243 | 162 | 946 | 420 | | |
+| Bénéfice net attribuable aux actionnaires ordinaires | 212 | 210 | 853 | 402 | 512 | 731 |
+| Bénéfice net dilué par action ($ US) | 10,01 | 9,89 | 40,26 | 18,96 | 24,15 | 34,48 |
+| Flux de trésorerie liés aux activités d'exploitation | 717 | 685 | 2 092 | 1 944 | 2 732 | 2 196 |
+| Flux de trésorerie disponibles pour les actionnaires (FCFA2S, mesure non IFRS) | 443 | 529 | 1 522 | 1 259 | 1 683 | 1 472 |
 
 La croissance des produits (+19 % au trimestre comme sur neuf mois) vient surtout des acquisitions : la croissance
 interne n'est que de 2 % au trimestre. Au troisième trimestre, Constellation a conclu des acquisitions pour 484 millions
 en espèces (609 millions avec les paiements différés estimés); après le 30 septembre, elle en a conclu ou engagé d'autres
 pour 526 millions à la clôture (673 millions avec les paiements différés estimés).
+
+En 2025, le bénéfice attribuable recule de 30 % alors que les flux d'exploitation progressent de 24 % : selon l'émetteur,
+la charge de réévaluation du passif IRGA / TSS, qui suit le cours des titres de Sygnity et d'Asseco, atteint 252 millions
+sur l'exercice.
 
 ## Bilan
 
@@ -130,7 +151,8 @@ pour 526 millions à la clôture (673 millions avec les paiements différés est
 | dont participations ne donnant pas le contrôle | 772 | 692 |
 
 Les deux colonnes viennent des états financiers du troisième trimestre, publiés le 6 novembre 2026. Les chiffres au
-31 décembre 2025 avaient d'abord été publiés avec les états annuels de 2025, qui ne sont pas repris ici.
+31 décembre 2025 avaient d'abord été publiés avec les états annuels de 2025, le 9 mars 2026; ce document garde la date
+des états d'où il les tire.
 
 ## Dividende
 

@@ -127,6 +127,19 @@ Conventions communes
 
 ---
 
+## 8. Données quotidiennes de marché (`alphaforge.market`)
+- **Module** : `finance/backtest/daily_data.py`, appelé par `build_data` (`--daily-only` pour ne refaire qu'elles).
+- **Univers** : `data/market/universe.yaml`, actifs proposés compris (aujourd'hui XRE.TO), pour que le volet finance
+  puisse les essayer sans nouveau téléchargement.
+- **Yahoo Finance** : `yfinance.download(t, period="max", interval="1d", auto_adjust=False, actions=True)`, rangé dans
+  `raw/yfinance_daily/<ticker>.csv` (`close`, `adj_close`, `volume`, `dividends`, `stock_splits`), séparé de
+  `raw/yfinance/` pour ne pas changer la version des données mensuelles. `close` est ajusté des fractionnements
+  seulement; les dividendes sont par action et ajustés des fractionnements (convention Yahoo, comme le starter).
+- **Banque du Canada** : Valet `FXUSDCAD`, quotidien depuis 2017-01-03, `raw/bankofcanada/FXUSDCAD.csv`.
+- **Sorties** : `daily_prices.parquet`, `fx_daily.parquet`, `corporate_actions.parquet`, et le bloc `daily` de
+  `data_version.json` (sha256 de chaque fichier). Une ligne sans clôture est retirée, jamais remplie.
+- **Conditions** : celles de Yahoo (usage personnel, non commercial) et de la Banque du Canada, comme ci-dessus.
+
 ## Reconstructions synthétiques
 
 ### Obligations à maturité constante (`finance/backtest/bonds.py`, testé dans `tests/finance/backtest/test_bonds.py`)

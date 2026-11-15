@@ -33,7 +33,7 @@ UNIVERSE_FILE = ALPHAFORGE_DIR / "data" / "market" / "universe.yaml"
 FX_URL = "https://www.bankofcanada.ca/valet/observations/FXUSDCAD/csv?start_date=2017-01-01"
 
 
-def universe_rows(include_proposed: bool = True) -> list[dict[str, Any]]:
+def universe_rows(*, include_proposed: bool = True) -> list[dict[str, Any]]:
     """Assets of ``data/market/universe.yaml``; proposed ones are downloaded too, so the finance side can try them."""
     doc = yaml.safe_load(UNIVERSE_FILE.read_text(encoding="utf-8")) or {}
     return [a for a in doc.get("assets") or [] if include_proposed or not a.get("proposed")]

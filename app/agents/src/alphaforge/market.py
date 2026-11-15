@@ -109,7 +109,7 @@ def data_version() -> dict[str, Any]:
 
 # ----------------------------------------------------------------------------- univers
 @lru_cache(maxsize=2)
-def _universe(include_proposed: bool) -> dict[str, Asset]:
+def _universe(*, include_proposed: bool) -> dict[str, Asset]:
     doc = yaml.safe_load(UNIVERSE_FILE.read_text(encoding="utf-8")) or {}
     out: dict[str, Asset] = {}
     for row in doc.get("assets") or []:
@@ -128,7 +128,7 @@ def _universe(include_proposed: bool) -> dict[str, Asset]:
 
 
 def universe() -> dict[str, Asset]:
-    return _universe(os.environ.get("ALPHAFORGE_MARKET_INCLUDE_PROPOSED") == "1")
+    return _universe(include_proposed=os.environ.get("ALPHAFORGE_MARKET_INCLUDE_PROPOSED") == "1")
 
 
 def find_asset(ticker: str | None, name: str | None = None, currency: str | None = None) -> Asset | None:

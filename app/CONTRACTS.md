@@ -292,6 +292,7 @@ staging/<run_id>/researchers/<sujet>-<rk>/findings.json, _done.json
 staging/<run_id>/supervisor/quarantine.json           éléments et hôtes en quarantaine
 archive/<hôte>/<AAAA-MM-JJ>/<sha256>.json              réponse brute archivée par un chercheur
 runtime/agents-<release>.zip                code des runtimes, poussé par Terraform
+runtime/data/long/*.parquet, manifest.json  données longues et quotidiennes de marché (section 5.2), déposées par scripts/finance/upload_long_data.py
 scenarios/...                               scénarios probabilistes, hors de la base OKF (section 10)
 ```
 
@@ -366,6 +367,19 @@ data: {}                          # données structurées lues par le code (prof
 - `published_epoch` : date de publication en **secondes UTC depuis l'époque Unix** (entier; une date seule vaut minuit UTC). Pour Stock Features, la plus récente des `published_at` de ses caractéristiques. Absent si la date est inconnue : un filtre `lessThanOrEquals` l'écarte alors, ce qui évite toute anticipation.
 - Filtres possibles sur S3 Vectors : `equals`, `notEquals`, `in`, `notIn`, comparaisons numériques, `andAll`, `orAll`. Jamais `startsWith` ni `stringContains`.
 - Les seeds `general/methodologie/`, `general/notions/` et `general/societes/` n'ont pas encore de fichier compagnon; Terraform enverrait ceux qui seraient versionnés dans `app/knowledge/general/` (`**/*.metadata.json`).
+
+### 5.2 Données de marché (`alphaforge.market`)
+
+Les prix, le change et les opérations sur titres ne sont pas de l'OKF : ce sont des parquets lus par le code, à travers une seule interface, `alphaforge.market`. Elle a la même API que `alphaforge.starter` (`universe`, `daily`, `close_on_or_before`, `dividends`, `dividend_yield_ttm`, `usdcad_on_or_before`, `median_dollar_volume_cad`, `last_prices`, `last_fx`, `find_asset`, `source_entry`), avec la même garantie : rien après `as_of`. Aucun autre module ne lit le jeu de départ directement (test `tests/test_market.py`).
+
+- **Univers** : `app/agents/src/alphaforge/data/market/universe.yaml`, tenu par le volet finance. Un actif `proposed: true` (aujourd'hui XRE.TO, immobilier) n'entre dans `market.universe()` qu'avec `ALPHAFORGE_MARKET_INCLUDE_PROPOSED=1`.
+- **Parquets quotidiens**, écrits par `finance/backtest/build_data.py` (module `daily_data.py`), à côté des parquets longs (`ALPHAFORGE_BT_DATA`) :
+  - `daily_prices.parquet` : `date`, `ticker`, `close` (ajusté des fractionnements), `adj_close` (ajusté aussi des dividendes), `volume`, `currency` (Yahoo Finance via `yfinance`);
+  - `fx_daily.parquet` : `date`, `usdcad`, `cadusd` (Banque du Canada, Valet `FXUSDCAD`);
+  - `corporate_actions.parquet` : `ex_date`, `ticker`, `action` (`dividend` ou `split`), `value`, `unit`.
+- **Version** : bloc `daily` de `data_version.json` (`data_sha256`, `built_utc`, `last_date`, sha256 de chaque fichier, manifestes des téléchargements bruts), repris dans `runtime/data/long/manifest.json`. Une décision du runtime `portfolio` qui lit ces parquets ajoute `+market:<data_sha256>` à sa `data_version`.
+- **Repli** : sans ces parquets (CI, développement local, runtimes qui ne téléchargent pas les données longues) ou avec `ALPHAFORGE_MARKET_SOURCE=starter`, `alphaforge.market` lit le jeu de départ, et ses sources restent `starter:…`. Avec les parquets, elles deviennent `market:daily_prices.parquet`, `market:fx_daily.parquet` ou `market:universe.yaml`.
+- Le runtime `portfolio` télécharge les parquets quotidiens avec les parquets longs quand le manifeste les déclare tous les trois, et vérifie leur sha256.
 
 ## 6. Step Functions de collecte
 

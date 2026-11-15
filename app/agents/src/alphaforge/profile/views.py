@@ -6,7 +6,7 @@ from typing import Any
 
 from ..trace import Trace
 from . import rules
-from .questionnaire import Questionnaire, format_fact, labeled
+from .questionnaire import Questionnaire, band_brief, fact_band, format_fact, labeled
 from .state import ClientSession
 
 VIEW_DIMENSIONS = (
@@ -60,13 +60,20 @@ def _dimension_status(questionnaire: Questionnaire, dimension: str, values: dict
     return "missing"
 
 
-def _confirmed_facts_by_date(session: ClientSession) -> list[dict[str, Any]]:
+def _fact_view(field_id: str, fact: dict[str, Any], locale: str) -> dict[str, Any]:
+    """Un fait de ``ProfileView`` : ``band`` (facultatif) est la tranche choisie, avec son libellé dans la langue de
+    la vue; ``value`` n'est alors que le chiffre du calcul, que lit le volet finance."""
+    view = {"field": field_id, "value": fact.get("value"), "provenance": fact.get("provenance"), "at": fact.get("at")}
+    band = fact_band(fact)
+    if band is not None:
+        view["band"] = band_brief(band, locale)
+    return view
+
+
+def _confirmed_facts_by_date(session: ClientSession, locale: str) -> list[dict[str, Any]]:
     # Une valeur à confirmer n'est pas encore un fait du profil (la valeur confirmée qu'elle remplace l'est).
     confirmed = sorted(session.confirmed_facts().items(), key=lambda item: (item[1].get("at") or "", item[0]))
-    return [
-        {"field": field_id, "value": fact.get("value"), "provenance": fact.get("provenance"), "at": fact.get("at")}
-        for field_id, fact in confirmed
-    ]
+    return [_fact_view(field_id, fact, locale) for field_id, fact in confirmed]
 
 
 def profile_view(
@@ -88,7 +95,7 @@ def profile_view(
             "summary": dimension_summary(questionnaire, dimension, confirmed, risk, locale),
             "fields": fields,
         }
-    facts = _confirmed_facts_by_date(session)
+    facts = _confirmed_facts_by_date(session, locale)
     return {
         "knowledge_level": rules.knowledge_level(questionnaire, values),
         "effective_risk": risk["effective"],

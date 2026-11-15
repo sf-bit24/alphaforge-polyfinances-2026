@@ -71,9 +71,9 @@ def test_the_value_is_unchanged_and_the_band_is_kept_with_the_fact(settings, sto
     # Le journal garde l'identifiant de la tranche, comme avant.
     entries = okf.parse(store.get(journal_key(client_id)).text).data["entries"]
     assert next(e for e in entries if e.get("field") == EMERGENCY)["option"] == "lt1"
-    # ProfileView garde la forme du contrat et les nombres que lit le volet finance.
+    # ProfileView garde les nombres que lit le volet finance; la tranche s'y ajoute en champ facultatif.
     view = response["profile"]
-    assert all(set(fact) == {"field", "value", "provenance", "at"} for fact in view["facts"])
+    assert all(set(fact) - {"band"} == {"field", "value", "provenance", "at"} for fact in view["facts"])
     profile = investor_profile_from_view(view, client_id)
     assert (profile.emergency_fund_months, profile.investable_wealth) == (0.0, 10000.0)
 
@@ -103,6 +103,21 @@ def test_no_emergency_fund_and_less_than_one_month_stay_distinct(q, settings, st
         known = {item["field"]: item for item in a1.build_context(q, session, TURN)["known_fields"]}
         shown[option] = known[EMERGENCY]["shown_as"]
     assert shown == {"none": "aucun fonds d'urgence", "lt1": "moins de 1 mois"}
+
+
+def test_profile_view_facts_carry_the_band_in_the_view_language(settings, store):
+    """Le panneau Profil du web affiche la tranche (``facts[].band.label``), pas « 0 »."""
+    service = make_service(settings, store)
+    client_id, response = started(service)
+    facts = {fact["field"]: fact for fact in response["profile"]["facts"]}
+    assert facts[EMERGENCY]["value"] == 0
+    assert facts[EMERGENCY]["band"] == {"option": "lt1", "label": "Moins de 1 mois", "min": 0, "max": 1}
+    assert facts[AMOUNT]["band"]["label"] == "De 10 000 $ à moins de 50 000 $"
+    assert "band" not in facts["horizon.horizon_band"]  # un choix sans nombre n'a pas de tranche
+    english = service.handle({"action": "profile.get", "client_id": client_id, "locale": "en"})
+    by_field = {fact["field"]: fact for fact in english["profile"]["facts"]}
+    assert by_field[EMERGENCY]["band"]["label"] == "Less than 1 month"
+    assert by_field[EMERGENCY]["value"] == 0
 
 
 # ---------------------------------------------------------------------- contexte et consigne d'A1

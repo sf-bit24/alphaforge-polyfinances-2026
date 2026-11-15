@@ -1,0 +1,529 @@
+{
+  "data_sha256": "008f122d5da4f8f7",
+  "built_utc": "2026-11-14T22:15:31+00:00",
+  "last_complete_month": "2026-10-31",
+  "n_rows": 38734,
+  "n_assets": 55,
+  "qa": {
+    "fx_fred_vs_starter_month_end": {
+      "n": 60,
+      "max_abs_diff": 0.00990000000000002
+    },
+    "cpi_ca_oecd_vs_statcan_monthly_inflation": {
+      "n": 362,
+      "corr": 0.9999999983670586,
+      "mean_abs_diff": 1.07042443472574e-07
+    },
+    "cnq_2022_08_month_return_starter": {
+      "2022-07-31": 0.022264,
+      "2022-08-31": 0.039656,
+      "2022-09-30": -0.097784
+    },
+    "proxy_vs_etf": {
+      "US_MKT~SPY": {
+        "n_months": 404,
+        "first": "1993-02-28",
+        "last": "2026-09-30",
+        "corr": 0.9874,
+        "ann_mean_proxy": 0.1158,
+        "ann_mean_etf": 0.114,
+        "vol_proxy": 0.1522,
+        "vol_etf": 0.1473
+      },
+      "UST_20Y~TLT": {
+        "n_months": 291,
+        "first": "2002-08-31",
+        "last": "2026-10-31",
+        "corr": 0.987,
+        "ann_mean_proxy": 0.0412,
+        "ann_mean_etf": 0.0431,
+        "vol_proxy": 0.1194,
+        "vol_etf": 0.1351
+      },
+      "UST_10Y~AGG": {
+        "n_months": 277,
+        "first": "2003-10-31",
+        "last": "2026-10-31",
+        "corr": 0.8775,
+        "ann_mean_proxy": 0.0289,
+        "ann_mean_etf": 0.0303,
+        "vol_proxy": 0.0733,
+        "vol_etf": 0.0447
+      },
+      "UST_5Y~AGG": {
+        "n_months": 277,
+        "first": "2003-10-31",
+        "last": "2026-10-31",
+        "corr": 0.8322,
+        "ann_mean_proxy": 0.0222,
+        "ann_mean_etf": 0.0303,
+        "vol_proxy": 0.0409,
+        "vol_etf": 0.0447
+      },
+      "CORP_AAA~AGG": {
+        "n_months": 277,
+        "first": "2003-10-31",
+        "last": "2026-10-31",
+        "corr": 0.885,
+        "ann_mean_proxy": 0.045,
+        "ann_mean_etf": 0.0303,
+        "vol_proxy": 0.1005,
+        "vol_etf": 0.0447
+      },
+      "GOLD~GLD": {
+        "n_months": 263,
+        "first": "2004-12-31",
+        "last": "2026-10-31",
+        "corr": 0.6323,
+        "ann_mean_proxy": 0.1115,
+        "ann_mean_etf": 0.1095,
+        "vol_proxy": 0.1359,
+        "vol_etf": 0.1734
+      },
+      "CA_EQ~XIU.TO": {
+        "n_months": 314,
+        "first": "1999-11-30",
+        "last": "2025-12-31",
+        "corr": 0.9835,
+        "ann_mean_proxy": 0.0946,
+        "ann_mean_etf": 0.0905,
+        "vol_proxy": 0.1357,
+        "vol_etf": 0.1389
+      },
+      "CA_GOV_10Y~XBB.TO": {
+        "n_months": 310,
+        "first": "2000-12-31",
+        "last": "2026-09-30",
+        "corr": 0.5843,
+        "ann_mean_proxy": 0.0367,
+        "ann_mean_etf": 0.0357,
+        "vol_proxy": 0.0516,
+        "vol_etf": 0.0475
+      },
+      "CA_TBILL~ZST.TO": {
+        "n_months": 187,
+        "first": "2011-03-31",
+        "last": "2026-09-30",
+        "corr": 0.4866,
+        "ann_mean_proxy": 0.0156,
+        "ann_mean_etf": 0.0223,
+        "vol_proxy": 0.004,
+        "vol_etf": 0.0077
+      },
+      "US_IND_BUSEQ~QQQ": {
+        "n_months": 330,
+        "first": "1999-04-30",
+        "last": "2026-09-30",
+        "corr": 0.9819,
+        "ann_mean_proxy": 0.1311,
+        "ann_mean_etf": 0.1303,
+        "vol_proxy": 0.2362,
+        "vol_etf": 0.2326
+      }
+    },
+    "cnq_fix_2022_08_22": {
+      "day_adj_close_return": 0.027794,
+      "day_true_total_return": 0.006078
+    },
+    "cnq_daily_around_2022_08_22": {
+      "2022-08-18": {
+        "close_ret": 0.02869,
+        "adj_close_ret": 0.02869
+      },
+      "2022-08-19": {
+        "close_ret": -0.00041,
+        "adj_close_ret": -0.00041
+      },
+      "2022-08-22": {
+        "close_ret": 0.00605,
+        "adj_close_ret": 0.02779
+      },
+      "2022-08-23": {
+        "close_ret": 0.01879,
+        "adj_close_ret": 0.01879
+      },
+      "2022-08-24": {
+        "close_ret": 0.0095,
+        "adj_close_ret": 0.0095
+      },
+      "2022-08-25": {
+        "close_ret": 0.01718,
+        "adj_close_ret": 0.01718
+      }
+    }
+  },
+  "raw_manifests": {
+    "bankofcanada": {
+      "V41690973.csv": {
+        "bytes": 8742,
+        "retrieved_utc": "2026-11-14T22:14:38+00:00",
+        "sha256": "6ddd200fb50ebdc5712d8b340eecbf34de5fb1509754bbe8f7cfca0b6cf7c4f8",
+        "url": "https://www.bankofcanada.ca/valet/observations/V41690973/csv?start_date=1990-01-01"
+      }
+    },
+    "datahub_gold": {
+      "monthly.csv": {
+        "bytes": 35747,
+        "retrieved_utc": "2026-11-14T22:14:38+00:00",
+        "sha256": "f20720f3413b3dd114cd116951516f0fab577ff8c91e102a3a92549582ea9608",
+        "url": "https://raw.githubusercontent.com/datasets/gold-prices/main/data/monthly.csv"
+      }
+    },
+    "fred": {
+      "AAA.csv": {
+        "bytes": 20806,
+        "retrieved_utc": "2026-11-14T22:14:36+00:00",
+        "sha256": "0f89a825d20cbc97cda34952c9727a642eda7167625feb5d77d1756f53dec59a",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=AAA"
+      },
+      "BAA.csv": {
+        "bytes": 20885,
+        "retrieved_utc": "2026-11-14T22:14:36+00:00",
+        "sha256": "0d7a21abcb6af2a2d7ac83fb6a8941a5e3ad8ddcec913dcff1b7d9d50eed6404",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAA"
+      },
+      "CANCPIALLMINMEI.csv": {
+        "bytes": 41096,
+        "retrieved_utc": "2026-11-14T22:14:38+00:00",
+        "sha256": "e1b335f40b26951c317d71c5cdcbf4d45b3fd25dca96504d3b5e1c6f489440af",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CANCPIALLMINMEI"
+      },
+      "CPIAUCNS.csv": {
+        "bytes": 25112,
+        "retrieved_utc": "2026-11-14T22:14:37+00:00",
+        "sha256": "0e1fc35d62c4b76698418b4e6a8f259ca23407a52bf3f5971597afe0388cadfc",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCNS"
+      },
+      "DAAA.csv": {
+        "bytes": 182274,
+        "retrieved_utc": "2026-11-14T22:14:37+00:00",
+        "sha256": "2659e8943f6689db6dc06d764b74c9fe22b2e34e91e92dae2aa6418ada9e342a",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DAAA"
+      },
+      "DBAA.csv": {
+        "bytes": 170047,
+        "retrieved_utc": "2026-11-14T22:14:37+00:00",
+        "sha256": "4ddf509580b0fce57ee5f65a60c7e0127a19bd34ee317400ff236fd736f3110c",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DBAA"
+      },
+      "DEXCAUS.csv": {
+        "bytes": 258931,
+        "retrieved_utc": "2026-11-14T22:14:37+00:00",
+        "sha256": "e2fb2368b337c34fbd2f70f99d02535c10336d6c564190f14d8a24659d9ddfe5",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXCAUS"
+      },
+      "DGS1.csv": {
+        "bytes": 269013,
+        "retrieved_utc": "2026-11-14T22:14:36+00:00",
+        "sha256": "7c17de002d572a8eb2513c0c2e523e578c38090ee442b7d5fdc5fc8059c8a8ad",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS1"
+      },
+      "DGS10.csv": {
+        "bytes": 269391,
+        "retrieved_utc": "2026-11-14T22:14:37+00:00",
+        "sha256": "ef864cd0a56c983f248fb34b46fc6f4e2b35bcee54b10cb5d0332ebfaea99d5b",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10"
+      },
+      "DGS2.csv": {
+        "bytes": 209564,
+        "retrieved_utc": "2026-11-14T22:14:36+00:00",
+        "sha256": "6ac9a529408135b020c6a9ffa525908e966ba7b0ae42b01410e3abdf96d1b12c",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2"
+      },
+      "DGS20.csv": {
+        "bytes": 262660,
+        "retrieved_utc": "2026-11-14T22:14:37+00:00",
+        "sha256": "0341ee6fdb3f01997bc8db0be368a17ce9135ad9fcce95ca086f8705277b8fa5",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS20"
+      },
+      "DGS3.csv": {
+        "bytes": 269112,
+        "retrieved_utc": "2026-11-14T22:14:36+00:00",
+        "sha256": "1a119b8bb748eb10f54f692284efef4a2835dada34b42a4e2a8fb848b3c0a955",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS3"
+      },
+      "DGS30.csv": {
+        "bytes": 206985,
+        "retrieved_utc": "2026-11-14T22:14:37+00:00",
+        "sha256": "b130da3fe2458c9a71e4337b6c99143c8d471d46522fd42926c36b08a6639f11",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS30"
+      },
+      "DGS5.csv": {
+        "bytes": 269217,
+        "retrieved_utc": "2026-11-14T22:14:36+00:00",
+        "sha256": "c95e40eb1bd64e660ed70eb9566bf811aaa0da3f6aee7770bf89ff993b01aa5e",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS5"
+      },
+      "GS1.csv": {
+        "bytes": 14203,
+        "retrieved_utc": "2026-11-14T22:14:35+00:00",
+        "sha256": "f05b71e26518446d84bac1c65c915ae4d8e2020a445f50b845efb39592acf251",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GS1"
+      },
+      "GS10.csv": {
+        "bytes": 14222,
+        "retrieved_utc": "2026-11-14T22:14:35+00:00",
+        "sha256": "018e609eb98c52ec8d2cf0ea9f8e1450c24974c31cca455cc19717a77703af78",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GS10"
+      },
+      "GS2.csv": {
+        "bytes": 9758,
+        "retrieved_utc": "2026-11-14T22:14:35+00:00",
+        "sha256": "9c63c804486812a148141adb9b25dae685054d36b785c3bca9b08757ca36a08a",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GS2"
+      },
+      "GS20.csv": {
+        "bytes": 13898,
+        "retrieved_utc": "2026-11-14T22:14:36+00:00",
+        "sha256": "c5497c8b87c86ca334d3024322e6142a984af084184b9a5b1f82fd0531c925ec",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GS20"
+      },
+      "GS3.csv": {
+        "bytes": 14206,
+        "retrieved_utc": "2026-11-14T22:14:35+00:00",
+        "sha256": "e550946ec3a7fe3a91efda95fbfb1ac74cd4c953bac07a81ab911503b80f955b",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GS3"
+      },
+      "GS30.csv": {
+        "bytes": 9646,
+        "retrieved_utc": "2026-11-14T22:14:36+00:00",
+        "sha256": "2eb0b74e9ccde39ee5072b1c35f32b0eaa16789c0a790c5db08c797e4a106493",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GS30"
+      },
+      "GS5.csv": {
+        "bytes": 14214,
+        "retrieved_utc": "2026-11-14T22:14:35+00:00",
+        "sha256": "49e61dc82bac413c9ce0461b5b54eab8d588376f6b9cfa15c93c478760ba81a3",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GS5"
+      },
+      "IR3TIB01CAM156N.csv": {
+        "bytes": 19664,
+        "retrieved_utc": "2026-11-14T22:14:38+00:00",
+        "sha256": "74d6cbbb2cf93db71b23c463222164ec371085e1337dec4e391678df538a9d95",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=IR3TIB01CAM156N"
+      },
+      "IRLTLT01CAM156N.csv": {
+        "bytes": 25103,
+        "retrieved_utc": "2026-11-14T22:14:38+00:00",
+        "sha256": "e6aa7237c2a5173c6828aba5f10f227ebf830dcd17e1559ee93c54b4c155429e",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=IRLTLT01CAM156N"
+      }
+    },
+    "kenfrench": {
+      "12_Industry_Portfolios_CSV.zip": {
+        "bytes": 139127,
+        "retrieved_utc": "2026-11-14T22:14:34+00:00",
+        "sha256": "78ff32de9b3b308c96beb48a5f6f8ae06209495ef63ee6efa274d6bdbb491b86",
+        "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/12_Industry_Portfolios_CSV.zip"
+      },
+      "F-F_International_Countries.zip": {
+        "bytes": 1281647,
+        "retrieved_utc": "2026-11-14T22:14:35+00:00",
+        "sha256": "6041ff104726d6aadfea76c4ef25af35594e799b90064b76b6bb83bd4acb0091",
+        "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_International_Countries.zip"
+      },
+      "F-F_Research_Data_Factors_CSV.zip": {
+        "bytes": 13078,
+        "retrieved_utc": "2026-11-14T22:14:34+00:00",
+        "sha256": "b03d39e4bb253dda0f14893db3b78e64b40b8d6549a0fc0fd4111dae84c98618",
+        "url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_CSV.zip"
+      }
+    },
+    "shiller": {
+      "ie_data.xls": {
+        "bytes": 1623552,
+        "retrieved_utc": "2026-11-14T22:14:38+00:00",
+        "sha256": "59532175bd1b95cee294de96fe05856cfb109663e235b5c2e5a496b258ba00c3",
+        "url": "https://img1.wsimg.com/blobby/go/e5e77e0b-59d1-44d9-ab25-4763ac982e53/downloads/ie_data.xls"
+      }
+    },
+    "yfinance": {
+      "AAPL.csv": {
+        "bytes": 560411,
+        "retrieved_utc": "2026-11-14T22:15:11+00:00",
+        "sha256": "44630302c2ed791a18ac9e298012d75e9433143c45d7ed3e73433f6571f06f4d",
+        "url": "yfinance.download('AAPL', period='max', interval='1d', auto_adjust=False)"
+      },
+      "AGG.csv": {
+        "bytes": 272714,
+        "retrieved_utc": "2026-11-14T22:15:24+00:00",
+        "sha256": "e686315b19e7b19993e47683d793f3e4389af42c2e6fc71d30721f6f3bbf827c",
+        "url": "yfinance.download('AGG', period='max', interval='1d', auto_adjust=False)"
+      },
+      "AMZN.csv": {
+        "bytes": 350747,
+        "retrieved_utc": "2026-11-14T22:15:14+00:00",
+        "sha256": "b042f10a974d074a8fe0ce05573d42a7efd41626abd9234210a63d430ff5b5db",
+        "url": "yfinance.download('AMZN', period='max', interval='1d', auto_adjust=False)"
+      },
+      "ATD.TO.csv": {
+        "bytes": 354194,
+        "retrieved_utc": "2026-11-14T22:15:08+00:00",
+        "sha256": "cc05d0b894621477888fe28095a855cdb137d1d7ead314a1c2088339f27e3460",
+        "url": "yfinance.download('ATD.TO', period='max', interval='1d', auto_adjust=False)"
+      },
+      "BTC-USD.csv": {
+        "bytes": 185847,
+        "retrieved_utc": "2026-11-14T22:15:26+00:00",
+        "sha256": "c6f43478699510f48451a3ccbb7c8389dcad21fc0b8cad8b7b430c92bf7e135d",
+        "url": "yfinance.download('BTC-USD', period='max', interval='1d', auto_adjust=False)"
+      },
+      "CNQ.TO.csv": {
+        "bytes": 383170,
+        "retrieved_utc": "2026-11-14T22:15:06+00:00",
+        "sha256": "de726853d528d6958a1c35dcd25b16a6053b0e823503930ab7c3c7e121e22f05",
+        "url": "yfinance.download('CNQ.TO', period='max', interval='1d', auto_adjust=False)"
+      },
+      "CNR.TO.csv": {
+        "bytes": 352822,
+        "retrieved_utc": "2026-11-14T22:15:07+00:00",
+        "sha256": "f7bffe0d4f6d5995333c7c8564f12836ab812573a5d6c03992bc79dec362c4d9",
+        "url": "yfinance.download('CNR.TO', period='max', interval='1d', auto_adjust=False)"
+      },
+      "CSU.TO.csv": {
+        "bytes": 209460,
+        "retrieved_utc": "2026-11-14T22:15:10+00:00",
+        "sha256": "5f15424d061df60128d8d027f4dcb1f029ce283e4f4c5f622a7656731860335a",
+        "url": "yfinance.download('CSU.TO', period='max', interval='1d', auto_adjust=False)"
+      },
+      "ENB.TO.csv": {
+        "bytes": 368625,
+        "retrieved_utc": "2026-11-14T22:15:06+00:00",
+        "sha256": "a504a381ea51d8ebb1dc1358e72c81daf3707a4c1fba6e8e9a03f6cee66ec07b",
+        "url": "yfinance.download('ENB.TO', period='max', interval='1d', auto_adjust=False)"
+      },
+      "ESGV.csv": {
+        "bytes": 95754,
+        "retrieved_utc": "2026-11-14T22:15:22+00:00",
+        "sha256": "b06e3d75fc24464ce84bb64b7074dfd48ee5939b7adb5e022e962cc0811be2e9",
+        "url": "yfinance.download('ESGV', period='max', interval='1d', auto_adjust=False)"
+      },
+      "ETH-USD.csv": {
+        "bytes": 152368,
+        "retrieved_utc": "2026-11-14T22:15:26+00:00",
+        "sha256": "606834c9ad29576ecdbb329098a9c276a439876880f256e43fda2bffc18fa885",
+        "url": "yfinance.download('ETH-USD', period='max', interval='1d', auto_adjust=False)"
+      },
+      "FTS.TO.csv": {
+        "bytes": 365696,
+        "retrieved_utc": "2026-11-14T22:15:08+00:00",
+        "sha256": "d883326e1f99a5dec3fb3bbc95b1736c2d94bc2519e7c9fe6093a766e74a729c",
+        "url": "yfinance.download('FTS.TO', period='max', interval='1d', auto_adjust=False)"
+      },
+      "GLD.csv": {
+        "bytes": 259613,
+        "retrieved_utc": "2026-11-14T22:15:25+00:00",
+        "sha256": "ebf1ebee2830242d0e8441e50431e17c3ea47f67a31d57c0122a25d5d8c9d038",
+        "url": "yfinance.download('GLD', period='max', interval='1d', auto_adjust=False)"
+      },
+      "GOOGL.csv": {
+        "bytes": 266779,
+        "retrieved_utc": "2026-11-14T22:15:13+00:00",
+        "sha256": "0bb6765eecf190b5393f944d489fcdd89b1849ca767fcaf4c2002e45c2ccdde2",
+        "url": "yfinance.download('GOOGL', period='max', interval='1d', auto_adjust=False)"
+      },
+      "JNJ.csv": {
+        "bytes": 733722,
+        "retrieved_utc": "2026-11-14T22:15:16+00:00",
+        "sha256": "a3d3146fd088ef257c42d561a872dc70b4f4b9e0c3eecb5b4557f86639005fa7",
+        "url": "yfinance.download('JNJ', period='max', interval='1d', auto_adjust=False)"
+      },
+      "JPM.csv": {
+        "bytes": 538474,
+        "retrieved_utc": "2026-11-14T22:15:15+00:00",
+        "sha256": "06f6606bfc96207adb90dfd435e3d7a09b4628f00dfa4bd3d4a86409d73a2d37",
+        "url": "yfinance.download('JPM', period='max', interval='1d', auto_adjust=False)"
+      },
+      "MFC.TO.csv": {
+        "bytes": 319580,
+        "retrieved_utc": "2026-11-14T22:15:05+00:00",
+        "sha256": "79e6ccd00314c6e4c59473261c4d79bcccaff3c3081b9723fe63fe72d6a08766",
+        "url": "yfinance.download('MFC.TO', period='max', interval='1d', auto_adjust=False)"
+      },
+      "MSFT.csv": {
+        "bytes": 471642,
+        "retrieved_utc": "2026-11-14T22:15:12+00:00",
+        "sha256": "b7151721ead99a6ec68b61eb3d6f358e64794dc770b4101fe2764e94a7191070",
+        "url": "yfinance.download('MSFT', period='max', interval='1d', auto_adjust=False)"
+      },
+      "NVDA.csv": {
+        "bytes": 342474,
+        "retrieved_utc": "2026-11-14T22:15:12+00:00",
+        "sha256": "9a16f08f2a5c3da9b1ec6bc69a95cd84bd227e9f8ff83b7c59c6902ffdff8d25",
+        "url": "yfinance.download('NVDA', period='max', interval='1d', auto_adjust=False)"
+      },
+      "PG.csv": {
+        "bytes": 722258,
+        "retrieved_utc": "2026-11-14T22:15:17+00:00",
+        "sha256": "69f68c1c400896ced7fdb56ce45128d68c81d513c8994c9a1518da7140292fb2",
+        "url": "yfinance.download('PG', period='max', interval='1d', auto_adjust=False)"
+      },
+      "QQQ.csv": {
+        "bytes": 322177,
+        "retrieved_utc": "2026-11-14T22:15:21+00:00",
+        "sha256": "df98a714670cd0b707c2a3e684d525c0d8177712a9eb0ebfe4c89ee08a915308",
+        "url": "yfinance.download('QQQ', period='max', interval='1d', auto_adjust=False)"
+      },
+      "RY.TO.csv": {
+        "bytes": 369162,
+        "retrieved_utc": "2026-11-14T22:15:03+00:00",
+        "sha256": "335808d574575d20294769ecf1e7b0e6a2191a1272abb1a1f1e398472fff9a5a",
+        "url": "yfinance.download('RY.TO', period='max', interval='1d', auto_adjust=False)"
+      },
+      "SHOP.TO.csv": {
+        "bytes": 136602,
+        "retrieved_utc": "2026-11-14T22:15:09+00:00",
+        "sha256": "6b11f32f3fec6ffb92dd23756b727aa4e84414763133c86e1b3c33ed69df0f1b",
+        "url": "yfinance.download('SHOP.TO', period='max', interval='1d', auto_adjust=False)"
+      },
+      "SPY.csv": {
+        "bytes": 380867,
+        "retrieved_utc": "2026-11-14T22:15:20+00:00",
+        "sha256": "84b39dd1e09defae9b02654f5c6958b62476da937c0a41ede9ba893e888da0de",
+        "url": "yfinance.download('SPY', period='max', interval='1d', auto_adjust=False)"
+      },
+      "TD.TO.csv": {
+        "bytes": 368604,
+        "retrieved_utc": "2026-11-14T22:15:04+00:00",
+        "sha256": "77fc9a0cae7533e54a48ff76c4c7191c47f121fbe0404bc4527622a6813d9ff8",
+        "url": "yfinance.download('TD.TO', period='max', interval='1d', auto_adjust=False)"
+      },
+      "TLT.csv": {
+        "bytes": 285904,
+        "retrieved_utc": "2026-11-14T22:15:25+00:00",
+        "sha256": "e69b89c86e9ea35b2df7a52159184e7e798cb85178127009067ec765c9d33040",
+        "url": "yfinance.download('TLT', period='max', interval='1d', auto_adjust=False)"
+      },
+      "TSLA.csv": {
+        "bytes": 196532,
+        "retrieved_utc": "2026-11-14T22:15:14+00:00",
+        "sha256": "750228897e1dab03fe2f9d41f0ba641366adffe1a58e44d8fd05c549fa5ef1f2",
+        "url": "yfinance.download('TSLA', period='max', interval='1d', auto_adjust=False)"
+      },
+      "XBB.TO.csv": {
+        "bytes": 310268,
+        "retrieved_utc": "2026-11-14T22:15:22+00:00",
+        "sha256": "384ada0d45f68fad3b4a063c404231d9b089bb737ea839886c7178cf95dc3491",
+        "url": "yfinance.download('XBB.TO', period='max', interval='1d', auto_adjust=False)"
+      },
+      "XIU.TO.csv": {
+        "bytes": 321904,
+        "retrieved_utc": "2026-11-14T22:15:19+00:00",
+        "sha256": "39fb4d03cd2f0fedc1ecc7f788db3a4bdcb78d7fe6f628b3f709e0f3c7728685",
+        "url": "yfinance.download('XIU.TO', period='max', interval='1d', auto_adjust=False)"
+      },
+      "XOM.csv": {
+        "bytes": 710016,
+        "retrieved_utc": "2026-11-14T22:15:18+00:00",
+        "sha256": "6fa2151f91dde3d05af16c97da73ab587e5e80bb563041635a0905e7fb14b4b9",
+        "url": "yfinance.download('XOM', period='max', interval='1d', auto_adjust=False)"
+      },
+      "ZST.TO.csv": {
+        "bytes": 186097,
+        "retrieved_utc": "2026-11-14T22:15:23+00:00",
+        "sha256": "35f4499afed02fd81b583aae21575d7ebd36061efff94bfe63f625796fc53a32",
+        "url": "yfinance.download('ZST.TO', period='max', interval='1d', auto_adjust=False)"
+      }
+    }
+  }
+}

@@ -1,0 +1,78 @@
+{
+ "disclaimer": "SIMULATION ONLY",
+ "d8_esgv": {
+  "etf_months_in_data": 96,
+  "etf_period": [
+   "2018-10-31",
+   "2026-09-30"
+  ],
+  "etf_full_10y_windows": [],
+  "index_live_since_launch_full_10y_windows": [],
+  "index_incl_backtest_full_10y_windows": [
+   "2015-04..2025-03",
+   "2016-04..2026-03"
+  ],
+  "backtest_months_in_first_index_window": 41,
+  "ftse_choice_minus_parent_calendar_pts": {
+   "2016": -1.3,
+   "2017": 1.5,
+   "2018": 1.6,
+   "2019": 2.2,
+   "2020": 4.7,
+   "2021": 0.8,
+   "2022": -4.8,
+   "2023": 4.5,
+   "2024": 1.0,
+   "2025": -0.6
+  },
+  "ftse_choice_minus_parent_live_years_mean_pts": 1.11,
+  "etf_2022_usd": {
+   "ESGV": -0.2404,
+   "SPY": -0.1818,
+   "US_MKT": -0.1992
+  },
+  "monthly_corr_esgv_spy": 0.9932,
+  "ann_return_gap_esgv_minus_spy_pts": 0.05
+ },
+ "d10_cnq": {
+  "starter_rows": {
+   "close_2022_08_19": 35.450539,
+   "close_2022_08_22": 35.665001,
+   "adj_close_2022_08_19": 28.506203,
+   "adj_close_2022_08_22": 29.298502
+  },
+  "starter_corporate_actions": [
+   {
+    "ex_date": "2022-08-22",
+    "ticker": "CNQ.TO",
+    "action": "dividend",
+    "value": "0.75",
+    "unit": "CAD per share"
+   },
+   {
+    "ex_date": "2022-08-22",
+    "ticker": "CNQ.TO",
+    "action": "split",
+    "value": "1.021",
+    "unit": "split ratio (new:old)"
+   },
+   {
+    "ex_date": "2024-06-11",
+    "ticker": "CNQ.TO",
+    "action": "split",
+    "value": "2.0",
+    "unit": "split ratio (new:old)"
+   }
+  ],
+  "dividend_in_starter_equals_1_50_over_2024_split": true,
+  "implied_unadjusted_close_2022_08_19": 72.39,
+  "implied_unadjusted_close_2022_08_22": 71.33,
+  "price_only_return": -0.01464,
+  "true_total_return_with_1_50_dividend": 0.00608,
+  "close_return_starter": 0.00605,
+  "adj_close_return_starter": 0.02779,
+  "dividend_yield_on_ex_date": 0.02072,
+  "one_minus_1_over_fake_split": 0.02057,
+  "double_count_pts": 2.17
+ }
+}

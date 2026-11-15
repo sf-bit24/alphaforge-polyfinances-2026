@@ -20,7 +20,7 @@ from alphaforge.finance.portfolio.market import returns_window
 
 from .facts import FactBook
 
-ENGINE = "engine:research/backtest"
+ENGINE = "alphaforge.finance.backtest (rendements mensuels, data/long)"
 
 
 @dataclass

@@ -1,0 +1,7 @@
+{
+ "p14_retraite_usd:rolling:16:1": "results/p14_retraite_usd/20261115T000120Z_rolling_h16.json",
+ "p14_retraite_usd:non_overlapping:16:1": "results/p14_retraite_usd/20261115T000145Z_non_overlapping_h16.json",
+ "p14_retraite_usd:rolling:20:0": "results/p14_retraite_usd/20261115T000206Z_rolling_h20.json",
+ "p14_coussin_cad:non_overlapping:1:1": "results/p14_coussin_cad/20261115T000234Z_non_overlapping_h1.json",
+ "p14_coussin_cad:rolling:1:0": "results/p14_coussin_cad/20261115T000239Z_rolling_h1.json"
+}

@@ -1,7 +1,7 @@
 """F3 — Outils d'analyse d'un portefeuille (lentilles Timeline, Risque, Diversité, Contraintes).
 
 Fonctions déterministes ; chaque chiffre est recalculable et devient un ``Fact`` sourcé.
-Les mesures reprennent celles de l'engine (research/backtest/engine/metrics.py) pour que
+Les mesures reprennent celles du moteur (``finance/backtest/metrics.py``) pour que
 l'analyse et le Judge (F4) mesurent exactement la même chose.
 Les rendements historiques décrivent le passé : ce ne sont pas des prévisions.
 SIMULATION SEULEMENT.
@@ -16,9 +16,10 @@ import pandas as pd
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import squareform
 
+from ..backtest import data as bt_data
+from ..backtest import metrics as bt_metrics
 from ..contracts import PolicySpec
 from ..observability.telemetry import traced_tool
-from ._engine import bt_data, bt_metrics
 from .market import ReturnWindow
 
 P = 12

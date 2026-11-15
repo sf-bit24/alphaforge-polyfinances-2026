@@ -1,0 +1,18 @@
+p12_accum_usd --mode non_overlapping
+p12_accum_usd --mode rolling --step 12
+p12_accum_cad --mode non_overlapping
+p12_accum_cad --mode rolling --step 12
+p12_accum_cad_h2 --mode non_overlapping
+p12_accum_cad_h2 --mode rolling --step 12
+p12_decum_usd --mode non_overlapping
+p12_decum_usd --mode rolling --step 12
+p12_decum_usd --mode non_overlapping --horizon 10
+p12_decum_usd --mode rolling --step 12 --horizon 10
+p12_decum_cad --mode non_overlapping
+p12_decum_cad --mode rolling --step 12
+p12_decum_cad --mode non_overlapping --horizon 10
+p12_decum_cad --mode rolling --step 12 --horizon 10
+p12_decum_usd_will --mode rolling --step 12 --no-oracle
+p12_decum_cad_will --mode rolling --step 12 --no-oracle
+p12_decum_usd_will --mode rolling --step 12 --horizon 10 --no-oracle
+p12_decum_cad_will --mode rolling --step 12 --horizon 10 --no-oracle

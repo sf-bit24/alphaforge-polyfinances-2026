@@ -1,0 +1,740 @@
+{
+ "disclaimer": "SIMULATION ONLY",
+ "sector_cap": 0.1,
+ "variants": {
+  "euclid": {
+   "risk_parity_iv36": {
+    "mateo_usd_long_esg": {
+     "n_windows": 91,
+     "p10_real": -0.0015,
+     "median_real": 0.0366,
+     "worst_maxdd": 0.404,
+     "breach_rate": 0.077,
+     "equity_mean": 0.406,
+     "sector_proxies_mean": 0.323,
+     "core_us_mkt_xen_mean": 0.084,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_long_esg_euclid_x/20261115T013336Z_rolling_h10.json"
+    },
+    "mateo_usd_gold_esg": {
+     "n_windows": 42,
+     "p10_real": 0.0254,
+     "median_real": 0.0506,
+     "worst_maxdd": 0.162,
+     "breach_rate": 0.0,
+     "equity_mean": 0.41,
+     "sector_proxies_mean": 0.31,
+     "core_us_mkt_xen_mean": 0.101,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.012,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_euclid_x/20261115T013341Z_rolling_h10.json"
+    },
+    "mateo_cad_esg": {
+     "n_windows": 40,
+     "p10_real": 0.0381,
+     "median_real": 0.0602,
+     "worst_maxdd": 0.118,
+     "breach_rate": 0.0,
+     "equity_mean": 0.409,
+     "sector_proxies_mean": 0.081,
+     "core_us_mkt_xen_mean": 0.167,
+     "ca_eq_mean": 0.16,
+     "gold_mean": 0.103,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_euclid_x/20261115T013345Z_rolling_h10.json"
+    }
+   },
+   "min_variance_60": {
+    "mateo_usd_long_esg": {
+     "n_windows": 91,
+     "p10_real": -0.0042,
+     "median_real": 0.0338,
+     "worst_maxdd": 0.464,
+     "breach_rate": 0.066,
+     "equity_mean": 0.409,
+     "sector_proxies_mean": 0.399,
+     "core_us_mkt_xen_mean": 0.01,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_long_esg_euclid_x/20261115T013336Z_rolling_h10.json"
+    },
+    "mateo_usd_gold_esg": {
+     "n_windows": 42,
+     "p10_real": 0.015,
+     "median_real": 0.0377,
+     "worst_maxdd": 0.13,
+     "breach_rate": 0.0,
+     "equity_mean": 0.414,
+     "sector_proxies_mean": 0.392,
+     "core_us_mkt_xen_mean": 0.022,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.057,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_euclid_x/20261115T013341Z_rolling_h10.json"
+    },
+    "mateo_cad_esg": {
+     "n_windows": 40,
+     "p10_real": 0.0206,
+     "median_real": 0.0428,
+     "worst_maxdd": 0.112,
+     "breach_rate": 0.0,
+     "equity_mean": 0.414,
+     "sector_proxies_mean": 0.234,
+     "core_us_mkt_xen_mean": 0.02,
+     "ca_eq_mean": 0.16,
+     "gold_mean": 0.054,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_euclid_x/20261115T013345Z_rolling_h10.json"
+    }
+   },
+   "mean_var_60_ra10": {
+    "mateo_usd_long_esg": {
+     "n_windows": 91,
+     "p10_real": -0.0044,
+     "median_real": 0.0376,
+     "worst_maxdd": 0.478,
+     "breach_rate": 0.066,
+     "equity_mean": 0.442,
+     "sector_proxies_mean": 0.432,
+     "core_us_mkt_xen_mean": 0.01,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_long_esg_euclid_x/20261115T013336Z_rolling_h10.json"
+    },
+    "mateo_usd_gold_esg": {
+     "n_windows": 42,
+     "p10_real": 0.0181,
+     "median_real": 0.0438,
+     "worst_maxdd": 0.238,
+     "breach_rate": 0.238,
+     "equity_mean": 0.428,
+     "sector_proxies_mean": 0.406,
+     "core_us_mkt_xen_mean": 0.022,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.071,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_euclid_x/20261115T013341Z_rolling_h10.json"
+    },
+    "mateo_cad_esg": {
+     "n_windows": 40,
+     "p10_real": 0.0356,
+     "median_real": 0.0641,
+     "worst_maxdd": 0.143,
+     "breach_rate": 0.0,
+     "equity_mean": 0.46,
+     "sector_proxies_mean": 0.327,
+     "core_us_mkt_xen_mean": 0.023,
+     "ca_eq_mean": 0.11,
+     "gold_mean": 0.059,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_euclid_x/20261115T013345Z_rolling_h10.json"
+    }
+   },
+   "static_eq40": {
+    "mateo_usd_long_esg": {
+     "n_windows": 91,
+     "p10_real": -0.0078,
+     "median_real": 0.0395,
+     "worst_maxdd": 0.392,
+     "breach_rate": 0.077,
+     "equity_mean": 0.405,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.405,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_long_esg_euclid_x/20261115T013336Z_rolling_h10.json"
+    },
+    "mateo_usd_gold_esg": {
+     "n_windows": 42,
+     "p10_real": 0.0289,
+     "median_real": 0.0546,
+     "worst_maxdd": 0.167,
+     "breach_rate": 0.0,
+     "equity_mean": 0.407,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.407,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_euclid_x/20261115T013341Z_rolling_h10.json"
+    },
+    "mateo_cad_esg": {
+     "n_windows": 40,
+     "p10_real": 0.0302,
+     "median_real": 0.0601,
+     "worst_maxdd": 0.122,
+     "breach_rate": 0.0,
+     "equity_mean": 0.406,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.203,
+     "ca_eq_mean": 0.202,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_euclid_x/20261115T013345Z_rolling_h10.json"
+    }
+   },
+   "static_eq60": {
+    "mateo_usd_long_esg": {
+     "n_windows": 91,
+     "p10_real": -0.0003,
+     "median_real": 0.0548,
+     "worst_maxdd": 0.581,
+     "breach_rate": 0.604,
+     "equity_mean": 0.604,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.604,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_long_esg_euclid_x/20261115T013336Z_rolling_h10.json"
+    },
+    "mateo_usd_gold_esg": {
+     "n_windows": 42,
+     "p10_real": 0.0348,
+     "median_real": 0.0658,
+     "worst_maxdd": 0.281,
+     "breach_rate": 0.667,
+     "equity_mean": 0.606,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.606,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_euclid_x/20261115T013341Z_rolling_h10.json"
+    },
+    "mateo_cad_esg": {
+     "n_windows": 40,
+     "p10_real": 0.0361,
+     "median_real": 0.0704,
+     "worst_maxdd": 0.179,
+     "breach_rate": 0.15,
+     "equity_mean": 0.605,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.303,
+     "ca_eq_mean": 0.302,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_euclid_x/20261115T013345Z_rolling_h10.json"
+    }
+   }
+  },
+  "prorata": {
+   "risk_parity_iv36": {
+    "mateo_usd_long_esg": {
+     "n_windows": 91,
+     "p10_real": -0.0048,
+     "median_real": 0.0386,
+     "worst_maxdd": 0.41,
+     "breach_rate": 0.077,
+     "equity_mean": 0.406,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.406,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_long_esg_prorata_x/20261115T013355Z_rolling_h10.json"
+    },
+    "mateo_usd_gold_esg": {
+     "n_windows": 42,
+     "p10_real": 0.0302,
+     "median_real": 0.0518,
+     "worst_maxdd": 0.16,
+     "breach_rate": 0.0,
+     "equity_mean": 0.41,
+     "sector_proxies_mean": 0.015,
+     "core_us_mkt_xen_mean": 0.395,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.042,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_prorata_x/20261115T013359Z_rolling_h10.json"
+    },
+    "mateo_cad_esg": {
+     "n_windows": 40,
+     "p10_real": 0.0386,
+     "median_real": 0.0582,
+     "worst_maxdd": 0.119,
+     "breach_rate": 0.0,
+     "equity_mean": 0.409,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.209,
+     "ca_eq_mean": 0.2,
+     "gold_mean": 0.117,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_prorata_x/20261115T013402Z_rolling_h10.json"
+    }
+   },
+   "min_variance_60": {
+    "mateo_usd_long_esg": {
+     "n_windows": 91,
+     "p10_real": -0.0042,
+     "median_real": 0.0338,
+     "worst_maxdd": 0.464,
+     "breach_rate": 0.066,
+     "equity_mean": 0.409,
+     "sector_proxies_mean": 0.399,
+     "core_us_mkt_xen_mean": 0.01,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_long_esg_prorata_x/20261115T013355Z_rolling_h10.json"
+    },
+    "mateo_usd_gold_esg": {
+     "n_windows": 42,
+     "p10_real": 0.015,
+     "median_real": 0.0377,
+     "worst_maxdd": 0.13,
+     "breach_rate": 0.0,
+     "equity_mean": 0.414,
+     "sector_proxies_mean": 0.392,
+     "core_us_mkt_xen_mean": 0.022,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.057,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_prorata_x/20261115T013359Z_rolling_h10.json"
+    },
+    "mateo_cad_esg": {
+     "n_windows": 40,
+     "p10_real": 0.0206,
+     "median_real": 0.0428,
+     "worst_maxdd": 0.112,
+     "breach_rate": 0.0,
+     "equity_mean": 0.414,
+     "sector_proxies_mean": 0.234,
+     "core_us_mkt_xen_mean": 0.02,
+     "ca_eq_mean": 0.16,
+     "gold_mean": 0.054,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_prorata_x/20261115T013402Z_rolling_h10.json"
+    }
+   },
+   "mean_var_60_ra10": {
+    "mateo_usd_long_esg": {
+     "n_windows": 91,
+     "p10_real": -0.0044,
+     "median_real": 0.0376,
+     "worst_maxdd": 0.478,
+     "breach_rate": 0.066,
+     "equity_mean": 0.442,
+     "sector_proxies_mean": 0.432,
+     "core_us_mkt_xen_mean": 0.01,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_long_esg_prorata_x/20261115T013355Z_rolling_h10.json"
+    },
+    "mateo_usd_gold_esg": {
+     "n_windows": 42,
+     "p10_real": 0.0181,
+     "median_real": 0.0438,
+     "worst_maxdd": 0.238,
+     "breach_rate": 0.238,
+     "equity_mean": 0.428,
+     "sector_proxies_mean": 0.406,
+     "core_us_mkt_xen_mean": 0.022,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.071,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_prorata_x/20261115T013359Z_rolling_h10.json"
+    },
+    "mateo_cad_esg": {
+     "n_windows": 40,
+     "p10_real": 0.0356,
+     "median_real": 0.0641,
+     "worst_maxdd": 0.143,
+     "breach_rate": 0.0,
+     "equity_mean": 0.46,
+     "sector_proxies_mean": 0.327,
+     "core_us_mkt_xen_mean": 0.023,
+     "ca_eq_mean": 0.11,
+     "gold_mean": 0.059,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_prorata_x/20261115T013402Z_rolling_h10.json"
+    }
+   },
+   "static_eq40": {
+    "mateo_usd_long_esg": {
+     "n_windows": 91,
+     "p10_real": -0.0078,
+     "median_real": 0.0395,
+     "worst_maxdd": 0.392,
+     "breach_rate": 0.077,
+     "equity_mean": 0.405,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.405,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_long_esg_prorata_x/20261115T013355Z_rolling_h10.json"
+    },
+    "mateo_usd_gold_esg": {
+     "n_windows": 42,
+     "p10_real": 0.0289,
+     "median_real": 0.0546,
+     "worst_maxdd": 0.167,
+     "breach_rate": 0.0,
+     "equity_mean": 0.407,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.407,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_prorata_x/20261115T013359Z_rolling_h10.json"
+    },
+    "mateo_cad_esg": {
+     "n_windows": 40,
+     "p10_real": 0.0302,
+     "median_real": 0.0601,
+     "worst_maxdd": 0.122,
+     "breach_rate": 0.0,
+     "equity_mean": 0.406,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.203,
+     "ca_eq_mean": 0.202,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_prorata_x/20261115T013402Z_rolling_h10.json"
+    }
+   },
+   "static_eq60": {
+    "mateo_usd_long_esg": {
+     "n_windows": 91,
+     "p10_real": -0.0003,
+     "median_real": 0.0548,
+     "worst_maxdd": 0.581,
+     "breach_rate": 0.604,
+     "equity_mean": 0.604,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.604,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_long_esg_prorata_x/20261115T013355Z_rolling_h10.json"
+    },
+    "mateo_usd_gold_esg": {
+     "n_windows": 42,
+     "p10_real": 0.0348,
+     "median_real": 0.0658,
+     "worst_maxdd": 0.281,
+     "breach_rate": 0.667,
+     "equity_mean": 0.606,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.606,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_prorata_x/20261115T013359Z_rolling_h10.json"
+    },
+    "mateo_cad_esg": {
+     "n_windows": 40,
+     "p10_real": 0.0361,
+     "median_real": 0.0704,
+     "worst_maxdd": 0.179,
+     "breach_rate": 0.15,
+     "equity_mean": 0.605,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.303,
+     "ca_eq_mean": 0.302,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_prorata_x/20261115T013402Z_rolling_h10.json"
+    }
+   }
+  },
+  "prorata_cap10": {
+   "risk_parity_iv36": {
+    "mateo_usd_long_esg": {
+     "n_windows": 91,
+     "p10_real": -0.0048,
+     "median_real": 0.0386,
+     "worst_maxdd": 0.41,
+     "breach_rate": 0.077,
+     "equity_mean": 0.406,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.406,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_long_esg_prorata_cap10_x/20261115T013410Z_rolling_h10.json"
+    },
+    "mateo_usd_gold_esg": {
+     "n_windows": 42,
+     "p10_real": 0.0302,
+     "median_real": 0.0532,
+     "worst_maxdd": 0.16,
+     "breach_rate": 0.0,
+     "equity_mean": 0.41,
+     "sector_proxies_mean": 0.002,
+     "core_us_mkt_xen_mean": 0.408,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.043,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_prorata_cap10_x/20261115T013413Z_rolling_h10.json"
+    },
+    "mateo_cad_esg": {
+     "n_windows": 40,
+     "p10_real": 0.0386,
+     "median_real": 0.0582,
+     "worst_maxdd": 0.119,
+     "breach_rate": 0.0,
+     "equity_mean": 0.409,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.209,
+     "ca_eq_mean": 0.2,
+     "gold_mean": 0.117,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_prorata_cap10_x/20261115T013415Z_rolling_h10.json"
+    }
+   },
+   "min_variance_60": {
+    "mateo_usd_long_esg": {
+     "n_windows": 91,
+     "p10_real": -0.0065,
+     "median_real": 0.0337,
+     "worst_maxdd": 0.492,
+     "breach_rate": 0.077,
+     "equity_mean": 0.409,
+     "sector_proxies_mean": 0.1,
+     "core_us_mkt_xen_mean": 0.309,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_long_esg_prorata_cap10_x/20261115T013410Z_rolling_h10.json"
+    },
+    "mateo_usd_gold_esg": {
+     "n_windows": 42,
+     "p10_real": 0.0223,
+     "median_real": 0.0454,
+     "worst_maxdd": 0.17,
+     "breach_rate": 0.0,
+     "equity_mean": 0.415,
+     "sector_proxies_mean": 0.098,
+     "core_us_mkt_xen_mean": 0.317,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.056,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_prorata_cap10_x/20261115T013413Z_rolling_h10.json"
+    },
+    "mateo_cad_esg": {
+     "n_windows": 40,
+     "p10_real": 0.0224,
+     "median_real": 0.0427,
+     "worst_maxdd": 0.112,
+     "breach_rate": 0.0,
+     "equity_mean": 0.414,
+     "sector_proxies_mean": 0.097,
+     "core_us_mkt_xen_mean": 0.121,
+     "ca_eq_mean": 0.196,
+     "gold_mean": 0.055,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_prorata_cap10_x/20261115T013415Z_rolling_h10.json"
+    }
+   },
+   "mean_var_60_ra10": {
+    "mateo_usd_long_esg": {
+     "n_windows": 91,
+     "p10_real": -0.001,
+     "median_real": 0.0375,
+     "worst_maxdd": 0.504,
+     "breach_rate": 0.077,
+     "equity_mean": 0.414,
+     "sector_proxies_mean": 0.1,
+     "core_us_mkt_xen_mean": 0.314,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_long_esg_prorata_cap10_x/20261115T013410Z_rolling_h10.json"
+    },
+    "mateo_usd_gold_esg": {
+     "n_windows": 42,
+     "p10_real": 0.0274,
+     "median_real": 0.0469,
+     "worst_maxdd": 0.187,
+     "breach_rate": 0.0,
+     "equity_mean": 0.416,
+     "sector_proxies_mean": 0.097,
+     "core_us_mkt_xen_mean": 0.319,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.07,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_prorata_cap10_x/20261115T013413Z_rolling_h10.json"
+    },
+    "mateo_cad_esg": {
+     "n_windows": 40,
+     "p10_real": 0.0369,
+     "median_real": 0.0575,
+     "worst_maxdd": 0.143,
+     "breach_rate": 0.0,
+     "equity_mean": 0.44,
+     "sector_proxies_mean": 0.095,
+     "core_us_mkt_xen_mean": 0.184,
+     "ca_eq_mean": 0.161,
+     "gold_mean": 0.058,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_prorata_cap10_x/20261115T013415Z_rolling_h10.json"
+    }
+   },
+   "static_eq40": {
+    "mateo_usd_long_esg": {
+     "n_windows": 91,
+     "p10_real": -0.0078,
+     "median_real": 0.0395,
+     "worst_maxdd": 0.392,
+     "breach_rate": 0.077,
+     "equity_mean": 0.405,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.405,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_long_esg_prorata_cap10_x/20261115T013410Z_rolling_h10.json"
+    },
+    "mateo_usd_gold_esg": {
+     "n_windows": 42,
+     "p10_real": 0.0289,
+     "median_real": 0.0546,
+     "worst_maxdd": 0.167,
+     "breach_rate": 0.0,
+     "equity_mean": 0.407,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.407,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_prorata_cap10_x/20261115T013413Z_rolling_h10.json"
+    },
+    "mateo_cad_esg": {
+     "n_windows": 40,
+     "p10_real": 0.0302,
+     "median_real": 0.0601,
+     "worst_maxdd": 0.122,
+     "breach_rate": 0.0,
+     "equity_mean": 0.406,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.203,
+     "ca_eq_mean": 0.202,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_prorata_cap10_x/20261115T013415Z_rolling_h10.json"
+    }
+   },
+   "static_eq60": {
+    "mateo_usd_long_esg": {
+     "n_windows": 91,
+     "p10_real": -0.0003,
+     "median_real": 0.0548,
+     "worst_maxdd": 0.581,
+     "breach_rate": 0.604,
+     "equity_mean": 0.604,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.604,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_long_esg_prorata_cap10_x/20261115T013410Z_rolling_h10.json"
+    },
+    "mateo_usd_gold_esg": {
+     "n_windows": 42,
+     "p10_real": 0.0348,
+     "median_real": 0.0658,
+     "worst_maxdd": 0.281,
+     "breach_rate": 0.667,
+     "equity_mean": 0.606,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.606,
+     "ca_eq_mean": 0.0,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_prorata_cap10_x/20261115T013413Z_rolling_h10.json"
+    },
+    "mateo_cad_esg": {
+     "n_windows": 40,
+     "p10_real": 0.0361,
+     "median_real": 0.0704,
+     "worst_maxdd": 0.179,
+     "breach_rate": 0.15,
+     "equity_mean": 0.605,
+     "sector_proxies_mean": 0.0,
+     "core_us_mkt_xen_mean": 0.303,
+     "ca_eq_mean": 0.302,
+     "gold_mean": 0.0,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_prorata_cap10_x/20261115T013415Z_rolling_h10.json"
+    }
+   }
+  }
+ },
+ "inter_era": {
+  "euclid": [
+   {
+    "strategy": "risk_parity_iv36",
+    "eligible_all_eras": true,
+    "worst_p10": -0.0015,
+    "max_breach": 0.077,
+    "sector_proxies_usd_long": 0.323
+   },
+   {
+    "strategy": "min_variance_60",
+    "eligible_all_eras": true,
+    "worst_p10": -0.0042,
+    "max_breach": 0.066,
+    "sector_proxies_usd_long": 0.399
+   },
+   {
+    "strategy": "mean_var_60_ra10",
+    "eligible_all_eras": true,
+    "worst_p10": -0.0044,
+    "max_breach": 0.238,
+    "sector_proxies_usd_long": 0.432
+   },
+   {
+    "strategy": "static_eq40",
+    "eligible_all_eras": true,
+    "worst_p10": -0.0078,
+    "max_breach": 0.077,
+    "sector_proxies_usd_long": 0.0
+   },
+   {
+    "strategy": "static_eq60",
+    "eligible_all_eras": false,
+    "worst_p10": -0.0003,
+    "max_breach": 0.667,
+    "sector_proxies_usd_long": 0.0
+   }
+  ],
+  "prorata": [
+   {
+    "strategy": "min_variance_60",
+    "eligible_all_eras": true,
+    "worst_p10": -0.0042,
+    "max_breach": 0.066,
+    "sector_proxies_usd_long": 0.399
+   },
+   {
+    "strategy": "mean_var_60_ra10",
+    "eligible_all_eras": true,
+    "worst_p10": -0.0044,
+    "max_breach": 0.238,
+    "sector_proxies_usd_long": 0.432
+   },
+   {
+    "strategy": "risk_parity_iv36",
+    "eligible_all_eras": true,
+    "worst_p10": -0.0048,
+    "max_breach": 0.077,
+    "sector_proxies_usd_long": 0.0
+   },
+   {
+    "strategy": "static_eq40",
+    "eligible_all_eras": true,
+    "worst_p10": -0.0078,
+    "max_breach": 0.077,
+    "sector_proxies_usd_long": 0.0
+   },
+   {
+    "strategy": "static_eq60",
+    "eligible_all_eras": false,
+    "worst_p10": -0.0003,
+    "max_breach": 0.667,
+    "sector_proxies_usd_long": 0.0
+   }
+  ],
+  "prorata_cap10": [
+   {
+    "strategy": "mean_var_60_ra10",
+    "eligible_all_eras": true,
+    "worst_p10": -0.001,
+    "max_breach": 0.077,
+    "sector_proxies_usd_long": 0.1
+   },
+   {
+    "strategy": "risk_parity_iv36",
+    "eligible_all_eras": true,
+    "worst_p10": -0.0048,
+    "max_breach": 0.077,
+    "sector_proxies_usd_long": 0.0
+   },
+   {
+    "strategy": "min_variance_60",
+    "eligible_all_eras": true,
+    "worst_p10": -0.0065,
+    "max_breach": 0.077,
+    "sector_proxies_usd_long": 0.1
+   },
+   {
+    "strategy": "static_eq40",
+    "eligible_all_eras": true,
+    "worst_p10": -0.0078,
+    "max_breach": 0.077,
+    "sector_proxies_usd_long": 0.0
+   },
+   {
+    "strategy": "static_eq60",
+    "eligible_all_eras": false,
+    "worst_p10": -0.0003,
+    "max_breach": 0.667,
+    "sector_proxies_usd_long": 0.0
+   }
+  ]
+ }
+}

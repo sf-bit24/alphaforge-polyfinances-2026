@@ -22,6 +22,7 @@ app/agents/
   main.py                        point d'entrée : python main.py (BedrockAgentCoreApp, aiguillage sur AGENT_ROLE)
   pyproject.toml, uv.lock        projet uv, Python 3.13
   scripts/package.sh             zip de déploiement direct AgentCore (linux/arm64)
+  scripts/backtest/              études par persona sur le moteur de backtest (profils, analyses, synthèses)
   src/alphaforge/
     config.py                    variables d'environnement (CONTRACTS.md §1)
     server.py                    application, /invocations (JSON ou SSE), /ping
@@ -29,6 +30,8 @@ app/agents/
     agentkit.py                  modèle Bedrock (Strands), boucle d'agent, traces, garde-fou
     starter.py                   lecture du jeu de départ
     data/starter/                jeu de données de départ des organisateurs (copie, sans build_dataset.py)
+    data/long/                   données longues 1926-2026 du moteur de backtest (catalogue versionné, parquets non)
+    finance/backtest/            moteur de backtest mensuel (alphaforge.finance.backtest)
     store/                       magasin OKF : s3 (bucket chiffré SSE-KMS) ou local (dossier)
     profile/
       questionnaire.yaml         questionnaire bilingue versionné, règles et pondérations (à relire par le volet finance)
@@ -111,7 +114,7 @@ sh scripts/package.sh <out_dir>        # par exemple infrastructure/infra/build/
 Le script exporte les dépendances verrouillées (`uv export --frozen --no-dev`), les installe en roues
 `aarch64-manylinux2014` pour Python 3.13 (`--only-binary=:all:`; il échoue si une roue manque, sans changer de
 plateforme), place `main.py` et le paquet `alphaforge` (YAML et jeu de départ compris) à la racine du zip, retire
-`__pycache__` et `.pyc`, fixe les droits (644 fichiers, 755 dossiers et exécutables) et produit :
+les parquets et `raw/` de `alphaforge/data/long/` s'ils existent localement, retire `__pycache__` et `.pyc`, fixe les droits (644 fichiers, 755 dossiers et exécutables) et produit :
 
 - `<out_dir>/agents.zip` : environ 32 Mo compressé, 70 Mo décompressé (limites vérifiées : 250 Mo et 750 Mo);
 - `<out_dir>/knowledge/` : les fichiers `**/*.md` de `app/knowledge/general/`, à pousser sous `general/`.
@@ -170,7 +173,9 @@ Construction et contrôle du portefeuille à partir d'un `PolicySpec` (sortie de
 | `finance/llm/` | `llm_call()` via `bedrock-runtime` Converse (sortie structurée native) en mode `live`, `record` ou `replay` ; clé sha256 canonique ; `FileStore` ou `DynamoS3Store` en écriture unique ; `ReplayModel` pour Strands. |
 | `finance/observability/` | Spans OpenTelemetry GenAI (JSONL, X-Ray OTLP), `log_event` vers CloudWatch, vérificateur numérique par phrase, ancrage Guardrail, journal des décisions chaîné par hash (`verify_chain`). |
 | `finance/rules/canada_2026.yaml` | Paramètres canadiens 2026, chacun avec sa source officielle et son statut. |
+| `finance/backtest/` | Moteur de backtest mensuel 1926-2026 (fenêtres, stratégies ex-ante, ORACLE, sélection robuste, walk-forward, traces) ; données longues dans `data/long/`. Voir ci-dessous. |
 | `scripts/finance/` | `demo_trace.py` (démo de bout en bout sous une trace), `feasibility_levels.py` (faisabilité de la table de risque de F1), `bedrock_smoke.py`. |
+| `scripts/backtest/` | Études par persona sur le moteur (profils YAML, analyses, synthèses versionnées). |
 | `tests/finance/` | Tests F2-F4 sur un mandat générique ; `fixtures/llm_records/` contient les réponses LLM rejouées. |
 
 ```sh
@@ -192,3 +197,29 @@ Ressources AWS de traçabilité (Terraform, `infrastructure/infra/traceability.t
 | `ALPHAFORGE_REPLAY_TABLE` | `llm_replay_table` | Index DynamoDB du rejeu LLM. |
 | `ALPHAFORGE_DECISIONS_TABLE` | `decisions_table` | Tête de chaîne et maillons du journal des décisions. |
 | `ALPHAFORGE_OTLP_XRAY=1` | — | Exporte les spans vers X-Ray (Transaction Search, indexation 100 %). |
+
+### Moteur de backtest (`finance/backtest/`)
+
+`alphaforge.finance.backtest` simule des stratégies d'allocation sur des fenêtres historiques mensuelles (1926-2026)
+et écrit une trace JSON par exécution (hash des données et du moteur, graine, période, résultats). Simulation
+seulement. Il dépend du groupe `finance` (numpy, pandas, scipy, pyarrow), pas des dépendances de base. Les parquets de
+`src/alphaforge/data/long/` ne sont pas versionnés (licences yfinance, Moody's, OCDE) : on les reconstruit avec le
+groupe `backtest-data`. Détails : [`src/alphaforge/finance/backtest/README.md`](src/alphaforge/finance/backtest/README.md),
+sources : [`src/alphaforge/data/long/SOURCES.md`](src/alphaforge/data/long/SOURCES.md), études :
+[`scripts/backtest/README.md`](scripts/backtest/README.md).
+
+```sh
+uv run --group finance --group backtest-data python -I -m alphaforge.finance.backtest.build_data  # parquets dans data/long/
+uv run --group finance python -I -m alphaforge.finance.backtest.run --profile example
+uv run --group finance pytest tests/finance          # tests du moteur et du volet finance
+```
+
+Sans le groupe `finance` (CI), les tests du moteur sautent (`pytest.importorskip`) ; sans les parquets, ceux qui
+lisent les données sautent aussi, avec la commande de reconstruction en raison.
+
+| Variable | Défaut | Rôle |
+| --- | --- | --- |
+| `ALPHAFORGE_BT_DATA` | `src/alphaforge/data/long` | Données traitées du moteur (et `raw/` des téléchargements). |
+| `ALPHAFORGE_STARTER_DIR` | `src/alphaforge/data/starter` | Jeu de départ lu par `build_data`. |
+| `ALPHAFORGE_BT_PROFILES` | `finance/backtest/profiles`, puis `scripts/backtest/profiles` | Dossiers des profils YAML (séparés par `os.pathsep`). |
+| `ALPHAFORGE_BT_RESULTS` | `scripts/backtest/results` (checkout), sinon `./backtest-results` | Traces des exécutions. |

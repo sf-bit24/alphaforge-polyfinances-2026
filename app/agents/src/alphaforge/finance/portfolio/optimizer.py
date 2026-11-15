@@ -18,10 +18,10 @@ from dataclasses import dataclass, field
 import cvxpy as cp
 import numpy as np
 
+from ..backtest.strategies import ledoit_wolf
 from ..contracts import PolicySpec
 from ..contracts.policy import CONTROL_ONLY_MEASURES
 from ..observability.telemetry import traced_tool
-from ._engine import ledoit_wolf
 from .compile import CompiledPolicy, compile_policy
 from .market import ReturnWindow, returns_window
 

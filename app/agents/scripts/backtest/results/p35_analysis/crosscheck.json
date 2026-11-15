@@ -1,0 +1,1063 @@
+{
+ "run_id": "crosscheck",
+ "created_utc": "20261115T000248Z",
+ "disclaimer": "Simulation historique uniquement (donnees publiques). Ne constitue pas un conseil financier. Les resultats passes ne predisent pas les resultats futurs. Les lignes hindsight=True (ORACLE) utilisent le futur et sont non investissables.",
+ "engine_sha256": "4d3e707a3271717d",
+ "data_version": {
+  "data_sha256": "008f122d5da4f8f7",
+  "built_utc": "2026-11-14T22:15:31+00:00",
+  "last_complete_month": "2026-10-31"
+ },
+ "script": "analysis/p35/crosscheck.py",
+ "params": {
+  "traces": [
+   "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/p35_B_cad/20261114T235756Z_rolling_h15.json",
+   "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/p35_B_cad/20261114T235713Z_rolling_h20.json",
+   "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/p35_A_usd/20261114T235516Z_rolling_h0.5.json",
+   "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/p35_B_tickers/20261114T235401Z_non_overlapping_h4.9167.json",
+   "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/p35_B_usd1926/20261114T235835Z_rolling_h15.json"
+  ]
+ },
+ "results": {
+  "B15_robust": {
+   "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/p35_B_cad/20261114T235756Z_rolling_h15.json",
+   "strategy": "risk_parity_36m",
+   "mean_weights": {
+    "CA_EQ": 0.12822,
+    "US_MKT": 0.13443714285714287,
+    "US_IND_NODUR": 0.060128571428571434,
+    "US_IND_HLTH": 0.04053142857142857,
+    "CA_GOV_10Y": 0.2717371428571429,
+    "UST_5Y": 0.2077742857142857,
+    "CA_TBILL": 0.016985714285714288,
+    "UST_TBILL": 0.01689714285714286,
+    "GOLD": 0.12329142857142857
+   },
+   "class_weights": {
+    "actions_CA_titres": 0.0,
+    "actions_US_titres_proxy_secteurs": 0.10066,
+    "FNB_actions": 0.26265714285714287,
+    "FNB_oblig_et_encaisse": 0.5133942857142857,
+    "or": 0.12329142857142857,
+    "crypto": 0.0
+   },
+   "usd_share": 0.58306,
+   "weights_range_over_windows": {
+    "CA_EQ": [
+     0.1179,
+     0.1469
+    ],
+    "US_MKT": [
+     0.1244,
+     0.1503
+    ],
+    "US_IND_NODUR": [
+     0.0483,
+     0.0652
+    ],
+    "US_IND_HLTH": [
+     0.0361,
+     0.0462
+    ],
+    "CA_GOV_10Y": [
+     0.2176,
+     0.3181
+    ],
+    "UST_5Y": [
+     0.149,
+     0.2603
+    ],
+    "CA_TBILL": [
+     0.0137,
+     0.0201
+    ],
+    "UST_TBILL": [
+     0.0136,
+     0.0201
+    ],
+    "GOLD": [
+     0.0858,
+     0.1396
+    ]
+   },
+   "oracle_class_p10_p90": {
+    "actions_CA_titres": [
+     0.0,
+     0.0
+    ],
+    "actions_US_titres_proxy_secteurs": [
+     0.07113640000000002,
+     0.1
+    ],
+    "FNB_actions": [
+     0.4049676,
+     0.6006810000000001
+    ],
+    "FNB_oblig_et_encaisse": [
+     0.15398620000000005,
+     0.48380400000000007
+    ],
+    "or": [
+     0.0,
+     0.15
+    ],
+    "crypto": [
+     0.0,
+     0.0
+    ]
+   },
+   "oracle_usd_p10_p90": [
+    0.11141600000000002,
+    0.9542304000000001
+   ],
+   "oracle_gap_final_real_wealth_mean": 0.9642012208130671,
+   "oracle_gap_final_real_wealth_median": 0.7580227353030519,
+   "walk_forward_gap_final_real_wealth_mean": 1.0000460279366583,
+   "walk_forward_final_real_wealth_p10": 0.6167140956530052
+  },
+  "B15_e40_u50_gold15": {
+   "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/p35_B_cad/20261114T235756Z_rolling_h15.json",
+   "strategy": "e40_u50_gold15",
+   "mean_weights": {
+    "CA_EQ": 0.17226857142857144,
+    "US_MKT": 0.17259428571428573,
+    "US_IND_NODUR": 0.0,
+    "US_IND_HLTH": 0.0,
+    "CA_GOV_10Y": 0.2537485714285714,
+    "UST_5Y": 0.2526371428571429,
+    "CA_TBILL": 0.0,
+    "UST_TBILL": 0.0,
+    "GOLD": 0.1487742857142857
+   },
+   "class_weights": {
+    "actions_CA_titres": 0.0,
+    "actions_US_titres_proxy_secteurs": 0.0,
+    "FNB_actions": 0.34486285714285714,
+    "FNB_oblig_et_encaisse": 0.5063857142857142,
+    "or": 0.1487742857142857,
+    "crypto": 0.0
+   },
+   "usd_share": 0.5740057142857143,
+   "weights_range_over_windows": {
+    "CA_EQ": [
+     0.1701,
+     0.1747
+    ],
+    "US_MKT": [
+     0.1666,
+     0.178
+    ],
+    "US_IND_NODUR": [
+     0.0,
+     0.0
+    ],
+    "US_IND_HLTH": [
+     0.0,
+     0.0
+    ],
+    "CA_GOV_10Y": [
+     0.248,
+     0.256
+    ],
+    "UST_5Y": [
+     0.2496,
+     0.2564
+    ],
+    "CA_TBILL": [
+     0.0,
+     0.0
+    ],
+    "UST_TBILL": [
+     0.0,
+     0.0
+    ],
+    "GOLD": [
+     0.1416,
+     0.1548
+    ]
+   },
+   "oracle_class_p10_p90": {
+    "actions_CA_titres": [
+     0.0,
+     0.0
+    ],
+    "actions_US_titres_proxy_secteurs": [
+     0.07113640000000002,
+     0.1
+    ],
+    "FNB_actions": [
+     0.4049676,
+     0.6006810000000001
+    ],
+    "FNB_oblig_et_encaisse": [
+     0.15398620000000005,
+     0.48380400000000007
+    ],
+    "or": [
+     0.0,
+     0.15
+    ],
+    "crypto": [
+     0.0,
+     0.0
+    ]
+   },
+   "oracle_usd_p10_p90": [
+    0.11141600000000002,
+    0.9542304000000001
+   ],
+   "oracle_gap_final_real_wealth_mean": 1.036261810946199,
+   "oracle_gap_final_real_wealth_median": 0.7923052360836347,
+   "walk_forward_gap_final_real_wealth_mean": 1.0000460279366583,
+   "walk_forward_final_real_wealth_p10": 0.6167140956530052
+  },
+  "B15_bnc_pondere_usdfi": {
+   "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/p35_B_cad/20261114T235756Z_rolling_h15.json",
+   "strategy": "bnc_pondere_usdfi",
+   "mean_weights": {
+    "CA_EQ": 0.13638,
+    "US_MKT": 0.31856285714285715,
+    "US_IND_NODUR": 0.0,
+    "US_IND_HLTH": 0.0,
+    "CA_GOV_10Y": 0.36220857142857144,
+    "UST_5Y": 0.18285142857142858,
+    "CA_TBILL": 0.0,
+    "UST_TBILL": 0.0,
+    "GOLD": 0.0
+   },
+   "class_weights": {
+    "actions_CA_titres": 0.0,
+    "actions_US_titres_proxy_secteurs": 0.0,
+    "FNB_actions": 0.45494285714285715,
+    "FNB_oblig_et_encaisse": 0.54506,
+    "or": 0.0,
+    "crypto": 0.0
+   },
+   "usd_share": 0.5014142857142857,
+   "weights_range_over_windows": {
+    "CA_EQ": [
+     0.1333,
+     0.1389
+    ],
+    "US_MKT": [
+     0.31,
+     0.3254
+    ],
+    "US_IND_NODUR": [
+     0.0,
+     0.0
+    ],
+    "US_IND_HLTH": [
+     0.0,
+     0.0
+    ],
+    "CA_GOV_10Y": [
+     0.356,
+     0.368
+    ],
+    "UST_5Y": [
+     0.1807,
+     0.1842
+    ],
+    "CA_TBILL": [
+     0.0,
+     0.0
+    ],
+    "UST_TBILL": [
+     0.0,
+     0.0
+    ],
+    "GOLD": [
+     0.0,
+     0.0
+    ]
+   },
+   "oracle_class_p10_p90": {
+    "actions_CA_titres": [
+     0.0,
+     0.0
+    ],
+    "actions_US_titres_proxy_secteurs": [
+     0.07113640000000002,
+     0.1
+    ],
+    "FNB_actions": [
+     0.4049676,
+     0.6006810000000001
+    ],
+    "FNB_oblig_et_encaisse": [
+     0.15398620000000005,
+     0.48380400000000007
+    ],
+    "or": [
+     0.0,
+     0.15
+    ],
+    "crypto": [
+     0.0,
+     0.0
+    ]
+   },
+   "oracle_usd_p10_p90": [
+    0.11141600000000002,
+    0.9542304000000001
+   ],
+   "oracle_gap_final_real_wealth_mean": 0.7567297049487034,
+   "oracle_gap_final_real_wealth_median": 0.561192390213261,
+   "walk_forward_gap_final_real_wealth_mean": 1.0000460279366583,
+   "walk_forward_final_real_wealth_p10": 0.6167140956530052
+  },
+  "B20_robust": {
+   "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/p35_B_cad/20261114T235713Z_rolling_h20.json",
+   "strategy": "e40_u0",
+   "mean_weights": {
+    "CA_EQ": 0.4040566666666667,
+    "US_MKT": 0.0,
+    "US_IND_NODUR": 0.0,
+    "US_IND_HLTH": 0.0,
+    "CA_GOV_10Y": 0.5959433333333333,
+    "UST_5Y": 0.0,
+    "CA_TBILL": 0.0,
+    "UST_TBILL": 0.0,
+    "GOLD": 0.0
+   },
+   "class_weights": {
+    "actions_CA_titres": 0.0,
+    "actions_US_titres_proxy_secteurs": 0.0,
+    "FNB_actions": 0.4040566666666667,
+    "FNB_oblig_et_encaisse": 0.5959433333333333,
+    "or": 0.0,
+    "crypto": 0.0
+   },
+   "usd_share": 0.0,
+   "weights_range_over_windows": {
+    "CA_EQ": [
+     0.4009,
+     0.408
+    ],
+    "US_MKT": [
+     0.0,
+     0.0
+    ],
+    "US_IND_NODUR": [
+     0.0,
+     0.0
+    ],
+    "US_IND_HLTH": [
+     0.0,
+     0.0
+    ],
+    "CA_GOV_10Y": [
+     0.592,
+     0.5991
+    ],
+    "UST_5Y": [
+     0.0,
+     0.0
+    ],
+    "CA_TBILL": [
+     0.0,
+     0.0
+    ],
+    "UST_TBILL": [
+     0.0,
+     0.0
+    ],
+    "GOLD": [
+     0.0,
+     0.0
+    ]
+   },
+   "oracle_class_p10_p90": {
+    "actions_CA_titres": [
+     0.0,
+     0.0
+    ],
+    "actions_US_titres_proxy_secteurs": [
+     0.1,
+     0.1
+    ],
+    "FNB_actions": [
+     0.3965653,
+     0.9
+    ],
+    "FNB_oblig_et_encaisse": [
+     0.0,
+     0.47847600000000007
+    ],
+    "or": [
+     0.0,
+     0.15
+    ],
+    "crypto": [
+     0.0,
+     0.0
+    ]
+   },
+   "oracle_usd_p10_p90": [
+    0.15939290000000003,
+    1.0
+   ],
+   "oracle_gap_final_real_wealth_mean": 1.3199407644144374,
+   "oracle_gap_final_real_wealth_median": 0.43990297672107026,
+   "walk_forward_gap_final_real_wealth_mean": 0.6394122691688101,
+   "walk_forward_final_real_wealth_p10": 0.8694435767217582
+  },
+  "A_robust": {
+   "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/p35_A_usd/20261114T235516Z_rolling_h0.5.json",
+   "strategy": "usd_tbill_lump",
+   "mean_weights": {
+    "UST_TBILL": 1.0,
+    "UST_2Y": 0.0,
+    "UST_5Y": 0.0,
+    "CA_TBILL": 0.0,
+    "CA_GOV_10Y": 0.0
+   },
+   "class_weights": {
+    "actions_CA_titres": 0.0,
+    "actions_US_titres_proxy_secteurs": 0.0,
+    "FNB_actions": 0.0,
+    "FNB_oblig_et_encaisse": 1.0,
+    "or": 0.0,
+    "crypto": 0.0
+   },
+   "usd_share": 1.0,
+   "weights_range_over_windows": {
+    "UST_TBILL": [
+     1.0,
+     1.0
+    ],
+    "UST_2Y": [
+     0.0,
+     0.0
+    ],
+    "UST_5Y": [
+     0.0,
+     0.0
+    ],
+    "CA_TBILL": [
+     0.0,
+     0.0
+    ],
+    "CA_GOV_10Y": [
+     0.0,
+     0.0
+    ]
+   },
+   "oracle_class_p10_p90": {
+    "actions_CA_titres": [
+     0.0,
+     0.0
+    ],
+    "actions_US_titres_proxy_secteurs": [
+     0.0,
+     0.0
+    ],
+    "FNB_actions": [
+     0.0,
+     0.0
+    ],
+    "FNB_oblig_et_encaisse": [
+     1.0,
+     1.0
+    ],
+    "or": [
+     0.0,
+     0.0
+    ],
+    "crypto": [
+     0.0,
+     0.0
+    ]
+   },
+   "oracle_usd_p10_p90": [
+    0.0,
+    1.0
+   ],
+   "oracle_gap_final_real_wealth_mean": 0.024587419710762573,
+   "oracle_gap_final_real_wealth_median": 0.006857081952484911,
+   "walk_forward_gap_final_real_wealth_mean": 0.024602675882338918,
+   "walk_forward_final_real_wealth_p10": 0.9842468413135552
+  },
+  "tickers_oracle": {
+   "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/p35_B_tickers/20261114T235401Z_non_overlapping_h4.9167.json",
+   "strategy": "e40_u50_gold15",
+   "mean_weights": {
+    "XIU.TO": 0.175,
+    "SPY": 0.173,
+    "PG": 0.0,
+    "JNJ": 0.0,
+    "XBB.TO": 0.2468,
+    "AGG": 0.2473,
+    "ZST.TO": 0.0,
+    "UST_TBILL": 0.0,
+    "GLD": 0.158
+   },
+   "class_weights": {
+    "actions_CA_titres": 0.0,
+    "actions_US_titres_proxy_secteurs": 0.0,
+    "FNB_actions": 0.348,
+    "FNB_oblig_et_encaisse": 0.4941,
+    "or": 0.158,
+    "crypto": 0.0
+   },
+   "usd_share": 0.5783,
+   "weights_range_over_windows": {
+    "XIU.TO": [
+     0.175,
+     0.175
+    ],
+    "SPY": [
+     0.173,
+     0.173
+    ],
+    "PG": [
+     0.0,
+     0.0
+    ],
+    "JNJ": [
+     0.0,
+     0.0
+    ],
+    "XBB.TO": [
+     0.2468,
+     0.2468
+    ],
+    "AGG": [
+     0.2473,
+     0.2473
+    ],
+    "ZST.TO": [
+     0.0,
+     0.0
+    ],
+    "UST_TBILL": [
+     0.0,
+     0.0
+    ],
+    "GLD": [
+     0.158,
+     0.158
+    ]
+   },
+   "oracle_class_p10_p90": {
+    "actions_CA_titres": [
+     0.0,
+     0.0
+    ],
+    "actions_US_titres_proxy_secteurs": [
+     0.1,
+     0.1
+    ],
+    "FNB_actions": [
+     0.75,
+     0.75
+    ],
+    "FNB_oblig_et_encaisse": [
+     0.0,
+     0.0
+    ],
+    "or": [
+     0.15,
+     0.15
+    ],
+    "crypto": [
+     0.0,
+     0.0
+    ]
+   },
+   "oracle_usd_p10_p90": [
+    1.0,
+    1.0
+   ],
+   "oracle_gap_final_real_wealth_mean": 0.4389784057699059,
+   "oracle_gap_final_real_wealth_median": 0.4389784057699059
+  },
+  "B2_reselect": {
+   "B15": {
+    "willingness_0.15": {
+     "limit": 0.15,
+     "robust_choice": "risk_parity_36m",
+     "top5": {
+      "risk_parity_36m": {
+       "score_p10": 1.600623607050546,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.10921998811882183
+      },
+      "e40_u50_gold15": {
+       "score_p10": 1.481398886312271,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.11263962103888714
+      },
+      "e40_u50_gold10": {
+       "score_p10": 1.4357299168489683,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.10860793960994641
+      },
+      "bnc_pondere_usdfi": {
+       "score_p10": 1.4241340646491094,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.14013722677048135
+      },
+      "e40_u50_def10_gold10": {
+       "score_p10": 1.4103665544475659,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.1099117053353923
+      }
+     },
+     "bnc_eligible": [
+      "bnc_pondere_usdfi",
+      "bnc_conservateur_usdfi",
+      "bnc_prudent_usdfi"
+     ],
+     "best_bnc": "bnc_pondere_usdfi"
+    },
+    "capacity_Lcap": {
+     "limit": 0.39028406745611244,
+     "robust_choice": "e60_u50",
+     "top5": {
+      "e60_u50": {
+       "score_p10": 1.748646041625499,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.17911313692912223
+      },
+      "momentum_top3": {
+       "score_p10": 1.6966036451717748,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.16173693370987496
+      },
+      "risk_parity_36m": {
+       "score_p10": 1.600623607050546,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.10921998811882183
+      },
+      "bnc_equilibre": {
+       "score_p10": 1.5893495109888616,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.1931211737913886
+      },
+      "bnc_croissance": {
+       "score_p10": 1.565398835313928,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.30348813675434727
+      }
+     },
+     "bnc_eligible": [
+      "bnc_equilibre",
+      "bnc_croissance",
+      "bnc_croissance_usdfi",
+      "bnc_pondere",
+      "bnc_equilibre_usdfi",
+      "bnc_pondere_usdfi",
+      "bnc_conservateur",
+      "bnc_conservateur_usdfi",
+      "bnc_prudent",
+      "bnc_prudent_usdfi"
+     ],
+     "best_bnc": "bnc_equilibre"
+    },
+    "min_of_both": {
+     "limit": 0.15,
+     "robust_choice": "risk_parity_36m",
+     "top5": {
+      "risk_parity_36m": {
+       "score_p10": 1.600623607050546,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.10921998811882183
+      },
+      "e40_u50_gold15": {
+       "score_p10": 1.481398886312271,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.11263962103888714
+      },
+      "e40_u50_gold10": {
+       "score_p10": 1.4357299168489683,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.10860793960994641
+      },
+      "bnc_pondere_usdfi": {
+       "score_p10": 1.4241340646491094,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.14013722677048135
+      },
+      "e40_u50_def10_gold10": {
+       "score_p10": 1.4103665544475659,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.1099117053353923
+      }
+     },
+     "bnc_eligible": [
+      "bnc_pondere_usdfi",
+      "bnc_conservateur_usdfi",
+      "bnc_prudent_usdfi"
+     ],
+     "best_bnc": "bnc_pondere_usdfi"
+    }
+   },
+   "B20": {
+    "willingness_0.15": {
+     "limit": 0.15,
+     "robust_choice": "e40_u0",
+     "top5": {
+      "e40_u0": {
+       "score_p10": 4.717932307077881,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.13367186967008637
+      },
+      "risk_parity_36m": {
+       "score_p10": 4.543943074005881,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.10921998811882183
+      },
+      "e40_u50_gold15": {
+       "score_p10": 4.23151233894761,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.11263962103888714
+      },
+      "e40_u25": {
+       "score_p10": 4.125922261333651,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.12295070318928192
+      },
+      "e40_u50_def10_gold10": {
+       "score_p10": 4.090885054116644,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.1099117053353923
+      }
+     },
+     "bnc_eligible": [
+      "bnc_pondere_usdfi",
+      "bnc_conservateur_usdfi",
+      "bnc_prudent_usdfi"
+     ],
+     "best_bnc": "bnc_pondere_usdfi"
+    },
+    "capacity_Lcap": {
+     "limit": 0.39028406745611244,
+     "robust_choice": "momentum_top3",
+     "top5": {
+      "momentum_top3": {
+       "score_p10": 5.761246170027275,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.16173693370987496
+      },
+      "bnc_croissance": {
+       "score_p10": 5.554671989052856,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.3034881367543474
+      },
+      "bnc_croissance_usdfi": {
+       "score_p10": 5.554671989052856,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.3034881367543474
+      },
+      "bnc_equilibre": {
+       "score_p10": 5.090227062844048,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.1931211737913886
+      },
+      "bnc_equilibre_usdfi": {
+       "score_p10": 4.9572607729958875,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.1888761925259903
+      }
+     },
+     "bnc_eligible": [
+      "bnc_croissance",
+      "bnc_croissance_usdfi",
+      "bnc_equilibre",
+      "bnc_equilibre_usdfi",
+      "bnc_pondere",
+      "bnc_pondere_usdfi",
+      "bnc_conservateur",
+      "bnc_prudent",
+      "bnc_conservateur_usdfi",
+      "bnc_prudent_usdfi"
+     ],
+     "best_bnc": "bnc_croissance"
+    },
+    "min_of_both": {
+     "limit": 0.15,
+     "robust_choice": "e40_u0",
+     "top5": {
+      "e40_u0": {
+       "score_p10": 4.717932307077881,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.13367186967008637
+      },
+      "risk_parity_36m": {
+       "score_p10": 4.543943074005881,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.10921998811882183
+      },
+      "e40_u50_gold15": {
+       "score_p10": 4.23151233894761,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.11263962103888714
+      },
+      "e40_u25": {
+       "score_p10": 4.125922261333651,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.12295070318928192
+      },
+      "e40_u50_def10_gold10": {
+       "score_p10": 4.090885054116644,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.1099117053353923
+      }
+     },
+     "bnc_eligible": [
+      "bnc_pondere_usdfi",
+      "bnc_conservateur_usdfi",
+      "bnc_prudent_usdfi"
+     ],
+     "best_bnc": "bnc_pondere_usdfi"
+    }
+   },
+   "USD1926_15": {
+    "willingness_0.15": {
+     "limit": 0.15,
+     "robust_choice": "bncus_prudent",
+     "top5": {
+      "bncus_prudent": {
+       "score_p10": -0.11089934571591042,
+       "breach_rate": 0.05813953488372093,
+       "max_drawdown_worst": 0.15288341906067404
+      },
+      "e20_5y": {
+       "score_p10": -0.11089934571591042,
+       "breach_rate": 0.05813953488372093,
+       "max_drawdown_worst": 0.15288341906067404
+      },
+      "risk_parity_36m": {
+       "score_p10": -0.21807314389582177,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.14725095019991186
+      },
+      "cash_100": {
+       "score_p10": -0.6245899130179593,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.0008998599580108957
+      },
+      "bncus_croissance": {
+       "score_p10": 0.5273485965757702,
+       "breach_rate": 1.0,
+       "max_drawdown_worst": 0.7219451686417309
+      }
+     },
+     "bnc_eligible": [
+      "bncus_prudent"
+     ],
+     "best_bnc": "bncus_prudent"
+    },
+    "capacity_Lcap": {
+     "limit": 0.39028406745611244,
+     "robust_choice": "e60_10y",
+     "top5": {
+      "e60_10y": {
+       "score_p10": 0.45978289571024844,
+       "breach_rate": 0.05813953488372093,
+       "max_drawdown_worst": 0.5866033987761572
+      },
+      "bncus_equilibre": {
+       "score_p10": 0.4435257702172486,
+       "breach_rate": 0.05813953488372093,
+       "max_drawdown_worst": 0.5704285347084752
+      },
+      "e60_5y": {
+       "score_p10": 0.4435257702172486,
+       "breach_rate": 0.05813953488372093,
+       "max_drawdown_worst": 0.5704285347084752
+      },
+      "e50_5y": {
+       "score_p10": 0.3897947040615972,
+       "breach_rate": 0.05813953488372093,
+       "max_drawdown_worst": 0.47835076198515947
+      },
+      "e50_10y": {
+       "score_p10": 0.3530969402131727,
+       "breach_rate": 0.05813953488372093,
+       "max_drawdown_worst": 0.5021938240678826
+      }
+     },
+     "bnc_eligible": [
+      "bncus_equilibre",
+      "bncus_pondere",
+      "bncus_conservateur",
+      "bncus_prudent"
+     ],
+     "best_bnc": "bncus_equilibre"
+    }
+   },
+   "A_6m": {
+    "capacity_and_AMF1_0.0": {
+     "limit": 0.0,
+     "robust_choice": "usd_tbill_lump",
+     "top5": {
+      "usd_tbill_lump": {
+       "score_p10": -0.031030660451464208,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.0
+      },
+      "usd_2y_lump": {
+       "score_p10": -0.04575686767332456,
+       "breach_rate": 0.7828054298642534,
+       "max_drawdown_worst": 0.039381961776217445
+      },
+      "half_usd_half_cad": {
+       "score_p10": -0.0539647606485641,
+       "breach_rate": 0.7496229260935143,
+       "max_drawdown_worst": 0.08978062356520433
+      },
+      "usd_5y_lump": {
+       "score_p10": -0.08224216300457235,
+       "breach_rate": 0.9230769230769231,
+       "max_drawdown_worst": 0.09940460846699473
+      },
+      "cad_tbill_unconverted": {
+       "score_p10": -0.09003422508457037,
+       "breach_rate": 0.8582202111613876,
+       "max_drawdown_worst": 0.18668157677933828
+      }
+     },
+     "bnc_eligible": [],
+     "best_bnc": null
+    },
+    "willingness_Q10_0.15": {
+     "limit": 0.15,
+     "robust_choice": "usd_tbill_lump",
+     "top5": {
+      "usd_tbill_lump": {
+       "score_p10": -0.031030660451464208,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.0
+      },
+      "usd_2y_lump": {
+       "score_p10": -0.04575686767332456,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.039381961776217445
+      },
+      "half_usd_half_cad": {
+       "score_p10": -0.0539647606485641,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.08978062356520433
+      },
+      "usd_5y_lump": {
+       "score_p10": -0.08224216300457235,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.09940460846699473
+      },
+      "cad_tbill_unconverted": {
+       "score_p10": -0.09003422508457037,
+       "breach_rate": 0.00904977375565611,
+       "max_drawdown_worst": 0.18668157677933828
+      }
+     },
+     "bnc_eligible": [],
+     "best_bnc": null
+    },
+    "tolerance_0.05": {
+     "limit": 0.05,
+     "robust_choice": "usd_tbill_lump",
+     "top5": {
+      "usd_tbill_lump": {
+       "score_p10": -0.031030660451464208,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.0
+      },
+      "usd_2y_lump": {
+       "score_p10": -0.04575686767332456,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.039381961776217445
+      },
+      "half_usd_half_cad": {
+       "score_p10": -0.0539647606485641,
+       "breach_rate": 0.016591251885369532,
+       "max_drawdown_worst": 0.08978062356520433
+      },
+      "usd_5y_lump": {
+       "score_p10": -0.08224216300457235,
+       "breach_rate": 0.05128205128205128,
+       "max_drawdown_worst": 0.09940460846699473
+      },
+      "cad_tbill_unconverted": {
+       "score_p10": -0.09003422508457037,
+       "breach_rate": 0.12217194570135746,
+       "max_drawdown_worst": 0.18668157677933828
+      }
+     },
+     "bnc_eligible": [],
+     "best_bnc": null
+    }
+   },
+   "A_6m_tickers": {
+    "capacity_0.0": {
+     "limit": 0.0,
+     "robust_choice": "usd_tbill_lump",
+     "top5": {
+      "usd_tbill_lump": {
+       "score_p10": -0.04518524390817941,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.0
+      },
+      "half_usd_tbill_half_zst": {
+       "score_p10": -0.07600910611710503,
+       "breach_rate": 0.9945054945054945,
+       "max_drawdown_worst": 0.07473631694534766
+      },
+      "agg_lump": {
+       "score_p10": -0.08129538722545085,
+       "breach_rate": 0.989010989010989,
+       "max_drawdown_worst": 0.10157601894037693
+      },
+      "zst_unconverted": {
+       "score_p10": -0.12176016950197856,
+       "breach_rate": 1.0,
+       "max_drawdown_worst": 0.14908963260744756
+      },
+      "cad_tbill_unconverted": {
+       "score_p10": -0.1272628961596834,
+       "breach_rate": 1.0,
+       "max_drawdown_worst": 0.1428540130468563
+      }
+     },
+     "bnc_eligible": [],
+     "best_bnc": null
+    },
+    "willingness_0.15": {
+     "limit": 0.15,
+     "robust_choice": "usd_tbill_lump",
+     "top5": {
+      "usd_tbill_lump": {
+       "score_p10": -0.04518524390817941,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.0
+      },
+      "half_usd_tbill_half_zst": {
+       "score_p10": -0.07600910611710503,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.07473631694534766
+      },
+      "agg_lump": {
+       "score_p10": -0.08129538722545085,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.10157601894037693
+      },
+      "zst_unconverted": {
+       "score_p10": -0.12176016950197856,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.14908963260744756
+      },
+      "cad_tbill_unconverted": {
+       "score_p10": -0.1272628961596834,
+       "breach_rate": 0.0,
+       "max_drawdown_worst": 0.1428540130468563
+      }
+     },
+     "bnc_eligible": [],
+     "best_bnc": null
+    }
+   }
+  }
+ }
+}

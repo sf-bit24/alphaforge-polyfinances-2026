@@ -1,0 +1,1567 @@
+{
+ "run_id": "bnc",
+ "created_utc": "20261115T004538Z",
+ "disclaimer": "Simulation historique uniquement (donnees publiques). Ne constitue pas un conseil financier. Les resultats passes ne predisent pas les resultats futurs. Les lignes hindsight=True (ORACLE) utilisent le futur et sont non investissables.",
+ "engine_sha256": "4d3e707a3271717d",
+ "data_version": {
+  "data_sha256": "008f122d5da4f8f7",
+  "built_utc": "2026-11-14T22:15:31+00:00",
+  "last_complete_month": "2026-10-31"
+ },
+ "script": "analysis/croisement/bnc.py",
+ "inputs": [
+  "results/amira_etf/20261114T224838Z_non_overlapping_h15.json",
+  "results/amira_etf/20261114T225010Z_rolling_h15.json",
+  "results/croisement_runs/x_bnc_amira_cap/20261115T003126Z_non_overlapping_h15.json",
+  "results/croisement_runs/x_bnc_amira_cap/20261115T003136Z_rolling_h15.json",
+  "results/croisement_runs/x_bnc_amira_w30/20261115T003145Z_non_overlapping_h15.json",
+  "results/croisement_runs/x_bnc_amira_w30/20261115T003156Z_rolling_h15.json",
+  "results/croisement_runs/x_bnc_mateo_cap/20261115T003030Z_non_overlapping_h10.json",
+  "results/croisement_runs/x_bnc_mateo_cap/20261115T003046Z_rolling_h10.json",
+  "results/croisement_runs/x_bnc_mateo_w15/20261115T003103Z_non_overlapping_h10.json",
+  "results/croisement_runs/x_bnc_mateo_w15/20261115T003115Z_rolling_h10.json",
+  "results/croisement_runs/x_bnc_robert_cap/20261115T002940Z_non_overlapping_h4.json",
+  "results/croisement_runs/x_bnc_robert_cap/20261115T002954Z_rolling_h4.json",
+  "results/croisement_runs/x_bnc_robert_cap_court/20261115T003738Z_non_overlapping_h4.json",
+  "results/croisement_runs/x_bnc_robert_cap_court/20261115T003744Z_rolling_h4.json",
+  "results/croisement_runs/x_bnc_robert_w05/20261115T003005Z_non_overlapping_h4.json",
+  "results/croisement_runs/x_bnc_robert_w05/20261115T003018Z_rolling_h4.json",
+  "results/croisement_runs/x_bnc_tickers/20261115T003205Z_non_overlapping_h4.9167.json",
+  "results/mateo_cad_esg/20261114T234337Z_non_overlapping_h10.json",
+  "results/mateo_cad_esg/20261114T234928Z_rolling_h10.json",
+  "results/robert_cad/20261114T233723Z_non_overlapping_h4.json",
+  "results/robert_cad/20261114T234006Z_rolling_h4.json"
+ ],
+ "params": {
+  "doc": "Item 3 - public BNC target portfolios (00-cadre.md: Prudent 80/6/14 ... Actions 0/30/70, % fixed income /\nCA equity / global equity) backtested under each persona's limits (capacity and willingness), CAD 1977+ on\nCA_GOV_10Y / CA_EQ / US_MKT (US_MKT = stand-in for 'actions mondiales', no ex-US index in the data), annual\nrebalancing, 10 bps; and on the real tickers XBB.TO / XIU.TO / SPY, 2021-11 -> 2026-09 (one 59-month window).\nRobust BNC = best p10 of the real annualized return among BNC portfolios with breach_rate <= the persona's\ntolerance (Robert 0.10, Mateo 0.25, Amira 0.10). Compared, on the same windows, with the persona's robust strategy.\nSIMULATION ONLY - BNC portfolios are proxies built from public target weights, not the funds' returns.\n",
+  "limits": {
+   "robert": {
+    "capacite": {
+     "max_drawdown": 0.23,
+     "max_cvar_5": 0.036
+    },
+    "volonte": {
+     "max_drawdown": 0.05,
+     "max_cvar_5": 0.036
+    }
+   },
+   "mateo": {
+    "capacite": {
+     "max_vol": 0.1,
+     "max_drawdown": 0.2
+    },
+    "volonte": {
+     "max_vol": 0.1,
+     "max_drawdown": 0.15
+    }
+   },
+   "amira": {
+    "capacite": {
+     "max_drawdown": 0.4
+    },
+    "sensibilite_0.30": {
+     "max_drawdown": 0.3
+    }
+   }
+  }
+ },
+ "results": {
+  "robert": {
+   "capacite|non_overlapping": {
+    "trace": "results/croisement_runs/x_bnc_robert_cap/20261115T002940Z_non_overlapping_h4.json",
+    "robust_bnc": "bnc_prudent",
+    "assigned": [
+     "bnc_conservateur"
+    ],
+    "assigned_rank_among_bnc": {
+     "bnc_conservateur": 4
+    },
+    "table": [
+     {
+      "strategy": "bnc_prudent",
+      "p10": -0.01564,
+      "median": 0.04406,
+      "maxdd_worst": 0.1536,
+      "breach_rate": 0.0833,
+      "breach_types": {
+       "CVaR5": 0.0833
+      },
+      "p_real_loss": 0.1667,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_pondere",
+      "p10": 0.01155,
+      "median": 0.06246,
+      "maxdd_worst": 0.1567,
+      "breach_rate": 0.4167,
+      "breach_types": {
+       "CVaR5": 0.4167
+      },
+      "p_real_loss": 0.0,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_equilibre",
+      "p10": 0.00433,
+      "median": 0.07156,
+      "maxdd_worst": 0.1804,
+      "breach_rate": 0.75,
+      "breach_types": {
+       "CVaR5": 0.75
+      },
+      "p_real_loss": 0.0833,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_conservateur",
+      "p10": -0.0013,
+      "median": 0.05525,
+      "maxdd_worst": 0.1521,
+      "breach_rate": 0.25,
+      "breach_types": {
+       "CVaR5": 0.25
+      },
+      "p_real_loss": 0.1667,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_croissance",
+      "p10": -0.01246,
+      "median": 0.08219,
+      "maxdd_worst": 0.2471,
+      "breach_rate": 0.8333,
+      "breach_types": {
+       "CVaR5": 0.8333,
+       "maxDD": 0.1667
+      },
+      "p_real_loss": 0.1667,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_actions",
+      "p10": -0.03312,
+      "median": 0.09476,
+      "maxdd_worst": 0.3319,
+      "breach_rate": 0.9167,
+      "breach_types": {
+       "CVaR5": 0.9167,
+       "maxDD": 0.25
+      },
+      "p_real_loss": 0.1667,
+      "eligible": false
+     }
+    ],
+    "cash_100": {
+     "p10": -0.009631991921489202,
+     "p_real_loss": 0.3333333333333333
+    },
+    "persona_robust_same_windows": {
+     "strategy": "eq20_gold10",
+     "trace": "results/robert_cad/20261114T233723Z_non_overlapping_h4.json",
+     "same_windows": true,
+     "p10": 0.028305089811149965,
+     "median": 0.043387278544385066,
+     "maxdd_worst": 0.0970934062764679
+    }
+   },
+   "capacite|rolling": {
+    "trace": "results/croisement_runs/x_bnc_robert_cap/20261115T002954Z_rolling_h4.json",
+    "robust_bnc": null,
+    "assigned": [
+     "bnc_conservateur"
+    ],
+    "assigned_rank_among_bnc": {
+     "bnc_conservateur": 3
+    },
+    "table": [
+     {
+      "strategy": "bnc_pondere",
+      "p10": 0.01074,
+      "median": 0.06021,
+      "maxdd_worst": 0.1567,
+      "breach_rate": 0.4348,
+      "breach_types": {
+       "CVaR5": 0.4348
+      },
+      "p_real_loss": 0.0435,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_equilibre",
+      "p10": 0.00617,
+      "median": 0.06526,
+      "maxdd_worst": 0.1931,
+      "breach_rate": 0.6304,
+      "breach_types": {
+       "CVaR5": 0.6304
+      },
+      "p_real_loss": 0.0652,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_conservateur",
+      "p10": -0.0015,
+      "median": 0.05107,
+      "maxdd_worst": 0.1521,
+      "breach_rate": 0.2609,
+      "breach_types": {
+       "CVaR5": 0.2609
+      },
+      "p_real_loss": 0.1304,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_croissance",
+      "p10": -0.00728,
+      "median": 0.07741,
+      "maxdd_worst": 0.3035,
+      "breach_rate": 0.7391,
+      "breach_types": {
+       "CVaR5": 0.7391,
+       "maxDD": 0.2174
+      },
+      "p_real_loss": 0.1304,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_prudent",
+      "p10": -0.01471,
+      "median": 0.04586,
+      "maxdd_worst": 0.1536,
+      "breach_rate": 0.1522,
+      "breach_types": {
+       "CVaR5": 0.1522
+      },
+      "p_real_loss": 0.1304,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_actions",
+      "p10": -0.02311,
+      "median": 0.08666,
+      "maxdd_worst": 0.4023,
+      "breach_rate": 0.8913,
+      "breach_types": {
+       "CVaR5": 0.8913,
+       "maxDD": 0.2826
+      },
+      "p_real_loss": 0.1739,
+      "eligible": false
+     }
+    ],
+    "cash_100": {
+     "p10": -0.00980068279795776,
+     "p_real_loss": 0.30434782608695654
+    },
+    "persona_robust_same_windows": {
+     "strategy": "eq20_gold10",
+     "trace": "results/robert_cad/20261114T234006Z_rolling_h4.json",
+     "same_windows": true,
+     "p10": 0.015333095167026856,
+     "median": 0.041640506811587374,
+     "maxdd_worst": 0.09709340627646812
+    }
+   },
+   "capacite_oblig_courtes|non_overlapping": {
+    "trace": "results/croisement_runs/x_bnc_robert_cap_court/20261115T003738Z_non_overlapping_h4.json",
+    "robust_bnc": "bnc_conservateur",
+    "assigned": [
+     "bnc_conservateur"
+    ],
+    "assigned_rank_among_bnc": {
+     "bnc_conservateur": 1
+    },
+    "table": [
+     {
+      "strategy": "bnc_conservateur",
+      "p10": 0.01016,
+      "median": 0.04578,
+      "maxdd_worst": 0.101,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_prudent",
+      "p10": 0.00545,
+      "median": 0.03205,
+      "maxdd_worst": 0.0907,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0833,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_pondere",
+      "p10": 0.00631,
+      "median": 0.05686,
+      "maxdd_worst": 0.1335,
+      "breach_rate": 0.3333,
+      "breach_types": {
+       "CVaR5": 0.3333
+      },
+      "p_real_loss": 0.0833,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_equilibre",
+      "p10": -0.0017,
+      "median": 0.0638,
+      "maxdd_worst": 0.1802,
+      "breach_rate": 0.6667,
+      "breach_types": {
+       "CVaR5": 0.6667
+      },
+      "p_real_loss": 0.1667,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_croissance",
+      "p10": -0.01634,
+      "median": 0.08389,
+      "maxdd_worst": 0.2542,
+      "breach_rate": 0.8333,
+      "breach_types": {
+       "CVaR5": 0.8333,
+       "maxDD": 0.25
+      },
+      "p_real_loss": 0.1667,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_actions",
+      "p10": -0.03312,
+      "median": 0.09476,
+      "maxdd_worst": 0.3319,
+      "breach_rate": 0.9167,
+      "breach_types": {
+       "CVaR5": 0.9167,
+       "maxDD": 0.25
+      },
+      "p_real_loss": 0.1667,
+      "eligible": false
+     }
+    ],
+    "cash_100": {
+     "p10": -0.009631991921489202,
+     "p_real_loss": 0.3333333333333333
+    },
+    "persona_robust_same_windows": {
+     "strategy": "eq20_gold10",
+     "trace": "results/robert_cad/20261114T233723Z_non_overlapping_h4.json",
+     "same_windows": true,
+     "p10": 0.028305089811149965,
+     "median": 0.043387278544385066,
+     "maxdd_worst": 0.0970934062764679
+    }
+   },
+   "capacite_oblig_courtes|rolling": {
+    "trace": "results/croisement_runs/x_bnc_robert_cap_court/20261115T003744Z_rolling_h4.json",
+    "robust_bnc": "bnc_conservateur",
+    "assigned": [
+     "bnc_conservateur"
+    ],
+    "assigned_rank_among_bnc": {
+     "bnc_conservateur": 1
+    },
+    "table": [
+     {
+      "strategy": "bnc_conservateur",
+      "p10": 0.00744,
+      "median": 0.04289,
+      "maxdd_worst": 0.101,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0217,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_prudent",
+      "p10": 0.00322,
+      "median": 0.03471,
+      "maxdd_worst": 0.0907,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0652,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_pondere",
+      "p10": 0.00666,
+      "median": 0.05571,
+      "maxdd_worst": 0.1353,
+      "breach_rate": 0.3913,
+      "breach_types": {
+       "CVaR5": 0.3913
+      },
+      "p_real_loss": 0.0652,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_equilibre",
+      "p10": -0.00036,
+      "median": 0.06299,
+      "maxdd_worst": 0.2124,
+      "breach_rate": 0.5652,
+      "breach_types": {
+       "CVaR5": 0.5652
+      },
+      "p_real_loss": 0.1087,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_croissance",
+      "p10": -0.01076,
+      "median": 0.0756,
+      "maxdd_worst": 0.3123,
+      "breach_rate": 0.7391,
+      "breach_types": {
+       "CVaR5": 0.7391,
+       "maxDD": 0.2391
+      },
+      "p_real_loss": 0.1522,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_actions",
+      "p10": -0.02311,
+      "median": 0.08666,
+      "maxdd_worst": 0.4023,
+      "breach_rate": 0.8913,
+      "breach_types": {
+       "CVaR5": 0.8913,
+       "maxDD": 0.2826
+      },
+      "p_real_loss": 0.1739,
+      "eligible": false
+     }
+    ],
+    "cash_100": {
+     "p10": -0.00980068279795776,
+     "p_real_loss": 0.30434782608695654
+    },
+    "persona_robust_same_windows": {
+     "strategy": "eq20_gold10",
+     "trace": "results/robert_cad/20261114T234006Z_rolling_h4.json",
+     "same_windows": true,
+     "p10": 0.015333095167026856,
+     "median": 0.041640506811587374,
+     "maxdd_worst": 0.09709340627646812
+    }
+   },
+   "volonte|non_overlapping": {
+    "trace": "results/croisement_runs/x_bnc_robert_w05/20261115T003005Z_non_overlapping_h4.json",
+    "robust_bnc": null,
+    "assigned": [
+     "bnc_conservateur"
+    ],
+    "assigned_rank_among_bnc": {
+     "bnc_conservateur": 3
+    },
+    "table": [
+     {
+      "strategy": "bnc_pondere",
+      "p10": 0.01155,
+      "median": 0.06246,
+      "maxdd_worst": 0.1567,
+      "breach_rate": 0.8333,
+      "breach_types": {
+       "maxDD": 0.8333,
+       "CVaR5": 0.4167
+      },
+      "p_real_loss": 0.0,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_equilibre",
+      "p10": 0.00433,
+      "median": 0.07156,
+      "maxdd_worst": 0.1804,
+      "breach_rate": 0.9167,
+      "breach_types": {
+       "maxDD": 0.9167,
+       "CVaR5": 0.75
+      },
+      "p_real_loss": 0.0833,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_conservateur",
+      "p10": -0.0013,
+      "median": 0.05525,
+      "maxdd_worst": 0.1521,
+      "breach_rate": 0.6667,
+      "breach_types": {
+       "maxDD": 0.6667,
+       "CVaR5": 0.25
+      },
+      "p_real_loss": 0.1667,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_croissance",
+      "p10": -0.01246,
+      "median": 0.08219,
+      "maxdd_worst": 0.2471,
+      "breach_rate": 1.0,
+      "breach_types": {
+       "maxDD": 1.0,
+       "CVaR5": 0.8333
+      },
+      "p_real_loss": 0.1667,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_prudent",
+      "p10": -0.01564,
+      "median": 0.04406,
+      "maxdd_worst": 0.1536,
+      "breach_rate": 0.5,
+      "breach_types": {
+       "maxDD": 0.5,
+       "CVaR5": 0.0833
+      },
+      "p_real_loss": 0.1667,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_actions",
+      "p10": -0.03312,
+      "median": 0.09476,
+      "maxdd_worst": 0.3319,
+      "breach_rate": 1.0,
+      "breach_types": {
+       "maxDD": 1.0,
+       "CVaR5": 0.9167
+      },
+      "p_real_loss": 0.1667,
+      "eligible": false
+     }
+    ],
+    "cash_100": {
+     "p10": -0.009631991921489202,
+     "p_real_loss": 0.3333333333333333
+    },
+    "persona_robust_same_windows": {
+     "strategy": "eq20_gold10",
+     "trace": "results/robert_cad/20261114T233723Z_non_overlapping_h4.json",
+     "same_windows": true,
+     "p10": 0.028305089811149965,
+     "median": 0.043387278544385066,
+     "maxdd_worst": 0.0970934062764679
+    }
+   },
+   "volonte|rolling": {
+    "trace": "results/croisement_runs/x_bnc_robert_w05/20261115T003018Z_rolling_h4.json",
+    "robust_bnc": null,
+    "assigned": [
+     "bnc_conservateur"
+    ],
+    "assigned_rank_among_bnc": {
+     "bnc_conservateur": 3
+    },
+    "table": [
+     {
+      "strategy": "bnc_pondere",
+      "p10": 0.01074,
+      "median": 0.06021,
+      "maxdd_worst": 0.1567,
+      "breach_rate": 0.7609,
+      "breach_types": {
+       "maxDD": 0.7609,
+       "CVaR5": 0.4348
+      },
+      "p_real_loss": 0.0435,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_equilibre",
+      "p10": 0.00617,
+      "median": 0.06526,
+      "maxdd_worst": 0.1931,
+      "breach_rate": 0.8478,
+      "breach_types": {
+       "maxDD": 0.8478,
+       "CVaR5": 0.6304
+      },
+      "p_real_loss": 0.0652,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_conservateur",
+      "p10": -0.0015,
+      "median": 0.05107,
+      "maxdd_worst": 0.1521,
+      "breach_rate": 0.6522,
+      "breach_types": {
+       "maxDD": 0.6522,
+       "CVaR5": 0.2609
+      },
+      "p_real_loss": 0.1304,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_croissance",
+      "p10": -0.00728,
+      "median": 0.07741,
+      "maxdd_worst": 0.3035,
+      "breach_rate": 1.0,
+      "breach_types": {
+       "maxDD": 1.0,
+       "CVaR5": 0.7391
+      },
+      "p_real_loss": 0.1304,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_prudent",
+      "p10": -0.01471,
+      "median": 0.04586,
+      "maxdd_worst": 0.1536,
+      "breach_rate": 0.4783,
+      "breach_types": {
+       "maxDD": 0.4783,
+       "CVaR5": 0.1522
+      },
+      "p_real_loss": 0.1304,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_actions",
+      "p10": -0.02311,
+      "median": 0.08666,
+      "maxdd_worst": 0.4023,
+      "breach_rate": 1.0,
+      "breach_types": {
+       "maxDD": 1.0,
+       "CVaR5": 0.8913
+      },
+      "p_real_loss": 0.1739,
+      "eligible": false
+     }
+    ],
+    "cash_100": {
+     "p10": -0.00980068279795776,
+     "p_real_loss": 0.30434782608695654
+    },
+    "persona_robust_same_windows": {
+     "strategy": "eq20_gold10",
+     "trace": "results/robert_cad/20261114T234006Z_rolling_h4.json",
+     "same_windows": true,
+     "p10": 0.015333095167026856,
+     "median": 0.041640506811587374,
+     "maxdd_worst": 0.09709340627646812
+    }
+   }
+  },
+  "mateo": {
+   "capacite|non_overlapping": {
+    "trace": "results/croisement_runs/x_bnc_mateo_cap/20261115T003030Z_non_overlapping_h10.json",
+    "robust_bnc": "bnc_equilibre",
+    "assigned": [
+     "bnc_equilibre",
+     "bnc_pondere"
+    ],
+    "assigned_rank_among_bnc": {
+     "bnc_equilibre": 1,
+     "bnc_pondere": 2
+    },
+    "table": [
+     {
+      "strategy": "bnc_equilibre",
+      "p10": 0.05684,
+      "median": 0.06877,
+      "maxdd_worst": 0.1931,
+      "breach_rate": 0.25,
+      "breach_types": {
+       "vol": 0.25
+      },
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_pondere",
+      "p10": 0.05278,
+      "median": 0.06361,
+      "maxdd_worst": 0.1344,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_conservateur",
+      "p10": 0.04787,
+      "median": 0.05794,
+      "maxdd_worst": 0.1102,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_prudent",
+      "p10": 0.04305,
+      "median": 0.05388,
+      "maxdd_worst": 0.1178,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_actions",
+      "p10": 0.06357,
+      "median": 0.08006,
+      "maxdd_worst": 0.4023,
+      "breach_rate": 1.0,
+      "breach_types": {
+       "vol": 1.0,
+       "maxDD": 0.75
+      },
+      "p_real_loss": 0.0,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_croissance",
+      "p10": 0.06098,
+      "median": 0.07487,
+      "maxdd_worst": 0.3035,
+      "breach_rate": 1.0,
+      "breach_types": {
+       "vol": 0.75,
+       "maxDD": 0.75
+      },
+      "p_real_loss": 0.0,
+      "eligible": false
+     }
+    ],
+    "cash_100": {
+     "p10": 0.002667001072243459,
+     "p_real_loss": 0.25
+    },
+    "persona_robust_same_windows": {
+     "strategy": "risk_parity_iv36",
+     "trace": "results/mateo_cad_esg/20261114T234337Z_non_overlapping_h10.json",
+     "same_windows": true,
+     "p10": 0.052812748008961366,
+     "median": 0.05922156893127284,
+     "maxdd_worst": 0.11830838045832581
+    }
+   },
+   "capacite|rolling": {
+    "trace": "results/croisement_runs/x_bnc_mateo_cap/20261115T003046Z_rolling_h10.json",
+    "robust_bnc": "bnc_equilibre",
+    "assigned": [
+     "bnc_equilibre",
+     "bnc_pondere"
+    ],
+    "assigned_rank_among_bnc": {
+     "bnc_equilibre": 1,
+     "bnc_pondere": 2
+    },
+    "table": [
+     {
+      "strategy": "bnc_equilibre",
+      "p10": 0.03635,
+      "median": 0.07332,
+      "maxdd_worst": 0.1931,
+      "breach_rate": 0.175,
+      "breach_types": {
+       "vol": 0.175
+      },
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_pondere",
+      "p10": 0.0357,
+      "median": 0.06621,
+      "maxdd_worst": 0.1567,
+      "breach_rate": 0.1,
+      "breach_types": {
+       "vol": 0.1
+      },
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_prudent",
+      "p10": 0.02973,
+      "median": 0.05039,
+      "maxdd_worst": 0.1536,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_conservateur",
+      "p10": 0.02676,
+      "median": 0.05648,
+      "maxdd_worst": 0.1521,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_croissance",
+      "p10": 0.03259,
+      "median": 0.0847,
+      "maxdd_worst": 0.3035,
+      "breach_rate": 0.825,
+      "breach_types": {
+       "vol": 0.625,
+       "maxDD": 0.675
+      },
+      "p_real_loss": 0.05,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_actions",
+      "p10": 0.02783,
+      "median": 0.09006,
+      "maxdd_worst": 0.4023,
+      "breach_rate": 0.95,
+      "breach_types": {
+       "vol": 0.95,
+       "maxDD": 0.675
+      },
+      "p_real_loss": 0.1,
+      "eligible": false
+     }
+    ],
+    "cash_100": {
+     "p10": -0.008726528228873265,
+     "p_real_loss": 0.275
+    },
+    "persona_robust_same_windows": {
+     "strategy": "risk_parity_iv36",
+     "trace": "results/mateo_cad_esg/20261114T234928Z_rolling_h10.json",
+     "same_windows": true,
+     "p10": 0.03812253277638229,
+     "median": 0.06019161197946521,
+     "maxdd_worst": 0.11830838045832592
+    }
+   },
+   "volonte|non_overlapping": {
+    "trace": "results/croisement_runs/x_bnc_mateo_w15/20261115T003103Z_non_overlapping_h10.json",
+    "robust_bnc": "bnc_pondere",
+    "assigned": [
+     "bnc_equilibre",
+     "bnc_pondere"
+    ],
+    "assigned_rank_among_bnc": {
+     "bnc_equilibre": 6,
+     "bnc_pondere": 1
+    },
+    "table": [
+     {
+      "strategy": "bnc_pondere",
+      "p10": 0.05278,
+      "median": 0.06361,
+      "maxdd_worst": 0.1344,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_conservateur",
+      "p10": 0.04787,
+      "median": 0.05794,
+      "maxdd_worst": 0.1102,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_prudent",
+      "p10": 0.04305,
+      "median": 0.05388,
+      "maxdd_worst": 0.1178,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_actions",
+      "p10": 0.06357,
+      "median": 0.08006,
+      "maxdd_worst": 0.4023,
+      "breach_rate": 1.0,
+      "breach_types": {
+       "vol": 1.0,
+       "maxDD": 1.0
+      },
+      "p_real_loss": 0.0,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_croissance",
+      "p10": 0.06098,
+      "median": 0.07487,
+      "maxdd_worst": 0.3035,
+      "breach_rate": 1.0,
+      "breach_types": {
+       "vol": 0.75,
+       "maxDD": 0.75
+      },
+      "p_real_loss": 0.0,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_equilibre",
+      "p10": 0.05684,
+      "median": 0.06877,
+      "maxdd_worst": 0.1931,
+      "breach_rate": 1.0,
+      "breach_types": {
+       "vol": 0.25,
+       "maxDD": 0.75
+      },
+      "p_real_loss": 0.0,
+      "eligible": false
+     }
+    ],
+    "cash_100": {
+     "p10": 0.002667001072243459,
+     "p_real_loss": 0.25
+    },
+    "persona_robust_same_windows": {
+     "strategy": "risk_parity_iv36",
+     "trace": "results/mateo_cad_esg/20261114T234337Z_non_overlapping_h10.json",
+     "same_windows": true,
+     "p10": 0.052812748008961366,
+     "median": 0.05922156893127284,
+     "maxdd_worst": 0.11830838045832581
+    }
+   },
+   "volonte|rolling": {
+    "trace": "results/croisement_runs/x_bnc_mateo_w15/20261115T003115Z_rolling_h10.json",
+    "robust_bnc": "bnc_pondere",
+    "assigned": [
+     "bnc_equilibre",
+     "bnc_pondere"
+    ],
+    "assigned_rank_among_bnc": {
+     "bnc_equilibre": 4,
+     "bnc_pondere": 1
+    },
+    "table": [
+     {
+      "strategy": "bnc_pondere",
+      "p10": 0.0357,
+      "median": 0.06621,
+      "maxdd_worst": 0.1567,
+      "breach_rate": 0.2,
+      "breach_types": {
+       "vol": 0.1,
+       "maxDD": 0.1
+      },
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_prudent",
+      "p10": 0.02973,
+      "median": 0.05039,
+      "maxdd_worst": 0.1536,
+      "breach_rate": 0.1,
+      "breach_types": {
+       "maxDD": 0.1
+      },
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_conservateur",
+      "p10": 0.02676,
+      "median": 0.05648,
+      "maxdd_worst": 0.1521,
+      "breach_rate": 0.1,
+      "breach_types": {
+       "maxDD": 0.1
+      },
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_equilibre",
+      "p10": 0.03635,
+      "median": 0.07332,
+      "maxdd_worst": 0.1931,
+      "breach_rate": 0.775,
+      "breach_types": {
+       "vol": 0.175,
+       "maxDD": 0.75
+      },
+      "p_real_loss": 0.0,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_croissance",
+      "p10": 0.03259,
+      "median": 0.0847,
+      "maxdd_worst": 0.3035,
+      "breach_rate": 0.875,
+      "breach_types": {
+       "vol": 0.625,
+       "maxDD": 0.775
+      },
+      "p_real_loss": 0.05,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_actions",
+      "p10": 0.02783,
+      "median": 0.09006,
+      "maxdd_worst": 0.4023,
+      "breach_rate": 0.95,
+      "breach_types": {
+       "vol": 0.95,
+       "maxDD": 0.925
+      },
+      "p_real_loss": 0.1,
+      "eligible": false
+     }
+    ],
+    "cash_100": {
+     "p10": -0.008726528228873265,
+     "p_real_loss": 0.275
+    },
+    "persona_robust_same_windows": {
+     "strategy": "risk_parity_iv36",
+     "trace": "results/mateo_cad_esg/20261114T234928Z_rolling_h10.json",
+     "same_windows": true,
+     "p10": 0.03812253277638229,
+     "median": 0.06019161197946521,
+     "maxdd_worst": 0.11830838045832592
+    }
+   }
+  },
+  "amira": {
+   "capacite|non_overlapping": {
+    "trace": "results/croisement_runs/x_bnc_amira_cap/20261115T003126Z_non_overlapping_h15.json",
+    "robust_bnc": "bnc_croissance",
+    "assigned": [
+     "bnc_croissance"
+    ],
+    "assigned_rank_among_bnc": {
+     "bnc_croissance": 1
+    },
+    "table": [
+     {
+      "strategy": "bnc_croissance",
+      "p10": 0.07235,
+      "median": 0.07316,
+      "maxdd_worst": 0.3035,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_equilibre",
+      "p10": 0.06197,
+      "median": 0.0673,
+      "maxdd_worst": 0.1931,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_pondere",
+      "p10": 0.05343,
+      "median": 0.06249,
+      "maxdd_worst": 0.1344,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_conservateur",
+      "p10": 0.04426,
+      "median": 0.05731,
+      "maxdd_worst": 0.1102,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_prudent",
+      "p10": 0.03779,
+      "median": 0.05366,
+      "maxdd_worst": 0.1178,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_actions",
+      "p10": 0.07918,
+      "median": 0.08228,
+      "maxdd_worst": 0.4023,
+      "breach_rate": 0.3333,
+      "breach_types": {
+       "maxDD": 0.3333
+      },
+      "p_real_loss": 0.0,
+      "eligible": false
+     }
+    ],
+    "cash_100": {
+     "p10": -0.0005324621421824993,
+     "p_real_loss": 0.3333333333333333
+    },
+    "persona_robust_same_windows": {
+     "strategy": "Mom_etf_top3",
+     "trace": "results/amira_etf/20261114T224838Z_non_overlapping_h15.json",
+     "same_windows": true,
+     "p10": 0.06194122201195196,
+     "median": 0.07091420524338155,
+     "maxdd_worst": 0.30415486307231854
+    }
+   },
+   "capacite|rolling": {
+    "trace": "results/croisement_runs/x_bnc_amira_cap/20261115T003136Z_rolling_h15.json",
+    "robust_bnc": "bnc_equilibre",
+    "assigned": [
+     "bnc_croissance"
+    ],
+    "assigned_rank_among_bnc": {
+     "bnc_croissance": 3
+    },
+    "table": [
+     {
+      "strategy": "bnc_equilibre",
+      "p10": 0.04272,
+      "median": 0.07014,
+      "maxdd_worst": 0.1931,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_pondere",
+      "p10": 0.04111,
+      "median": 0.06249,
+      "maxdd_worst": 0.1567,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_croissance",
+      "p10": 0.03953,
+      "median": 0.08036,
+      "maxdd_worst": 0.3035,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_conservateur",
+      "p10": 0.03571,
+      "median": 0.05846,
+      "maxdd_worst": 0.1521,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_prudent",
+      "p10": 0.02783,
+      "median": 0.05843,
+      "maxdd_worst": 0.1536,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_actions",
+      "p10": 0.03446,
+      "median": 0.08266,
+      "maxdd_worst": 0.4023,
+      "breach_rate": 0.3429,
+      "breach_types": {
+       "maxDD": 0.3429
+      },
+      "p_real_loss": 0.0,
+      "eligible": false
+     }
+    ],
+    "cash_100": {
+     "p10": -0.007315894562846803,
+     "p_real_loss": 0.2857142857142857
+    },
+    "persona_robust_same_windows": {
+     "strategy": "Mom_etf_top3",
+     "trace": "results/amira_etf/20261114T225010Z_rolling_h15.json",
+     "same_windows": true,
+     "p10": 0.0516334966232829,
+     "median": 0.07137240866855277,
+     "maxdd_worst": 0.30415486307231876
+    }
+   },
+   "sensibilite_0.30|non_overlapping": {
+    "trace": "results/croisement_runs/x_bnc_amira_w30/20261115T003145Z_non_overlapping_h15.json",
+    "robust_bnc": "bnc_equilibre",
+    "assigned": [
+     "bnc_croissance"
+    ],
+    "assigned_rank_among_bnc": {
+     "bnc_croissance": 6
+    },
+    "table": [
+     {
+      "strategy": "bnc_equilibre",
+      "p10": 0.06197,
+      "median": 0.0673,
+      "maxdd_worst": 0.1931,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_pondere",
+      "p10": 0.05343,
+      "median": 0.06249,
+      "maxdd_worst": 0.1344,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_conservateur",
+      "p10": 0.04426,
+      "median": 0.05731,
+      "maxdd_worst": 0.1102,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_prudent",
+      "p10": 0.03779,
+      "median": 0.05366,
+      "maxdd_worst": 0.1178,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_actions",
+      "p10": 0.07918,
+      "median": 0.08228,
+      "maxdd_worst": 0.4023,
+      "breach_rate": 0.6667,
+      "breach_types": {
+       "maxDD": 0.6667
+      },
+      "p_real_loss": 0.0,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_croissance",
+      "p10": 0.07235,
+      "median": 0.07316,
+      "maxdd_worst": 0.3035,
+      "breach_rate": 0.3333,
+      "breach_types": {
+       "maxDD": 0.3333
+      },
+      "p_real_loss": 0.0,
+      "eligible": false
+     }
+    ],
+    "cash_100": {
+     "p10": -0.0005324621421824993,
+     "p_real_loss": 0.3333333333333333
+    },
+    "persona_robust_same_windows": {
+     "strategy": "Mom_etf_top3",
+     "trace": "results/amira_etf/20261114T224838Z_non_overlapping_h15.json",
+     "same_windows": true,
+     "p10": 0.06194122201195196,
+     "median": 0.07091420524338155,
+     "maxdd_worst": 0.30415486307231854
+    }
+   },
+   "sensibilite_0.30|rolling": {
+    "trace": "results/croisement_runs/x_bnc_amira_w30/20261115T003156Z_rolling_h15.json",
+    "robust_bnc": "bnc_equilibre",
+    "assigned": [
+     "bnc_croissance"
+    ],
+    "assigned_rank_among_bnc": {
+     "bnc_croissance": 5
+    },
+    "table": [
+     {
+      "strategy": "bnc_equilibre",
+      "p10": 0.04272,
+      "median": 0.07014,
+      "maxdd_worst": 0.1931,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_pondere",
+      "p10": 0.04111,
+      "median": 0.06249,
+      "maxdd_worst": 0.1567,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_conservateur",
+      "p10": 0.03571,
+      "median": 0.05846,
+      "maxdd_worst": 0.1521,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_prudent",
+      "p10": 0.02783,
+      "median": 0.05843,
+      "maxdd_worst": 0.1536,
+      "breach_rate": 0.0,
+      "breach_types": {},
+      "p_real_loss": 0.0,
+      "eligible": true
+     },
+     {
+      "strategy": "bnc_croissance",
+      "p10": 0.03953,
+      "median": 0.08036,
+      "maxdd_worst": 0.3035,
+      "breach_rate": 0.3429,
+      "breach_types": {
+       "maxDD": 0.3429
+      },
+      "p_real_loss": 0.0,
+      "eligible": false
+     },
+     {
+      "strategy": "bnc_actions",
+      "p10": 0.03446,
+      "median": 0.08266,
+      "maxdd_worst": 0.4023,
+      "breach_rate": 0.6,
+      "breach_types": {
+       "maxDD": 0.6
+      },
+      "p_real_loss": 0.0,
+      "eligible": false
+     }
+    ],
+    "cash_100": {
+     "p10": -0.007315894562846803,
+     "p_real_loss": 0.2857142857142857
+    },
+    "persona_robust_same_windows": {
+     "strategy": "Mom_etf_top3",
+     "trace": "results/amira_etf/20261114T225010Z_rolling_h15.json",
+     "same_windows": true,
+     "p10": 0.0516334966232829,
+     "median": 0.07137240866855277,
+     "maxdd_worst": 0.30415486307231876
+    }
+   }
+  },
+  "constraints": {
+   "mateo_equity_band_0.40_0.80": {
+    "bnc_prudent": 0.2,
+    "bnc_conservateur": 0.3,
+    "bnc_actions": 1.0
+   },
+   "amira_tech_lookthrough_le_0.30": {
+    "bnc_prudent": {
+     "at_2026_09": 0.061,
+     "max_1977_2026": 0.0634,
+     "share_months_over_0.30_since_1977": 0.0
+    },
+    "bnc_conservateur": {
+     "at_2026_09": 0.0915,
+     "max_1977_2026": 0.0951,
+     "share_months_over_0.30_since_1977": 0.0
+    },
+    "bnc_pondere": {
+     "at_2026_09": 0.1372,
+     "max_1977_2026": 0.1426,
+     "share_months_over_0.30_since_1977": 0.0
+    },
+    "bnc_equilibre": {
+     "at_2026_09": 0.1829,
+     "max_1977_2026": 0.1901,
+     "share_months_over_0.30_since_1977": 0.0
+    },
+    "bnc_croissance": {
+     "at_2026_09": 0.2439,
+     "max_1977_2026": 0.2535,
+     "share_months_over_0.30_since_1977": 0.0
+    },
+    "bnc_actions": {
+     "at_2026_09": 0.3048,
+     "max_1977_2026": 0.3169,
+     "share_months_over_0.30_since_1977": 0.0067
+    }
+   },
+   "lookthrough_busEq_last": [
+    "2026-09-30",
+    0.4355
+   ],
+   "note": "BNC portfolios contain no gold, no crypto and no single stocks (00-cadre.md)."
+  },
+  "tickers_2021_11_2026_09": {
+   "trace": "results/croisement_runs/x_bnc_tickers/20261115T003205Z_non_overlapping_h4.9167.json",
+   "metrics": {
+    "bnc_actions": {
+     "window": "2021-11..2026-09",
+     "ann_real_return": 0.1119,
+     "ann_return": 0.1503,
+     "vol": 0.1221,
+     "maxdd": 0.1601,
+     "cvar5": 0.0621,
+     "worst_12m": -0.1077,
+     "within_limits": {
+      "robert|capacite": false,
+      "robert|volonte": false,
+      "mateo|capacite": false,
+      "mateo|volonte": false,
+      "amira|capacite": true,
+      "amira|sensibilite_0.30": true
+     }
+    },
+    "bnc_conservateur": {
+     "window": "2021-11..2026-09",
+     "ann_real_return": 0.0133,
+     "ann_return": 0.0483,
+     "vol": 0.0734,
+     "maxdd": 0.135,
+     "cvar5": 0.0388,
+     "worst_12m": -0.1137,
+     "within_limits": {
+      "robert|capacite": false,
+      "robert|volonte": false,
+      "mateo|capacite": true,
+      "mateo|volonte": true,
+      "amira|capacite": true,
+      "amira|sensibilite_0.30": true
+     }
+    },
+    "bnc_croissance": {
+     "window": "2021-11..2026-09",
+     "ann_real_return": 0.0839,
+     "ann_return": 0.1213,
+     "vol": 0.1066,
+     "maxdd": 0.153,
+     "cvar5": 0.0548,
+     "worst_12m": -0.1093,
+     "within_limits": {
+      "robert|capacite": false,
+      "robert|volonte": false,
+      "mateo|capacite": false,
+      "mateo|volonte": false,
+      "amira|capacite": true,
+      "amira|sensibilite_0.30": true
+     }
+    },
+    "bnc_equilibre": {
+     "window": "2021-11..2026-09",
+     "ann_real_return": 0.0557,
+     "ann_return": 0.0921,
+     "vol": 0.0921,
+     "maxdd": 0.1459,
+     "cvar5": 0.0474,
+     "worst_12m": -0.111,
+     "within_limits": {
+      "robert|capacite": false,
+      "robert|volonte": false,
+      "mateo|capacite": true,
+      "mateo|volonte": true,
+      "amira|capacite": true,
+      "amira|sensibilite_0.30": true
+     }
+    },
+    "bnc_pondere": {
+     "window": "2021-11..2026-09",
+     "ann_real_return": 0.0346,
+     "ann_return": 0.0702,
+     "vol": 0.0821,
+     "maxdd": 0.1405,
+     "cvar5": 0.0425,
+     "worst_12m": -0.1123,
+     "within_limits": {
+      "robert|capacite": false,
+      "robert|volonte": false,
+      "mateo|capacite": true,
+      "mateo|volonte": true,
+      "amira|capacite": true,
+      "amira|sensibilite_0.30": true
+     }
+    },
+    "bnc_prudent": {
+     "window": "2021-11..2026-09",
+     "ann_real_return": -0.0009,
+     "ann_return": 0.0336,
+     "vol": 0.0686,
+     "maxdd": 0.1313,
+     "cvar5": 0.0363,
+     "worst_12m": -0.1147,
+     "within_limits": {
+      "robert|capacite": false,
+      "robert|volonte": false,
+      "mateo|capacite": true,
+      "mateo|volonte": true,
+      "amira|capacite": true,
+      "amira|sensibilite_0.30": true
+     }
+    },
+    "cash_zst": {
+     "window": "2021-11..2026-09",
+     "ann_real_return": -0.0001,
+     "ann_return": 0.0343,
+     "vol": 0.0062,
+     "maxdd": 0.0041,
+     "cvar5": 0.002,
+     "worst_12m": 0.0056,
+     "within_limits": {
+      "robert|capacite": true,
+      "robert|volonte": true,
+      "mateo|capacite": true,
+      "mateo|volonte": true,
+      "amira|capacite": true,
+      "amira|sensibilite_0.30": true
+     }
+    }
+   }
+  }
+ }
+}

@@ -1,8 +1,9 @@
-"""Tests sautés tant que l'engine de backtest (research/backtest) est absent, comme tests/finance."""
+"""Tests sautés si les données longues du moteur de backtest (``alphaforge/data/long``, parquets non versionnés)
+ou numpy/pandas manquent, comme tests/finance."""
 
 from __future__ import annotations
 
-from alphaforge.finance._engine_path import engine_available
+from alphaforge.finance.backtest.paths import long_data_available
 
 NEEDS_ENGINE = {
     "test_pipeline_rules.py",
@@ -16,6 +17,6 @@ NEEDS_ENGINE = {
 
 
 def pytest_ignore_collect(collection_path, config):
-    if collection_path.name in NEEDS_ENGINE and not engine_available():
+    if collection_path.name in NEEDS_ENGINE and not long_data_available():
         return True
     return None

@@ -1,0 +1,227 @@
+{
+ "run_id": "reverse",
+ "created_utc": "20261115T000009Z",
+ "disclaimer": "Simulation historique uniquement (donnees publiques). Ne constitue pas un conseil financier. Les resultats passes ne predisent pas les resultats futurs. Les lignes hindsight=True (ORACLE) utilisent le futur et sont non investissables.",
+ "engine_sha256": "4d3e707a3271717d",
+ "data_version": {
+  "data_sha256": "008f122d5da4f8f7",
+  "built_utc": "2026-11-14T22:15:31+00:00",
+  "last_complete_month": "2026-10-31"
+ },
+ "script": "analysis/p12",
+ "params": {
+  "doc": "Reverse engineering for persona 12: (1) rule checks across eras/horizons (robust / fragile / inconclusive),\n(2) start-of-window observable signals vs outcomes (Spearman; association only, NO causality, small N).\nReads results/p12_analysis/swr.json + derive_thresholds.json and the latest engine traces. SIMULATION ONLY."
+ },
+ "results": {
+  "rules": [
+   {
+    "rule": "SAFEMAX 60 % actions >= SAFEMAX 100 % actions",
+    "by_case": {
+     "usd_1926_H30": true,
+     "usd_1926_H40": true,
+     "usd_1926_H50": true,
+     "usd_1926_H55": true,
+     "cad_1977_H30": true,
+     "cad_1977_H40": false
+    },
+    "verdict": "robuste USD, fragile CAD (1 fenetre independante)"
+   },
+   {
+    "rule": "SAFEMAX BNC Equilibre > SAFEMAX BNC Conservateur",
+    "by_case": {
+     "usd_1926_H30": true,
+     "usd_1926_H40": true,
+     "usd_1926_H50": true,
+     "usd_1926_H55": true,
+     "cad_1977_H30": true,
+     "cad_1977_H40": true
+    },
+    "verdict": "robuste"
+   },
+   {
+    "rule": "Echec historique a 4 % > 0 pour le meilleur melange",
+    "by_case": {
+     "usd_1926_H30": true,
+     "usd_1926_H40": true,
+     "usd_1926_H50": true,
+     "usd_1926_H55": true,
+     "cad_1977_H30": false,
+     "cad_1977_H40": false
+    },
+    "verdict": "robuste USD, fragile CAD (1 fenetre independante)"
+   },
+   {
+    "rule": "SAFEMAX(H) < 4 % pour le meilleur melange",
+    "by_case": {
+     "usd_1926_H30": true,
+     "usd_1926_H40": true,
+     "usd_1926_H50": true,
+     "usd_1926_H55": true,
+     "cad_1977_H30": false,
+     "cad_1977_H40": false
+    },
+    "verdict": "robuste USD, fragile CAD (1 fenetre independante)"
+   },
+   {
+    "rule": "Meilleur SAFEMAX avec 50-70 % d'actions",
+    "by_case": {
+     "usd_1926_H30": true,
+     "usd_1926_H40": true,
+     "usd_1926_H50": true,
+     "usd_1926_H55": true,
+     "cad_1977_H30": true,
+     "cad_1977_H40": false
+    },
+    "verdict": "robuste USD, fragile CAD (1 fenetre independante)"
+   },
+   {
+    "rule": "100 % actions : pire SAFEMAX que BNC Croissance",
+    "by_case": {
+     "usd_1926_H30": true,
+     "usd_1926_H40": true,
+     "usd_1926_H50": true,
+     "usd_1926_H55": true,
+     "cad_1977_H30": true,
+     "cad_1977_H40": true
+    },
+    "verdict": "robuste"
+   }
+  ],
+  "signals_pwr": {
+   "usd_1926_H50": {
+    "n_annual_starts": 40,
+    "n_independent": 2,
+    "first_start": "1937-01-31",
+    "corr_with_pwr": {
+     "trail10y_real_eq": {
+      "rho": -0.3596622889305817,
+      "p_naive": 0.022640474229985164
+     },
+     "trail12m_eq": {
+      "rho": -0.14971857410881803,
+      "p_naive": 0.35648212574279536
+     },
+     "trail12m_infl": {
+      "rho": 0.3078799249530957,
+      "p_naive": 0.053273819643875925
+     },
+     "cash_yield_12m": {
+      "rho": -0.22082551594746722,
+      "p_naive": 0.17090262558602926
+     },
+     "eq_drawdown_at_start": {
+      "rho": 0.29710655062408425,
+      "p_naive": 0.06263560388078206
+     }
+    }
+   },
+   "usd_1926_H30": {
+    "n_annual_starts": 60,
+    "n_independent": 3,
+    "first_start": "1937-01-31",
+    "corr_with_pwr": {
+     "trail10y_real_eq": {
+      "rho": -0.421283689913865,
+      "p_naive": 0.0008020412151411324
+     },
+     "trail12m_eq": {
+      "rho": -0.028118921922756324,
+      "p_naive": 0.831117510675763
+     },
+     "trail12m_infl": {
+      "rho": 0.4599611003056406,
+      "p_naive": 0.00021780735044231756
+     },
+     "cash_yield_12m": {
+      "rho": 0.4023339816615727,
+      "p_naive": 0.00143884530893137
+     },
+     "eq_drawdown_at_start": {
+      "rho": 0.1474119005613979,
+      "p_naive": 0.26102093129848036
+     }
+    }
+   },
+   "cad_1977_H30": {
+    "n_annual_starts": 10,
+    "n_independent": 1,
+    "first_start": "1987-01-31",
+    "corr_with_pwr": {
+     "trail10y_real_eq": {
+      "rho": -0.3696969696969697,
+      "p_naive": 0.29305007529282234
+     },
+     "trail12m_eq": {
+      "rho": -0.4424242424242424,
+      "p_naive": 0.20042268671194213
+     },
+     "trail12m_infl": {
+      "rho": 0.29696969696969694,
+      "p_naive": 0.40470167127015705
+     },
+     "cash_yield_12m": {
+      "rho": 0.49090909090909085,
+      "p_naive": 0.1496556734208368
+     },
+     "eq_drawdown_at_start": {
+      "rho": 0.45647294162092733,
+      "p_naive": 0.18480608278680513
+     }
+    }
+   }
+  },
+  "accum_oracle": {
+   "p12_accum_usd|rolling_h6": {
+    "n": 85,
+    "rho_equity_share_vs_trail10y_real_eq": -0.08811083913237946,
+    "p_naive": 0.4226251266783098,
+    "oracle_equity_share_p10_median_p90": [
+     0.06,
+     1.0,
+     1.0
+    ]
+   },
+   "p12_accum_cad|rolling_h6": {
+    "n": 34,
+    "rho_equity_share_vs_trail10y_real_eq": -0.22170031093171746,
+    "p_naive": 0.2076254367788457,
+    "oracle_equity_share_p10_median_p90": [
+     0.2242593,
+     1.0,
+     1.0
+    ]
+   }
+  },
+  "sequence_k_star": {
+   "usd_1926": {
+    "30": {
+     "k_star": 9,
+     "max_corr": 0.9316060434001773,
+     "k_at_max": 13
+    },
+    "40": {
+     "k_star": 10,
+     "max_corr": 0.9358852863887193,
+     "k_at_max": 13
+    },
+    "50": {
+     "k_star": 11,
+     "max_corr": 0.9189233476629087,
+     "k_at_max": 13
+    }
+   },
+   "cad_1977": {
+    "30": {
+     "k_star": 9,
+     "max_corr": 0.7209715515886987,
+     "k_at_max": 16
+    },
+    "40": {
+     "k_star": 4,
+     "max_corr": 0.9277113713803644,
+     "k_at_max": 16
+    }
+   }
+  }
+ }
+}

@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from ..backtest import data as bt_data
 from ..contracts import PolicySpec
-from ._engine import bt_data
 
 
 class InsufficientHistory(ValueError):

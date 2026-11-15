@@ -1,7 +1,7 @@
 """Volet finance AlphaForge AI — F2 (optimiseur), F3 (analyses), F4 (contrôle du Judge).
 
 Entrée : un ``contracts.PolicySpec`` produit par F1 (hors de ce paquet).
-Données : engine de research/backtest, importé en lecture seule.
+Données : moteur de backtest ``alphaforge.finance.backtest`` (données longues ``alphaforge/data/long``).
 SIMULATION SEULEMENT — aucun conseil financier, aucun ordre.
 """
 from .analysis import (

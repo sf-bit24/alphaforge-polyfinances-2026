@@ -9,8 +9,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from ..backtest import data as bt_data
 from ..contracts import Limit, PolicySpec
-from ._engine import bt_data
 
 BROAD_TAGS = {"broad_market", "tech_heavy"}
 

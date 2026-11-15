@@ -1,0 +1,6 @@
+{
+ "p14_etudes_usd:rolling:10:1": "results/p14_etudes_usd/20261115T000101Z_rolling_h10.json",
+ "p14_etudes_usd:non_overlapping:10:1": "results/p14_etudes_usd/20261115T000143Z_non_overlapping_h10.json",
+ "p14_coussin_usd:non_overlapping:1:1": "results/p14_coussin_usd/20261115T000234Z_non_overlapping_h1.json",
+ "p14_coussin_usd:rolling:1:0": "results/p14_coussin_usd/20261115T000241Z_rolling_h1.json"
+}

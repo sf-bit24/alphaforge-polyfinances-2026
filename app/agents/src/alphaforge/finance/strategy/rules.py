@@ -264,7 +264,7 @@ def build_limits(plan: Plan, cfg: StrategyConfig | None = None) -> list[Limit]:
                 blocking=False,
                 derived_from="étape 0 : position dans la bande (tolérance, capacité)",
                 source=cfg.src("band"),
-                description_fr="part actions visée par le style (hors crypto)",
+                description_fr="part actions visée, placée par la tolérance et plafonnée par la capacité (hors crypto)",
             )
         )
     for t, f in plan.floors.items():

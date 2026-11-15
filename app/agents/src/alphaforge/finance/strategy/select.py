@@ -370,7 +370,7 @@ def apply_strategy(
             add(
                 "result",
                 "strat.band_target",
-                "part actions visée par le style (hors crypto)",
+                "part actions visée, placée par la tolérance et plafonnée par la capacité (hors crypto)",
                 plan.growth_floor,
                 "%",
                 path="band",

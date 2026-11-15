@@ -62,8 +62,8 @@ L'étape 0 choisit un **style de composition** et quelques **titres satellites**
 décrit ses règles exactes, telles que codées au commit `6f84b19` : `strategy.yaml` v0.1.0, sha256
 `4136e34e2930240811c59daf12fabfdd108f4b3bfb7c34afd8395a6d8c7e88cb`. Chaque Fact `strat.*` cite
 `strategy.yaml@0.1.0#<section>` et renvoie ici. Toutes les valeurs de `strategy.yaml` sont des **hypothèses de
-conception, à valider par l'équipe**; aucune ne vient des fiches de personas. L'étape 0 est **désactivée par
-défaut** (`build_portfolio(strategy=False)`); activée, elle s'insère entre la compilation du mandat et le premier
+conception, à valider par l'équipe**; aucune ne vient des fiches de personas. L'étape 0 est **active par
+défaut sur la branche de travail** (`build_portfolio(strategy=True)`, à valider par l'équipe avant toute fusion ; `strategy=False` rend l'ancien comportement); elle s'insère entre la compilation du mandat et le premier
 tour de l'optimisation. Simulation éducative seulement, jamais un conseil.
 
 Les notions sont expliquées dans [Style de portefeuille](../notions/style-de-portefeuille.md),

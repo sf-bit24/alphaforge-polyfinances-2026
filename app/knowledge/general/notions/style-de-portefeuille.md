@@ -66,7 +66,7 @@ Les faits et les limites sont les mêmes à tous les niveaux; seuls les mots cha
 
 ## Comment AlphaForge AI le fixe
 
-Le code fixe le style à l'étape 0 du moteur, désactivée par défaut; le modèle l'explique. Le compilateur de mandat
+Le code fixe le style à l'étape 0 du moteur (active par défaut sur la branche de travail, à valider par l'équipe); le modèle l'explique. Le compilateur de mandat
 fixe d'abord le niveau de risque N0 à N5 (`risk_levels.yaml`); le code en tire un **style par défaut** :
 
 | Niveau | Style par défaut | Repères publics rapprochés par l'équipe |

@@ -69,11 +69,34 @@ const NUMBER_WORDS: Record<string, number> = Object.fromEntries(
 );
 
 /** A number of months, in digits or in words; « dix-huit » or "twenty-four" is not read as « huit » or "four". */
-const MONTHS = new RegExp(`(?:\\b(\\d{1,2})|(?<![\\w-])(${Object.keys(NUMBER_WORDS).join("|")}))\\s*(?:mois|months?)\\b`);
+const MONTHS = new RegExp(`(?:\\b(\\d{1,2})|(?<![\\w-])(${Object.keys(NUMBER_WORDS).join("|")}))\\s*(?:mois|months?)\\b`, "g");
+
+/** Words that tie a number of months to money set aside. */
+const SAVINGS = /urgence|emergency|coussin|cushion|précaution|precaution|côté|aside|épargne|savings/g;
+
+/** Characters between two matches of the same text. */
+const gap = (left: RegExpExecArray, right: RegExpExecArray) =>
+  Math.max(0, right.index - (left.index + left[0].length), left.index - (right.index + right[0].length));
+
+/**
+ * The number of months nearest a savings word of the same clause: « dans un mois, j'achète une
+ * maison; j'ai 4 mois de côté » reads 4. A comma does not end the clause (« côté épargne, j'ai six mois »).
+ */
+function savedMonths(lower: string): RegExpExecArray | null {
+  let nearest: { months: RegExpExecArray; distance: number } | null = null;
+  for (const clause of lower.split(/[.;!?]/)) {
+    const savings = [...clause.matchAll(SAVINGS)];
+    for (const months of clause.matchAll(MONTHS)) {
+      const distance = Math.min(...savings.map((word) => gap(months, word)));
+      if (distance < (nearest?.distance ?? Infinity)) nearest = { months, distance };
+    }
+  }
+  return nearest?.months ?? null;
+}
 
 function emergencyFundFact(lower: string): ExtractedFact | null {
-  const months = MONTHS.exec(lower);
-  if (!months || !/(urgence|emergency|coussin|cushion|précaution|precaution|côté|aside|épargne|savings)/.test(lower)) return null;
+  const months = savedMonths(lower);
+  if (!months) return null;
   const [, digits, word = ""] = months;
   const value = Number(digits ?? NUMBER_WORDS[word]);
   return {

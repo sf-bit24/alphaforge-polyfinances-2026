@@ -129,6 +129,42 @@ describe("issue #81: emergency fund in words", () => {
   );
 });
 
+type MonthsCase = [message: string, months: number];
+
+describe("issue #81: the emergency fund is the number of months nearest a savings word, in the same clause", () => {
+  // The two scenarios of the review: the first « N mois » of the message speaks of something else.
+  const HOUSE_FIRST: MonthsCase = ["Dans un mois, j'achète une maison; j'ai 4 mois d'épargne de côté.", 4];
+  const SCHOOL_FIRST: MonthsCase = ["Ma fille ira à l'école dans douze mois; j'ai un mois d'épargne de précaution.", 1];
+  const REVIEW_SCENARIOS = [HOUSE_FIRST, SCHOOL_FIRST];
+
+  it.each<MonthsCase>([
+    ...REVIEW_SCENARIOS,
+    ["Il y a deux mois, j'ai ouvert un compte d'épargne. J'ai maintenant 3 mois de côté.", 3],
+    ["J'ai douze mois de côté, dans un mois je pars en voyage.", 12],
+    ["Côté épargne, j'ai six mois.", 6],
+    ["In two months I buy a house; I have four months of savings.", 4],
+  ])("reads « %s » as a %i-month fund", (message, months) => {
+    expect(facts(message)["risk_capacity.emergency_fund"]).toBe(months);
+  });
+
+  it("records nothing when no clause ties a number of months to savings", () => {
+    expect(facts("Dans un mois, je pars. J'ai de l'épargne.")).not.toHaveProperty(["risk_capacity.emergency_fund"]);
+  });
+
+  it.each(REVIEW_SCENARIOS)("is understood by the simulator after the sample profile: « %s »", async (message, months) => {
+    const { runtime, current } = await sampleSession("fr");
+    const reply = await state(runtime, { action: "followup.reply", client_id: current.client_id, message });
+    expect(reply.profile.facts.find((fact) => fact.field === "risk_capacity.emergency_fund")?.value).toBe(months);
+  });
+
+  it("keeps the effective risk of the first scenario at medium, as before the number words", async () => {
+    const { runtime, current } = await sampleSession("fr");
+    const [message] = HOUSE_FIRST;
+    const reply = await state(runtime, { action: "followup.reply", client_id: current.client_id, message });
+    expect(reply.profile.effective_risk).toBe("medium");
+  });
+});
+
 describe("issue #81: labels keep their sigla in the profile summary", () => {
   const values: FieldValues = new Map([
     ["preferences.themes", { field: "preferences.themes", value: ["technology", "health"], provenance: "a1:1", at: "2026-11-15T00:00:00Z" }],

@@ -66,8 +66,6 @@ export const portfolioFr = {
     incomplet: "Des informations obligatoires manquent : un portefeuille prudent est construit avec des valeurs par défaut prudentes, à revoir une fois le profil complété.",
     protection: "Protection : le portefeuille le plus prudent du mandat est construit, sans titre individuel ni cryptoactif ; une revue par une personne est recommandée.",
   } satisfies Record<DecisionKind, string>,
-  /** Header of a protection whose only cause is the vulnerability signals of the profile (`protection.profile_status`). */
-  protectionSignals: "Des signaux de vulnérabilité appellent une protection : aucune allocation n’est proposée.",
   labels: { FAIT: "FAIT", HYPOTHESE: "HYPOTHÈSE", FICTION: "FICTION" } satisfies Record<FactLabel, string>,
   labelHelp: {
     FAIT: "Calculé par le code sur des données sourcées.",
@@ -308,7 +306,6 @@ export const portfolioEn: PortfolioStrings = {
     incomplet: "Required information is missing: a cautious portfolio is built with cautious default values, to be reviewed once the profile is complete.",
     protection: "Protection: the most prudent portfolio of the mandate is built, without single stocks or crypto-assets; a review by a person is recommended.",
   },
-  protectionSignals: "Vulnerability signals call for protection: no allocation is proposed.",
   labels: { FAIT: "FACT", HYPOTHESE: "ASSUMPTION", FICTION: "FICTION" },
   labelHelp: {
     FAIT: "Computed by code on sourced data.",

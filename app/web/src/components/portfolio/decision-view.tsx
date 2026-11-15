@@ -3,7 +3,7 @@
 import { EXPLANATION_SECTIONS, type Decision, type ExplanationSection, type PortfolioBuildResponse, type Statement } from "@/lib/contract/portfolio";
 import { curly, formatDateTime, formatDate } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
-import { protectionCause, requestFacts } from "@/lib/portfolio/decision";
+import { requestFacts } from "@/lib/portfolio/decision";
 import { groundingLine } from "@/lib/portfolio/grounding";
 import d from "@/components/details/details.module.css";
 import { cn } from "@/components/ui/cn";
@@ -99,9 +99,7 @@ function SummaryMeta({ response, fixture }: { response: PortfolioBuildResponse; 
 function Summary({ response, fixture }: { response: PortfolioBuildResponse; fixture: boolean }) {
   const { t } = useI18n();
   const v = t.portfolioView;
-  const { facts } = useDecisionLookup();
   const decision = response.decision;
-  const kindText = decision.kind === "protection" && protectionCause(facts) === "signals" ? v.protectionSignals : v.kindText[decision.kind];
   return (
     <section className={cn(d.tile, d.tWide)} aria-label={v.meta.decision}>
       <div className={p.summary}>
@@ -110,7 +108,7 @@ function Summary({ response, fixture }: { response: PortfolioBuildResponse; fixt
             <span className={cn(d.chip, KIND_TONE[decision.kind])}>{v.kinds[decision.kind]}</span>
             <FactChip id="level" />
           </div>
-          <p className={p.kindText}>{kindText}</p>
+          <p className={p.kindText}>{v.kindText[decision.kind]}</p>
           <EngineLanguageNote />
           <RequestCheck decision={decision} />
         </div>

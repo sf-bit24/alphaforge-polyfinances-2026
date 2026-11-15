@@ -76,31 +76,8 @@ describe("counters agree in number", () => {
   });
 });
 
-describe("header of a decision without an allocation (#76 causes)", () => {
-  /** Robert's decision turned into a protection whose facts record the given causes. */
-  function protection(causes: string[]): PortfolioBuildResponse {
-    const response = robert();
-    const model = response.decision.facts[0]!;
-    const facts = [...response.decision.facts, ...causes.map((fact_id) => ({ ...model, fact_id }))];
-    return { ...response, decision: { ...response.decision, kind: "protection", positions: [], facts } };
-  }
+describe("header of an incomplete profile and of a protection", () => {
   const header = (locale: Locale, response: PortfolioBuildResponse) => render(locale, response, decisionView);
-
-  it("is true for a protection by the dollar rule (acceptable loss, horizon, withdrawals)", () => {
-    const fr = header("fr", protection(["protection.l_star", "protection.min_L_plan"]));
-    expect(fr).toContain(portfolioFr.kindText.protection);
-    expect(fr).toContain("Aucune allocation ne respecte les limites de votre profil");
-    expect(fr).not.toContain("signaux de vulnérabilité");
-    expect(header("en", protection(["protection.l_star"]))).toContain("No allocation fits the limits of your profile");
-  });
-
-  it("names the vulnerability signals only when they are the cause", () => {
-    expect(header("fr", protection(["protection.profile_status"]))).toContain(portfolioFr.protectionSignals);
-    expect(header("en", protection(["protection.profile_status"]))).toContain(portfolioEn.protectionSignals);
-    const both = header("fr", protection(["protection.profile_status", "protection.l_star"]));
-    expect(both).toContain(portfolioFr.kindText.protection);
-    expect(both).not.toContain(portfolioFr.protectionSignals);
-  });
 
   it("keeps distinct texts for an incomplete profile and a protection", () => {
     expect(portfolioFr.kindText.incomplet).not.toBe(portfolioFr.kindText.protection);

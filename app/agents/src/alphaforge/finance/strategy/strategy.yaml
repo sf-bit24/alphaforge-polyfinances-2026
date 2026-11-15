@@ -7,7 +7,18 @@
 # que d'oracles de test. Le style change la COMPOSITION à risque égal : aucune valeur de ce fichier ne
 # modifie R, le niveau, e_cap, l* ni un budget risk.* de risk_levels.yaml.
 version: "0.1.0"
-status: HYPOTHESE
+status: HYPOTHESE   # hypothèses de conception (jamais des faits de marché), tranchées le 2026-11-15 ci-dessous
+decided:
+  date: "2026-11-15"
+  by: "sf-bit24 (utilisateur), décision déléguée à l'agent hackoton-95"
+  items:
+    - "N2 reste défensive : sa bande 25-40 % couvre le profil BNC Conservateur (30 % d'actions), classé Défensive par la convention d'équipe"
+    - "π n'est pas fixé par style : la tolérance place, la capacité plafonne (rapport de profilage, 31-368) ; faible sang-froid ≤ 0,5"
+    - "τ défensive −0,25 sur tech et energy ; bonus 0,10 ; φ 0,5 / 0,5 / 0,75 ; f_abs 3 % (proposition D5 du backtest)"
+    - "k_default 2, k_max 3, au plus un titre par secteur ; titres non retenus exclus (non_shortlisted: exclude) pour garder la décision explicable"
+    - "poids des indicateurs et fenêtres alignés sur FTSE Russell v8.8 (volatilité 5 ans hebdo, bêta 2 ans quotidien contre l'indice local)"
+    - "une capacité qui lie bloque toute montée de style (prudence) ; momentum en sensibilité seulement"
+    - "codes du profil court absents du questionnaire : lus s'ils existent, à aligner avec le volet profil"
 brain_fiche: architecture/strategie-selection-titres.md
 okf_methodology: general/methodologie/scoring-par-style.md
 inspirations:

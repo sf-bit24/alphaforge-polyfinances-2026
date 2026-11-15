@@ -90,9 +90,16 @@ class Floors(_Strict):
     overconfidence_mult: float = Field(gt=0, le=1)
 
 
+class Decided(_Strict):
+    date: str
+    by: str
+    items: list[str]
+
+
 class StrategyConfig(_Strict):
     version: str
     status: Literal["HYPOTHESE"]
+    decided: Decided | None = None
     brain_fiche: str
     okf_methodology: str
     inspirations: list[str]

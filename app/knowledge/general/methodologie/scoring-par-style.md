@@ -11,7 +11,7 @@ stale_after: "2027-02-15T00:00:00Z"
 sources:
   - id: strategie-etape-0
     title: "Configuration de l'étape 0 d'AlphaForge AI (strategy.yaml v0.1.0)"
-    resource: "app/agents/src/alphaforge/finance/strategy/strategy.yaml au commit 6f84b19 (v0.1.0, sha256 4136e34e2930240811c59daf12fabfdd108f4b3bfb7c34afd8395a6d8c7e88cb); code au même commit : finance/strategy/style.py, rules.py, features.py, scoring.py et select.py"
+    resource: "app/agents/src/alphaforge/finance/strategy/strategy.yaml (v0.1.0, sha256 9056d51b7ed0b09bfb5fbffb8941b04adad84e4818144e91699c075713fe3d29); code au même commit : finance/strategy/style.py, rules.py, features.py, scoring.py et select.py"
     retrieved_at: "2026-11-15T04:50:00Z"
   - id: politique-risque
     title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
@@ -19,7 +19,7 @@ sources:
     retrieved_at: "2026-11-15T04:50:00Z"
   - id: queues-sectorielles
     title: "Baisses maximales longues des industries (calibration de l'étape 0)"
-    resource: "app/agents/scripts/calibration/tails_sectors.py et app/agents/tests/finance/fixtures/calibration/tails_sectors.csv au commit 6f84b19 (US_IND_UTILS 0,431; US_IND_HLTH 0,479), avec tails_monthly.csv (US_IND_ENRGY 0,588; US_IND_MONEY 0,693)"
+    resource: "app/agents/scripts/calibration/tails_sectors.py et app/agents/tests/finance/fixtures/calibration/tails_sectors.csv (US_IND_UTILS 0,431; US_IND_HLTH 0,479), avec tails_monthly.csv (US_IND_ENRGY 0,588; US_IND_MONEY 0,693)"
     retrieved_at: "2026-11-15T04:50:00Z"
   - id: ftse-global-factor
     title: "FTSE Russell, FTSE Global Factor Index Series Ground Rules, v8.8 (juillet 2026)"
@@ -48,19 +48,19 @@ sources:
 data:
   strategy_yaml:
     path: "app/agents/src/alphaforge/finance/strategy/strategy.yaml"
-    commit: "6f84b19"
+    decided: "2026-11-15"
     version: "0.1.0"
-    sha256: "4136e34e2930240811c59daf12fabfdd108f4b3bfb7c34afd8395a6d8c7e88cb"
+    sha256: "9056d51b7ed0b09bfb5fbffb8941b04adad84e4818144e91699c075713fe3d29"
   fact_prefix: "strat."
   limits_blocking: false
-  enabled_by_default: false
+  enabled_by_default: true   # build_portfolio(strategy=True) ; strategy=False rend l'ancien comportement
 ---
 
 # Étape 0 : style et score des titres
 
 L'étape 0 choisit un **style de composition** et quelques **titres satellites** avant l'optimisation. Ce document
-décrit ses règles exactes, telles que codées au commit `6f84b19` : `strategy.yaml` v0.1.0, sha256
-`4136e34e2930240811c59daf12fabfdd108f4b3bfb7c34afd8395a6d8c7e88cb`. Chaque Fact `strat.*` cite
+décrit ses règles exactes, telles que codées et tranchées le 2026-11-15 : `strategy.yaml` v0.1.0, sha256
+`9056d51b7ed0b09bfb5fbffb8941b04adad84e4818144e91699c075713fe3d29`. Chaque Fact `strat.*` cite
 `strategy.yaml@0.1.0#<section>` et renvoie ici. Toutes les valeurs de `strategy.yaml` sont des **hypothèses de
 conception, à valider par l'équipe**; aucune ne vient des fiches de personas. L'étape 0 est **active par
 défaut sur la branche de travail** (`build_portfolio(strategy=True)`, à valider par l'équipe avant toute fusion ; `strategy=False` rend l'ancien comportement); elle s'insère entre la compilation du mandat et le premier

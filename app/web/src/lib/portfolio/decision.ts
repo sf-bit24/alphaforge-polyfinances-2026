@@ -163,7 +163,7 @@ export function rowFacts(row: RankingRow): DecisionFact[] {
 export interface RequestFacts {
   weight?: DecisionFact;
   method?: DecisionFact;
-  /** Judge checks of the request as asked, with their observable outcome (« refuse ; 4 violation(s)… »). */
+  /** Judge checks of the request as asked, with their observable outcome (« refusée ; 4 violations bloquantes »). */
   checks: DecisionTraceEvent[];
 }
 

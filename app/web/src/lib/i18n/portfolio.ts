@@ -1,7 +1,8 @@
 /**
  * Strings of the « Portefeuille simulé » view (`/portfolio`). Merged into the dictionary as
  * `portfolioView`; the English half is typed by the French one. The Decision's own texts
- * (statements, labels of facts, constraint descriptions) come from the engine in French.
+ * (statements, labels of facts, constraint descriptions) come from the engine in French: in
+ * another language the view says so (`engineLanguage`).
  */
 import type { DecisionKind, FactLabel, LensVerdict, Style } from "@/lib/contract/portfolio";
 
@@ -42,6 +43,10 @@ export const portfolioFr = {
     auditFailed: "audit non enregistré",
   },
   modes: { rules: "règles", llm: "LLM" },
+  /** Shown when the interface language is not the engine's (French). */
+  engineLanguage: "Les textes du moteur (faits, explication, contrôles du Judge, contrefactuels, trace) sont en français seulement pour l’instant.",
+  /** Between a label and its value. */
+  colon: " : ",
   kinds: {
     proposition: "Proposition",
     refus_encadre: "Refus encadré",
@@ -165,7 +170,7 @@ export const portfolioFr = {
   debate: {
     title: "Débat des lentilles",
     lead: "Verdicts du second tour, tranchés par le code; un amendement ne peut que resserrer le mandat.",
-    lenses: { timeline: "Horizon", risk: "Risque", diversity: "Diversification", constraints: "Contraintes" } as Record<string, string>,
+    lenses: { timeline: "Horizon", risk: "Risque", diversity: "Diversité et préférences", constraints: "Contraintes" } as Record<string, string>,
     verdicts: { soutien: "soutien", objection_maintenue: "objection maintenue", objection_satisfaite: "objection satisfaite" } satisfies Record<LensVerdict, string>,
     applied: "appliqué",
     rejected: "rejeté",
@@ -246,6 +251,8 @@ export const portfolioEn: PortfolioStrings = {
     auditFailed: "audit not recorded",
   },
   modes: { rules: "rules", llm: "LLM" },
+  engineLanguage: "Engine texts (facts, explanation, Judge checks, counterfactuals, trace) are in French only for now.",
+  colon: ": ",
   kinds: {
     proposition: "Proposal",
     refus_encadre: "Framed refusal",
@@ -369,7 +376,7 @@ export const portfolioEn: PortfolioStrings = {
   debate: {
     title: "Debate of the lenses",
     lead: "Second-round verdicts, settled by code; an amendment can only tighten the mandate.",
-    lenses: { timeline: "Horizon", risk: "Risk", diversity: "Diversification", constraints: "Constraints" },
+    lenses: { timeline: "Horizon", risk: "Risk", diversity: "Diversity and preferences", constraints: "Constraints" },
     verdicts: { soutien: "support", objection_maintenue: "objection maintained", objection_satisfaite: "objection satisfied" },
     applied: "applied",
     rejected: "rejected",

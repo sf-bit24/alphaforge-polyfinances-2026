@@ -44,13 +44,35 @@ function errorText(value: unknown): string | null {
   return JSON.stringify(value);
 }
 
+/** `items` when the collector counts them, else the number of `keys` it wrote. */
+function itemCount(value: Record<string, unknown>): number | null {
+  if (typeof value.items === "number") return value.items;
+  return Array.isArray(value.keys) ? value.keys.length : null;
+}
+
 function collector(value: unknown, role: string): CollectorOutcome | null {
   if (!isRecord(value)) return null;
   return {
     role: typeof value.role === "string" ? value.role : role,
     status: typeof value.status === "string" ? value.status : "unknown",
-    items: typeof value.items === "number" ? value.items : Array.isArray(value.keys) ? value.keys.length : null,
+    items: itemCount(value),
     error: errorText(value.error),
+  };
+}
+
+function curatedOutcome(curated: Record<string, unknown>): NonNullable<RunOutcome["curated"]> {
+  const rejected = Array.isArray(curated.rejected) ? curated.rejected : [];
+  return {
+    status: typeof curated.status === "string" ? curated.status : null,
+    written: Array.isArray(curated.written) ? curated.written.filter((key): key is string => typeof key === "string") : [],
+    rejected: rejected.filter(isRecord).map((item) => ({ key: String(item.key ?? ""), reason: String(item.reason ?? "") })),
+  };
+}
+
+function ingestionOutcome(ingestion: Record<string, unknown>): NonNullable<RunOutcome["ingestion"]> {
+  return {
+    status: typeof ingestion.status === "string" ? ingestion.status : null,
+    job_id: typeof ingestion.job_id === "string" ? ingestion.job_id : null,
   };
 }
 
@@ -58,28 +80,12 @@ function collector(value: unknown, role: string): CollectorOutcome | null {
 export function summarizeRunOutput(output: unknown): RunOutcome | null {
   if (!isRecord(output)) return null;
   const collected = isRecord(output.collected) ? output.collected : {};
-  const curated = isRecord(output.curated) ? output.curated : null;
-  const ingestion = isRecord(output.ingestion) ? output.ingestion : null;
-  const rejected = Array.isArray(curated?.rejected) ? curated.rejected : [];
   return {
     run_id: typeof output.run_id === "string" ? output.run_id : null,
     press: collector(collected.press, "press"),
     data: collector(collected.data, "data"),
-    curated: curated
-      ? {
-          status: typeof curated.status === "string" ? curated.status : null,
-          written: Array.isArray(curated.written) ? curated.written.filter((key): key is string => typeof key === "string") : [],
-          rejected: rejected
-            .filter(isRecord)
-            .map((item) => ({ key: String(item.key ?? ""), reason: String(item.reason ?? "") })),
-        }
-      : null,
-    ingestion: ingestion
-      ? {
-          status: typeof ingestion.status === "string" ? ingestion.status : null,
-          job_id: typeof ingestion.job_id === "string" ? ingestion.job_id : null,
-        }
-      : null,
+    curated: isRecord(output.curated) ? curatedOutcome(output.curated) : null,
+    ingestion: isRecord(output.ingestion) ? ingestionOutcome(output.ingestion) : null,
   };
 }
 

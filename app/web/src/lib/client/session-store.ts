@@ -6,7 +6,8 @@
 import type { AnswerValue, ClientState, KnowledgeLevel, Locale, Question, Stage, TraceStep } from "@/lib/contract/schemas";
 import type { PositionInput, UploadFile } from "@/lib/contract/requests";
 import { ClientState as ClientStateSchema } from "@/lib/contract/schemas";
-import { ApiError, callAgent, callAgentStream, isAbort, type StreamHandlers } from "./api";
+import { callAgent, callAgentStream, toApiError, type ApiError, type StreamHandlers } from "./api";
+import { clearSessionStorage, readClientId, readHistory, writeClientId, writeHistory } from "./session-storage";
 
 export interface TraceRun {
   id: string;
@@ -52,9 +53,6 @@ export interface ErrorMessages {
   noResult: string;
 }
 
-const KEY_CLIENT = "alphaforge.client_id";
-const keyRuns = (id: string) => `alphaforge.runs.${id}`;
-const keyConversation = (id: string) => `alphaforge.conversation.${id}`;
 const MAX_RUNS = 40;
 const MAX_ENTRIES = 120;
 
@@ -80,21 +78,39 @@ function uid(): string {
     : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
-function readJson<T>(key: string, fallback: T): T {
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
+interface RequestOptions {
+  streamed: boolean;
+  /** A new session: runs, state and conversation start empty. */
+  fresh?: boolean;
+  /** A request whose answer has no trace step leaves no run. */
+  quiet?: boolean;
+  /** Shown at once; dropped if the request fails. */
+  userEntry?: ConversationEntry | null;
+  /** Adds A1's answer to the conversation when it says something. */
+  agentEntry?: boolean;
 }
 
-function writeJson(key: string, value: unknown): void {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Storage full or disabled: the session still works for this tab.
-  }
+/** A request in flight: what it calls, how it shows, and the trace run that records it. */
+interface PendingRequest {
+  action: string;
+  call: (handlers: StreamHandlers) => Promise<ClientState>;
+  options: RequestOptions;
+  run: TraceRun;
+  started: number;
+}
+
+function newRun(action: string, { streamed }: Pick<RequestOptions, "streamed">): TraceRun {
+  return { id: uid(), action, startedAt: new Date().toISOString(), durationMs: null, status: "running", streamed, steps: [], error: null };
+}
+
+/** Newest first, at most MAX_RUNS. */
+function withNewRun(runs: TraceRun[], run: TraceRun): TraceRun[] {
+  return [run, ...runs].slice(0, MAX_RUNS);
+}
+
+/** A1's message and questions in a ClientState, as a conversation entry. */
+function agentEntryOf(state: ClientState): Extract<ConversationEntry, { role: "agent" }> {
+  return { id: uid(), role: "agent", at: new Date().toISOString(), message: state.message, questions: state.questions, stage: state.stage };
 }
 
 export interface ReplyInput {
@@ -136,8 +152,7 @@ export class SessionStore {
   private persist(): void {
     const { clientId, runs, conversation } = this.snapshot;
     if (!clientId) return;
-    writeJson(keyRuns(clientId), runs.slice(0, MAX_RUNS));
-    writeJson(keyConversation(clientId), conversation.slice(-MAX_ENTRIES));
+    writeHistory(clientId, runs.slice(0, MAX_RUNS), conversation.slice(-MAX_ENTRIES));
   }
 
   private options() {
@@ -148,12 +163,7 @@ export class SessionStore {
   init = async (): Promise<void> => {
     if (this.initialized) return;
     this.initialized = true;
-    let clientId: string | null = null;
-    try {
-      clientId = window.localStorage.getItem(KEY_CLIENT);
-    } catch {
-      clientId = null;
-    }
+    const clientId = readClientId();
     if (!clientId) {
       this.set({ hydrated: true });
       return;
@@ -162,8 +172,7 @@ export class SessionStore {
       hydrated: true,
       clientId,
       resuming: true,
-      runs: readJson<TraceRun[]>(keyRuns(clientId), []),
-      conversation: readJson<ConversationEntry[]>(keyConversation(clientId), []),
+      ...readHistory(clientId),
     });
     await this.resume();
   };
@@ -177,7 +186,7 @@ export class SessionStore {
       { streamed: false },
     );
     if (!ok && this.snapshot.error?.code === "not_found") {
-      this.clearStorage(clientId);
+      clearSessionStorage(clientId);
       this.set({ ...INITIAL, hydrated: true, notice: "not_found" });
     } else {
       this.seedConversation();
@@ -203,20 +212,10 @@ export class SessionStore {
 
   forget = (): void => {
     const clientId = this.snapshot.clientId;
-    if (clientId) this.clearStorage(clientId);
+    if (clientId) clearSessionStorage(clientId);
     this.retryLast = null;
     this.set({ ...INITIAL, hydrated: true });
   };
-
-  private clearStorage(clientId: string): void {
-    try {
-      window.localStorage.removeItem(KEY_CLIENT);
-      window.localStorage.removeItem(keyRuns(clientId));
-      window.localStorage.removeItem(keyConversation(clientId));
-    } catch {
-      // ignore
-    }
-  }
 
   answerBase = (questionId: string, value: AnswerValue): Promise<boolean> => {
     const clientId = this.requireClient();
@@ -342,11 +341,7 @@ export class SessionStore {
     const state = this.snapshot.state;
     if (!state || this.snapshot.conversation.length > 0) return;
     if ((state.stage === "followups" || state.stage === "complete") && (state.message || state.questions.length > 0)) {
-      this.set({
-        conversation: [
-          { id: uid(), role: "agent", at: new Date().toISOString(), message: state.message, questions: state.questions, stage: state.stage },
-        ],
-      });
+      this.set({ conversation: [agentEntryOf(state)] });
       this.persist();
     }
   }
@@ -354,20 +349,22 @@ export class SessionStore {
   private async execute(
     action: string,
     call: (handlers: StreamHandlers) => Promise<ClientState>,
-    options: { streamed: boolean; fresh?: boolean; quiet?: boolean; userEntry?: ConversationEntry | null; agentEntry?: boolean },
+    options: RequestOptions,
   ): Promise<boolean> {
     if (this.snapshot.pending) return false;
-    const run: TraceRun = {
-      id: uid(),
-      action,
-      startedAt: new Date().toISOString(),
-      durationMs: null,
-      status: "running",
-      streamed: options.streamed,
-      steps: [],
-      error: null,
-    };
-    const started = performance.now();
+    const request: PendingRequest = { action, call, options, run: newRun(action, options), started: performance.now() };
+    this.beginRequest(request);
+    try {
+      const result = await call(this.streamHandlers());
+      this.completeRequest(request, result);
+      return true;
+    } catch (error) {
+      this.failRequest(request, toApiError(error));
+      return false;
+    }
+  }
+
+  private beginRequest({ action, options, run }: PendingRequest): void {
     const conversationBefore = options.fresh ? [] : this.snapshot.conversation;
     this.set({
       pending: action,
@@ -378,7 +375,10 @@ export class SessionStore {
       conversation: options.userEntry ? [...conversationBefore, options.userEntry] : conversationBefore,
       ...(options.fresh ? { runs: [], state: null } : {}),
     });
-    const handlers: StreamHandlers = {
+  }
+
+  private streamHandlers(): StreamHandlers {
+    return {
       onTrace: (step) => {
         const live = this.snapshot.liveRun;
         if (live) this.set({ liveRun: { ...live, steps: [...live.steps, step] } });
@@ -386,76 +386,56 @@ export class SessionStore {
       // One `delta` per agent message, carrying the whole message (CONTRACTS.md 3.4): replace, never append.
       onDelta: (text) => this.set({ streamText: text }),
     };
-    try {
-      const result = await call(handlers);
-      const finished: TraceRun = { ...run, status: "ok", steps: result.trace, durationMs: performance.now() - started };
-      // `message` is null after a deterministic transition: nothing to show then.
-      const agentSpoke = Boolean(result.message) || result.questions.length > 0;
-      const conversation =
-        options.agentEntry && agentSpoke
-          ? [
-              ...this.snapshot.conversation,
-              {
-                id: uid(),
-                role: "agent" as const,
-                at: new Date().toISOString(),
-                message: result.message,
-                questions: result.questions,
-                stage: result.stage,
-                // Links the message to the trace of the request that produced it.
-                runId: finished.id,
-              },
-            ]
-          : this.snapshot.conversation;
-      if (options.fresh || this.snapshot.clientId !== result.client_id) {
-        try {
-          window.localStorage.setItem(KEY_CLIENT, result.client_id);
-        } catch {
-          // ignore
-        }
-      }
-      this.retryLast = null;
-      this.set({
-        clientId: result.client_id,
-        state: result,
-        pending: null,
-        liveRun: null,
-        streamText: "",
-        runs: options.quiet && result.trace.length === 0 ? this.snapshot.runs : [finished, ...this.snapshot.runs].slice(0, MAX_RUNS),
-        conversation,
-        revision: this.snapshot.revision + 1,
-      });
-      this.persist();
-      return true;
-    } catch (error) {
-      const apiError =
-        error instanceof ApiError
-          ? error
-          : isAbort(error)
-            ? new ApiError("aborted", "Aborted")
-            : new ApiError("internal", error instanceof Error ? error.message : String(error));
-      const failed: TraceRun = {
-        ...run,
-        status: "error",
-        steps: this.snapshot.liveRun?.steps ?? [],
-        durationMs: performance.now() - started,
-        error: { code: apiError.code, message: apiError.message },
-      };
-      this.retryLast = () => this.execute(action, call, options);
-      this.set({
-        pending: null,
-        liveRun: null,
-        streamText: "",
-        error: apiError,
-        errorAction: action,
-        runs: [failed, ...this.snapshot.runs].slice(0, MAX_RUNS),
-        // The optimistic user entry is dropped: the composer keeps the text for a retry.
-        conversation: options.userEntry
-          ? this.snapshot.conversation.filter((entry) => entry.id !== options.userEntry?.id)
-          : this.snapshot.conversation,
-      });
-      this.persist();
-      return false;
-    }
+  }
+
+  private completeRequest({ options, run, started }: PendingRequest, result: ClientState): void {
+    const finished: TraceRun = { ...run, status: "ok", steps: result.trace, durationMs: performance.now() - started };
+    // `message` is null after a deterministic transition: nothing to show then.
+    const agentSpoke = Boolean(result.message) || result.questions.length > 0;
+    const conversation =
+      options.agentEntry && agentSpoke
+        ? [
+            ...this.snapshot.conversation,
+            // Links the message to the trace of the request that produced it.
+            { ...agentEntryOf(result), runId: finished.id },
+          ]
+        : this.snapshot.conversation;
+    if (options.fresh || this.snapshot.clientId !== result.client_id) writeClientId(result.client_id);
+    this.retryLast = null;
+    this.set({
+      clientId: result.client_id,
+      state: result,
+      pending: null,
+      liveRun: null,
+      streamText: "",
+      runs: options.quiet && result.trace.length === 0 ? this.snapshot.runs : withNewRun(this.snapshot.runs, finished),
+      conversation,
+      revision: this.snapshot.revision + 1,
+    });
+    this.persist();
+  }
+
+  private failRequest({ action, call, options, run, started }: PendingRequest, apiError: ApiError): void {
+    const failed: TraceRun = {
+      ...run,
+      status: "error",
+      steps: this.snapshot.liveRun?.steps ?? [],
+      durationMs: performance.now() - started,
+      error: { code: apiError.code, message: apiError.message },
+    };
+    this.retryLast = () => this.execute(action, call, options);
+    this.set({
+      pending: null,
+      liveRun: null,
+      streamText: "",
+      error: apiError,
+      errorAction: action,
+      runs: withNewRun(this.snapshot.runs, failed),
+      // The optimistic user entry is dropped: the composer keeps the text for a retry.
+      conversation: options.userEntry
+        ? this.snapshot.conversation.filter((entry) => entry.id !== options.userEntry?.id)
+        : this.snapshot.conversation,
+    });
+    this.persist();
   }
 }

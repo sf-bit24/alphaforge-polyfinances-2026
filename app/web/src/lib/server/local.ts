@@ -5,6 +5,12 @@ import type { Upstream } from "./upstream";
 
 const TIMEOUT_MS = 180_000;
 
+/** Why fetch failed: Node's fetch puts the network error (ECONNREFUSED...) in `cause`. */
+function failureReason(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  return error.cause instanceof Error ? error.cause.message : error.message;
+}
+
 /** `local` mode: POST the request to the Python runtime started on this machine. */
 export async function invokeLocal(url: string, request: AgentRequest, stream: boolean, signal: AbortSignal): Promise<Upstream> {
   let response: Response;
@@ -21,7 +27,7 @@ export async function invokeLocal(url: string, request: AgentRequest, stream: bo
     });
   } catch (error) {
     if (signal.aborted) throw error;
-    const reason = error instanceof Error ? (error.cause instanceof Error ? error.cause.message : error.message) : String(error);
+    const reason = failureReason(error);
     throw new GatewayError(
       "internal",
       {

@@ -3,7 +3,7 @@
 import { Check, Copy, Languages, Server, SlidersHorizontal, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
-import type { KnowledgeLevel, Locale } from "@/lib/contract/schemas";
+import type { ClientState, GatewayHealth, KnowledgeLevel, Locale } from "@/lib/contract/schemas";
 import { KNOWLEDGE_LEVELS } from "@/lib/contract/schemas";
 import { useHealth } from "@/lib/client/health";
 import { useSession } from "@/lib/client/session";
@@ -32,6 +32,162 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
       <dt className="text-sm text-ink-500">{label}</dt>
       <dd className="text-sm break-all text-ink-900">{children}</dd>
     </div>
+  );
+}
+
+function SavedNote() {
+  const { t } = useI18n();
+  return (
+    <span role="status" className="inline-flex items-center gap-1 text-xs font-medium text-good-ink">
+      <Check aria-hidden className="size-3.5" />
+      {t.settings.saved}
+    </span>
+  );
+}
+
+function LanguageCard({ saved, busy, onSelect }: { saved: boolean; busy: boolean; onSelect: (locale: Locale) => Promise<void> }) {
+  const { t, locale } = useI18n();
+  return (
+    <Card>
+      <CardHeader title={t.settings.language} subtitle={t.settings.languageHelp} icon={<Languages aria-hidden className="size-4" />} actions={saved ? <SavedNote /> : null} />
+      <div role="radiogroup" aria-label={t.settings.language} className="grid gap-2 px-5 py-4 sm:grid-cols-2">
+        {(["fr", "en"] as const).map((option) => (
+          <label key={option} className={RADIO_CARD}>
+            <input type="radio" name="locale" className="sr-only" checked={locale === option} onChange={() => void onSelect(option)} disabled={busy} />
+            <Dot />
+            <span>
+              <span className="block text-sm font-semibold text-ink-950">{option === "fr" ? "Français" : "English"}</span>
+              <span className="block text-xs text-ink-500 uppercase">{option}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function KnowledgeLevels({ current, busy, onSelect }: { current: KnowledgeLevel | null; busy: boolean; onSelect: (level: KnowledgeLevel) => Promise<void> }) {
+  const { t } = useI18n();
+  return (
+    <div role="radiogroup" aria-label={t.settings.knowledge} className="grid gap-2 px-5 py-4">
+      {KNOWLEDGE_LEVELS.map((level) => (
+        <label key={level} className={RADIO_CARD}>
+          <input
+            type="radio"
+            name="knowledge"
+            className="sr-only"
+            checked={current === level}
+            onChange={() => void onSelect(level)}
+            disabled={busy}
+          />
+          <Dot />
+          <span>
+            <span className="block text-sm font-semibold text-ink-950">{t.knowledgeLevels[level]}</span>
+            <span className="block text-xs text-ink-600">{t.knowledgeDescriptions[level]}</span>
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/** The level is part of the profile: it needs a session. */
+function KnowledgeCard({ state, saved, busy, onSelect }: { state: ClientState | null; saved: boolean; busy: boolean; onSelect: (level: KnowledgeLevel) => Promise<void> }) {
+  const { t } = useI18n();
+  return (
+    <Card>
+      <CardHeader
+        title={t.settings.knowledge}
+        subtitle={t.settings.knowledgeHelp}
+        icon={<SlidersHorizontal aria-hidden className="size-4" />}
+        actions={saved ? <SavedNote /> : null}
+      />
+      {state ? (
+        <KnowledgeLevels current={state.profile.knowledge_level} busy={busy} onSelect={onSelect} />
+      ) : (
+        <p className="px-5 py-4 text-sm text-ink-600">
+          {t.settings.knowledgeNeedsSession}{" "}
+          <Link href="/profile" className="font-medium text-navy underline underline-offset-2">
+            {t.home.start}
+          </Link>
+        </p>
+      )}
+    </Card>
+  );
+}
+
+function SessionCard({ clientId, copied, onCopy, onForget }: { clientId: string | null; copied: boolean; onCopy: () => void; onForget: () => void }) {
+  const { t } = useI18n();
+  return (
+    <Card>
+      <CardHeader title={t.settings.session} icon={<UserRound aria-hidden className="size-4" />} />
+      <div className="px-5 py-4">
+        {clientId ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <code className="rounded-md bg-ink-50 px-2.5 py-1.5 font-mono text-sm text-ink-800 ring-1 ring-ink-150">{clientId}</code>
+            <Button size="sm" variant="secondary" onClick={onCopy} icon={copied ? <Check aria-hidden className="size-4" /> : <Copy aria-hidden className="size-4" />}>
+              {copied ? t.common.copied : t.common.copy}
+            </Button>
+            <Button size="sm" variant="danger" onClick={onForget}>
+              {t.settings.forget}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-ink-500">{t.settings.sessionNone}</p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function ModeRow({ health }: { health: GatewayHealth | null }) {
+  const { t } = useI18n();
+  return (
+    <Row label={t.settings.mode}>
+      {health ? (
+        <span className="inline-flex items-center gap-2">
+          <span aria-hidden className={cn("size-2 rounded-full", health.ok ? "bg-good" : "bg-critical")} />
+          {t.mode[health.mode]} <code className="font-mono text-xs text-ink-500">AGENT_MODE={health.mode}</code>
+        </span>
+      ) : (
+        t.mode.checking
+      )}
+    </Row>
+  );
+}
+
+function EnvironmentCard({ health }: { health: GatewayHealth | null }) {
+  const { t } = useI18n();
+  return (
+    <Card>
+      <CardHeader title={t.settings.environment} icon={<Server aria-hidden className="size-4" />} />
+      <dl className="divide-y divide-ink-150 px-5 py-2">
+        <ModeRow health={health} />
+        {health?.agent ? (
+          <>
+            <Row label={t.settings.release}>
+              <code className="font-mono">{health.agent.release}</code>
+            </Row>
+            <Row label={t.settings.env}>
+              <code className="font-mono">
+                {health.agent.env} · {health.agent.role}
+              </code>
+            </Row>
+          </>
+        ) : null}
+        {health?.runtime ? (
+          <Row label={t.settings.runtime}>
+            <code className="font-mono text-xs">{health.runtime.arn ?? health.runtime.name}</code>
+            {health.runtime.status ? <span className="ml-2 text-xs text-ink-500">{health.runtime.status}</span> : null}
+          </Row>
+        ) : null}
+        {health?.error ? (
+          <div className="py-3">
+            <ErrorNotice error={health.error} compact />
+          </div>
+        ) : null}
+      </dl>
+    </Card>
   );
 }
 
@@ -66,12 +222,9 @@ export function SettingsView() {
     }
   };
 
-  const savedNote = (
-    <span role="status" className="inline-flex items-center gap-1 text-xs font-medium text-good-ink">
-      <Check aria-hidden className="size-3.5" />
-      {t.settings.saved}
-    </span>
-  );
+  const forget = () => {
+    if (window.confirm(t.settings.forgetConfirm)) session.forget();
+  };
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-8 sm:px-6">
@@ -80,122 +233,10 @@ export function SettingsView() {
         <ErrorNotice error={session.error} onRetry={session.retry} onDismiss={session.dismissError} />
       ) : null}
 
-      <Card>
-        <CardHeader title={t.settings.language} subtitle={t.settings.languageHelp} icon={<Languages aria-hidden className="size-4" />} actions={saved === "locale" ? savedNote : null} />
-        <div role="radiogroup" aria-label={t.settings.language} className="grid gap-2 px-5 py-4 sm:grid-cols-2">
-          {(["fr", "en"] as const).map((option) => (
-            <label key={option} className={RADIO_CARD}>
-              <input type="radio" name="locale" className="sr-only" checked={locale === option} onChange={() => void changeLocale(option)} disabled={busy} />
-              <Dot />
-              <span>
-                <span className="block text-sm font-semibold text-ink-950">{option === "fr" ? "Français" : "English"}</span>
-                <span className="block text-xs text-ink-500 uppercase">{option}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title={t.settings.knowledge}
-          subtitle={t.settings.knowledgeHelp}
-          icon={<SlidersHorizontal aria-hidden className="size-4" />}
-          actions={saved === "knowledge" ? savedNote : null}
-        />
-        {state ? (
-          <div role="radiogroup" aria-label={t.settings.knowledge} className="grid gap-2 px-5 py-4">
-            {KNOWLEDGE_LEVELS.map((level) => (
-              <label key={level} className={RADIO_CARD}>
-                <input
-                  type="radio"
-                  name="knowledge"
-                  className="sr-only"
-                  checked={state.profile.knowledge_level === level}
-                  onChange={() => void changeLevel(level)}
-                  disabled={busy}
-                />
-                <Dot />
-                <span>
-                  <span className="block text-sm font-semibold text-ink-950">{t.knowledgeLevels[level]}</span>
-                  <span className="block text-xs text-ink-600">{t.knowledgeDescriptions[level]}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-        ) : (
-          <p className="px-5 py-4 text-sm text-ink-600">
-            {t.settings.knowledgeNeedsSession}{" "}
-            <Link href="/profile" className="font-medium text-navy underline underline-offset-2">
-              {t.home.start}
-            </Link>
-          </p>
-        )}
-      </Card>
-
-      <Card>
-        <CardHeader title={t.settings.session} icon={<UserRound aria-hidden className="size-4" />} />
-        <div className="px-5 py-4">
-          {session.clientId ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <code className="rounded-md bg-ink-50 px-2.5 py-1.5 font-mono text-sm text-ink-800 ring-1 ring-ink-150">{session.clientId}</code>
-              <Button size="sm" variant="secondary" onClick={() => void copyId()} icon={copied ? <Check aria-hidden className="size-4" /> : <Copy aria-hidden className="size-4" />}>
-                {copied ? t.common.copied : t.common.copy}
-              </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() => {
-                  if (window.confirm(t.settings.forgetConfirm)) session.forget();
-                }}
-              >
-                {t.settings.forget}
-              </Button>
-            </div>
-          ) : (
-            <p className="text-sm text-ink-500">{t.settings.sessionNone}</p>
-          )}
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader title={t.settings.environment} icon={<Server aria-hidden className="size-4" />} />
-        <dl className="divide-y divide-ink-150 px-5 py-2">
-          <Row label={t.settings.mode}>
-            {health ? (
-              <span className="inline-flex items-center gap-2">
-                <span aria-hidden className={cn("size-2 rounded-full", health.ok ? "bg-good" : "bg-critical")} />
-                {t.mode[health.mode]} <code className="font-mono text-xs text-ink-500">AGENT_MODE={health.mode}</code>
-              </span>
-            ) : (
-              t.mode.checking
-            )}
-          </Row>
-          {health?.agent ? (
-            <>
-              <Row label={t.settings.release}>
-                <code className="font-mono">{health.agent.release}</code>
-              </Row>
-              <Row label={t.settings.env}>
-                <code className="font-mono">
-                  {health.agent.env} · {health.agent.role}
-                </code>
-              </Row>
-            </>
-          ) : null}
-          {health?.runtime ? (
-            <Row label={t.settings.runtime}>
-              <code className="font-mono text-xs">{health.runtime.arn ?? health.runtime.name}</code>
-              {health.runtime.status ? <span className="ml-2 text-xs text-ink-500">{health.runtime.status}</span> : null}
-            </Row>
-          ) : null}
-          {health?.error ? (
-            <div className="py-3">
-              <ErrorNotice error={health.error} compact />
-            </div>
-          ) : null}
-        </dl>
-      </Card>
+      <LanguageCard saved={saved === "locale"} busy={busy} onSelect={changeLocale} />
+      <KnowledgeCard state={state} saved={saved === "knowledge"} busy={busy} onSelect={changeLevel} />
+      <SessionCard clientId={session.clientId} copied={copied} onCopy={() => void copyId()} onForget={forget} />
+      <EnvironmentCard health={health} />
     </div>
   );
 }

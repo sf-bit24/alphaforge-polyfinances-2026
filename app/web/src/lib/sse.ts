@@ -33,20 +33,24 @@ export class SseParser {
 
     let start = 0;
     for (let i = 0; i < this.buffer.length; i += 1) {
-      const ch = this.buffer[i];
-      if (ch !== "\n" && ch !== "\r") continue;
+      const char = this.buffer[i];
+      if (char !== "\n" && char !== "\r") continue;
       this.processLine(this.buffer.slice(start, i), out);
-      if (ch === "\r") {
-        if (i + 1 < this.buffer.length) {
-          if (this.buffer[i + 1] === "\n") i += 1;
-        } else {
-          this.pendingCr = true;
-        }
-      }
+      if (char === "\r") i = this.endOfCrLineBreak(i);
       start = i + 1;
     }
     this.buffer = this.buffer.slice(start);
     return out;
+  }
+
+  /** Index of the last character of the line break that starts with the CR at `index`: its LF, if any. */
+  private endOfCrLineBreak(index: number): number {
+    if (index + 1 >= this.buffer.length) {
+      // The chunk ends on this CR: the next chunk may start with its LF.
+      this.pendingCr = true;
+      return index;
+    }
+    return this.buffer[index + 1] === "\n" ? index + 1 : index;
   }
 
   /** End of stream: a last event without its trailing blank line is still delivered. */

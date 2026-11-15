@@ -28,12 +28,12 @@ export function isDraftEmpty(question: Question, draft: Draft): boolean {
   return false;
 }
 
-/** Parse "12 500,50", "12,500.50" or "12500.5" into a number. */
 /** Question ids are opaque (q_*, a1_<turn>_<n>, fb_<turn>_<n>...): keep only safe characters for DOM ids and names. */
 export function questionDomId(id: string): string {
   return id.replace(/[^A-Za-z0-9_-]/g, "_");
 }
 
+/** Parse "12 500,50", "12,500.50" or "12500.5" into a number. */
 export function parseNumberInput(raw: string): number | null {
   const compact = raw.replace(/[\s  $%]/g, "");
   if (compact === "") return null;
@@ -47,63 +47,95 @@ export function parseNumberInput(raw: string): number | null {
 
 export type DraftResult = { ok: true; value: AnswerValue } | { ok: false; error: string };
 
-export function draftToValue(question: Question, draft: Draft, t: Dictionary, locale: Locale): DraftResult {
-  const q = t.question;
+type QuestionTexts = Dictionary["question"];
+
+const MAX_TEXT_ANSWER_CHARS = 2000;
+
+/** Why a number is out of the question's bounds, or null; a percent is within 0 to 100 unless the question says otherwise. */
+function boundsError(question: Question, value: number, texts: QuestionTexts, locale: Locale): string | null {
   const min = question.min ?? (question.kind === "percent" ? 0 : null);
   const max = question.max ?? (question.kind === "percent" ? 100 : null);
-  const bounds = (value: number): string | null => {
-    if (min !== null && max !== null && (value < min || value > max)) return q.between(formatNumber(min, locale), formatNumber(max, locale));
-    if (min !== null && value < min) return q.atLeast(formatNumber(min, locale));
-    if (max !== null && value > max) return q.atMost(formatNumber(max, locale));
-    return null;
-  };
+  if (min !== null && max !== null && (value < min || value > max)) return texts.between(formatNumber(min, locale), formatNumber(max, locale));
+  if (min !== null && value < min) return texts.atLeast(formatNumber(min, locale));
+  if (max !== null && value > max) return texts.atMost(formatNumber(max, locale));
+  return null;
+}
+
+function withinBounds(question: Question, value: number, texts: QuestionTexts, locale: Locale): DraftResult {
+  const error = boundsError(question, value, texts, locale);
+  return error ? { ok: false, error } : { ok: true, value };
+}
+
+function scaleValue(question: Question, draft: Draft, texts: QuestionTexts, locale: Locale): DraftResult {
+  if (typeof draft !== "number") return { ok: false, error: texts.choose };
+  if (!Number.isInteger(draft)) return { ok: false, error: texts.integer };
+  return withinBounds(question, draft, texts, locale);
+}
+
+function numberOfDraft(draft: Draft): number | null {
+  if (typeof draft === "number") return draft;
+  return typeof draft === "string" ? parseNumberInput(draft) : null;
+}
+
+/** Number, money or percent. */
+function amountValue(question: Question, draft: Draft, texts: QuestionTexts, locale: Locale): DraftResult {
+  const value = numberOfDraft(draft);
+  if (value === null) return { ok: false, error: texts.enterNumber };
+  if (question.kind === "money" && value < 0) return { ok: false, error: texts.atLeast("0") };
+  return withinBounds(question, value, texts, locale);
+}
+
+function textValue(draft: Draft, texts: QuestionTexts): DraftResult {
+  const text = typeof draft === "string" ? draft.trim() : "";
+  return text.length >= 1 && text.length <= MAX_TEXT_ANSWER_CHARS ? { ok: true, value: text } : { ok: false, error: texts.textLength };
+}
+
+export function draftToValue(question: Question, draft: Draft, t: Dictionary, locale: Locale): DraftResult {
+  const texts = t.question;
   switch (question.kind) {
     case "single_choice":
-      return typeof draft === "string" && draft ? { ok: true, value: draft } : { ok: false, error: q.choose };
+      return typeof draft === "string" && draft ? { ok: true, value: draft } : { ok: false, error: texts.choose };
     case "multi_choice":
-      return Array.isArray(draft) && draft.length > 0 ? { ok: true, value: draft } : { ok: false, error: q.chooseAtLeastOne };
+      return Array.isArray(draft) && draft.length > 0 ? { ok: true, value: draft } : { ok: false, error: texts.chooseAtLeastOne };
     case "boolean":
-      return typeof draft === "boolean" ? { ok: true, value: draft } : { ok: false, error: q.choose };
-    case "scale": {
-      if (typeof draft !== "number") return { ok: false, error: q.choose };
-      if (!Number.isInteger(draft)) return { ok: false, error: q.integer };
-      const error = bounds(draft);
-      return error ? { ok: false, error } : { ok: true, value: draft };
-    }
+      return typeof draft === "boolean" ? { ok: true, value: draft } : { ok: false, error: texts.choose };
+    case "scale":
+      return scaleValue(question, draft, texts, locale);
     case "number":
     case "money":
-    case "percent": {
-      const value = typeof draft === "number" ? draft : typeof draft === "string" ? parseNumberInput(draft) : null;
-      if (value === null) return { ok: false, error: q.enterNumber };
-      if (question.kind === "money" && value < 0) return { ok: false, error: q.atLeast("0") };
-      const error = bounds(value);
-      return error ? { ok: false, error } : { ok: true, value };
-    }
-    case "text": {
-      const text = typeof draft === "string" ? draft.trim() : "";
-      return text.length >= 1 && text.length <= 2000 ? { ok: true, value: text } : { ok: false, error: q.textLength };
-    }
+    case "percent":
+      return amountValue(question, draft, texts, locale);
+    case "text":
+      return textValue(draft, texts);
   }
+}
+
+function optionLabel(question: Question, option: string): string {
+  return question.options?.find((candidate) => candidate.value === option)?.label ?? option;
+}
+
+/** A number answer with its unit: money in its currency, a percent with its sign. */
+function amountText(question: Question, value: number, locale: Locale): string {
+  if (question.kind === "money") return formatMoney(value, locale, question.unit || "CAD");
+  if (question.kind === "percent") return `${formatNumber(value, locale)}${locale === "fr" ? "\u00a0%" : "%"}`;
+  return `${formatNumber(value, locale)}${question.unit ? ` ${question.unit}` : ""}`;
 }
 
 /** A readable version of an answer, for the conversation thread. */
 export function displayAnswer(question: Question, value: AnswerValue, t: Dictionary, locale: Locale): string {
-  const label = (option: string) => question.options?.find((candidate) => candidate.value === option)?.label ?? option;
   switch (question.kind) {
     case "single_choice":
-      return label(String(value));
+      return optionLabel(question, String(value));
     case "multi_choice":
-      return Array.isArray(value) ? value.map(label).join(", ") : String(value);
+      return Array.isArray(value) ? value.map((option) => optionLabel(question, option)).join(", ") : String(value);
     case "boolean":
       return value === true ? t.question.yes : t.question.no;
     case "money":
-      return typeof value === "number" ? formatMoney(value, locale, question.unit || "CAD") : String(value);
     case "percent":
-      return typeof value === "number" ? `${formatNumber(value, locale)}${locale === "fr" ? "\u00a0%" : "%"}` : String(value);
+    case "number":
+      return typeof value === "number" ? amountText(question, value, locale) : String(value);
     case "scale":
       return question.max !== null && question.max !== undefined ? `${String(value)} / ${question.max}` : String(value);
-    case "number":
-      return typeof value === "number" ? `${formatNumber(value, locale)}${question.unit ? ` ${question.unit}` : ""}` : String(value);
     case "text":
       return String(value);
   }

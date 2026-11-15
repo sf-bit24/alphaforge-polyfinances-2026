@@ -15,7 +15,7 @@ from dataclasses import replace
 from datetime import date, timedelta
 from typing import Any
 
-from .. import clock, starter
+from .. import clock, market
 from ..agentkit import ModelFactory, bedrock_model_factory
 from ..collect import fetchers, staging
 from ..config import Settings
@@ -122,7 +122,7 @@ def _expert_job(payload: dict[str, Any], run_id: str) -> dict[str, Any]:
     if mode not in ("sweep", "question"):
         raise AppError("bad_request", "mode doit valoir sweep ou question.")
     depth = _depth(payload.get("depth") or ("quick" if mode == "sweep" else "standard"))
-    default_issuers = list(starter.universe()) if mode == "sweep" else []
+    default_issuers = list(market.universe()) if mode == "sweep" else []
     cap = _researcher_cap(payload, depth)
     job = expert_mod.ExpertJob(
         run_id=run_id,

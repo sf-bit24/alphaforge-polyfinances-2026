@@ -197,7 +197,8 @@ build_runtime_zip() {
     fi
     for required in alphaforge/profile/questionnaire.yaml alphaforge/profile/skills/client-brain-init/SKILL.md \
         alphaforge/profile/skills/client-brain-update/SKILL.md alphaforge/data/starter/assets_universe.csv \
-        alphaforge/data/starter/prices_daily.csv alphaforge/data/starter/fx_usdcad_daily.csv; do
+        alphaforge/data/starter/prices_daily.csv alphaforge/data/starter/fx_usdcad_daily.csv \
+        alphaforge/data/market/universe.yaml; do
         if [ ! -f "$stage/$required" ]; then
             echo "error: $required is missing from the package" >&2
             exit 1

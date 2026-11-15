@@ -232,6 +232,14 @@ def build_portfolio(
         if r1.status != "optimal":
             raise RuntimeError(f"mandat infaisable : {r1.infeasible_rules}")
         book.data_version = r1.data_version
+        # Données de marché quotidiennes (alphaforge.market) lues par l'étape 0 : leur version entre dans celle de
+        # la décision. En repli sur le jeu de départ (figé), rien ne change.
+        if strat is not None:
+            from alphaforge import market
+
+            mv = market.data_version()
+            if mv.get("source") == "market" and mv.get("version"):
+                book.data_version = f"{book.data_version}+market:{mv['version']}"
         # Lot E, OKF général : avec le magasin OKF (OkfMarketStore), la version des données couvre aussi les
         # (clé, ETag) des fondamentaux de general/societes/, lus ici une fois pour toute la décision. Jamais les
         # actualités : une nouvelle ne change ni le mandat ni la version des données.

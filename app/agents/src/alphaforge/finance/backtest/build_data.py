@@ -4,6 +4,7 @@ Usage (from app/agents/):
     uv run --group finance --group backtest-data python -I -m alphaforge.finance.backtest.build_data
         [--refresh]   # re-download everything
         [--offline]   # build from <data dir>/raw only, no network
+        [--daily-only]  # only the daily market parquets (daily_data.py)
 
 Security: every downloaded file is treated as untrusted DATA. Each source lives in
 its own folder <data dir>/raw/<source>/ with a manifest.json (url, retrieval time,
@@ -18,6 +19,9 @@ Outputs (<data dir>/):
     fx_monthly.parquet       USDCAD month-end
     inflation_monthly.parquet  US & Canada CPI monthly inflation
     lookthrough_us_mkt.parquet  share of each KF industry in US market cap (time-varying)
+    daily_prices.parquet, fx_daily.parquet, corporate_actions.parquet
+                             daily market data for alphaforge.market (daily_data.py), universe of
+                             data/market/universe.yaml; "daily" block of data_version.json
     qa_overlap.csv           yfinance vs starter dataset concordance on the overlap
     coverage.csv             asset_id, start, end, n_months
     data_version.json        content hash + build metadata
@@ -37,6 +41,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from . import daily_data
 from .bonds import bond_returns_from_yields
 from .paths import data_dir, starter_dir
 
@@ -97,6 +102,7 @@ DOWNLOADS = {
     },
     "bankofcanada": {
         "V41690973.csv": "https://www.bankofcanada.ca/valet/observations/V41690973/csv?start_date=1990-01-01",
+        "FXUSDCAD.csv": daily_data.FX_URL,
     },
 }
 
@@ -148,6 +154,7 @@ def download_all(*, refresh: bool) -> None:
             manifest[file_name] = _manifest_entry(url, content)
             _write_manifest(folder, manifest)
     download_yfinance(refresh=refresh)
+    daily_data.download_yfinance_daily(RAW, [str(a["ticker"]) for a in daily_data.universe_rows()], refresh=refresh)
 
 
 def universe() -> pd.DataFrame:
@@ -1166,10 +1173,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--refresh", action="store_true", help="re-download all raw files")
     parser.add_argument("--offline", action="store_true", help="do not download, build from <data dir>/raw only")
+    parser.add_argument("--daily-only", action="store_true", help="only build the daily market parquets")
     arguments = parser.parse_args()
     if not arguments.offline:
         download_all(refresh=arguments.refresh)
-    build()
+    if not arguments.daily_only:
+        build()
+    daily_data.build_daily(OUT, RAW)
 
 
 if __name__ == "__main__":

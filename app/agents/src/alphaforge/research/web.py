@@ -111,9 +111,8 @@ class ResearchWeb:
 
     # --------------------------------------------------------------- utilitaires
     def _robots_text(self, url: str) -> tuple[int, str]:
-        host = urllib.parse.urlsplit(url).hostname or ""
         try:
-            response = http.http_get(url, allowed_hosts={host}, max_bytes=500_000, timeout=8)
+            response = http.get_robots(url)
         except http.FetchError as exc:
             if exc.status is not None:
                 return exc.status, ""

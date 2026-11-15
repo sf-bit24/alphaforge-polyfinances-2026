@@ -1,0 +1,441 @@
+# Catalogue des concepts de tldoole (version 1, 2026-11-14).
+#
+# Un concept n'entre dans une vidéo que s'il figure ici : A7 ne détecte que ces identifiants, et A8 bâtit
+# son scénario sur les points clés validés (key_points), complétés par des faits calculés par le code
+# (fact_hints, voir facts.py). Les points clés reprennent l'atelier BNCD du Datathon (sources FINRA,
+# Investor.gov, CIRO), et canada.ca pour le CELI et le REER.
+#
+# aliases : expressions repérées dans les messages de l'investisseur (minuscules, sans accents; un * final
+# accepte toute fin de mot). signals : règles déterministes de signals.py qui pointent vers ce concept.
+
+version: 1
+
+sources:
+  bncd_instruments:
+    title: "Atelier BNCD, Comprendre l'investisseur : « Mais qu'achète-t-on vraiment ? » (FINRA, Investor.gov)"
+    resource: "brain:references/comprendre-investisseur-avant-solution.md#slide-5"
+  bncd_rendement:
+    title: "Atelier BNCD, Comprendre l'investisseur : « Un rendement n'est jamais qu'un chiffre » (FINRA)"
+    resource: "brain:references/comprendre-investisseur-avant-solution.md#slide-6"
+  bncd_horizon:
+    title: "Atelier BNCD, Comprendre l'investisseur : « Le temps disponible change la décision » (Investor.gov, CIRO, FINRA)"
+    resource: "brain:references/comprendre-investisseur-avant-solution.md#slide-7"
+  bncd_risque:
+    title: "Atelier BNCD, Comprendre l'investisseur : « Le risque ne se résume pas à ça peut baisser » (FINRA, CIRO)"
+    resource: "brain:references/comprendre-investisseur-avant-solution.md#slide-8"
+  bncd_diversification:
+    title: "Atelier BNCD, Comprendre l'investisseur : « Diversifier, c'est multiplier les sources de rendement et de risque » (FINRA, Investor.gov)"
+    resource: "brain:references/comprendre-investisseur-avant-solution.md#slide-9"
+  bncd_xsp:
+    title: "Atelier BNCD, Comprendre l'investisseur : « Que m'apporterait XSP ? » (portefeuille très canadien)"
+    resource: "brain:references/comprendre-investisseur-avant-solution.md#slide-13"
+  canada_celi:
+    title: "Gouvernement du Canada, Compte d'épargne libre d'impôt (CELI)"
+    resource: "https://www.canada.ca/fr/agence-revenu/services/impot/particuliers/sujets/compte-epargne-libre-impot.html"
+  canada_reer:
+    title: "Gouvernement du Canada, REER et régimes connexes"
+    resource: "https://www.canada.ca/fr/agence-revenu/services/impot/particuliers/sujets/reer-regimes-connexes.html"
+
+concepts:
+  - id: fnb
+    label: {fr: "FNB", en: "ETF"}
+    title: {fr: "Un FNB, c'est quoi ?", en: "What is an ETF?"}
+    accent: blue
+    aliases:
+      fr: ["fnb", "fnbs", "fonds negocie*", "fonds indiciel*", "etf", "etfs", "xiu", "xbb", "zeqt", "xsp", "vfv", "ishares"]
+      en: ["etf", "etfs", "exchange traded fund*", "exchange-traded fund*", "index fund*"]
+    signals: [products_without_etf]
+    key_points:
+      fr:
+        - "Un FNB (fonds négocié en bourse) est un panier de placements : une part vous donne un petit morceau de tout ce qu'il contient."
+        - "Il s'achète et se vend en bourse, au prix du marché, comme une action."
+        - "Son rendement est celui des actifs qu'il détient, moins les frais."
+        - "Risques à comprendre : les actifs du panier, les frais, la liquidité et l'écart entre prix acheteur et vendeur."
+      en:
+        - "An ETF (exchange-traded fund) is a basket of investments: one unit gives you a small piece of everything inside it."
+        - "It is bought and sold on an exchange, at the market price, like a stock."
+        - "Its return is the return of the assets it holds, minus fees."
+        - "Risks to understand: the assets in the basket, fees, liquidity and the bid-ask spread."
+    fact_hints:
+      - {tool: compare_assets, tickers: ["SHOP.TO", "XIU.TO"], metric: annualized_volatility}
+      - {tool: asset_stats, ticker: "XIU.TO"}
+    sources: [bncd_instruments]
+
+  - id: diversification
+    label: {fr: "Diversification", en: "Diversification"}
+    title: {fr: "Diversifier, vraiment ?", en: "Diversify, really?"}
+    accent: green
+    aliases:
+      fr: ["diversif*", "correlation", "tous mes oeufs", "meme panier"]
+      en: ["diversif*", "correlation", "all my eggs", "one basket"]
+    signals: [flag_sector_concentration, flag_few_holdings]
+    key_points:
+      fr:
+        - "Diversifier, c'est varier les expositions qui peuvent réagir différemment, pas seulement posséder plus de titres."
+        - "Dix actions technologiques dépendent souvent des mêmes moteurs : ce n'est pas une vraie diversification."
+        - "On peut diversifier par classe d'actifs, région, secteur, style et source de risque."
+        - "Des placements qui ne bougent pas exactement ensemble réduisent la dépendance à un seul scénario : c'est la corrélation."
+      en:
+        - "Diversifying means mixing exposures that can react differently, not just owning more securities."
+        - "Ten tech stocks often depend on the same drivers: that is not real diversification."
+        - "You can diversify by asset class, region, sector, style and source of risk."
+        - "Investments that do not move exactly together reduce dependence on a single scenario: that is correlation."
+    fact_hints:
+      - {tool: compare_assets, tickers: ["NVDA", "SPY"], metric: max_drawdown}
+      - {tool: compare_assets, tickers: ["SPY", "GLD"], metric: total_return}
+    sources: [bncd_diversification]
+
+  - id: volatilite
+    label: {fr: "Volatilité", en: "Volatility"}
+    title: {fr: "La volatilité, en clair", en: "Volatility, plainly"}
+    accent: yellow
+    aliases:
+      fr: ["volatil*", "fluctu*", "ca bouge", "montagnes russes", "yo-yo"]
+      en: ["volatil*", "fluctuat*", "swings", "roller coaster"]
+    signals: [attitude_vs_reaction]
+    key_points:
+      fr:
+        - "La volatilité mesure l'ampleur des variations de prix, à la hausse comme à la baisse."
+        - "Plus elle est élevée, plus la valeur peut s'écarter de son point de départ en peu de temps."
+        - "Une action seule est en général plus volatile qu'un panier diversifié."
+        - "La volatilité passée ne garantit pas la volatilité future."
+      en:
+        - "Volatility measures how widely prices move, up as well as down."
+        - "The higher it is, the further the value can drift from where it started in a short time."
+        - "A single stock is usually more volatile than a diversified basket."
+        - "Past volatility does not guarantee future volatility."
+    fact_hints:
+      - {tool: compare_assets, tickers: ["SHOP.TO", "XIU.TO", "XBB.TO"], metric: annualized_volatility}
+      - {tool: asset_stats, ticker: "XIU.TO"}
+    sources: [bncd_risque]
+
+  - id: baisse_maximale
+    label: {fr: "Baisse maximale", en: "Drawdown"}
+    title: {fr: "La pire baisse", en: "The worst drop"}
+    accent: coral
+    aliases:
+      fr: ["baisse maximale", "drawdown", "krach", "chute", "perte maximale", "creux"]
+      en: ["drawdown", "crash", "max loss", "maximum loss", "worst drop"]
+    signals: [reaction_sell_all]
+    key_points:
+      fr:
+        - "La baisse maximale est la pire chute entre un sommet et un creux sur une période."
+        - "Elle montre ce qu'un investisseur aurait vécu dans le pire moment."
+        - "Après une baisse de 50 %, il faut une hausse de 100 % pour revenir au point de départ."
+        - "Le temps pour récupérer compte autant que la profondeur de la baisse."
+      en:
+        - "Drawdown is the worst fall from a peak to a trough over a period."
+        - "It shows what an investor would have lived through at the worst moment."
+        - "After a 50% drop, it takes a 100% gain to get back to where you started."
+        - "The time to recover matters as much as the depth of the drop."
+    fact_hints:
+      - {tool: asset_stats, ticker: "SPY"}
+      - {tool: asset_stats, ticker: "SHOP.TO"}
+    sources: [bncd_risque]
+
+  - id: rendement_total
+    label: {fr: "Rendement", en: "Return"}
+    title: {fr: "Lire un rendement", en: "Reading a return"}
+    accent: green
+    aliases:
+      fr: ["rendement*", "dividende*", "distribution*", "ca rapporte"]
+      en: ["return", "returns", "dividend*", "yield on", "payout"]
+    signals: []
+    key_points:
+      fr:
+        - "Rendement total = gain ou perte en capital + revenus reçus (intérêts, dividendes, distributions)."
+        - "Exemple : 100 $ devenus 108 $, plus 2 $ de dividendes, font un rendement total de 10 %."
+        - "Un rendement n'a de sens qu'avec sa période : +10 % sur un mois ou sur dix ans, ce n'est pas pareil."
+        - "Le rendement passé décrit le passé ; il ne garantit pas le rendement futur."
+      en:
+        - "Total return = capital gain or loss + income received (interest, dividends, distributions)."
+        - "Example: $100 that becomes $108, plus $2 of dividends, is a 10% total return."
+        - "A return only means something with its period: +10% over one month or over ten years is not the same."
+        - "Past returns describe the past; they do not guarantee future returns."
+    fact_hints:
+      - {tool: asset_stats, ticker: "XIU.TO"}
+    sources: [bncd_rendement]
+
+  - id: horizon
+    label: {fr: "Horizon", en: "Time horizon"}
+    title: {fr: "Votre horizon de placement", en: "Your time horizon"}
+    accent: violet
+    aliases:
+      fr: ["horizon", "long terme", "court terme", "moyen terme"]
+      en: ["horizon", "long term", "short term", "long-term", "short-term"]
+    signals: [short_horizon_high_risk]
+    key_points:
+      fr:
+        - "L'horizon, c'est le temps avant d'avoir besoin d'une part importante de l'argent investi."
+        - "Court : moins de 3 ans. Moyen : de 3 à 10 ans. Long : 10 ans et plus."
+        - "L'horizon n'est ni l'âge ni la tolérance au risque : aimer le risque ne donne pas plus de temps pour récupérer."
+        - "Un même portefeuille peut avoir plusieurs horizons : urgences, projet, retraite."
+      en:
+        - "Your horizon is the time before you need a large part of the money you invested."
+        - "Short: under 3 years. Medium: 3 to 10 years. Long: 10 years and more."
+        - "Horizon is neither age nor risk tolerance: liking risk does not give you more time to recover."
+        - "One portfolio can have several horizons: emergencies, a project, retirement."
+    fact_hints:
+      - {tool: asset_stats, ticker: "SPY"}
+    sources: [bncd_horizon]
+
+  - id: tolerance_capacite
+    label: {fr: "Tolérance et capacité", en: "Tolerance vs capacity"}
+    title: {fr: "Vouloir ou pouvoir ?", en: "Willing or able?"}
+    accent: violet
+    aliases:
+      fr: ["tolerance", "capacite", "capacite de risque", "profil de risque"]
+      en: ["risk tolerance", "risk capacity", "tolerance", "capacity"]
+    signals: [loss_impact_vs_attitude]
+    key_points:
+      fr:
+        - "La tolérance, c'est ce que vous acceptez de vivre ; la capacité, c'est ce que vous pouvez vous permettre de perdre."
+        - "Vouloir accepter une baisse ne signifie pas pouvoir en assumer les conséquences."
+        - "La capacité dépend de l'horizon, des revenus, du fonds d'urgence et des dettes."
+        - "Le niveau de risque retenu est le plus prudent des deux."
+      en:
+        - "Tolerance is what you are willing to live through; capacity is what you can afford to lose."
+        - "Being willing to accept a drop does not mean you can afford its consequences."
+        - "Capacity depends on your horizon, income, emergency fund and debts."
+        - "The risk level used is the more cautious of the two."
+    fact_hints: []
+    sources: [bncd_risque]
+
+  - id: types_risque
+    label: {fr: "Risque", en: "Risk"}
+    title: {fr: "Les visages du risque", en: "The faces of risk"}
+    accent: coral
+    aliases:
+      fr: ["risque de credit", "risque de liquidite", "risque de marche"]
+      en: ["credit risk", "liquidity risk", "market risk"]
+    signals: []
+    key_points:
+      fr:
+        - "Le risque, c'est la possibilité d'un résultat négatif important pour vous, pas seulement « ça peut baisser »."
+        - "Marché, crédit, liquidité, taux et inflation, devise, concentration : chaque placement en combine plusieurs."
+        - "Le risque qui compte dépend de votre objectif, de votre horizon et de votre capacité à absorber une perte."
+      en:
+        - "Risk is the possibility of a significantly bad outcome for you, not just 'it can go down'."
+        - "Market, credit, liquidity, rates and inflation, currency, concentration: every investment combines several."
+        - "The risk that matters depends on your goal, your horizon and your capacity to absorb a loss."
+    fact_hints:
+      - {tool: compare_assets, tickers: ["ZST.TO", "XBB.TO", "XIU.TO"], metric: max_drawdown}
+    sources: [bncd_risque]
+
+  - id: obligations_taux
+    label: {fr: "Obligations et taux", en: "Bonds and rates"}
+    title: {fr: "Pourquoi une obligation peut baisser", en: "Why a bond can fall"}
+    accent: blue
+    aliases:
+      fr: ["obligation*", "taux d'interet*", "taux directeur", "rendement obligataire", "cpg"]
+      en: ["bond", "bonds", "interest rate*", "policy rate", "bond yield*", "gic"]
+    signals: []
+    key_points:
+      fr:
+        - "Une obligation est un prêt à un gouvernement ou à une société, qui vous verse des intérêts."
+        - "Quand les taux d'intérêt montent, le prix des obligations déjà émises baisse, et inversement."
+        - "Plus l'échéance est longue, plus le prix réagit aux variations de taux."
+        - "Risques à comprendre : taux, crédit (l'émetteur peut ne pas payer) et liquidité."
+      en:
+        - "A bond is a loan to a government or a company that pays you interest."
+        - "When interest rates rise, the price of existing bonds falls, and the other way round."
+        - "The longer the maturity, the more the price reacts to rate changes."
+        - "Risks to understand: rates, credit (the issuer may not pay) and liquidity."
+    fact_hints:
+      - {tool: macro_series, series_id: "BD.CDN.10YR.DQ.YLD"}
+      - {tool: compare_assets, tickers: ["ZST.TO", "XBB.TO", "TLT"], metric: max_drawdown}
+    sources: [bncd_instruments, bncd_risque]
+
+  - id: inflation
+    label: {fr: "Inflation", en: "Inflation"}
+    title: {fr: "L'inflation grignote", en: "Inflation nibbles away"}
+    accent: yellow
+    aliases:
+      fr: ["inflation", "pouvoir d'achat", "ipc", "cout de la vie", "rendement reel"]
+      en: ["inflation", "purchasing power", "cpi", "cost of living", "real return"]
+    signals: []
+    key_points:
+      fr:
+        - "L'inflation est la hausse générale des prix : avec le même argent, on achète moins."
+        - "Le rendement réel, c'est à peu près le rendement moins l'inflation."
+        - "Un placement qui rapporte moins que l'inflation fait perdre du pouvoir d'achat."
+      en:
+        - "Inflation is the general rise in prices: the same money buys less."
+        - "The real return is roughly the return minus inflation."
+        - "An investment that earns less than inflation loses purchasing power."
+    fact_hints:
+      - {tool: macro_series, series_id: "STATIC_TOTALCPICHANGE"}
+      - {tool: macro_series, series_id: "V39079"}
+    sources: [bncd_rendement, bncd_risque]
+
+  - id: devise
+    label: {fr: "Risque de change", en: "Currency risk"}
+    title: {fr: "Le dollar américain compte aussi", en: "The US dollar matters too"}
+    accent: blue
+    aliases:
+      fr: ["devise*", "taux de change", "dollar americain", "usd", "couvert*", "couverture"]
+      en: ["currency", "exchange rate", "us dollar", "usd", "hedged", "hedging"]
+    signals: [cad_only_with_usd]
+    key_points:
+      fr:
+        - "Un placement en dollars américains, pour un investisseur canadien, dépend aussi du taux de change USD/CAD."
+        - "Si le dollar américain baisse face au dollar canadien, la valeur en CAD baisse, même si le placement n'a pas bougé."
+        - "Certains FNB couvrent ce risque : on les dit « couverts en dollars canadiens »."
+      en:
+        - "A US-dollar investment held by a Canadian investor also depends on the USD/CAD exchange rate."
+        - "If the US dollar falls against the Canadian dollar, the value in CAD falls even if the investment did not move."
+        - "Some ETFs hedge this risk: they are called 'CAD-hedged'."
+    fact_hints:
+      - {tool: fx_usdcad}
+    sources: [bncd_risque, bncd_xsp]
+
+  - id: concentration
+    label: {fr: "Concentration", en: "Concentration"}
+    title: {fr: "Trop dans un seul panier", en: "Too much in one basket"}
+    accent: coral
+    aliases:
+      fr: ["concentr*", "une seule action", "un seul titre"]
+      en: ["concentrat*", "single stock", "one stock"]
+    signals: [flag_concentration]
+    key_points:
+      fr:
+        - "Un portefeuille est concentré quand son résultat dépend trop d'une seule exposition : un titre, un secteur ou un pays."
+        - "Une seule mauvaise nouvelle peut alors peser lourd sur l'ensemble."
+        - "Plusieurs positions ne suffisent pas si elles dépendent des mêmes moteurs."
+      en:
+        - "A portfolio is concentrated when its result depends too much on one exposure: a stock, a sector or a country."
+        - "A single piece of bad news can then weigh heavily on the whole."
+        - "Several positions are not enough if they depend on the same drivers."
+    fact_hints:
+      - {tool: client_portfolio}
+      - {tool: compare_assets, tickers: ["SHOP.TO", "XIU.TO"], metric: max_drawdown}
+    sources: [bncd_risque, bncd_diversification]
+
+  - id: biais_domestique
+    label: {fr: "Biais domestique", en: "Home bias"}
+    title: {fr: "Un portefeuille très canadien", en: "A very Canadian portfolio"}
+    accent: green
+    aliases:
+      fr: ["biais domestique", "trop canadien", "juste canadien", "seulement canadien"]
+      en: ["home bias", "too canadian", "only canadian"]
+    signals: [flag_home_bias]
+    key_points:
+      fr:
+        - "Le biais domestique, c'est investir surtout dans son propre pays."
+        - "Le Canada ne représente qu'une petite part de la bourse mondiale, et quelques secteurs y pèsent lourd, comme la finance et l'énergie."
+        - "Ajouter d'autres régions multiplie les sources de rendement et de risque, avec un risque de change à comprendre."
+      en:
+        - "Home bias means investing mostly in your own country."
+        - "Canada is only a small share of the world stock market, and a few sectors weigh heavily in it, such as financials and energy."
+        - "Adding other regions multiplies the sources of return and risk, with a currency risk to understand."
+    fact_hints:
+      - {tool: client_portfolio}
+      - {tool: compare_assets, tickers: ["XIU.TO", "SPY"], metric: total_return}
+    sources: [bncd_xsp, bncd_diversification]
+
+  - id: frais
+    label: {fr: "Frais", en: "Fees"}
+    title: {fr: "Les frais qui s'additionnent", en: "Fees that add up"}
+    accent: yellow
+    aliases:
+      fr: ["frais", "rfg", "frais de gestion", "commission*"]
+      en: ["fee", "fees", "mer", "management expense*", "commission*"]
+    signals: []
+    key_points:
+      fr:
+        - "Les frais d'un fonds, résumés par le RFG (ratio des frais de gestion), sont prélevés chaque année sur la valeur investie."
+        - "Ils réduisent le rendement chaque année, et l'écart se compose avec le temps."
+        - "Deux fonds semblables peuvent avoir des frais très différents."
+      en:
+        - "A fund's fees, summed up by the MER (management expense ratio), are taken every year from the amount invested."
+        - "They reduce the return every year, and the gap compounds over time."
+        - "Two similar funds can have very different fees."
+    fact_hints:
+      - {tool: fee_drag, amount_cad: 10000, annual_return_pct: 5, fee_pct: 2, years: 25}
+    sources: [bncd_instruments, bncd_rendement]
+
+  - id: interets_composes
+    label: {fr: "Intérêts composés", en: "Compounding"}
+    title: {fr: "L'effet boule de neige", en: "The snowball effect"}
+    accent: green
+    aliases:
+      fr: ["compos*", "boule de neige", "interet sur interet"]
+      en: ["compound*", "snowball"]
+    signals: [high_interest_debt]
+    key_points:
+      fr:
+        - "Les intérêts composés, ce sont des gains qui produisent à leur tour des gains."
+        - "Plus l'horizon est long, plus l'effet est fort."
+        - "Le même mécanisme joue contre vous avec une dette à intérêt élevé, comme un solde de carte de crédit."
+      en:
+        - "Compounding means gains that in turn produce more gains."
+        - "The longer the horizon, the stronger the effect."
+        - "The same mechanism works against you with high-interest debt, such as a credit card balance."
+    fact_hints:
+      - {tool: compound_growth, initial_cad: 1000, monthly_cad: 100, annual_rate_pct: 5, years: 25}
+    sources: [bncd_rendement]
+
+  - id: celi_reer
+    label: {fr: "CELI et REER", en: "TFSA and RRSP"}
+    title: {fr: "CELI ou REER ?", en: "TFSA or RRSP?"}
+    accent: violet
+    aliases:
+      fr: ["celi", "reer", "reee", "ferr", "compte enregistre", "abri fiscal"]
+      en: ["tfsa", "rrsp", "resp", "rrif", "registered account*", "tax shelter"]
+    signals: [unknown_account_types]
+    key_points:
+      fr:
+        - "CELI : les revenus de placement et les retraits ne sont pas imposables ; les cotisations ne sont pas déductibles."
+        - "REER : les cotisations sont déductibles du revenu imposable ; les retraits sont imposés."
+        - "Ce sont des comptes, pas des placements : on peut y détenir des FNB, des actions ou des CPG."
+        - "Les droits de cotisation sont limités et propres à chaque personne."
+      en:
+        - "TFSA: investment income and withdrawals are not taxed; contributions are not deductible."
+        - "RRSP: contributions are deductible from taxable income; withdrawals are taxed."
+        - "They are accounts, not investments: they can hold ETFs, stocks or GICs."
+        - "Contribution room is limited and specific to each person."
+    fact_hints: []
+    sources: [canada_celi, canada_reer]
+
+  - id: fonds_urgence
+    label: {fr: "Fonds d'urgence", en: "Emergency fund"}
+    title: {fr: "Le coussin avant tout", en: "The cushion comes first"}
+    accent: blue
+    aliases:
+      fr: ["fonds d'urgence", "coussin", "imprevu*", "liquidite*"]
+      en: ["emergency fund", "cushion", "rainy day", "liquidity"]
+    signals: [low_emergency_fund]
+    key_points:
+      fr:
+        - "Le fonds d'urgence est une réserve d'argent disponible rapidement pour les imprévus."
+        - "Sans lui, une dépense imprévue peut forcer à vendre ses placements au mauvais moment."
+        - "Il fait partie de votre capacité à prendre du risque."
+      en:
+        - "An emergency fund is a reserve of money you can reach quickly for the unexpected."
+        - "Without it, an unexpected expense can force you to sell investments at the wrong time."
+        - "It is part of your capacity to take risk."
+    fact_hints:
+      - {tool: asset_stats, ticker: "XIU.TO"}
+    sources: [bncd_risque, bncd_horizon]
+
+  - id: cryptoactifs
+    label: {fr: "Cryptoactifs", en: "Crypto assets"}
+    title: {fr: "Les cryptoactifs, sans le battage", en: "Crypto, without the hype"}
+    accent: coral
+    aliases:
+      fr: ["crypto*", "bitcoin", "btc", "ether", "eth", "jeton*", "blockchain"]
+      en: ["crypto*", "bitcoin", "btc", "ether", "eth", "token*", "blockchain"]
+    signals: [crypto_interest_beginner, flag_crypto_heavy]
+    key_points:
+      fr:
+        - "Un cryptoactif est un actif numérique ; les droits qu'il donne varient selon le jeton."
+        - "Sa valeur peut varier très fortement, à la hausse comme à la baisse."
+        - "Risques à comprendre : volatilité, liquidité, garde (où sont conservés les jetons) et technologie."
+      en:
+        - "A crypto asset is a digital asset; the rights it gives vary from one token to another."
+        - "Its value can swing very strongly, up as well as down."
+        - "Risks to understand: volatility, liquidity, custody (where the tokens are held) and technology."
+    fact_hints:
+      - {tool: compare_assets, tickers: ["BTC-USD", "SPY"], metric: max_drawdown}
+      - {tool: asset_stats, ticker: "BTC-USD"}
+    sources: [bncd_instruments]

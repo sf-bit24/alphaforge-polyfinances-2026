@@ -4,7 +4,8 @@
 #   app/agents/scripts/package.sh <out_dir>
 #
 # Produit :
-#   <out_dir>/agents.zip   main.py et le paquet alphaforge (données de départ et YAML compris) à la racine,
+#   <out_dir>/agents.zip   main.py et le paquet alphaforge (données de départ et YAML compris, sans les parquets
+#                          ni raw/ de alphaforge/data/long) à la racine,
 #                          à côté des dépendances verrouillées (uv.lock), installées en roues aarch64-manylinux2014.
 #   <out_dir>/knowledge/   les fichiers **/*.md de app/knowledge/general/ (Terraform les envoie sous general/).
 #
@@ -83,6 +84,14 @@ if [ -e "$stage/main.py" ] || [ -e "$stage/alphaforge" ]; then
 fi
 cp -- "$agents_dir/main.py" "$stage/main.py"
 cp -R -- "$agents_dir/src/alphaforge" "$stage/alphaforge"
+# Données longues du moteur de backtest (alphaforge/data/long) : les parquets reconstruits (licences yfinance,
+# Moody's, OCDE : pas de redistribution) et les téléchargements bruts raw/ ne partent jamais dans le zip, même
+# s'ils existent dans un checkout local (ils ne sont pas versionnés, donc absents en CI). Seuls le catalogue
+# (assets.csv, coverage.csv, qa_overlap.csv, data_version.json) et SOURCES.md restent.
+if [ -d "$stage/alphaforge/data/long" ]; then
+    rm -rf -- "$stage/alphaforge/data/long/raw"
+    find "$stage/alphaforge/data/long" -type f -name '*.parquet' -exec rm -f {} +
+fi
 for required in alphaforge/profile/questionnaire.yaml alphaforge/data/starter/assets_universe.csv \
     alphaforge/data/starter/prices_daily.csv alphaforge/data/starter/fx_usdcad_daily.csv; do
     if [ ! -f "$stage/$required" ]; then

@@ -16,7 +16,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { CollectPanel } from "./collect-panel";
 import { DocumentLoader } from "./document-view";
 
-const GROUP_ORDER = ["index", "methodologie", "actualites", "donnees", "other"];
+const GROUP_ORDER = ["index", "methodologie", "notions", "societes", "actualites", "donnees", "other"];
 
 /** The general base: list `general/` documents, read one, feed the base. */
 export function KnowledgeView() {

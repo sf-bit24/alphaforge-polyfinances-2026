@@ -29,6 +29,8 @@ app/agents/
     agentkit.py                  modèle Bedrock (Strands), boucle d'agent, traces, garde-fou
     starter.py                   lecture du jeu de départ
     data/starter/                jeu de données de départ des organisateurs (copie, sans build_dataset.py)
+    data/long/                   données longues 1926-2026 du moteur de backtest (catalogue versionné, parquets non)
+    finance/backtest/            moteur de backtest mensuel (alphaforge.finance.backtest)
     store/                       magasin OKF : s3 (bucket chiffré SSE-KMS) ou local (dossier)
     profile/
       questionnaire.yaml         questionnaire bilingue versionné, règles et pondérations (à relire par le volet finance)
@@ -45,6 +47,8 @@ app/agents/
       staging.py, service.py     éléments collectés, tâche asynchrone et marqueur _done.json
   tests/                         pytest, sans réseau ni AWS (modèle scripté pour la vraie boucle Strands)
 app/knowledge/general/methodologie/   documents de méthodologie versionnés (poussés sous general/ par Terraform)
+app/knowledge/general/notions/        notions financières (Financial Concept), reliées au catalogue de tldoole
+app/knowledge/general/societes/       chiffres publiés d'ATD et de CSU, relevés à la main (poussés de même)
 ```
 
 ## Lancer en local
@@ -110,7 +114,7 @@ sh scripts/package.sh <out_dir>        # par exemple infrastructure/infra/build/
 Le script exporte les dépendances verrouillées (`uv export --frozen --no-dev`), les installe en roues
 `aarch64-manylinux2014` pour Python 3.13 (`--only-binary=:all:`; il échoue si une roue manque, sans changer de
 plateforme), place `main.py` et le paquet `alphaforge` (YAML et jeu de départ compris) à la racine du zip, retire
-`__pycache__` et `.pyc`, fixe les droits (644 fichiers, 755 dossiers et exécutables) et produit :
+les parquets et `raw/` de `alphaforge/data/long/` s'ils existent localement, retire `__pycache__` et `.pyc`, fixe les droits (644 fichiers, 755 dossiers et exécutables) et produit :
 
 - `<out_dir>/agents.zip` : environ 32 Mo compressé, 70 Mo décompressé (limites vérifiées : 250 Mo et 750 Mo);
 - `<out_dir>/knowledge/` : les fichiers `**/*.md` de `app/knowledge/general/`, à pousser sous `general/`.
@@ -156,3 +160,65 @@ provenance `a1:<tour>` ou `a2:<tour>`.
 
 Seuls ces hôtes sont joignables, en HTTPS, redirections comprises; les adresses sont construites par le code. Le
 User-Agent est générique et ne contient aucun renseignement personnel.
+
+## Volet finance (`alphaforge.finance`, simulation seulement)
+
+Construction et contrôle du portefeuille à partir d'un `PolicySpec` (sortie de F1, hors de ce paquet). Contrat :
+`app/CONTRACTS.md` §9. Aucun seuil n'est fixé ici et aucune donnée des fiches persona n'est reprise.
+
+| Module | Rôle |
+| --- | --- |
+| `finance/contracts/` | `InvestorProfile`, `PolicySpec`, `Decision`, `Fact`, `TraceEvent` (Pydantic). |
+| `finance/portfolio/` | **F2** `optimize()` (cvxpy : CVaR, CDaR, variance Ledoit-Wolf ; prix duaux des contraintes ; diagnostic d'infaisabilité). **F3** contributions au risque d'Euler, clusters, look-through, stress, horizon. **F4** `check()` du Judge, déterministe, et `framed_alternative()`. |
+| `finance/llm/` | `llm_call()` via `bedrock-runtime` Converse (sortie structurée native) en mode `live`, `record` ou `replay` ; clé sha256 canonique ; `FileStore` ou `DynamoS3Store` en écriture unique ; `ReplayModel` pour Strands. |
+| `finance/observability/` | Spans OpenTelemetry GenAI (JSONL, X-Ray OTLP), `log_event` vers CloudWatch, vérificateur numérique par phrase, ancrage Guardrail, journal des décisions chaîné par hash (`verify_chain`). |
+| `finance/rules/canada_2026.yaml` | Paramètres canadiens 2026, chacun avec sa source officielle et son statut. |
+| `finance/backtest/` | Moteur de backtest mensuel 1926-2026 (fenêtres, stratégies ex-ante, ORACLE, sélection robuste, walk-forward, traces) ; données longues dans `data/long/`. Voir ci-dessous. |
+| `scripts/finance/` | `demo_trace.py` (démo de bout en bout sous une trace), `feasibility_levels.py` (faisabilité de la table de risque de F1), `bedrock_smoke.py`. |
+| `tests/finance/` | Tests F2-F4 sur un mandat générique ; `fixtures/llm_records/` contient les réponses LLM rejouées. |
+
+```sh
+cd app/agents
+uv sync --group dev --group finance && uv run pytest tests/finance
+ALPHAFORGE_LLM_MODE=replay uv run --group finance python scripts/finance/demo_trace.py
+```
+
+Déterminisme : Claude 5.x n'accepte ni `temperature` ni `seed`. Les chiffres, poids et verdicts viennent du code ;
+seule la formulation du LLM varie, et elle est figée en `replay`. Si le prompt, le Guardrail, les données ou le code
+changent, la clé ne correspond plus et l'appel lève `ReplayMiss` : la dérive est détectée.
+
+Ressources AWS de traçabilité (Terraform, `infrastructure/infra/traceability.tf`), lues dans l'environnement :
+
+| Variable | Output Terraform | Contenu |
+| --- | --- | --- |
+| `ALPHAFORGE_GUARDRAIL_ID` / `_VERSION` | `guardrail_id` / `guardrail_version` | Guardrail `cadre` (sujets interdits, données personnelles, NAS, ancrage 0,75). |
+| `ALPHAFORGE_TRACE_BUCKET` | `trace_bucket` | Object Lock : journal complet des invocations Bedrock, blobs du rejeu, `decisions/`. |
+| `ALPHAFORGE_REPLAY_TABLE` | `llm_replay_table` | Index DynamoDB du rejeu LLM. |
+| `ALPHAFORGE_DECISIONS_TABLE` | `decisions_table` | Tête de chaîne et maillons du journal des décisions. |
+| `ALPHAFORGE_OTLP_XRAY=1` | — | Exporte les spans vers X-Ray (Transaction Search, indexation 100 %). |
+
+### Moteur de backtest (`finance/backtest/`)
+
+`alphaforge.finance.backtest` simule des stratégies d'allocation sur des fenêtres historiques mensuelles (1926-2026)
+et écrit une trace JSON par exécution (hash des données et du moteur, graine, période, résultats). Simulation
+seulement. Il dépend du groupe `finance` (numpy, pandas, scipy, pyarrow), pas des dépendances de base. Les parquets de
+`src/alphaforge/data/long/` ne sont pas versionnés (licences yfinance, Moody's, OCDE) : on les reconstruit avec le
+groupe `backtest-data`. Détails : [`src/alphaforge/finance/backtest/README.md`](src/alphaforge/finance/backtest/README.md),
+sources : [`src/alphaforge/data/long/SOURCES.md`](src/alphaforge/data/long/SOURCES.md). Les études par persona et leurs
+rapports ne sont pas dans l'app (Brain `references/backtest/`, scripts archivés au commit `597d00b`).
+
+```sh
+uv run --group finance --group backtest-data python -I -m alphaforge.finance.backtest.build_data  # parquets dans data/long/
+uv run --group finance python -I -m alphaforge.finance.backtest.run --profile example
+uv run --group finance pytest tests/finance          # tests du moteur et du volet finance
+```
+
+Sans le groupe `finance` (CI), les tests du moteur sautent (`pytest.importorskip`) ; sans les parquets, ceux qui
+lisent les données sautent aussi, avec la commande de reconstruction en raison.
+
+| Variable | Défaut | Rôle |
+| --- | --- | --- |
+| `ALPHAFORGE_BT_DATA` | `src/alphaforge/data/long` | Données traitées du moteur (et `raw/` des téléchargements). |
+| `ALPHAFORGE_STARTER_DIR` | `src/alphaforge/data/starter` | Jeu de départ lu par `build_data`. |
+| `ALPHAFORGE_BT_PROFILES` | `finance/backtest/profiles` | Dossiers des profils YAML (séparés par `os.pathsep`). |
+| `ALPHAFORGE_BT_RESULTS` | `./backtest-results` (répertoire courant, ignoré par git) | Traces des exécutions. |

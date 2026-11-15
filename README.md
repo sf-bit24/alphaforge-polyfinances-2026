@@ -67,6 +67,7 @@ Un push sur `master` lance les tests, construit le zip des runtimes, puis HCP Te
 ## Données
 
 - **Jeu de départ des organisateurs** (`app/agents/src/alphaforge/data/starter/`) : 31 actifs, prix quotidiens du 2021-11-12 au 2026-11-12 (Yahoo Finance via yfinance), change USD/CAD (Banque du Canada), 9 séries macroéconomiques (Banque du Canada, FRED). Libre d'utilisation dans le cadre du Datathon; sources, traitements et limites dans `sources_metadata.csv`.
+- **Données longues du moteur de backtest** (`app/agents/src/alphaforge/data/long/`) : rendements mensuels 1926-2026 (Ken French, FRED, Shiller, DataHub pour l'or, Banque du Canada, yfinance et jeu de départ). Seuls le catalogue et `SOURCES.md` sont versionnés ; les parquets se reconstruisent (licences yfinance, Moody's, OCDE), voir [`app/agents/src/alphaforge/finance/backtest/README.md`](app/agents/src/alphaforge/finance/backtest/README.md).
 - **Collecte** (A4, A5) : sources publiques sans clé (Banque du Canada Valet, FRED, Yahoo Finance, flux RSS, GDELT). A6 garde pour chaque document sa source, sa date d'observation et sa date de publication, et rejette ce qui n'en a pas.
 
 ## Avant la fermeture du compte AWS (lundi 16 novembre, fin de journée)

@@ -1,8 +1,10 @@
+import re
 from pathlib import Path
 
 import pytest
 
 from alphaforge import okf
+from alphaforge.tldoole.concepts import load_catalog
 
 KNOWLEDGE = Path(__file__).resolve().parents[2] / "knowledge" / "general"
 
@@ -92,3 +94,19 @@ def test_seed_knowledge_documents_are_valid_public_okf():
             assert doc.type == "Methodology"
             titles = " ".join(source["title"] for source in doc.frontmatter["sources"])
             assert "BNCD" in titles or "énoncé" in titles.lower() or "jeu de départ" in titles.lower(), path
+        if "notions" in path.parts:
+            assert doc.type == "Financial Concept", path
+            catalog_id = doc.data.get("catalog_id")
+            assert catalog_id is None or load_catalog().get(catalog_id), (path, catalog_id)
+            for slug in doc.data.get("related", []):
+                assert (path.parent / f"{slug}.md").exists(), (path, slug)
+            for link in re.findall(r"\]\(([^)#]+\.md)\)", doc.body):
+                assert (path.parent / link).resolve().exists(), (path, link)
+        if "societes" in path.parts:
+            assert doc.type == "Company Fundamentals", path
+            data = doc.data
+            assert data["ticker"].endswith(".TO") and data["reporting_currency"] and data["unit"] == "millions", path
+            source_ids = {source["id"] for source in doc.frontmatter["sources"]}
+            for entry in [*data["periods"], *data["balance_sheets"]]:
+                assert entry["observed_at"] <= entry["published_at"], path
+                assert entry["source"] in source_ids, path

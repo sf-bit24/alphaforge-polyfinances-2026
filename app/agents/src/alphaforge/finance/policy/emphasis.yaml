@@ -1,0 +1,29 @@
+# policy_compiler/emphasis.yaml — poids des 4 « lentilles » d'explication (simulation seulement).
+# Regle : poids = base + somme des bonus des regles declenchees, puis normalisation (somme = 1).
+# Deterministe ; les seuils et bonus sont des HYPOTHESES DE PRESENTATION (non calibres) :
+# ils orientent l'explication, jamais une limite du mandat.
+# Chaque regle lit un « signal » calcule par le compilateur (voir README, section Emphase).
+# op : is_true (signal vrai) | lt | le | gt | ge (comparaison a value) ; signal None => non declenchee.
+version: "0.1.0"
+base: {timeline: 1.0, risk: 1.0, diversity: 1.0, constraints: 1.0}
+rules:
+  # --- calendrier
+  - {id: timeline.horizon_lt_5y,        lens: timeline,    bonus: 1.0, signal: min_goal_horizon_years, op: lt, value: 5}
+  - {id: timeline.recurring_withdrawal, lens: timeline,    bonus: 0.5, signal: has_recurring_withdrawal, op: is_true}
+  - {id: timeline.besoin_le_5y,         lens: timeline,    bonus: 1.0, signal: min_besoin_horizon_years, op: le, value: 5}
+  # --- risque
+  - {id: risk.tolerance_gt_capacity,    lens: risk,        bonus: 1.0, signal: tolerance_gt_capacity, op: is_true}
+  - {id: risk.max_loss_declared,        lens: risk,        bonus: 0.5, signal: max_loss_declared, op: is_true}
+  - {id: risk.debts,                    lens: risk,        bonus: 0.5, signal: has_debt, op: is_true}
+  - {id: risk.emergency_short,          lens: risk,        bonus: 1.0, signal: emergency_short, op: is_true}
+  - {id: risk.emotional_bias,           lens: risk,        bonus: 1.0, signal: emotional_bias, op: is_true}
+  # --- diversification / valeurs
+  - {id: diversity.esg_required,        lens: diversity,   bonus: 0.5, signal: esg_required, op: is_true}
+  - {id: diversity.value_filters,       lens: diversity,   bonus: 1.0, signal: has_value_filters, op: is_true}
+  - {id: diversity.tilts,               lens: diversity,   bonus: 0.5, signal: has_tilts, op: is_true}
+  - {id: diversity.concentrated,        lens: diversity,   bonus: 1.0, signal: max_position_share, op: ge, value: 0.10}
+  # --- contraintes
+  - {id: constraints.legal,             lens: constraints, bonus: 1.0, signal: has_legal_constraints, op: is_true}
+  - {id: constraints.employer_equity,   lens: constraints, bonus: 0.5, signal: has_employer_equity, op: is_true}
+  - {id: constraints.user_rules,        lens: constraints, bonus: 0.5, signal: has_user_rules, op: is_true}
+  - {id: constraints.request_outside,   lens: constraints, bonus: 1.0, signal: request_outside_policy, op: is_true}

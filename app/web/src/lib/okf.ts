@@ -26,10 +26,10 @@ export function parseOkf(content: string): OkfDocument {
   }
 }
 
-/** Group of a general/ key: methodologie, actualites, donnees, index or other. */
+/** Group of a general/ key: methodologie, societes, actualites, donnees, index or other. */
 export function generalGroup(key: string): string {
   const parts = key.split("/");
   if (parts.length === 2 && parts[1] === "index.md") return "index";
   const folder = parts[1] ?? "";
-  return ["methodologie", "actualites", "donnees"].includes(folder) ? folder : "other";
+  return ["methodologie", "notions", "societes", "actualites", "donnees"].includes(folder) ? folder : "other";
 }

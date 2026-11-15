@@ -18,6 +18,7 @@ export function AppNav() {
     { href: "/details", label: t.appNav.details },
     { href: "/", label: t.appNav.profile },
     { href: "/knowledge", label: t.appNav.knowledge },
+    { href: "/tldoole", label: t.nav.tldoole },
   ];
   const settingsActive = pathname.startsWith("/settings");
   return (
@@ -28,14 +29,14 @@ export function AppNav() {
       >
         {t.nav.skip}
       </a>
-      {/* One row from 1024 px; below, the tabs go to a second row that scrolls sideways. */}
+      {/* One row from 1280 px; below, the tabs go to a second row that scrolls sideways. */}
       <div className="flex flex-wrap items-center gap-x-6 px-4 sm:px-8 xl:gap-x-10">
         <div className="flex h-16 items-center">
           <Brand />
         </div>
         <nav
           aria-label={t.nav.menu}
-          className="order-last -mx-4 -mb-px flex h-11 w-[calc(100%+2rem)] min-w-0 gap-1 overflow-x-auto border-t border-line px-2 [scrollbar-width:none] sm:-mx-8 sm:w-[calc(100%+4rem)] sm:px-6 lg:order-none lg:mx-0 lg:h-16 lg:w-auto lg:border-t-0 lg:px-0"
+          className="order-last -mx-4 -mb-px flex h-11 w-[calc(100%+2rem)] min-w-0 gap-1 overflow-x-auto border-t border-line px-2 [scrollbar-width:none] sm:-mx-8 sm:w-[calc(100%+4rem)] sm:px-6 xl:order-none xl:mx-0 xl:h-16 xl:w-auto xl:border-t-0 xl:px-0"
         >
           {tabs.map((tab) => {
             const active = tab.href === "/" ? pathname === "/" : pathname.startsWith(tab.href);
@@ -56,7 +57,7 @@ export function AppNav() {
           })}
         </nav>
         <div className="ml-auto flex h-16 shrink-0 items-center gap-3 text-[13px] text-ink-500 sm:gap-[18px]">
-          <span className="hidden min-[1360px]:inline">{t.appNav.simulation}</span>
+          <span className="hidden min-[1536px]:inline">{t.appNav.simulation}</span>
           <ModeChip className="hidden xl:inline-flex" />
           <LanguageToggle />
           <Link

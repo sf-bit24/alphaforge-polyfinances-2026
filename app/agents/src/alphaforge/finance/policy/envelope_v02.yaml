@@ -1,0 +1,29 @@
+# envelope_v02.yaml — GENERE par policy_compiler.envelope.build_from_calibration (ne pas editer a la main)
+# Simulation seulement. Valeurs en fraction positive, rendements mensuels CAD/USD selon famille.
+version: 0.2.0
+definition: ENV(e,col) = max des familles ; HC (CAD77_hc, CAD71_hc, USD46_hc) si e<=10, sinon G5 (CAD77_main, CAD71_USeq, USD46) ; y2022 en perte positive
+source_files:
+  G5: {path: app/agents/tests/finance/fixtures/calibration/calib_grid5.csv, sha256: fc7c06d2533ce73e09929108c2bb27dd6f85be15a3b7d36a60f04c136941b583}
+  HC: {path: app/agents/tests/finance/fixtures/calibration/halfcash_env.csv, sha256: f106aeff759605ca3e32be8adfd216e42a982f556a0f53f40ab96d8f7929ff12}
+equity_pct:
+  0: {vol: 0.034739, cvar95_m: 0.014143, cvar95_12m: 0.037746, mdd: 0.104424, y2022: 0.042634, family_set: HC}
+  5: {vol: 0.034629, cvar95_m: 0.013758, cvar95_12m: 0.030457, mdd: 0.094275, y2022: 0.048081, family_set: HC}
+  10: {vol: 0.03575, cvar95_m: 0.014379, cvar95_12m: 0.024551, mdd: 0.089886, y2022: 0.055725, family_set: HC}
+  15: {vol: 0.049795, cvar95_m: 0.023238, cvar95_12m: 0.046638, mdd: 0.128143, y2022: 0.085683, family_set: G5}
+  20: {vol: 0.051444, cvar95_m: 0.024587, cvar95_12m: 0.047902, mdd: 0.130636, y2022: 0.092006, family_set: G5}
+  25: {vol: 0.054498, cvar95_m: 0.026658, cvar95_12m: 0.052196, mdd: 0.137802, y2022: 0.09838, family_set: G5}
+  30: {vol: 0.058296, cvar95_m: 0.028995, cvar95_12m: 0.059798, mdd: 0.161955, y2022: 0.104806, family_set: G5}
+  35: {vol: 0.062702, cvar95_m: 0.031903, cvar95_12m: 0.069276, mdd: 0.188087, y2022: 0.11128, family_set: G5}
+  40: {vol: 0.067597, cvar95_m: 0.035538, cvar95_12m: 0.081178, mdd: 0.213531, y2022: 0.117802, family_set: G5}
+  45: {vol: 0.072883, cvar95_m: 0.039817, cvar95_12m: 0.094274, mdd: 0.238301, y2022: 0.124369, family_set: G5}
+  50: {vol: 0.078481, cvar95_m: 0.044274, cvar95_12m: 0.107796, mdd: 0.262413, y2022: 0.13098, family_set: G5}
+  55: {vol: 0.084741, cvar95_m: 0.048877, cvar95_12m: 0.121442, mdd: 0.285879, y2022: 0.137634, family_set: G5}
+  60: {vol: 0.091594, cvar95_m: 0.053525, cvar95_12m: 0.135427, mdd: 0.308714, y2022: 0.144329, family_set: G5}
+  65: {vol: 0.098547, cvar95_m: 0.05819, cvar95_12m: 0.149399, mdd: 0.332861, y2022: 0.151063, family_set: G5}
+  70: {vol: 0.10558, cvar95_m: 0.062903, cvar95_12m: 0.163228, mdd: 0.359812, y2022: 0.157835, family_set: G5}
+  75: {vol: 0.112677, cvar95_m: 0.067683, cvar95_12m: 0.176981, mdd: 0.385846, y2022: 0.164643, family_set: G5}
+  80: {vol: 0.119828, cvar95_m: 0.072475, cvar95_12m: 0.190712, mdd: 0.410987, y2022: 0.171485, family_set: G5}
+  85: {vol: 0.127024, cvar95_m: 0.077267, cvar95_12m: 0.204298, mdd: 0.435261, y2022: 0.17836, family_set: G5}
+  90: {vol: 0.134256, cvar95_m: 0.082059, cvar95_12m: 0.217836, mdd: 0.458691, y2022: 0.185267, family_set: G5}
+  95: {vol: 0.14152, cvar95_m: 0.086869, cvar95_12m: 0.231299, mdd: 0.481302, y2022: 0.192203, family_set: G5}
+  100: {vol: 0.148811, cvar95_m: 0.091686, cvar95_12m: 0.244745, mdd: 0.503117, y2022: 0.199168, family_set: G5}

@@ -19,6 +19,7 @@ locals {
   s3_kms_user_role_arns = concat(
     [for role in aws_iam_role.agentcore : role.arn],
     [aws_iam_role.knowledge_base.arn, aws_iam_role.collecte.arn],
+    local.tldoole_kms_user_role_arns,
   )
 }
 
@@ -152,7 +153,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
   depends_on = [aws_s3_bucket_versioning.this]
 }
 
-# Base generale de depart (methodologie), versionnee dans app/knowledge/general
+# Base generale de depart (methodologie, notions, societes), versionnee dans app/knowledge/general
 # et copiee dans infra/build/knowledge/ par le job package_agents. Les
 # documents ecrits par A6 vivent sous d'autres prefixes (actualites/,
 # donnees/) et ne sont pas geres par Terraform.

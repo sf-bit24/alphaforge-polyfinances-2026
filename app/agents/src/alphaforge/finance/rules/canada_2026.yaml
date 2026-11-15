@@ -1,0 +1,531 @@
+# Canadian personal-finance parameters for the AlphaForge AI simulation engine.
+# Every value below was read on the cited official page on the retrieval date.
+# Entries with status "unverified" must NOT be used as facts by the engine.
+
+meta:
+  version: "1.0.0"
+  generated_utc: "2026-11-14T22:15:00Z"
+  jurisdiction: Canada (federal) + Quebec (QPP)
+  disclaimer: "Simulation only - not tax/financial advice; verify with official sources and a professional"
+
+# ---------------------------------------------------------------- 1. TFSA / CELI
+tfsa:
+  annual_dollar_limit:
+    value: 7000
+    unit: CAD
+    year: 2026
+    applies_to: [TFSA holder, resident of Canada, 18+]
+    source_url: https://www.canada.ca/en/revenue-agency/services/tax/registered-plans-administrators/pspa/mp-rrsp-dpsp-tfsa-limits-ympe.html
+    source_title: "MP, DB, RRSP, DPSP, ALDA, TFSA limits, YMPE and the YAMPE"
+    retrieved_utc: "2026-11-14T22:00:00Z"
+    status: verified
+    note: "Indexed to inflation, rounded to nearest $500. Same value on CRA page 'Calculate your TFSA contribution room'."
+  annual_dollar_limit_history:
+    value: {2009: 5000, 2010: 5000, 2011: 5000, 2012: 5000, 2013: 5500, 2014: 5500, 2015: 10000, 2016: 5500, 2017: 5500, 2018: 5500, 2019: 6000, 2020: 6000, 2021: 6000, 2022: 6000, 2023: 6500, 2024: 7000, 2025: 7000, 2026: 7000}
+    unit: CAD
+    year: 2026
+    applies_to: [TFSA holder]
+    source_url: https://www.canada.ca/en/revenue-agency/services/tax/registered-plans-administrators/pspa/mp-rrsp-dpsp-tfsa-limits-ympe.html
+    source_title: "MP, DB, RRSP, DPSP, ALDA, TFSA limits, YMPE and the YAMPE"
+    retrieved_utc: "2026-11-14T22:00:00Z"
+    status: verified
+    note: "Year-by-year table published by CRA."
+  cumulative_room_since_2009:
+    value: 111000
+    unit: CAD
+    year: 2026
+    applies_to: [person 18+ and resident of Canada every year since 2009, no contributions ever made]
+    source_url: https://www.canada.ca/en/revenue-agency/services/tax/registered-plans-administrators/pspa/mp-rrsp-dpsp-tfsa-limits-ympe.html
+    source_title: "MP, DB, RRSP, DPSP, ALDA, TFSA limits, YMPE and the YAMPE"
+    retrieved_utc: "2026-11-14T22:00:00Z"
+    status: verified
+    note: "DERIVED: sum of the CRA annual limits 2009-2026 (CRA does not print this total). Actual room = sum of limits from the year you turned 18 + unused room + prior-year withdrawals - contributions."
+  eligibility_age:
+    value: 18
+    unit: years
+    year: 2026
+    applies_to: [resident of Canada with valid SIN]
+    source_url: https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/tax-free-savings-account/opening.html
+    source_title: "Opening a TFSA"
+    retrieved_utc: "2026-11-14T22:11:00Z"
+    status: verified
+    note: "Where age of majority is 19, the account can be opened at 19 but room from the year of turning 18 carries over."
+
+# ---------------------------------------------------------------- 2. RRSP / REER
+rrsp:
+  dollar_limit:
+    value: 33810
+    unit: CAD
+    year: 2026
+    applies_to: [RRSP contributor with earned income]
+    source_url: https://www.canada.ca/en/revenue-agency/services/tax/registered-plans-administrators/pspa/mp-rrsp-dpsp-tfsa-limits-ympe.html
+    source_title: "MP, DB, RRSP, DPSP, ALDA, TFSA limits, YMPE and the YAMPE"
+    retrieved_utc: "2026-11-14T22:00:00Z"
+    status: verified
+    note: "2025 limit was 32,490. Deduction room also reduced by pension adjustments (PA) and increased by unused room."
+  earned_income_rate:
+    value: 0.18
+    unit: ratio
+    year: 2025
+    applies_to: [RRSP contributor; applied to previous-year earned income]
+    source_url: https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/t4040/rrsps-other-registered-plans-retirement.html
+    source_title: "T4040 RRSPs and Other Registered Plans for Retirement (Rev. 25)"
+    retrieved_utc: "2026-11-14T22:05:00Z"
+    status: verified
+    note: "Chart 3 of guide T4040 (tax year 2025): 18% of prior-year earned income, capped at the dollar limit. Rule unchanged for 2026 but the 2026 guide was not checked."
+  conversion_deadline:
+    value: {age: 71, date: "December 31 of the year the annuitant turns 71"}
+    unit: years
+    year: 2026
+    applies_to: [RRSP annuitant]
+    source_url: https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/rrsps-related-plans/rrsp-options-when-you-turn-71.html
+    source_title: "RRSP options when you turn 71"
+    retrieved_utc: "2026-11-14T22:04:00Z"
+    status: verified
+    note: "Last day to contribute; options are RRIF transfer, annuity, or taxable withdrawal."
+
+# ---------------------------------------------------------------- 3. RRIF / FERR
+rrif:
+  min_withdrawal_formula_under_71:
+    value: "1 / (90 - age)"
+    unit: ratio
+    year: 2026
+    applies_to: [RRIF annuitant (or spouse if elected) aged 70 or under at January 1]
+    source_url: https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/completing-slips-summaries/t4rsp-t4rif-information-returns/payments/chart-prescribed-factors.html
+    source_title: "Chart - Prescribed factors"
+    retrieved_utc: "2026-11-14T22:02:00Z"
+    status: verified
+    note: "Multiply the FMV of the RRIF at January 1 by the factor. Age is age at January 1 of the year."
+  min_withdrawal_factors:
+    value: {71: 0.0528, 72: 0.0540, 73: 0.0553, 74: 0.0567, 75: 0.0582, 76: 0.0598, 77: 0.0617, 78: 0.0636, 79: 0.0658, 80: 0.0682, 81: 0.0708, 82: 0.0738, 83: 0.0771, 84: 0.0808, 85: 0.0851, 86: 0.0899, 87: 0.0955, 88: 0.1021, 89: 0.1099, 90: 0.1192, 91: 0.1306, 92: 0.1449, 93: 0.1634, 94: 0.1879, 95: 0.2000}
+    unit: ratio
+    year: 2026
+    applies_to: [RRIF - "All other RRIFs" column (default case)]
+    source_url: https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/completing-slips-summaries/t4rsp-t4rif-information-returns/payments/chart-prescribed-factors.html
+    source_title: "Chart - Prescribed factors"
+    retrieved_utc: "2026-11-14T22:02:00Z"
+    status: verified
+    note: "Key 95 means 95 or older. 'Qualifying RRIFs' (set up 1986-1992 etc.) differ only at 71 (0.0526); pre-March-1986 RRIFs use 1/(90-age) and are ignored here."
+
+# ---------------------------------------------------------------- 4. FHSA / CELIAPP
+fhsa:
+  annual_limit:
+    value: 8000
+    unit: CAD
+    year: 2026
+    applies_to: [FHSA holder, first-time home buyer]
+    source_url: https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/first-home-savings-account/contributing-your-fhsa.html
+    source_title: "Contributing to your FHSA"
+    retrieved_utc: "2026-11-14T22:03:00Z"
+    status: verified
+    note: "Includes transfers from RRSP. Room only starts once the first FHSA is opened. Over-contribution taxed 1% per month."
+  lifetime_limit:
+    value: 40000
+    unit: CAD
+    year: 2026
+    applies_to: [FHSA holder]
+    source_url: https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/first-home-savings-account/contributing-your-fhsa.html
+    source_title: "Contributing to your FHSA"
+    retrieved_utc: "2026-11-14T22:03:00Z"
+    status: verified
+    note: "Not indexed. Investment income does not use up room."
+  carry_forward_max:
+    value: 8000
+    unit: CAD
+    year: 2026
+    applies_to: [FHSA holder]
+    source_url: https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/first-home-savings-account/contributing-your-fhsa.html
+    source_title: "Contributing to your FHSA"
+    retrieved_utc: "2026-11-14T22:03:00Z"
+    status: verified
+    note: "Max room in a single year is therefore 16,000 (8,000 + 8,000 carry-forward), subject to the 40,000 lifetime limit."
+
+# ---------------------------------------------------------------- 5. RESP / REEE + CESG + CLB
+resp:
+  lifetime_contribution_limit:
+    value: 50000
+    unit: CAD
+    year: 2026
+    applies_to: [RESP beneficiary, all plans combined]
+    source_url: https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/registered-education-savings-plans-resps/resp-contributions.html
+    source_title: "Registered Education Savings Plans contributions"
+    retrieved_utc: "2026-11-14T22:06:00Z"
+    status: verified
+    note: "No annual contribution limit since 2007. Excess contributions taxed 1% per month."
+  cesg_basic_rate:
+    value: {rate: 0.20, on_first_contribution: 2500, grant: 500}
+    unit: ratio
+    year: 2026
+    applies_to: [RESP beneficiary under 18, ESDC Canada Education Savings Grant]
+    source_url: https://www.canada.ca/en/services/benefits/education/education-savings/estimating-amounts.html
+    source_title: "How much money can be added to Registered Education Savings Plans"
+    retrieved_utc: "2026-11-14T22:05:00Z"
+    status: verified
+    note: "20% of the first 2,500 contributed per year = 500 basic CESG per year."
+  cesg_annual_max:
+    value: 600
+    unit: CAD
+    year: 2026
+    applies_to: [RESP beneficiary, lowest income tier, current-year contributions]
+    source_url: https://www.canada.ca/en/services/benefits/education/education-savings/estimating-amounts.html
+    source_title: "How much money can be added to Registered Education Savings Plans"
+    retrieved_utc: "2026-11-14T22:05:00Z"
+    status: verified
+    note: "500 basic + 100 additional. Catch-up of unused grant room (commonly 1,000 basic/yr) was NOT confirmed on this page - do not model catch-up without verifying."
+  cesg_additional:
+    value:
+      - {adjusted_family_income_max: 58523, rate_on_first_500: 0.20, grant: 100}
+      - {adjusted_family_income_min: 58523, adjusted_family_income_max: 117045, rate_on_first_500: 0.10, grant: 50}
+    unit: CAD
+    year: 2026
+    applies_to: [RESP beneficiary, family with 1-3 children]
+    source_url: https://www.canada.ca/en/services/benefits/education/education-savings/estimating-amounts.html
+    source_title: "How much money can be added to Registered Education Savings Plans"
+    retrieved_utc: "2026-11-14T22:05:00Z"
+    status: verified
+    note: "Thresholds are 2026 adjusted family income; indexed annually; differ for 4+ children."
+  cesg_lifetime_max:
+    value: 7200
+    unit: CAD
+    year: 2026
+    applies_to: [RESP beneficiary]
+    source_url: https://www.canada.ca/en/services/benefits/education/education-savings/estimating-amounts.html
+    source_title: "How much money can be added to Registered Education Savings Plans"
+    retrieved_utc: "2026-11-14T22:05:00Z"
+    status: verified
+    note: "Per beneficiary."
+  canada_learning_bond:
+    value: {first_year: 500, each_subsequent_eligible_year: 100, lifetime_max: 2000, last_eligible_age: 15}
+    unit: CAD
+    year: 2026
+    applies_to: [child born 2004+ in low-income family]
+    source_url: https://www.canada.ca/en/services/benefits/education/education-savings/estimating-amounts.html
+    source_title: "How much money can be added to Registered Education Savings Plans"
+    retrieved_utc: "2026-11-14T22:05:00Z"
+    status: verified
+    note: "No contribution required. Income threshold (1-3 children) <= 58,523 for 2026."
+
+# ---------------------------------------------------------------- 6. RDSP / REEI
+rdsp:
+  lifetime_contribution_limit:
+    value: 200000
+    unit: CAD
+    year: 2026
+    applies_to: [RDSP beneficiary eligible for the Disability Tax Credit]
+    source_url: https://www.canada.ca/en/employment-social-development/programs/disability/savings.html
+    source_title: "Registered Disability Savings Plan"
+    retrieved_utc: "2026-11-14T22:07:00Z"
+    status: verified
+    note: "Per beneficiary, no annual limit stated."
+  cdsg_matching:
+    value:
+      - {family_income_max: 117045, tiers: [{rate: 3.0, on_first: 500}, {rate: 2.0, on_next: 1000}]}
+      - {family_income_min: 117045, tiers: [{rate: 1.0, on_first: 1000}]}
+    unit: ratio
+    year: 2026
+    applies_to: [RDSP beneficiary until Dec 31 of year turning 49]
+    source_url: https://www.canada.ca/en/employment-social-development/programs/disability/savings/how-much.html
+    source_title: "How much you could get in grants and bonds"
+    retrieved_utc: "2026-11-14T22:07:00Z"
+    status: verified
+    note: "Family income from tax return 2 years prior (2024 for 2026). Rates are grant dollars per contributed dollar."
+  cdsg_annual_max:
+    value: 3500
+    unit: CAD
+    year: 2026
+    applies_to: [RDSP beneficiary]
+    source_url: https://www.canada.ca/en/employment-social-development/programs/disability/savings/how-much.html
+    source_title: "How much you could get in grants and bonds"
+    retrieved_utc: "2026-11-14T22:07:00Z"
+    status: verified
+    note: "Up to 10,500 per year with carry-forward of unused entitlements."
+  cdsg_lifetime_max:
+    value: 70000
+    unit: CAD
+    year: 2026
+    applies_to: [RDSP beneficiary]
+    source_url: https://www.canada.ca/en/employment-social-development/programs/disability/savings/how-much.html
+    source_title: "How much you could get in grants and bonds"
+    retrieved_utc: "2026-11-14T22:07:00Z"
+    status: verified
+    note: ""
+  cdsb:
+    value: {annual_max: 1000, lifetime_max: 20000, full_bond_family_income_max: 38237, no_bond_family_income_min: 58523}
+    unit: CAD
+    year: 2026
+    applies_to: [low-income RDSP beneficiary]
+    source_url: https://www.canada.ca/en/employment-social-development/programs/disability/savings/how-much.html
+    source_title: "How much you could get in grants and bonds"
+    retrieved_utc: "2026-11-14T22:07:00Z"
+    status: verified
+    note: "No contribution required; partial bond between the two thresholds."
+
+# ---------------------------------------------------------------- 7. CPP / RPC
+cpp:
+  ympe:
+    value: 74600
+    unit: CAD
+    year: 2026
+    applies_to: [CPP contributors]
+    source_url: https://www.canada.ca/en/revenue-agency/services/tax/registered-plans-administrators/pspa/mp-rrsp-dpsp-tfsa-limits-ympe.html
+    source_title: "MP, DB, RRSP, DPSP, ALDA, TFSA limits, YMPE and the YAMPE"
+    retrieved_utc: "2026-11-14T22:00:00Z"
+    status: verified
+    note: "2025: 71,300."
+  yampe:
+    value: 85000
+    unit: CAD
+    year: 2026
+    applies_to: [CPP contributors (second additional ceiling, CPP2)]
+    source_url: https://www.canada.ca/en/revenue-agency/services/tax/registered-plans-administrators/pspa/mp-rrsp-dpsp-tfsa-limits-ympe.html
+    source_title: "MP, DB, RRSP, DPSP, ALDA, TFSA limits, YMPE and the YAMPE"
+    retrieved_utc: "2026-11-14T22:00:00Z"
+    status: verified
+    note: "2025: 81,200."
+  max_monthly_retirement_at_65:
+    value: 1507.65
+    unit: CAD/month
+    year: 2026
+    applies_to: [new CPP retirement pensioner starting at 65 in January 2026]
+    source_url: https://www.canada.ca/en/services/benefits/publicpensions/cpp/cpp-benefit/amount.html
+    source_title: "How much you could receive - Canada.ca (CPP)"
+    retrieved_utc: "2026-11-14T22:08:00Z"
+    status: verified
+    note: "Average at 65 (July 2026) was 858.34 - most people get far less than the max. Not guaranteed."
+  early_reduction_per_month:
+    value: 0.006
+    unit: ratio_per_month
+    year: 2026
+    applies_to: [CPP start before 65]
+    source_url: https://www.canada.ca/en/services/benefits/publicpensions/cpp/cpp-benefit/when-start.html
+    source_title: "When to start your retirement pension - Canada.ca (CPP)"
+    retrieved_utc: "2026-11-14T22:09:00Z"
+    status: verified
+    note: "7.2%/year, max 36% at 60."
+  deferral_increase_per_month:
+    value: 0.007
+    unit: ratio_per_month
+    year: 2026
+    applies_to: [CPP start after 65]
+    source_url: https://www.canada.ca/en/services/benefits/publicpensions/cpp/cpp-benefit/when-start.html
+    source_title: "When to start your retirement pension - Canada.ca (CPP)"
+    retrieved_utc: "2026-11-14T22:09:00Z"
+    status: verified
+    note: "8.4%/year, max 42% at 70; no benefit to wait past 70."
+  start_age_range:
+    value: {earliest: 60, standard: 65, latest: 70}
+    unit: years
+    year: 2026
+    applies_to: [CPP retirement pension]
+    source_url: https://www.canada.ca/en/services/benefits/publicpensions/cpp/cpp-benefit/when-start.html
+    source_title: "When to start your retirement pension - Canada.ca (CPP)"
+    retrieved_utc: "2026-11-14T22:09:00Z"
+    status: verified
+    note: ""
+
+# ---------------------------------------------------------------- 8. QPP / RRQ
+qpp:
+  max_monthly_retirement_at_65:
+    value: 1508
+    unit: CAD/month
+    year: 2026
+    applies_to: [Quebec workers, QPP retirement pension starting at 65]
+    source_url: https://www.retraitequebec.gouv.qc.ca/en/retraite/rrq/calcul_rente/Pages/calcul_rente.aspx
+    source_title: "Calculation of Your Retirement Pension Under the Québec Pension Plan"
+    retrieved_utc: "2026-11-14T22:12:00Z"
+    status: verified
+    note: "Page shows rounded dollars. Max at 72 shown as 2,394/month. (rrq.gouv.qc.ca now redirects to retraitequebec.gouv.qc.ca.)"
+  early_reduction_per_month:
+    value: {min: 0.005, max: 0.006}
+    unit: ratio_per_month
+    year: 2026
+    applies_to: [QPP start between 60 and 65]
+    source_url: https://www.retraitequebec.gouv.qc.ca/en/retraite/rrq/calcul_rente/Pages/calcul_rente.aspx
+    source_title: "Calculation of Your Retirement Pension Under the Québec Pension Plan"
+    retrieved_utc: "2026-11-14T22:12:00Z"
+    status: verified
+    note: "Unlike CPP's flat 0.6%: rate is closer to 0.6% the closer the pension at 65 is to the maximum, closer to 0.5% for small pensions."
+  deferral_increase_per_month:
+    value: 0.007
+    unit: ratio_per_month
+    year: 2026
+    applies_to: [QPP start after 65]
+    source_url: https://www.retraitequebec.gouv.qc.ca/en/retraite/rrq/calcul_rente/Pages/calcul_rente.aspx
+    source_title: "Calculation of Your Retirement Pension Under the Québec Pension Plan"
+    retrieved_utc: "2026-11-14T22:12:00Z"
+    status: verified
+    note: "Stops increasing at 72 (not 70 as for CPP): max +58.8%."
+  start_age_range:
+    value: {earliest: 60, standard: 65, max_increase_age: 72}
+    unit: years
+    year: 2026
+    applies_to: [QPP retirement pension]
+    source_url: https://www.retraitequebec.gouv.qc.ca/en/retraite/rrq/calcul_rente/Pages/calcul_rente.aspx
+    source_title: "Calculation of Your Retirement Pension Under the Québec Pension Plan"
+    retrieved_utc: "2026-11-14T22:12:00Z"
+    status: verified
+    note: ""
+
+# ---------------------------------------------------------------- 9. OAS / PSV
+oas:
+  max_monthly_65_74:
+    value: 762.50
+    unit: CAD/month
+    year: 2026
+    applies_to: [OAS pensioner 65-74, full residence, Oct-Dec 2026 quarter]
+    source_url: https://www.canada.ca/en/services/benefits/publicpensions/cpp/old-age-security/payments.html
+    source_title: "Old Age Security payment amounts - Canada.ca"
+    retrieved_utc: "2026-11-14T22:09:00Z"
+    status: verified
+    note: "Indexed quarterly to CPI (+1.4% this quarter). Page modified 2026-09-29. Quarterly x3 = 2,287.50 per quarter."
+  max_monthly_75_plus:
+    value: 838.75
+    unit: CAD/month
+    year: 2026
+    applies_to: [OAS pensioner 75+, Oct-Dec 2026 quarter]
+    source_url: https://www.canada.ca/en/services/benefits/publicpensions/cpp/old-age-security/payments.html
+    source_title: "Old Age Security payment amounts - Canada.ca"
+    retrieved_utc: "2026-11-14T22:09:00Z"
+    status: verified
+    note: "Automatic 10% increase from the month after the 75th birthday."
+  deferral_increase_per_month:
+    value: 0.006
+    unit: ratio_per_month
+    year: 2026
+    applies_to: [OAS start after 65, up to 70]
+    source_url: https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/when-start.html
+    source_title: "When to start your retirement pension (OAS)"
+    retrieved_utc: "2026-11-14T22:10:00Z"
+    status: verified
+    note: "7.2%/year, max 36% at 70. No early OAS before 65."
+  recovery_tax:
+    value:
+      rate: 0.15
+      income_year_2025: {threshold: 93454, full_recovery_65_74: 152062, full_recovery_75_plus: 157923, recovery_period: "July 2026 - June 2027"}
+      income_year_2026: {threshold: 95323, full_recovery_65_74_estimated: 155320, full_recovery_75_plus_estimated: 161320, recovery_period: "July 2027 - June 2028"}
+    unit: CAD
+    year: 2026
+    applies_to: [OAS pensioner, net world income]
+    source_url: https://www.canada.ca/en/services/benefits/publicpensions/cpp/old-age-security/recovery-tax.html
+    source_title: "Old Age Security pension recovery tax"
+    retrieved_utc: "2026-11-14T22:09:00Z"
+    status: verified
+    note: "15% of net income above threshold. Upper bounds for income year 2026 are marked as estimates by ESDC."
+  residency_requirement:
+    value: {min_years_after_18_living_in_canada: 10, min_years_after_18_living_abroad: 20, full_pension_years: 40}
+    unit: years
+    year: 2026
+    applies_to: [OAS applicant 65+]
+    source_url: https://www.canada.ca/en/services/benefits/publicpensions/cpp/old-age-security/eligibility.html
+    source_title: "Old Age Security - Do you qualify - Canada.ca"
+    retrieved_utc: "2026-11-14T22:10:00Z"
+    status: verified
+    note: "Full-pension 40 years and partial = years/40 read on the 'How much you could receive' page (.../old-age-security/benefit-amount.html)."
+
+# ---------------------------------------------------------------- 10. GIS / SRG
+gis:
+  max_monthly_single:
+    value: 1138.90
+    unit: CAD/month
+    year: 2026
+    applies_to: [OAS pensioner single/widowed/divorced, Oct-Dec 2026 quarter]
+    source_url: https://www.canada.ca/en/services/benefits/publicpensions/cpp/old-age-security/payments.html
+    source_title: "Old Age Security payment amounts - Canada.ca"
+    retrieved_utc: "2026-11-14T22:09:00Z"
+    status: verified
+    note: "Annual income must be below 23,112. Income-tested; indexed quarterly."
+
+# ---------------------------------------------------------------- 11. CDIC / SADC
+cdic:
+  coverage_limit_per_category:
+    value: 100000
+    unit: CAD
+    year: 2026
+    applies_to: [eligible deposits at each CDIC member institution, per category]
+    source_url: https://www.cdic.ca/your-coverage/whats-covered/
+    source_title: "What's covered - CDIC"
+    retrieved_utc: "2026-11-14T22:10:00Z"
+    status: verified
+    note: "Principal + interest, per member institution, per category."
+  insured_categories:
+    value: [deposits_in_one_name, joint_deposits, rrsp_deposits, rrif_deposits, tfsa_deposits, rdsp_deposits, resp_deposits, fhsa_deposits, deposits_held_in_trust]
+    unit: list
+    year: 2026
+    applies_to: [depositors]
+    source_url: https://www.cdic.ca/your-coverage/whats-covered/
+    source_title: "What's covered - CDIC"
+    retrieved_utc: "2026-11-14T22:10:00Z"
+    status: verified
+    note: "Covered: savings/chequing, GICs, term deposits, foreign-currency deposits. NOT covered: stocks, bonds, ETFs, mutual funds, crypto (incl. stablecoins). None of the starter-universe assets are CDIC-insured (CIPF brokerage protection is a different scheme, not covered here)."
+
+# ---------------------------------------------------------------- 12. Capital gains
+capital_gains:
+  inclusion_rate:
+    value: 0.5
+    unit: ratio
+    year: 2025
+    applies_to: [individuals, capital property in non-registered accounts]
+    source_url: https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/t4037/capital-gains.html
+    source_title: "T4037 Capital Gains 2025 (Rev. 25)"
+    retrieved_utc: "2026-11-14T22:11:00Z"
+    status: verified
+    note: "Guide for tax year 2025 uses 1/2 throughout; CRA page 'Calculating and reporting your capital gains and losses' (modified 2026-02-05) also uses 50%. The 2024 proposal to raise it to 2/3 is not reflected on CRA pages; the Finance cancellation notice could not be fetched. No CRA page for tax year 2026 yet - assumed unchanged. Gains inside TFSA/RRSP/RRIF/FHSA are not taxed as capital gains."
+
+# ---------------------------------------------------------------- 13. Foreign withholding
+foreign_withholding:
+  us_dividend_withholding_treaty_rate:
+    value: null
+    unit: ratio
+    year: 2026
+    applies_to: [Canadian resident holding US-listed dividend-paying securities]
+    source_url: https://www.irs.gov/businesses/international-businesses/canada-tax-treaty-documents
+    source_title: "Canada - Tax Treaty Documents (IRS)"
+    retrieved_utc: "2026-11-14T22:12:00Z"
+    status: unverified
+    note: "Commonly cited as 15% (Canada-US Convention, Art. X(2)(b)). Treaty PDFs were fetched but could not be text-extracted; no HTML CRA/IRS page stating the rate was found. Do not present as fact until verified."
+  rrsp_rrif_exempt_tfsa_not:
+    value: null
+    unit: boolean
+    year: 2026
+    applies_to: [RRSP, RRIF, TFSA, FHSA holding US securities]
+    source_url: https://www.irs.gov/publications/p597
+    source_title: "Publication 597 (10/2015), Information on the United States-Canada Income Tax Treaty"
+    retrieved_utc: "2026-11-14T22:13:00Z"
+    status: unverified
+    note: "Commonly cited: Art. XXI(2) exempts trusts operated exclusively for retirement benefits (RRSP/RRIF) so US dividends are not withheld; TFSA/RESP/FHSA are not recognised and suffer withholding. Pub 597 does not state this, and treaty text could not be extracted. Unverified."
+
+# ---------------------------------------------------------------- 14. FP Canada / Institut de planification financière PAG
+fp_canada_projection_assumptions:
+  pag_2026:
+    value:
+      edition: "2026 (published April 2026)"
+      inflation: 0.021
+      ympe_or_salary_growth: 0.031
+      short_term: 0.024
+      fixed_income: 0.032
+      canadian_equities: 0.063
+      us_equities: 0.064
+      international_developed_equities: 0.066
+      emerging_market_equities: 0.075
+      borrowing_rate: 0.044
+    unit: ratio_per_year
+    year: 2026
+    applies_to: [long-term (10+ year) financial-plan projections]
+    source_url: https://www.fpcanada.ca/docs/professionalsitelibraries/standards/projection-assumption-guidelines.pdf
+    source_title: "2026 Projection Assumption Guidelines (FP Canada Standards Council & Institut de planification financière)"
+    retrieved_utc: "2026-11-14T22:12:00Z"
+    status: verified
+    note: "Section 5 'Guidelines for 2026'. Nominal, GROSS of fees - subtract product/advice fees (example in guide uses 1.3%). 'Foreign developed' is now split into US (6.4%) and International developed (6.6%). Landing page: https://www.fpcanada.ca/projection-assumption-guidelines ; FR: institutpf-nhp-2026.pdf. Survival probability table in section 4e not transcribed."
+
+# ---------------------------------------------------------------- 15. Mortality (pointer only)
+mortality:
+  cia_cpm2014:
+    value: null
+    unit: pointer
+    year: 2014
+    applies_to: [longevity / decumulation projections]
+    source_url: https://www.cia-ica.ca/publications/214013e/
+    source_title: "Canadian Pensioners' Mortality 2014 - Final Report (CIA)"
+    retrieved_utc: "2026-11-14T22:13:00Z"
+    status: verified
+    note: "Pointer only, no numbers. Tables at https://www.cia-ica.ca/publications/214013t1e/ (CPM2014 rates). Page marks the report ARCHIVED and says a new Canadian pensioners' mortality report was due by end of March 2026 - check for the successor before use. CPM-B improvement scale is described in the report; no separate URL confirmed."

@@ -5,3 +5,18 @@
 
 # Documents du Datathon, copies dans le Brain : non versionnes ici.
 /docs/
+
+# Traces du moteur de backtest (défaut ./backtest-results, où qu'on le lance)
+backtest-results/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Traçabilité locale (peut contenir des prompts) et sorties d'infra (identifiant du compte)
+app/agents/.traces/
+# anciens emplacements (copies locales encore présentes sur certains postes)
+research/finance/traces/
+research/finance/infra/outputs.json

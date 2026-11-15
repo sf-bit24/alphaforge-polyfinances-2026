@@ -14,6 +14,7 @@ Le contrat avec les runtimes Python et l'infrastructure est `app/CONTRACTS.md` :
 | `/dashboard` | **Tableau de bord** : tuiles d'indicateurs et assistant. L'assistant s'ouvre sur un paysage (personnage, volée d'oiseaux qui réagit au pointeur et à la saisie), puis devient la conversation avec A1 (`followup.reply`) : relances, questions structurées, arrêt dès 70 %. Chaque réponse porte ses sources et « Comment j'ai répondu », la trace de la requête. |
 | `/details` | **Détails du portefeuille** : valeur, rendements quotidiens, retraite, volatilité, comparaison avec XIU.TO, répartition, gouvernance, stress test 2022, rendements mensuels, journal des décisions, les quatre questions de l'atelier BNCD, positions. |
 | `/knowledge` | Base de connaissances générale et collecte (A4, A5, A6). |
+| `/tldoole` | tldoole : vidéos verticales d’environ une minute sur les concepts que l’investisseur ne comprend pas encore (CONTRACTS.md, section 8). |
 | `/settings` | Réglages (langue, niveau de connaissances, session). |
 
 `/profile` redirige vers `/`.
@@ -34,7 +35,7 @@ La marche, la volée d'oiseaux et l'entrée des graphiques font partie de la maq
 Vérifiées à 1920 × 1080, 1440 × 900, 1280 × 720, 1024 × 768 et 390 × 844 :
 
 - sur téléphone (moins de 760 px), le parcours devient une bande en bas de l'écran où le personnage marche, sous les cartes; la barre du haut passe en icônes;
-- sous 1024 px, les onglets passent sur une deuxième ligne que l'on fait défiler;
+- sous 1280 px, les onglets passent sur une deuxième ligne que l'on fait défiler;
 - sur un écran bas (portable), les cartes du parcours se resserrent et leur bouton principal reste visible en bas de la carte;
 - le tableau de bord tient sur un écran à partir de 1100 px de large et 805 px de haut; plus bas, la page défile un peu plutôt que de couper les tuiles.
 

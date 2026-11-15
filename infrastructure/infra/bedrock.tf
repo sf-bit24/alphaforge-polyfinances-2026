@@ -226,8 +226,38 @@ resource "aws_bedrock_guardrail" "cadre" {
         "Buy 10 shares of Tesla in my brokerage account for me.",
       ]
     }
+    topics_config {
+      name       = "garantie-rendement"
+      type       = "DENY"
+      definition = "Promettre ou garantir un rendement, un gain ou l'absence de perte sur un placement."
+      examples = [
+        "Ce portefeuille vous garantit 12 % par an sans aucun risque.",
+        "Avec cette strategie, vous ne pouvez pas perdre d'argent.",
+      ]
+    }
+    topics_config {
+      name       = "conseil-personnalise-reel"
+      type       = "DENY"
+      definition = "Presenter une recommandation comme un conseil financier reel, reglemente et personnalise, a suivre tel quel."
+      examples = [
+        "C'est mon conseil officiel : achetez exactement 300 actions de TSLA demain.",
+      ]
+    }
     tier_config {
       tier_name = "CLASSIC"
+    }
+  }
+
+  # Ancrage contextuel : evalue seulement quand une source d'ancrage est fournie (verification des
+  # explications du volet finance) ; sans source, il ne s'applique pas (verifie le 2026-11-14).
+  contextual_grounding_policy_config {
+    filters_config {
+      type      = "GROUNDING"
+      threshold = 0.75
+    }
+    filters_config {
+      type      = "RELEVANCE"
+      threshold = 0.1
     }
   }
 
@@ -235,64 +265,95 @@ resource "aws_bedrock_guardrail" "cadre" {
   # de compte : on ne bloque pas l'entree, mais une sortie ne le repete jamais.
   sensitive_information_policy_config {
     pii_entities_config {
-      type          = "CA_SOCIAL_INSURANCE_NUMBER"
-      action        = "BLOCK"
-      input_action  = "BLOCK"
-      output_action = "BLOCK"
+      type           = "CA_SOCIAL_INSURANCE_NUMBER"
+      action         = "BLOCK"
+      input_action   = "BLOCK"
+      output_action  = "BLOCK"
+      input_enabled  = true
+      output_enabled = true
+    }
+    # Le NAS ecrit avec espaces ou tirets (« 046 454 286 ») echappe au filtre gere : regex.
+    regexes_config {
+      name           = "nas-canadien"
+      description    = "Numero d'assurance sociale canadien, 9 chiffres groupes par 3"
+      pattern        = "\\b\\d{3}[ -]?\\d{3}[ -]?\\d{3}\\b"
+      action         = "BLOCK"
+      input_action   = "BLOCK"
+      output_action  = "BLOCK"
+      input_enabled  = true
+      output_enabled = true
     }
     pii_entities_config {
-      type          = "CA_HEALTH_NUMBER"
-      action        = "BLOCK"
-      input_action  = "BLOCK"
-      output_action = "BLOCK"
+      type           = "CA_HEALTH_NUMBER"
+      action         = "BLOCK"
+      input_action   = "BLOCK"
+      output_action  = "BLOCK"
+      input_enabled  = true
+      output_enabled = true
     }
     pii_entities_config {
-      type          = "CREDIT_DEBIT_CARD_NUMBER"
-      action        = "BLOCK"
-      input_action  = "BLOCK"
-      output_action = "BLOCK"
+      type           = "CREDIT_DEBIT_CARD_NUMBER"
+      action         = "BLOCK"
+      input_action   = "BLOCK"
+      output_action  = "BLOCK"
+      input_enabled  = true
+      output_enabled = true
     }
     pii_entities_config {
-      type          = "PASSWORD"
-      action        = "BLOCK"
-      input_action  = "BLOCK"
-      output_action = "BLOCK"
+      type           = "PASSWORD"
+      action         = "BLOCK"
+      input_action   = "BLOCK"
+      output_action  = "BLOCK"
+      input_enabled  = true
+      output_enabled = true
     }
     pii_entities_config {
-      type          = "PIN"
-      action        = "BLOCK"
-      input_action  = "BLOCK"
-      output_action = "BLOCK"
+      type           = "PIN"
+      action         = "BLOCK"
+      input_action   = "BLOCK"
+      output_action  = "BLOCK"
+      input_enabled  = true
+      output_enabled = true
     }
     pii_entities_config {
-      type          = "US_BANK_ACCOUNT_NUMBER"
-      action        = "ANONYMIZE"
-      input_action  = "NONE"
-      output_action = "ANONYMIZE"
+      type           = "US_BANK_ACCOUNT_NUMBER"
+      action         = "ANONYMIZE"
+      input_action   = "NONE"
+      output_action  = "ANONYMIZE"
+      input_enabled  = false
+      output_enabled = true
     }
     pii_entities_config {
-      type          = "INTERNATIONAL_BANK_ACCOUNT_NUMBER"
-      action        = "ANONYMIZE"
-      input_action  = "NONE"
-      output_action = "ANONYMIZE"
+      type           = "INTERNATIONAL_BANK_ACCOUNT_NUMBER"
+      action         = "ANONYMIZE"
+      input_action   = "NONE"
+      output_action  = "ANONYMIZE"
+      input_enabled  = false
+      output_enabled = true
     }
     pii_entities_config {
-      type          = "EMAIL"
-      action        = "ANONYMIZE"
-      input_action  = "NONE"
-      output_action = "ANONYMIZE"
+      type           = "EMAIL"
+      action         = "ANONYMIZE"
+      input_action   = "NONE"
+      output_action  = "ANONYMIZE"
+      input_enabled  = false
+      output_enabled = true
     }
     pii_entities_config {
-      type          = "PHONE"
-      action        = "ANONYMIZE"
-      input_action  = "NONE"
-      output_action = "ANONYMIZE"
+      type           = "PHONE"
+      action         = "ANONYMIZE"
+      input_action   = "NONE"
+      output_action  = "ANONYMIZE"
+      input_enabled  = false
+      output_enabled = true
     }
     pii_entities_config {
-      type          = "ADDRESS"
-      action        = "ANONYMIZE"
-      input_action  = "NONE"
-      output_action = "ANONYMIZE"
+      type           = "ADDRESS"
+      action         = "ANONYMIZE"
+      input_action   = "NONE"
+      output_action  = "ANONYMIZE"
+      input_enabled  = false
+      output_enabled = true
     }
   }
 

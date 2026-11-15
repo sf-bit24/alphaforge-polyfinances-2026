@@ -41,7 +41,7 @@ def _price_on_or_before(rows, iso: str):
     return best
 
 
-def weekly_returns(ticker: str, as_of: str, weeks: int, cad: bool = False) -> list[tuple[str, float]]:
+def weekly_returns(ticker: str, as_of: str, weeks: int, *, cad: bool = False) -> list[tuple[str, float]]:
     rows = market.daily(ticker, as_of)
     asset = market.universe().get(ticker)
     if not rows or asset is None:

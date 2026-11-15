@@ -20,12 +20,13 @@ Règles :
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from alphaforge.finance.contracts.policy import Limit, PolicySpec, Selector
 from alphaforge.finance.strategy.okf_facts import ESG_FACT_PREFIX, FILING_FACT_PREFIX, NEWS_FACT_PREFIX
 from alphaforge.finance.strategy.rules import clamp_strategy_floors
 
-from .schemas import PRIORITY, AppliedAmendment, LensReport
+from .schemas import PRIORITY, Amendment, AppliedAmendment, LensReport
 
 FLOOR_RATIO = 0.6
 NEWS_REJECT_FR = "une actualité ne justifie jamais un changement du mandat (rumeur ≠ fait)"
@@ -39,137 +40,180 @@ def _limit(policy: PolicySpec, rule_id: str) -> Limit | None:
     return next((lim for lim in policy.limits if lim.rule_id == rule_id), None)
 
 
-def apply_amendments(
+class _RejectedError(Exception):
+    """Amendement refusé ; ``why`` est la raison montrée dans le journal de la fusion."""
+
+    def __init__(self, why: str):
+        super().__init__(why)
+        self.why = why
+
+
+@dataclass(frozen=True)
+class _Guards:
+    known_fact_ids: set[str]
+    original: PolicySpec
+    feasible: Callable[[PolicySpec], bool] | None
+    floor_ratio: float
+    esg_preference: bool
+
+
+def apply_amendments(  # noqa: PLR0913 - les quatre entrées de la fusion, puis ses gardes passées par mot-clé
     policy: PolicySpec,
     reports: list[LensReport],
     emphasis: dict[str, float],
     known_fact_ids: set[str],
+    *,
     original: PolicySpec | None = None,
     feasible: Callable[[PolicySpec], bool] | None = None,
     floor_ratio: float = FLOOR_RATIO,
     esg_preference: bool = False,
 ) -> tuple[PolicySpec, list[AppliedAmendment]]:
-    original = original or policy
+    guards = _Guards(known_fact_ids, original or policy, feasible, floor_ratio, esg_preference)
     items = [(r.lens, a) for r in reports for a in r.amendments]
     items.sort(key=lambda la: (PRIORITY[la[0]], -emphasis.get(la[0], 0.0)))
     cur = policy.model_copy(deep=True)
     log: list[AppliedAmendment] = []
-
-    def reject(lens, a, why):
-        log.append(AppliedAmendment(lens=lens, amendment=a, status="rejete", why_fr=why))
-
     for lens, a in items:
-        if a.kind != "flag_only" and any(f.startswith(NEWS_FACT_PREFIX) for f in a.evidence_fact_ids):
-            reject(lens, a, NEWS_REJECT_FR)
-            continue
-        esg_ids = [f for f in a.evidence_fact_ids if f.startswith(ESG_FACT_PREFIX)]
-        if a.kind != "flag_only" and esg_ids and not esg_preference:
-            reject(lens, a, ESG_NO_PREFERENCE_FR)
-            continue
-        if (
-            a.kind == "exclude_asset"
-            and esg_ids
-            and not any(f.startswith(f"{ESG_FACT_PREFIX}{a.target}.") for f in esg_ids)
-        ):
-            reject(lens, a, ESG_OTHER_ASSET_FR)
-            continue
-        if a.kind != "flag_only" and any(f.startswith(FILING_FACT_PREFIX) for f in a.evidence_fact_ids):
-            reject(lens, a, FILING_REJECT_FR)
-            continue
-        missing = [f for f in a.evidence_fact_ids if f not in known_fact_ids]
-        if missing:
-            reject(lens, a, f"preuve inconnue : {missing}")
-            continue
-        if a.kind == "flag_only":
-            log.append(
-                AppliedAmendment(lens=lens, amendment=a, status="applique", why_fr="signalement, sans changement")
-            )
-            continue
-        new = cur.model_copy(deep=True)
-        before = after = None
-        if a.kind in ("tighten_limit", "cap_group"):
-            lim = _limit(new, a.target)
-            if lim is None:
-                reject(lens, a, f"limite inconnue : {a.target}")
-                continue
-            if a.value is None or lim.max is None or not a.value < lim.max - 1e-12:
-                reject(lens, a, "ne resserre pas la limite (le max doit baisser)")
-                continue
-            if a.kind == "cap_group" and lim.kind not in ("group_weight", "exposure", "asset_weight"):
-                reject(lens, a, "cap_group vise une limite de poids ou d'exposition")
-                continue
-            orig = _limit(original, a.target)
-            floor = (
-                (orig.max * floor_ratio) if orig is not None and orig.max is not None and lim.kind == "risk" else 0.0
-            )
-            if a.value < floor or a.value < 0 or (lim.min is not None and a.value < lim.min):
-                reject(lens, a, f"sous le plancher anti-cliquet ({floor:.4f}) ou sous le min")
-                continue
-            before, after = lim.max, a.value
-            lim.max = a.value
-        elif a.kind == "require_min_group":
-            lim = _limit(new, a.target)
-            if a.target.startswith("strat."):
-                reject(lens, a, "un plancher de style (strat.*) ne peut que baisser : le relever ajouterait du risque")
-                continue
-            if lim is None or lim.kind != "group_weight":
-                reject(lens, a, f"limite de groupe inconnue : {a.target}")
-                continue
-            cur_min = lim.min or 0.0
-            if a.value is None or not a.value > cur_min + 1e-12 or (lim.max is not None and a.value > lim.max):
-                reject(lens, a, "doit relever le min sans dépasser le max")
-                continue
-            before, after = lim.min, a.value
-            lim.min = a.value
-        elif a.kind == "exclude_asset":
-            if a.target not in new.universe:
-                reject(lens, a, f"actif hors univers : {a.target}")
-                continue
-            if a.target in new.excluded:
-                reject(lens, a, "déjà exclu")
-                continue
-            new.excluded[a.target] = a.evidence_fact_ids[0]
-            new.limits.append(
-                Limit(
-                    rule_id=f"amend.exclude.{a.target}",
-                    kind="asset_weight",
-                    selector=Selector(assets=[a.target]),
-                    max=0.0,
-                    blocking=True,
-                    derived_from=f"lentille {lens}",
-                    source=f"fact:{a.evidence_fact_ids[0]}",
-                    description_fr=a.reason_fr[:200],
-                )
-            )
-            before, after = "admis", "exclu"
-        elif a.kind == "switch_risk_measure":
-            tgt = a.target.upper()
-            if tgt not in _MEASURE_ORDER or _MEASURE_ORDER[tgt] <= _MEASURE_ORDER.get(new.risk_measure, 0):
-                reject(lens, a, "seul un passage vers une mesure plus prudente est admis")
-                continue
-            before, after = new.risk_measure, tgt
-            new.risk_measure = tgt
         try:
-            new = PolicySpec.model_validate(new.model_dump())
-            if any(lim.rule_id.startswith("strat.") for lim in new.limits):
-                # la prudence l'emporte sur le style : un plafond abaissé abaisse les planchers strat.* liés
-                new, _ = clamp_strategy_floors(new)
-        except Exception as exc:  # contrat invalide
-            reject(lens, a, f"mandat invalide après amendement : {exc}"[:300])
-            continue
-        why_ok = "appliqué"
-        if feasible is not None and not feasible(new):
-            relaxed = _relax_strategy_floors(new, feasible)
-            if relaxed is None:
-                reject(lens, a, "rendrait le mandat infaisable")
-                continue
-            # la prudence l'emporte sur le style : les planchers strat.* cèdent avant le resserrement
-            new, why_ok = relaxed, "appliqué ; planchers du style retirés pour rester faisable"
-        cur = new
-        log.append(
-            AppliedAmendment(lens=lens, amendment=a, status="applique", why_fr=why_ok, before=before, after=after)
-        )
+            cur, entry = _apply_one(cur, lens, a, guards)
+        except _RejectedError as rejected:
+            entry = AppliedAmendment(lens=lens, amendment=a, status="rejete", why_fr=rejected.why)
+        log.append(entry)
     return cur, log
+
+
+def _apply_one(cur: PolicySpec, lens: str, a: Amendment, guards: _Guards) -> tuple[PolicySpec, AppliedAmendment]:
+    """Mandat après l'amendement ``a`` et son entrée du journal ; lève ``_RejectedError`` s'il est refusé."""
+    _check_evidence(a, guards)
+    if a.kind == "flag_only":
+        return cur, AppliedAmendment(lens=lens, amendment=a, status="applique", why_fr="signalement, sans changement")
+    new = cur.model_copy(deep=True)
+    before, after = _change(new, lens, a, guards)
+    new = _revalidated(new)
+    new, why_ok = _kept_feasible(new, guards.feasible)
+    return new, AppliedAmendment(lens=lens, amendment=a, status="applique", why_fr=why_ok, before=before, after=after)
+
+
+def _check_evidence(a: Amendment, guards: _Guards) -> None:
+    """Gardes 4 à 6 (actualités, ESG, dépôts), puis preuves inconnues."""
+    changes_policy = a.kind != "flag_only"
+    if changes_policy and any(f.startswith(NEWS_FACT_PREFIX) for f in a.evidence_fact_ids):
+        raise _RejectedError(NEWS_REJECT_FR)
+    esg_ids = [f for f in a.evidence_fact_ids if f.startswith(ESG_FACT_PREFIX)]
+    if changes_policy and esg_ids and not guards.esg_preference:
+        raise _RejectedError(ESG_NO_PREFERENCE_FR)
+    if (
+        a.kind == "exclude_asset"
+        and esg_ids
+        and not any(f.startswith(f"{ESG_FACT_PREFIX}{a.target}.") for f in esg_ids)
+    ):
+        raise _RejectedError(ESG_OTHER_ASSET_FR)
+    if changes_policy and any(f.startswith(FILING_FACT_PREFIX) for f in a.evidence_fact_ids):
+        raise _RejectedError(FILING_REJECT_FR)
+    missing = [f for f in a.evidence_fact_ids if f not in guards.known_fact_ids]
+    if missing:
+        raise _RejectedError(f"preuve inconnue : {missing}")
+
+
+def _change(new: PolicySpec, lens: str, a: Amendment, guards: _Guards) -> tuple:
+    """Applique l'amendement à ``new`` (copie du mandat courant) ; renvoie la borne (avant, après)."""
+    if a.kind in ("tighten_limit", "cap_group"):
+        return _lower_max(new, a, guards)
+    if a.kind == "require_min_group":
+        return _raise_group_min(new, a)
+    if a.kind == "exclude_asset":
+        return _exclude_asset(new, lens, a)
+    if a.kind == "switch_risk_measure":
+        return _switch_risk_measure(new, a)
+    return None, None
+
+
+def _lower_max(new: PolicySpec, a: Amendment, guards: _Guards) -> tuple:
+    lim = _limit(new, a.target)
+    if lim is None:
+        raise _RejectedError(f"limite inconnue : {a.target}")
+    if a.value is None or lim.max is None or not a.value < lim.max - 1e-12:
+        raise _RejectedError("ne resserre pas la limite (le max doit baisser)")
+    if a.kind == "cap_group" and lim.kind not in ("group_weight", "exposure", "asset_weight"):
+        raise _RejectedError("cap_group vise une limite de poids ou d'exposition")
+    floor = _ratchet_floor(_limit(guards.original, a.target), lim, guards.floor_ratio)
+    if a.value < floor or a.value < 0 or (lim.min is not None and a.value < lim.min):
+        raise _RejectedError(f"sous le plancher anti-cliquet ({floor:.4f}) ou sous le min")
+    before, after = lim.max, a.value
+    lim.max = a.value
+    return before, after
+
+
+def _ratchet_floor(orig: Limit | None, lim: Limit, floor_ratio: float) -> float:
+    """Garde anti-cliquet : une limite de risque ne descend pas sous ``floor_ratio`` fois son max d'origine."""
+    return (orig.max * floor_ratio) if orig is not None and orig.max is not None and lim.kind == "risk" else 0.0
+
+
+def _raise_group_min(new: PolicySpec, a: Amendment) -> tuple:
+    lim = _limit(new, a.target)
+    if a.target.startswith("strat."):
+        raise _RejectedError("un plancher de style (strat.*) ne peut que baisser : le relever ajouterait du risque")
+    if lim is None or lim.kind != "group_weight":
+        raise _RejectedError(f"limite de groupe inconnue : {a.target}")
+    cur_min = lim.min or 0.0
+    if a.value is None or not a.value > cur_min + 1e-12 or (lim.max is not None and a.value > lim.max):
+        raise _RejectedError("doit relever le min sans dépasser le max")
+    before, after = lim.min, a.value
+    lim.min = a.value
+    return before, after
+
+
+def _exclude_asset(new: PolicySpec, lens: str, a: Amendment) -> tuple:
+    if a.target not in new.universe:
+        raise _RejectedError(f"actif hors univers : {a.target}")
+    if a.target in new.excluded:
+        raise _RejectedError("déjà exclu")
+    new.excluded[a.target] = a.evidence_fact_ids[0]
+    new.limits.append(
+        Limit(
+            rule_id=f"amend.exclude.{a.target}",
+            kind="asset_weight",
+            selector=Selector(assets=[a.target]),
+            max=0.0,
+            blocking=True,
+            derived_from=f"lentille {lens}",
+            source=f"fact:{a.evidence_fact_ids[0]}",
+            description_fr=a.reason_fr[:200],
+        )
+    )
+    return "admis", "exclu"
+
+
+def _switch_risk_measure(new: PolicySpec, a: Amendment) -> tuple:
+    tgt = a.target.upper()
+    if tgt not in _MEASURE_ORDER or _MEASURE_ORDER[tgt] <= _MEASURE_ORDER.get(new.risk_measure, 0):
+        raise _RejectedError("seul un passage vers une mesure plus prudente est admis")
+    before, after = new.risk_measure, tgt
+    new.risk_measure = tgt
+    return before, after
+
+
+def _revalidated(new: PolicySpec) -> PolicySpec:
+    """Mandat revalidé par le contrat ; les planchers strat.* suivent un plafond abaissé."""
+    try:
+        new = PolicySpec.model_validate(new.model_dump())
+        if any(lim.rule_id.startswith("strat.") for lim in new.limits):
+            # la prudence l'emporte sur le style : un plafond abaissé abaisse les planchers strat.* liés
+            new, _ = clamp_strategy_floors(new)
+    except Exception as exc:  # contrat invalide
+        raise _RejectedError(f"mandat invalide après amendement : {exc}"[:300]) from exc
+    return new
+
+
+def _kept_feasible(new: PolicySpec, feasible: Callable[[PolicySpec], bool] | None) -> tuple[PolicySpec, str]:
+    """Garde de faisabilité : les planchers strat.* cèdent avant le resserrement, sinon l'amendement est refusé."""
+    if feasible is None or feasible(new):
+        return new, "appliqué"
+    relaxed = _relax_strategy_floors(new, feasible)
+    if relaxed is None:
+        raise _RejectedError("rendrait le mandat infaisable")
+    # la prudence l'emporte sur le style : les planchers strat.* cèdent avant le resserrement
+    return relaxed, "appliqué ; planchers du style retirés pour rester faisable"
 
 
 def _relax_strategy_floors(policy: PolicySpec, feasible: Callable[[PolicySpec], bool]) -> PolicySpec | None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -12,6 +13,10 @@ from strands.models import Model
 from alphaforge.config import Settings
 from alphaforge.profile.service import ProfileService
 from alphaforge.store.local import LocalStore
+
+# Les tests lisent le jeu de départ figé, même si des parquets quotidiens ont été construits en local
+# (finance/backtest/daily_data.py) : sinon, les prix attendus changeraient avec chaque build.
+os.environ.setdefault("ALPHAFORGE_MARKET_SOURCE", "starter")
 
 BASE_ANSWERS = {
     "q_kn_invest_freq": "several_per_year",

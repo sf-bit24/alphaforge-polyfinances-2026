@@ -12,7 +12,7 @@ import { cn } from "@/components/ui/cn";
 import { PendingReply, Thread, ThreadEntries, ThreadNotices, threadView, type ThreadView } from "./assistant-thread";
 import styles from "./dashboard.module.css";
 import { IntroScene, SuggestionChips, type IntroChip } from "./intro-scene";
-import { isDemoKey, useAutoStart, useDemoScript, useFollowupForm, useThreadScroll, type FollowupForm } from "./use-assistant";
+import { isDemoKey, useDemoScript, useFollowupForm, useThreadScroll, type FollowupForm } from "./use-assistant";
 
 interface ChipOffer {
   /** A1's follow-ups can start: follow-up stage, nothing said yet, no reply pending. */
@@ -111,30 +111,20 @@ function Composer({
   );
 }
 
-interface AssistantProps {
-  state: ClientState;
-  sample: boolean;
-  /** The birds' scene before the first message (the dashboard); the journey goes straight to the thread. */
-  intro?: boolean;
-  /** Yan asks its first follow-ups without waiting for a click (end of the questionnaire). */
-  autoStart?: boolean;
-}
-
 /**
  * Yan, the assistant of the dashboard draft. Its conversation is A1's (`followup.reply`):
  * it asks the follow-ups that complete the profile, and answers within the profile's scope.
  * In `mock` mode, the draft's portfolio questions also get their example answers.
  */
-export function Assistant({ state, sample, intro: withIntro = true, autoStart = false }: AssistantProps) {
+export function Assistant({ state, sample }: { state: ClientState; sample: boolean }) {
   const { t, locale } = useI18n();
   const session = useSession();
-  const [intro, setIntro] = useState(() => withIntro && session.conversation.length === 0);
+  const [intro, setIntro] = useState(() => session.conversation.length === 0);
   const { demoEntries, demoTyping, playedDemos, playDemo } = useDemoScript();
   const view = threadView(state, session, demoEntries);
   const form = useFollowupForm(view.askQuestions ? state.questions : []);
   const readFromStart = view.askQuestions && !demoTyping && view.entries.at(-1) === view.lastAgent;
   const threadRef = useThreadScroll({ entryCount: view.entries.length, replying: view.replying, demoTyping, streamText: session.streamText, readFromStart });
-  useAutoStart(autoStart);
 
   const act = (chip: string, text: string) => {
     if (chip === "followups") void session.reply({});

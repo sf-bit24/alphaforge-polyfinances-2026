@@ -1,0 +1,65 @@
+/* Yan's small life: it blinks, its antenna glows, and in full figure it waves on arrival. */
+.yan {
+  flex: none;
+  display: block;
+  overflow: visible;
+}
+
+.eyes {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: blink 5s infinite;
+}
+@keyframes blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.1);
+  }
+}
+
+.light {
+  animation: glow 2.6s ease-in-out infinite;
+}
+@keyframes glow {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.wave {
+  transform-origin: 91px 92px;
+  animation: wave 1.6s var(--ease, ease) 0.4s 1 both;
+}
+@keyframes wave {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  20%,
+  60% {
+    transform: rotate(-14deg);
+  }
+  40%,
+  80% {
+    transform: rotate(8deg);
+  }
+}
+
+.curve {
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+  animation: draw 1.2s ease-out 0.3s forwards;
+}
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}

@@ -21,7 +21,6 @@ import { Scene, sceneLayout, WORLD, type SceneHandle } from "./scene";
 import { StageCard } from "./stage-card";
 import { AssistantLine } from "./assistant-line";
 import { useJourneyFlow, type DrawerName, type Flow } from "./use-journey-flow";
-import { DrawerChat, SideChat, sideChatReserve, useDrawerChat } from "./yan-chat";
 import styles from "./journey.module.css";
 
 /** « Passer les questions » in the top bar, while base questions remain (the landing has its own pill). */
@@ -87,7 +86,7 @@ function TopBar({ state, onOpen, onSkip, skipDisabled = false }: TopBarProps) {
  * The profile journey of the approved draft, driven by the real contract: one stop per
  * base question (the runtime decides the next one, branches included), a briefcase stop
  * for an existing portfolio (A2), then the house: the questionnaire ends there and Yan
- * (A1) asks its personalized follow-ups, in a conversation on the right of the screen.
+ * (A1) asks its personalized follow-ups, in the same cards as the base questions.
  */
 export function Journey() {
   const session = useSession();
@@ -140,12 +139,11 @@ const CARD_SHAPES: Record<Stage, CardShape> = {
   base_questions: PLAIN_CARD,
   existing_portfolio: { wide: false, tall: true, width: 640 },
   portfolio_review: { wide: true, tall: false, width: 560 },
-  followups: { wide: false, tall: false, width: 480 },
-  complete: { wide: false, tall: false, width: 480 },
+  followups: PLAIN_CARD,
+  complete: PLAIN_CARD,
 };
 
-/** `reserve`: room kept on the right, for Yan's conversation at the house. */
-function panelStyle({ geo, width, left, top, floor }: CardFrame, shape: CardShape, reserve = 0): CSSProperties {
+function panelStyle({ geo, width, left, top, floor }: CardFrame, shape: CardShape): CSSProperties {
   const { narrow } = geo;
   if (shape.wide) {
     const panelWidth = Math.min(1240, width - 32);
@@ -153,8 +151,7 @@ function panelStyle({ geo, width, left, top, floor }: CardFrame, shape: CardShap
   }
   // Tall cards (portfolio) start just under the progress bar so they fit without scrolling.
   const cardTop = shape.tall && !narrow ? 88 : top;
-  const room = reserve > 0 ? width - reserve - left : width - left - 40;
-  return { left, top: cardTop, width: narrow ? width - 32 : Math.min(shape.width, room), maxHeight: floor - cardTop };
+  return { left, top: cardTop, width: narrow ? width - 32 : Math.min(shape.width, width - left - 40), maxHeight: floor - cardTop };
 }
 
 function landingStyle({ geo, width, left, top, floor }: CardFrame): CSSProperties {
@@ -307,7 +304,6 @@ function CardContent({ state, flow, visible }: { state: ClientState | null; flow
 
 function JourneyDrawers({ drawer, state, onClose }: { drawer: DrawerName | null; state: ClientState | null; onClose: () => void }) {
   const { t } = useI18n();
-  const chat = useDrawerChat(state);
   return (
     <>
       <Drawer open={drawer === "trace"} onClose={onClose} label={t.trace.title}>
@@ -316,25 +312,19 @@ function JourneyDrawers({ drawer, state, onClose }: { drawer: DrawerName | null;
       <Drawer open={drawer === "profile"} onClose={onClose} label={t.panel.title}>
         {state ? <ProfilePanel state={state} /> : null}
       </Drawer>
-      <Drawer open={drawer === "chat" && chat} onClose={onClose} label={t.assistant.conversation}>
-        {state ? <DrawerChat state={state} /> : null}
-      </Drawer>
     </>
   );
 }
 
-/** The card of the stop, and Yan's conversation beside it at the house (when it fits). */
+/** The card of the stop where the walker stands. */
 function StopPanels({ state, flow, frame, visible }: { state: ClientState | null; flow: Flow; frame: CardFrame; visible: boolean }) {
   const shape = state ? CARD_SHAPES[state.stage] : PLAIN_CARD;
   // A new panel per stop, so each starts scrolled to its top.
   const panelKey = state ? `${state.stage}:${state.questions[0]?.id ?? ""}` : "none";
   return (
-    <>
-      <CardPanel key={panelKey} shape={shape} visible={visible} style={panelStyle(frame, shape, sideChatReserve(frame.width, state))}>
-        <CardContent state={state} flow={flow} visible={visible} />
-      </CardPanel>
-      <SideChat state={state} visible={visible} width={frame.width} floor={frame.floor} />
-    </>
+    <CardPanel key={panelKey} shape={shape} visible={visible} style={panelStyle(frame, shape)}>
+      <CardContent state={state} flow={flow} visible={visible} />
+    </CardPanel>
   );
 }
 

@@ -8,11 +8,10 @@ import { sayFor, type SayKey } from "@/lib/journey/path";
 import { PortfolioReviewStep } from "@/components/profile/portfolio-review-step";
 import { ErrorNotice } from "@/components/ui/error-notice";
 import { AssistantLine } from "./assistant-line";
+import { FollowupStage } from "./followup-card";
 import { PortfolioCard } from "./portfolio-card";
 import { QuestionCard } from "./question-card";
-import { EndCard } from "./end-card";
 import type { Flow } from "./use-journey-flow";
-import { useSideChat } from "./yan-chat";
 
 function sayText(t: Dictionary, key: SayKey): string {
   switch (key.kind) {
@@ -87,22 +86,6 @@ function ReviewStage({ state, flow }: StageProps) {
   );
 }
 
-/** `followups` and `complete`: the questionnaire ends at the house, and Yan takes over. */
-function EndStage({ state, flow, visible }: StageProps) {
-  const session = useSession();
-  const side = useSideChat(state);
-  return (
-    <EndCard
-      state={state}
-      side={side}
-      autoFocus={visible && flow.interacted}
-      busy={Boolean(session.pending)}
-      onOpenChat={() => flow.setDrawer("chat")}
-      onRestart={flow.restart}
-    />
-  );
-}
-
 /** The card of the stop where the walker stands, by stage. */
 export function StageCard(props: StageProps) {
   switch (props.state.stage) {
@@ -114,6 +97,6 @@ export function StageCard(props: StageProps) {
       return <ReviewStage {...props} />;
     case "followups":
     case "complete":
-      return <EndStage {...props} />;
+      return <FollowupStage state={props.state} visible={props.visible} interacted={props.flow.interacted} onRestart={props.flow.restart} />;
   }
 }

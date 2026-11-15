@@ -126,17 +126,4 @@ export function useThreadScroll({ entryCount, replying, demoTyping, streamText, 
   return threadRef;
 }
 
-/**
- * At the end of the questionnaire, Yan opens the follow-ups on its own, once, when
- * nothing has been said yet (a failed start is retried from the error notice).
- */
-export function useAutoStart(enabled: boolean) {
-  const session = useSession();
-  const started = useRef(false);
-  const shouldStart = enabled && session.state?.stage === "followups" && session.conversation.length === 0 && !session.pending;
-  useEffect(() => {
-    if (!shouldStart || started.current) return;
-    started.current = true;
-    void session.reply({});
-  }, [shouldStart, session]);
-}
+

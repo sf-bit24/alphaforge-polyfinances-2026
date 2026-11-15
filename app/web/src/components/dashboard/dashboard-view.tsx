@@ -11,6 +11,7 @@ import { cn } from "@/components/ui/cn";
 import { Spinner } from "@/components/ui/spinner";
 import { Assistant } from "./assistant";
 import { ProfileBento, SampleBento } from "./bento";
+import { YanMark } from "@/components/yan/yan";
 import styles from "./dashboard.module.css";
 
 /** Example portfolio data are shown against the simulator only (team decision of 2026-11-14). */
@@ -76,6 +77,7 @@ export function DashboardView() {
       <section className={styles.assist} aria-labelledby="assistant-title">
         <div className={styles.assistH}>
           <div className={styles.assistNote}>
+            <YanMark size={30} />
             <h2 id="assistant-title">{t.assistant.title}</h2>
             <span className={cn(styles.pill, completeness.ready && styles.pillReady)}>{t.assistant.profilePill(formatPercent(completeness.displayed, locale))}</span>
           </div>

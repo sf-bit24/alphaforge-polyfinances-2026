@@ -275,17 +275,11 @@
   gap: 12px;
   align-items: flex-start;
 }
+/* Yan's head (components/yan): it stands on its own, without a disc. */
 .avatar {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--navy);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-top: -3px;
 }
 .say p {
   font-size: 15px;
@@ -443,8 +437,7 @@
   align-items: center;
 }
 /* In a card that scrolls (short screens), its main button stays in reach at the bottom. */
-.card .actions,
-.card .next {
+.card .actions {
   position: sticky;
   bottom: -22px;
   z-index: 1;
@@ -632,76 +625,125 @@
   margin-bottom: 16px;
 }
 
-/* ---------- end of the questionnaire, Yan's conversation ---------- */
-.lead {
+/* ---------- at the house: Yan's follow-ups, in the question cards ---------- */
+/* Yan's own message (A1's markdown) in its line. */
+.sayRich {
+  min-width: 0;
+  padding-top: 4px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.sayRich p + p {
+  margin-top: 6px;
+}
+.more {
+  margin-top: 6px;
+  font-size: 14px;
+}
+.more summary {
+  cursor: pointer;
+  color: var(--ink-3);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.more[open] summary {
+  margin-bottom: 6px;
+}
+/* The questionnaire is over: a small badge above Yan's line, with where its questions stand. */
+.kicker {
+  margin-bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ok);
+  background: var(--ok-soft);
+  border: 1px solid #bfe0cc;
+  border-radius: 999px;
+  padding: 3px 11px 3px 8px;
+  white-space: nowrap;
+}
+.kicker svg {
+  width: 15px;
+  height: 15px;
+}
+.kickerPct {
+  margin-left: 4px;
+  padding-left: 9px;
+  border-left: 1px solid #bfe0cc;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/* Below the sticky « Continuer » area, which overlaps what follows by its padding. */
+.followupActions {
+  margin-top: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+.typing {
+  display: inline-flex;
+  gap: 5px;
+  margin: 14px 0 4px 46px;
+}
+.typing i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line-2);
+  animation: typing 1s infinite ease-in-out;
+}
+.typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes typing {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (max-width: 760px) {
+  .kicker {
+    gap: 4px;
+    font-size: 11px;
+    padding: 3px 9px 3px 6px;
+  }
+  .kickerPct {
+    margin-left: 2px;
+    padding-left: 6px;
+  }
+}
+/* The profile is ready: Yan in full beside the title. */
+.ready {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+}
+.ready .kicker {
+  margin-bottom: 0;
+}
+.card .ready h2 {
   margin-top: 10px;
+}
+.lead {
+  margin-top: 14px;
   font-size: 15px;
   line-height: 1.55;
   color: var(--ink-2);
 }
-.chat {
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow:
-    0 2px 4px rgba(11, 35, 65, 0.05),
-    0 12px 32px rgba(11, 35, 65, 0.1);
-}
-/* The assistant's own frame sits flush in the panel, which already draws the card. */
-.chat > section {
-  border: 0;
-  border-radius: 0;
-}
-.chatDrawer {
-  height: 100%;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.chat .chatHead {
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--line);
-}
-.chatHead {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.chatHead h2 {
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1.2;
-}
-.chatHead p {
-  font-size: 12px;
-  color: var(--ink-3);
-}
-.pill {
-  margin-left: auto;
-  white-space: nowrap;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--soft);
-  color: var(--ink-2);
-  border: 1px solid var(--line);
-  font-variant-numeric: tabular-nums;
-}
-.pillReady {
-  background: var(--ok-soft);
-  color: var(--ok);
-  border-color: #bfe0cc;
-}
 .next {
-  margin-top: -4px;
+  margin-top: 18px;
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px 20px;
   align-items: center;
 }
 
@@ -851,8 +893,7 @@
   .card {
     padding: 18px 18px 16px;
   }
-  .card .actions,
-  .card .next {
+  .card .actions {
     bottom: -16px;
     margin-bottom: -16px;
     padding-bottom: 16px;

@@ -9,7 +9,7 @@ import { sampleAnswer } from "@/lib/journey/sample-profile";
 import type { SceneHandle } from "./scene";
 
 type Phase = "landing" | "walking" | "ready";
-export type DrawerName = "trace" | "profile" | "chat";
+export type DrawerName = "trace" | "profile";
 
 /** Where the walker stands and what the screen shows. */
 function useJourneyState(initial: ClientState | null) {

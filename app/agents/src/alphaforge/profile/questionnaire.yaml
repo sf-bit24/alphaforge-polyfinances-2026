@@ -11,7 +11,7 @@
 # ce qu'un portefeuille ne dit pas, diapositive 14) et énoncé officiel (cadre responsable, p. 14 et 17).
 # Les fiches des personas ne fournissent aucun chiffre ni barème à ce fichier.
 
-version: "2026-11-14.1"
+version: "2026-11-14.2"
 review: "À relire par le volet finance de l'équipe larpathon : textes, options, poids et barèmes."
 
 completeness:
@@ -20,6 +20,18 @@ completeness:
   # Les questions de base donnent environ 0,65; les relances d'A1 complètent le profil.
   threshold: 0.70
   cap: 0.95
+
+followups:
+  # Version courte décidée par l'équipe (Brain, product/questionnaire-profil.md, « Version courte et choix de
+  # réponses ») : des choix de réponses chaque fois que c'est possible, une question ouverte en exception.
+  # max_generated : questions générées par A1 dans une session (les questions de secours fb_ et de
+  #   confirmation cf_ ne comptent pas).
+  # max_open_questions : questions ouvertes (genre text) par session, toutes sources confondues.
+  # open_fields : seuls champs qu'une question ouverte peut viser; une question ouverte sans champ (field nul)
+  #   est une question d'exploration.
+  max_generated: 8
+  max_open_questions: 2
+  open_fields: [objective.goal_detail]
 
 fields:
   # ---------------------------------------------------------------- niveau de connaissances
@@ -137,8 +149,24 @@ fields:
     summary: true
     writable_by: [a1]
     label: {fr: "Années avant le premier retrait important", en: "Years before the first major withdrawal"}
+    choices:
+      # Tranches proposées par le code (numeric_choices) : seules celles incluses dans la bande horizon.horizon_band
+      # déjà connue sont offertes, pour rester cohérent avec elle. Valeur écrite = borne basse (min), la plus
+      # prudente. Les bornes sont un choix de l'implémentation, à relire par le volet finance.
+      within: {field: horizon.horizon_band, ranges: {lt3: [0, 3], 3to10: [3, 10], gt10: [10, null]}}
+      tranches:
+        - {value: lt1, min: 0, max: 1, label: {fr: "Moins d'un an", en: "Less than a year"}}
+        - {value: 1to2, min: 1, max: 2, label: {fr: "De 1 à moins de 2 ans", en: "1 to less than 2 years"}}
+        - {value: 2to3, min: 2, max: 3, label: {fr: "De 2 à moins de 3 ans", en: "2 to less than 3 years"}}
+        - {value: 3to5, min: 3, max: 5, label: {fr: "De 3 à moins de 5 ans", en: "3 to less than 5 years"}}
+        - {value: 5to7, min: 5, max: 7, label: {fr: "De 5 à moins de 7 ans", en: "5 to less than 7 years"}}
+        - {value: 7to10, min: 7, max: 10, label: {fr: "De 7 à moins de 10 ans", en: "7 to less than 10 years"}}
+        - {value: 10to15, min: 10, max: 15, label: {fr: "De 10 à moins de 15 ans", en: "10 to less than 15 years"}}
+        - {value: 15to20, min: 15, max: 20, label: {fr: "De 15 à moins de 20 ans", en: "15 to less than 20 years"}}
+        - {value: 20to30, min: 20, max: 30, label: {fr: "De 20 à moins de 30 ans", en: "20 to less than 30 years"}}
+        - {value: 30plus, min: 30, max: null, label: {fr: "30 ans ou plus", en: "30 years or more"}}
     fallback:
-      kind: number
+      kind: single_choice
       prompt: {fr: "Dans combien d'années environ prévoyez-vous le premier retrait important ?", en: "In about how many years do you expect the first major withdrawal?"}
       help: {fr: "Un ordre de grandeur suffit.", en: "A rough estimate is enough."}
   - id: horizon.withdrawal_pattern
@@ -226,8 +254,22 @@ fields:
     weight: 6
     writable_by: [a1]
     label: {fr: "Perte admissible", en: "Acceptable loss"}
+    choices:
+      # Tranches en dollars calculées par le code (numeric_choices) : 2,5, 5, 10, 20 et 30 % du montant
+      # context.amount_cad (M), comme SF-04 de la banque du Brain, avec une tranche de plus sous 5 %.
+      # Valeur écrite = borne basse de la tranche, la plus prudente (0 pour la première).
+      relative_to: context.amount_cad
+      shares: [0.025, 0.05, 0.10, 0.20, 0.30]
+      # Tranches absolues, quand le montant est inconnu.
+      tranches:
+        - {value: lt1k, min: 0, max: 1000, label: {fr: "Moins de 1 000 $", en: "Less than $1,000"}}
+        - {value: 1k_2500, min: 1000, max: 2500, label: {fr: "De 1 000 $ à moins de 2 500 $", en: "$1,000 to less than $2,500"}}
+        - {value: 2500_5k, min: 2500, max: 5000, label: {fr: "De 2 500 $ à moins de 5 000 $", en: "$2,500 to less than $5,000"}}
+        - {value: 5k_10k, min: 5000, max: 10000, label: {fr: "De 5 000 $ à moins de 10 000 $", en: "$5,000 to less than $10,000"}}
+        - {value: 10k_25k, min: 10000, max: 25000, label: {fr: "De 10 000 $ à moins de 25 000 $", en: "$10,000 to less than $25,000"}}
+        - {value: 25k_plus, min: 25000, max: null, label: {fr: "25 000 $ ou plus", en: "$25,000 or more"}}
     fallback:
-      kind: money
+      kind: single_choice
       prompt: {fr: "Quelle perte, en dollars, pourriez-vous absorber sur ce placement sans changer vos projets ?", en: "What loss, in dollars, could you absorb on this investment without changing your plans?"}
       help: {fr: "Il s'agit de votre capacité financière, pas de votre confort face aux baisses.", en: "This is about your financial capacity, not your comfort with drops."}
   - id: risk_capacity.high_interest_debt
@@ -289,9 +331,20 @@ fields:
     weight: 4
     writable_by: [a1]
     label: {fr: "Ajout mensuel prévu", en: "Planned monthly contribution"}
+    choices:
+      # Tranches absolues proposées par le code (numeric_choices). Valeur écrite = borne basse (min), la plus
+      # prudente. Les bornes sont un choix de l'implémentation, à relire par le volet finance.
+      tranches:
+        - {value: none, min: 0, max: 0, label: {fr: "Aucun ajout", en: "No contribution"}}
+        - {value: lt100, min: 0, max: 100, label: {fr: "Moins de 100 $ par mois", en: "Less than $100 a month"}}
+        - {value: 100to250, min: 100, max: 250, label: {fr: "De 100 $ à moins de 250 $ par mois", en: "$100 to less than $250 a month"}}
+        - {value: 250to500, min: 250, max: 500, label: {fr: "De 250 $ à moins de 500 $ par mois", en: "$250 to less than $500 a month"}}
+        - {value: 500to1000, min: 500, max: 1000, label: {fr: "De 500 $ à moins de 1 000 $ par mois", en: "$500 to less than $1,000 a month"}}
+        - {value: 1000to2500, min: 1000, max: 2500, label: {fr: "De 1 000 $ à moins de 2 500 $ par mois", en: "$1,000 to less than $2,500 a month"}}
+        - {value: 2500plus, min: 2500, max: null, label: {fr: "2 500 $ ou plus par mois", en: "$2,500 or more a month"}}
     fallback:
-      kind: money
-      prompt: {fr: "Prévoyez-vous ajouter de l'argent régulièrement ? Si oui, combien par mois environ ? (0 si non)", en: "Do you plan to add money regularly? If so, about how much per month? (0 if not)"}
+      kind: single_choice
+      prompt: {fr: "Prévoyez-vous ajouter de l'argent régulièrement ? Si oui, combien par mois environ ?", en: "Do you plan to add money regularly? If so, about how much per month?"}
 
   # ---------------------------------------------------------------- préférences
   - id: preferences.esg_importance
@@ -444,11 +497,23 @@ questions:
       - {value: large, label: {fr: "J'accepte de fortes variations pour viser la croissance la plus élevée", en: "I accept large fluctuations to aim for the highest growth"}}
 
   # 5. Capacité à prendre du risque (capacité financière à vivre les conséquences d'une perte).
+  # Les questions à choix sur un champ numérique (number, money, percent) portent, pour chaque option, un
+  # identifiant de tranche (value) et, sous number, la valeur écrite dans le champ : la plus prudente de la tranche
+  # (borne basse pour une réserve ou un montant, borne haute pour un besoin de liquidité). min et max documentent
+  # les bornes de la tranche (max nul : sans borne haute).
   - id: q_emergency_fund
     field: risk_capacity.emergency_fund
-    kind: number
+    kind: single_choice
     prompt: {fr: "Votre fonds d'urgence couvre combien de mois de dépenses essentielles ?", en: "How many months of essential expenses does your emergency fund cover?"}
-    help: {fr: "Le fonds d'urgence est l'épargne disponible rapidement, hors de ce placement. Inscrivez 0 si vous n'en avez pas.", en: "The emergency fund is savings you can reach quickly, outside this investment. Enter 0 if you have none."}
+    help: {fr: "Le fonds d'urgence est l'épargne disponible rapidement, hors de ce placement.", en: "The emergency fund is savings you can reach quickly, outside this investment."}
+    # Points de capacité (rules.risk.capacity.thresholds) : 0 mois = 0; 1 = 1; 3 = 3; 6 et 12 = 4.
+    options:
+      - {value: none, number: 0, min: 0, max: 0, label: {fr: "Aucun fonds d'urgence", en: "No emergency fund"}}
+      - {value: lt1, number: 0, min: 0, max: 1, label: {fr: "Moins de 1 mois", en: "Less than 1 month"}}
+      - {value: 1to3, number: 1, min: 1, max: 3, label: {fr: "De 1 à moins de 3 mois", en: "1 to less than 3 months"}}
+      - {value: 3to6, number: 3, min: 3, max: 6, label: {fr: "De 3 à moins de 6 mois", en: "3 to less than 6 months"}}
+      - {value: 6to12, number: 6, min: 6, max: 12, label: {fr: "De 6 à moins de 12 mois", en: "6 to less than 12 months"}}
+      - {value: 12plus, number: 12, min: 12, max: null, label: {fr: "12 mois ou plus", en: "12 months or more"}}
   - id: q_income_stability
     field: risk_capacity.income_stability
     kind: single_choice
@@ -478,9 +543,15 @@ questions:
       - {value: large, label: {fr: "Oui, une part importante", en: "Yes, a large part"}}
   - id: q_withdrawal_pct
     field: constraints.withdrawal_pct_12m
-    kind: percent
+    kind: single_choice
     when: {field: constraints.liquidity_need, in: [some, large]}
     prompt: {fr: "Quelle part environ, en pourcentage du montant investi ?", en: "Roughly what share, as a percentage of the amount invested?"}
+    # Besoin de liquidité : la valeur écrite est la borne haute de la tranche, la plus prudente.
+    options:
+      - {value: lt10, number: 10, min: 0, max: 10, label: {fr: "Moins de 10 %", en: "Less than 10%"}}
+      - {value: 10to25, number: 25, min: 10, max: 25, label: {fr: "De 10 % à moins de 25 %", en: "10% to less than 25%"}}
+      - {value: 25to50, number: 50, min: 25, max: 50, label: {fr: "De 25 % à moins de 50 %", en: "25% to less than 50%"}}
+      - {value: 50plus, number: 100, min: 50, max: 100, label: {fr: "50 % ou plus", en: "50% or more"}}
   - id: q_accounts
     field: constraints.account_types
     kind: multi_choice
@@ -510,9 +581,19 @@ questions:
   # 8. Contexte, puis le portefeuille existant en dernier.
   - id: q_amount
     field: context.amount_cad
-    kind: money
+    kind: single_choice
     prompt: {fr: "Quel montant pensez-vous investir, en dollars canadiens ?", en: "How much do you plan to invest, in Canadian dollars?"}
     help: {fr: "Un ordre de grandeur suffit. Le profil reste fictif : n'indiquez aucun renseignement bancaire.", en: "A rough figure is enough. The profile stays fictitious: do not enter any banking details."}
+    # Tranches de SF-00 (banque du Brain). Valeur écrite = borne basse, qui garde les pertes en dollars prudentes;
+    # sous 10 000 $, la borne basse (0) ne permettrait aucun calcul en dollars : 5 000 $, le milieu de la tranche.
+    # « Je ne sais pas » vaut 10 000 $, comme SF-00.
+    options:
+      - {value: lt10k, number: 5000, min: 0, max: 10000, label: {fr: "Moins de 10 000 $", en: "Less than $10,000"}}
+      - {value: 10k_50k, number: 10000, min: 10000, max: 50000, label: {fr: "De 10 000 $ à moins de 50 000 $", en: "$10,000 to less than $50,000"}}
+      - {value: 50k_150k, number: 50000, min: 50000, max: 150000, label: {fr: "De 50 000 $ à moins de 150 000 $", en: "$50,000 to less than $150,000"}}
+      - {value: 150k_500k, number: 150000, min: 150000, max: 500000, label: {fr: "De 150 000 $ à moins de 500 000 $", en: "$150,000 to less than $500,000"}}
+      - {value: 500k_plus, number: 500000, min: 500000, max: null, label: {fr: "500 000 $ ou plus", en: "$500,000 or more"}}
+      - {value: unknown, number: 10000, label: {fr: "Je ne sais pas (10 000 $ retenus)", en: "I don't know ($10,000 used)"}}
   - id: q_existing_portfolio
     field: context.has_existing_portfolio
     kind: boolean

@@ -385,9 +385,13 @@ class ProfileService:
                     reason_text(exc.reason, locale),
                     {"question_id": question.id, "reason": exc.reason, **exc.params},
                 ) from exc
-            info["outputs"] = {"field": question.field.id, "value": value}
-        session.record_answer(question.id, value)
-        session.set_fact(question.field.id, value, f"base:{question.id}", question_id=question.id)
+            option = None
+            if question.numeric_choice:
+                # Tranche choisie : le code écrit sa valeur numérique et garde l'identifiant au journal.
+                option, value = value, question.option_number(value)
+            info["outputs"] = {"field": question.field.id, "value": value, **({"option": option} if option else {})}
+        session.record_answer(question.id, option if option is not None else value)
+        session.set_fact(question.field.id, value, f"base:{question.id}", question_id=question.id, option=option)
         self._prune_branches(session)
         values = session.values()
         if question.field.dimension == "knowledge":

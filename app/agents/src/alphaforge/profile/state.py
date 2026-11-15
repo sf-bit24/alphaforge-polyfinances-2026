@@ -173,9 +173,11 @@ class ClientSession:
         *,
         question_id: str | None = None,
         at: str | None = None,
+        option: str | None = None,
     ) -> Any:
         """Écrit un fait validé et l'inscrit au journal (``kind: answer``, ``field``, ``value``, ``question_id``?,
-        ``previous``?)."""
+        ``option``?, ``previous``?). ``option`` est l'identifiant de la tranche choisie quand un clic écrit un
+        nombre."""
         if not PROVENANCE.match(provenance):
             raise ValueError(f"invalid provenance {provenance!r}")
         at = at or clock.iso()
@@ -193,6 +195,8 @@ class ClientSession:
         }
         if question_id:
             entry["question_id"] = question_id
+        if option is not None:
+            entry["option"] = option
         if previous is not None and previous != value:
             entry["previous"] = previous
         self.new_journal.append(entry)

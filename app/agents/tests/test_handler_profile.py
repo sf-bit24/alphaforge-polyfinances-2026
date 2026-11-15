@@ -143,6 +143,36 @@ def test_base_answers_through_to_followups(service, store):
     stage = [e for e in entries if e["kind"] == "stage"][-1]
     assert stage["value"] == "followups" and stage["previous"] == "base_questions"
     assert stage["provenance"] == "base:q_existing_portfolio"
+    # Une tranche choisie écrit sa valeur numérique; le journal garde l'identifiant de la tranche.
+    amount = next(e for e in answers if e["question_id"] == "q_amount")
+    assert amount["value"] == 10000 and amount["option"] == "10k_50k"
+    assert all("option" not in e for e in answers if e["question_id"] not in ("q_amount", "q_emergency_fund"))
+    facts = {f["field"]: f["value"] for f in profile["facts"]}
+    assert facts["context.amount_cad"] == 10000 and facts["risk_capacity.emergency_fund"] == 6
+
+
+def test_emergency_fund_tranche_click_commits_a_number(service, store):
+    from alphaforge.profile import rules
+    from alphaforge.profile.questionnaire import default_questionnaire
+
+    q = default_questionnaire()
+    scores = {}
+    for option, months in (("none", 0), ("1to3", 1), ("3to6", 3), ("12plus", 12)):
+        client_id = start(service)["client_id"]
+        response = answer_base(service, client_id, {"q_emergency_fund": option})
+        assert response["ok"]
+        stored = okf.parse(store.get(profile_key(client_id)).text).data
+        assert stored["facts"]["risk_capacity.emergency_fund"]["value"] == months
+        values = {field: fact["value"] for field, fact in stored["facts"].items()}
+        assert isinstance(values["risk_capacity.emergency_fund"], int)
+        scores[option] = rules.capacity_score(q, values)
+        old = {**values, "risk_capacity.emergency_fund": months}  # l'ancienne saisie libre du même nombre
+        assert scores[option] == rules.capacity_score(q, old)
+    assert scores["none"] < scores["1to3"] <= scores["3to6"] <= scores["12plus"]
+    wrong = service.handle(
+        {"action": "base.answer", "client_id": start(service)["client_id"], "question_id": "q_kn_news", "value": 3}
+    )
+    assert wrong["error"]["details"]["reason"] == "not_a_string"
 
 
 def test_existing_portfolio_branch_and_skip(service):

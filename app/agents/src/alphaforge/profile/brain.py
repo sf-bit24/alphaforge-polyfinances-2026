@@ -7,7 +7,7 @@ jour suivante réorganise la base.
 
 Le LLM écrit le contenu des notes (chemin, titre, texte). Le code garde le reste : le chemin doit rester
 dans le dossier du client, hors des documents qu'il écrit lui-même (``profil.md``, ``journal.md``,
-``index.md``, ``portefeuille-existant.md``, ``traces/``); le frontmatter OKF est construit par
+``index.md``, ``portefeuille-existant.md``, ``kb.json``, ``traces/``); le frontmatter OKF est construit par
 ``okf.new_doc()`` et vérifié par ``okf.validate()``; les faits, scores et complétude restent dans
 ``profil.md``. Les notes ne sont écrites qu'à la fin d'un tour réussi (``finish``).
 
@@ -40,8 +40,9 @@ SKILLS_DIR = Path(__file__).with_name("skills")
 INIT_SKILL = "client-brain-init"
 UPDATE_SKILL = "client-brain-update"
 DOC_TYPE = "Profile Note"
-# Documents du client écrits par le code : jamais par A1.
-RESERVED = ("index.md", "profil.md", "journal.md", "portefeuille-existant.md")
+# Documents du client écrits par le code : jamais par A1. ``kb.json`` (état de la Knowledge Base du client,
+# client_kb.py) n'est pas une note ``.md`` : NOTE_PATH le refuse déjà, il est listé pour le dire.
+RESERVED = ("index.md", "profil.md", "journal.md", "portefeuille-existant.md", "kb.json")
 RESERVED_DIRS = ("traces/",)
 NOTE_PATH = re.compile(r"^[a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9-]*){0,2}\.md$")
 TAG = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")

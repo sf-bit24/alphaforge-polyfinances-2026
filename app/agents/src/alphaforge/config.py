@@ -17,6 +17,14 @@ DEFAULT_MODEL_ID = "us.anthropic.claude-opus-5-5"
 DEFAULT_REGION = "us-east-1"
 
 
+def _int(value: str | None) -> int | None:
+    """Entier d'une variable d'environnement; ``None`` si elle est absente ou illisible."""
+    try:
+        return int(value) if value else None
+    except ValueError:
+        return None
+
+
 @dataclass(frozen=True)
 class Settings:
     role: str
@@ -36,6 +44,13 @@ class Settings:
     researcher_arn: str | None = None
     researcher_name: str | None = None
     researcher_model_id: str | None = None
+    # Knowledge Base de chaque client (profile/client_kb.py) : bucket de vecteurs des clients, rôle de service des KB,
+    # préfixe des noms, modèle et dimension d'embedding. Une seule absente, ou le magasin local : désactivée.
+    client_kb_vector_bucket: str | None = None
+    client_kb_role_arn: str | None = None
+    client_kb_prefix: str | None = None
+    client_kb_embedding_model_arn: str | None = None
+    client_kb_embedding_dimensions: int | None = None
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Settings:
@@ -60,6 +75,11 @@ class Settings:
             researcher_arn=opt("ALPHAFORGE_RESEARCHER_ARN"),
             researcher_name=opt("ALPHAFORGE_RESEARCHER_NAME"),
             researcher_model_id=opt("ALPHAFORGE_RESEARCHER_MODEL_ID"),
+            client_kb_vector_bucket=opt("ALPHAFORGE_CLIENT_KB_VECTOR_BUCKET"),
+            client_kb_role_arn=opt("ALPHAFORGE_CLIENT_KB_ROLE_ARN"),
+            client_kb_prefix=opt("ALPHAFORGE_CLIENT_KB_PREFIX"),
+            client_kb_embedding_model_arn=opt("ALPHAFORGE_CLIENT_KB_EMBEDDING_MODEL_ARN"),
+            client_kb_embedding_dimensions=_int(opt("ALPHAFORGE_CLIENT_KB_EMBEDDING_DIMENSIONS")),
         )
 
     @property

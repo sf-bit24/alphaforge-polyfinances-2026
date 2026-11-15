@@ -205,8 +205,19 @@ def field_catalog(questionnaire: Questionnaire) -> str:
     return "\n".join(lines)
 
 
-def system_prompt(questionnaire: Questionnaire) -> str:
-    return SYSTEM_PROMPT.replace("{fields}", field_catalog(questionnaire))
+CLIENT_KNOWLEDGE_RULE = """
+The investor's own documents are also indexed (profile, journal, existing portfolio, your earlier notes, past \
+portfolio decisions): search_client_knowledge finds a passage there, for example a past decision or something the \
+investor said earlier. Use it only when such a passage would help you phrase a question, cite the `key` of each \
+passage you use, and never take a number from an excerpt: figures come from the context only. It may say that the \
+index is not active yet.
+"""
+
+
+def system_prompt(questionnaire: Questionnaire, *, client_knowledge: bool = False) -> str:
+    """Prompt système; ``client_knowledge`` ajoute la consigne de l'outil de la Knowledge Base du client."""
+    prompt = SYSTEM_PROMPT.replace("{fields}", field_catalog(questionnaire))
+    return prompt + CLIENT_KNOWLEDGE_RULE if client_knowledge else prompt
 
 
 def _field_brief(frame: TurnFrame, field_id: str) -> dict[str, Any]:
@@ -243,6 +254,9 @@ class TurnInput:
     new_answers: list[dict[str, Any]]
     journal: list[dict[str, Any]]
     portfolio: dict[str, Any] | None
+    # Recherche dans la Knowledge Base du client de la session (client_kb.searcher) : la base est choisie par le
+    # code, le modèle ne donne que la question. ``None`` quand la fonction est désactivée (pas d'outil).
+    client_search: Callable[[str], dict[str, Any]] | None = None
 
 
 def _fact_briefs(frame: TurnFrame, session: ClientSession) -> dict[str, dict[str, Any]]:
@@ -810,6 +824,11 @@ SEARCH_GENERAL_KNOWLEDGE_DESCRIPTION = (
 SEARCH_GENERAL_KNOWLEDGE_SCHEMA = {
     "json": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}
 }
+SEARCH_CLIENT_KNOWLEDGE_DESCRIPTION = (
+    "Search this investor's own knowledge base (their profile, journal, existing portfolio, notes and past "
+    "decisions) for a passage. Each result cites the OKF key of its document; figures still come from the context. "
+    "Returns an empty list with the status when the index is not active yet."
+)
 FINISH_TURN_DESCRIPTION = (
     "End the turn: the Markdown message for the investor, 0 to 3 follow-up questions in the Question "
     "shape (field, kind, prompt, help, options for choices, and reason: why this variable now), and "
@@ -859,6 +878,12 @@ def _search_general_knowledge(kb_search: KnowledgeSearch | None, query: str) -> 
     if kb_search is None or not kb_search.enabled:
         return {"results": [], "note": "knowledge base not available"}
     return {"results": kb_search.search(query)}
+
+
+def _search_client_knowledge(client_search: Callable[[str], dict[str, Any]], query: Any) -> dict[str, Any]:
+    if not isinstance(query, str) or not query.strip():
+        return {"results": [], "note": "query is required"}
+    return client_search(query)
 
 
 def _shape_error(message: Any, questions: Any) -> str | None:
@@ -937,8 +962,14 @@ class A1Turn:
         return [{"field": field_id, **item} for field_id, item in self.updates.items()]
 
     # ------------------------------------------------------------------ outils
-    def tools(self, kb_search: KnowledgeSearch | None, stream_message: Callable[[str], None]) -> list[Any]:
-        """Outils du tour. ``stream_message`` reçoit le message de fin de tour dès qu'il est accepté."""
+    def tools(
+        self,
+        kb_search: KnowledgeSearch | None,
+        stream_message: Callable[[str], None],
+        client_search: Callable[[str], dict[str, Any]] | None = None,
+    ) -> list[Any]:
+        """Outils du tour. ``stream_message`` reçoit le message de fin de tour dès qu'il est accepté;
+        ``client_search`` ajoute ``search_client_knowledge``, liée à la base du client de la session."""
         turn = self
 
         @tool(name="update_profile", description=UPDATE_PROFILE_DESCRIPTION, inputSchema=UPDATE_PROFILE_SCHEMA)
@@ -961,6 +992,14 @@ class A1Turn:
         def search_general_knowledge(query: str) -> str:
             return tool_result(_search_general_knowledge(kb_search, query))
 
+        @tool(
+            name="search_client_knowledge",
+            description=SEARCH_CLIENT_KNOWLEDGE_DESCRIPTION,
+            inputSchema=SEARCH_GENERAL_KNOWLEDGE_SCHEMA,
+        )
+        def search_client_knowledge(query: str) -> str:
+            return tool_result(_search_client_knowledge(client_search, query))
+
         @tool(name="finish_turn", description=FINISH_TURN_DESCRIPTION, inputSchema=FINISH_TURN_SCHEMA, context=True)
         def finish_turn(message: str, questions: list[dict[str, Any]], *, profile_complete: bool, tool_context) -> str:
             outcome = turn._finish(message, questions, profile_complete)
@@ -969,7 +1008,8 @@ class A1Turn:
                 tool_context.agent.cancel(after_current_tools=True)
             return tool_result(outcome)
 
-        return [update_profile, check_completeness, search_general_knowledge, finish_turn]
+        searches = [search_general_knowledge] + ([search_client_knowledge] if client_search is not None else [])
+        return [update_profile, check_completeness, *searches, finish_turn]
 
     def _check_completeness(self) -> dict[str, Any]:
         score = self.frame.completeness()
@@ -1151,12 +1191,14 @@ def _finish_turn_summary(tool_input: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _agent_spec(questionnaire: Questionnaire, tools: list[Any], *, guardrail: bool) -> AgentSpec:
+def _agent_spec(
+    questionnaire: Questionnaire, tools: list[Any], *, guardrail: bool, client_knowledge: bool = False
+) -> AgentSpec:
     return AgentSpec(
         actor="A1",
         name="createProfile-Agent",
         effort="low",
-        system_prompt=system_prompt(questionnaire),
+        system_prompt=system_prompt(questionnaire, client_knowledge=client_knowledge),
         tools=tools,
         max_turns=6,
         max_tokens=8000,
@@ -1266,7 +1308,10 @@ def run_a1(
         turn=turn_input.turn,
         investor_texts=investor_texts(turn_input.investor_message, turn_input.new_answers),
     )
-    spec = _agent_spec(questionnaire, state.tools(kb_search, runner.stream_message), guardrail=runner.guardrail)
+    tools = state.tools(kb_search, runner.stream_message, turn_input.client_search)
+    spec = _agent_spec(
+        questionnaire, tools, guardrail=runner.guardrail, client_knowledge=turn_input.client_search is not None
+    )
     run = runner.run(spec, _prompt(questionnaire, session, turn_input))
     if state.finished is None:
         run.follow_up(

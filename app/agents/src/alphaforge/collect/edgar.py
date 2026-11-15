@@ -18,6 +18,10 @@ Règles :
 - pièges : CN est déposée sous son symbole NYSE ``CNI``; l'historique d'ExxonMobil reste sous son ancien CIK
   (changé le 2026-07-01), lu en plus du nouveau; ATD et CSU sont absentes d'EDGAR.
 - 10 requêtes par seconde au plus et User-Agent avec courriel de contact (``collect.http``).
+
+Activité sectorielle : le code lit aussi le code SIC de l'émetteur (``submissions``) et, s'il figure dans
+``SIC_ACTIVITY`` (table fixe, sans modèle), joint à l'élément une activité exclue possible (``fossil_fuels``,
+``tobacco``, ``alcohol``, ``weapons``). A6 en tire un fait ESG ``sector_activity`` (CONTRACTS.md, section 11.5).
 """
 
 from __future__ import annotations
@@ -33,6 +37,40 @@ from . import http, staging
 
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 COMPANYFACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
+SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
+# Codes SIC (classification de la SEC) → activité du questionnaire (``okf.ESG_ACTIVITIES``). Table fixe et courte :
+# un code absent ne donne aucun fait. 4911 (électricité) n'y est pas : le code ne dit pas si elle est fossile.
+SIC_ACTIVITY = {
+    1221: "fossil_fuels",  # charbon bitumineux et lignite
+    1222: "fossil_fuels",
+    1231: "fossil_fuels",  # anthracite
+    1311: "fossil_fuels",  # pétrole brut et gaz naturel
+    1321: "fossil_fuels",  # liquides de gaz naturel
+    1381: "fossil_fuels",  # forage de puits de pétrole et de gaz
+    1382: "fossil_fuels",  # services d'exploration pétrolière et gazière
+    1389: "fossil_fuels",  # services aux champs de pétrole et de gaz
+    2911: "fossil_fuels",  # raffinage du pétrole
+    2990: "fossil_fuels",  # produits divers du pétrole et du charbon
+    4610: "fossil_fuels",  # pipelines (hors gaz naturel)
+    4612: "fossil_fuels",  # pipelines de pétrole brut
+    4613: "fossil_fuels",  # pipelines de produits pétroliers raffinés
+    4922: "fossil_fuels",  # transport de gaz naturel
+    4923: "fossil_fuels",  # transport et distribution de gaz naturel
+    4924: "fossil_fuels",  # distribution de gaz naturel
+    5171: "fossil_fuels",  # dépôts pétroliers en vrac
+    5172: "fossil_fuels",  # commerce de gros de produits pétroliers
+    2111: "tobacco",  # cigarettes
+    2121: "tobacco",
+    2131: "tobacco",
+    2141: "tobacco",
+    2082: "alcohol",  # bière
+    2084: "alcohol",  # vins et spiritueux
+    2085: "alcohol",  # boissons alcoolisées distillées
+    3482: "weapons",  # munitions de petit calibre
+    3483: "weapons",  # munitions
+    3484: "weapons",  # armes légères
+    3489: "weapons",  # armement, n.c.a.
+}
 HOSTS = ("www.sec.gov", "data.sec.gov")
 MAX_BYTES = 60_000_000  # companyfacts d'un grand émetteur : plusieurs dizaines de Mo (décompressé)
 TIMEOUT = 30.0
@@ -151,6 +189,8 @@ class Built:
     fundamentals: dict[str, Any]
     sources: list[dict[str, Any]]
     skipped: list[str] = field(default_factory=list)
+    sic: int | None = None
+    sic_description: str | None = None
 
     @property
     def latest_published(self) -> str:
@@ -452,6 +492,17 @@ def fundamentals_item(built: Built, *, run_id: str, retrieved_at: str) -> dict[s
             "cik": f"{built.cik:010d}",
             "taxonomy": built.taxonomy,
             "skipped": built.skipped[:40],
+            **(
+                {
+                    "sic": {
+                        "code": built.sic,
+                        "description": built.sic_description,
+                        "url": SUBMISSIONS_URL.format(cik=built.cik),
+                    }
+                }
+                if built.sic is not None
+                else {}
+            ),
             "collected_by": "A5",
             "run_id": run_id,
         },
@@ -470,6 +521,17 @@ class _SecRefusedError(Exception):
     """La SEC refuse la lecture (403, courriel de contact absent) : inutile d'insister pour les titres suivants."""
 
 
+def parse_sic(payload: Any) -> tuple[int, str] | None:
+    """``submissions`` → (code SIC, libellé), ou ``None`` si absent ou illisible."""
+    if not isinstance(payload, dict):
+        return None
+    try:
+        code = int(str(payload.get("sic") or "").strip())
+    except ValueError:
+        return None
+    return code, str(payload.get("sicDescription") or "").strip()[:120]
+
+
 def _fetch_one(issuer: Issuer, get: Getter, retrieved_at: str) -> Built:
     symbol = sec_symbol(issuer.ticker)
     ciks = (issuer.cik, *[c for c in LEGACY_CIKS.get(symbol, ()) if c != issuer.cik])
@@ -479,7 +541,14 @@ def _fetch_one(issuer: Issuer, get: Getter, retrieved_at: str) -> Built:
         if exc.status == HTTP_FORBIDDEN:
             raise _SecRefusedError(f"{issuer.ticker} : {exc}") from exc
         raise EdgarError(f"{issuer.ticker} : {exc}") from exc
-    return build_fundamentals(issuer, payloads, retrieved_at)
+    built = build_fundamentals(issuer, payloads, retrieved_at)
+    try:
+        sic = parse_sic(json.loads(get(SUBMISSIONS_URL.format(cik=issuer.cik))))
+    except (http.FetchError, ValueError):
+        sic = None  # le code SIC est un complément : son absence ne bloque pas les fondamentaux
+    if sic is not None:
+        built.sic, built.sic_description = sic
+    return built
 
 
 def stage_fundamentals(

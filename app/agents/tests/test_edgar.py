@@ -11,7 +11,7 @@ import pytest
 
 from alphaforge import okf
 from alphaforge.collect import data as data_collector
-from alphaforge.collect import edgar, fundamentals, staging, supervisor
+from alphaforge.collect import edgar, fundamentals, http, staging, supervisor
 from alphaforge.finance.strategy.okf_facts import fundamentals_facts, parse_company_fundamentals
 from alphaforge.trace import Trace
 
@@ -124,7 +124,7 @@ def test_ifrs_taxonomy_is_preferred_when_present():
     assert built.fundamentals["reporting_currency"] == "CAD" and built.fundamentals["periods"][0]["revenue"] == 5000.0
 
 
-def fake_sec(calls, mapping, facts_by_cik):
+def fake_sec(calls, mapping, facts_by_cik, sic_by_cik=None):
     def get(url):
         calls.append(url)
         if url == edgar.TICKERS_URL:
@@ -132,6 +132,11 @@ def fake_sec(calls, mapping, facts_by_cik):
         for cik, payload in facts_by_cik.items():
             if url == edgar.COMPANYFACTS_URL.format(cik=cik):
                 return json.dumps(payload).encode()
+            if url == edgar.SUBMISSIONS_URL.format(cik=cik):
+                if sic_by_cik and cik in sic_by_cik:
+                    code, label = sic_by_cik[cik]
+                    return json.dumps({"cik": str(cik), "sic": str(code), "sicDescription": label}).encode()
+                raise http.FetchError("not found", status=404, url=url)
         raise AssertionError(f"URL inattendue : {url}")
 
     return get
@@ -209,4 +214,55 @@ def test_a5_stages_equities_only_with_a_contact_email(store, monkeypatch):
     )
     report = data_collector.stage_edgar_fundamentals(run, Trace("fr"), budget_seconds=10)
     assert report["staged"] == ["AAPL"] and list(run.staged) == ["fundamentals-aapl"]
-    assert len(calls) == 2  # correspondance des symboles, puis companyfacts d'Apple ; ni SPY ni BTC-USD
+    assert len(calls) == 3  # correspondance des symboles, companyfacts et submissions d'Apple ; ni SPY ni BTC-USD
+
+
+def stage_with_sic(store, code, label, ticker="ENB.TO", cik=895728, name="Enbridge Inc."):
+    mapping = {"0": {"cik_str": cik, "ticker": edgar.sec_symbol(ticker), "title": name}}
+    staged = []
+    get = fake_sec([], mapping, {cik: companyfacts(name)}, {cik: (code, label)})
+    report = edgar.stage_fundamentals(
+        run_id="run1", tickers={ticker: "TSX"}, stage=staged.append, deadline=float("inf"), get=get
+    )
+    assert report["staged"] == [ticker]
+    for item in staged:
+        store.put_json(staging.item_key("run1", "data", item["id"]), item)
+    return staged[0]
+
+
+def test_a6_writes_a_sector_activity_fact_from_a_fossil_sic_code(store):
+    from alphaforge.finance.debate.okf_bridge import OkfMarketStore
+
+    item = stage_with_sic(store, 4610, "PIPE LINES (NO NATURAL GAS)")
+    assert item["data"]["sic"]["code"] == 4610
+    result = curate(store)
+    facts = [k for k in result["written"] if k.startswith(fundamentals.SECTOR_PREFIX)]
+    assert len(facts) == 1, result
+    doc = okf.parse(store.get_text(facts[0]).text)
+    assert doc.frontmatter["type"] == "Fact"
+    assert doc.data["esg"] == {"kind": "sector_activity", "metric": "fossil_fuels", "period": NOW[:10]}
+    assert doc.data["tickers"] == ["ENB.TO"] and doc.data["value"] == "4610"
+    items = OkfMarketStore(store).esg_items("ENB.TO", "2026-11-30")
+    assert [(i.kind, i.metric) for i in items] == [("sector_activity", "fossil_fuels")]
+    assert OkfMarketStore(store).esg_items("ENB.TO", "2026-11-01") == []  # pas avant sa publication
+    again = curate(store)
+    assert not [k for k in again["written"] if k.startswith(fundamentals.SECTOR_PREFIX)]
+
+
+def test_a_sic_code_outside_the_table_gives_no_esg_fact(store):
+    stage_with_sic(store, 4911, "ELECTRIC SERVICES", ticker="FTS.TO", cik=1666175, name="Fortis Inc.")
+    result = curate(store)
+    assert not [k for k in result["written"] if k.startswith(fundamentals.SECTOR_PREFIX)]
+
+
+def test_a_missing_sic_code_does_not_block_fundamentals():
+    mapping = {"0": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."}}
+    staged = []
+    report = edgar.stage_fundamentals(
+        run_id="run1",
+        tickers={"AAPL": None},
+        stage=staged.append,
+        deadline=float("inf"),
+        get=fake_sec([], mapping, {320193: companyfacts()}),
+    )
+    assert report["staged"] == ["AAPL"] and "sic" not in staged[0]["data"]

@@ -1705,6 +1705,9 @@ def _policy_spec(
     loss_bounds = {
         asset: float(bound) for asset, bound in (risk_levels.get("loss_bounds") or {}).items() if asset in universe
     }
+    # Crochet PROB_LOSS (non emis) : quand l'equipe aura tranche alpha, L et H par profil, ajouter ici
+    # ``portfolio.scenario_risk.prob_loss_limit(...)`` a ``limits`` (et, au besoin, ``scenario_blocks`` /
+    # ``scenario_run_id`` au PolicySpec). Aucun seuil n'est fixe tant que ce n'est pas decide.
     return PolicySpec(
         policy_id=f"f1-{profile.profile_id}-v{profile.version}-{inputs.as_of.isoformat()}-{signature}",
         profile_id=profile.profile_id,

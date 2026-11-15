@@ -129,3 +129,29 @@ def test_xray_trace_id_format(otel, xray):
     from alphaforge.portfolio_service import xray_trace_id
 
     assert xray_trace_id(otel) == xray
+
+
+# Variables de style des personas (demo.yaml) → champ du profil court qu'elles reprennent.
+STYLE_FIELDS = {
+    "goal": "objective.goal",
+    "approach": "preferences.approach",
+    "interests": "preferences.interests",
+    "exclusions": "preferences.exclusions",
+    "exclusion_strictness": "preferences.exclusion_strictness",
+    "esg_importance": "preferences.esg_importance",
+    "knowledge_level": "knowledge.level",
+    "employment_sector": "risk_capacity.employment_sector",
+    "hype_reaction": "behavior.hype_reaction",
+}
+
+
+def test_demo_style_inputs_use_the_questionnaire_codes():
+    """Un code inconnu passerait sans bruit (StyleInputs ne valide rien) et l'étape 0 l'ignorerait."""
+    from alphaforge.finance.personas import catalog
+    from alphaforge.profile.questionnaire import Questionnaire
+
+    questionnaire = Questionnaire.load()
+    for persona, spec in catalog().items():
+        for key, value in spec["style_inputs"].items():
+            assert key in STYLE_FIELDS, f"{persona}: {key} sans champ du questionnaire"
+            assert questionnaire.validate_field_value(STYLE_FIELDS[key], value) == value, (persona, key)

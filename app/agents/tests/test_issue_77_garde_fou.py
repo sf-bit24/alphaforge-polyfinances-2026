@@ -110,11 +110,12 @@ def test_texts_checked_are_the_ones_the_guardrail_evaluates():
     [
         "J'ai 4 mois de dépenses de côté.",
         "Mon compte est le 123-45678-9, mon téléphone le 514 555 1234.",
-        "NAS sans séparateurs : 046454286.",  # laissé au filtre géré du garde-fou, voir plus bas
+        # 9 chiffres collés sans mot-clé du NAS ni clé de Luhn valide (les autres cas : test_issue_77_suite.py).
+        "Voici 123456789, j'ai 4 mois de côté.",
         "J'ai 100000000 $ à placer.",
     ],
 )
-def test_text_without_a_separated_sin_reaches_the_model(guarded_settings, store, text):
+def test_text_without_a_sin_reaches_the_model(guarded_settings, store, text):
     factory = ScriptedFactory([[FINISH]])
     service = make_service(guarded_settings, store, factory)
     client_id = _client(service)
@@ -182,9 +183,10 @@ def _reply_blocked_by_guardrail(settings, store, assessment, message):
     return service.handle({"action": "followup.reply", "client_id": client_id, "message": message})
 
 
-def test_sin_without_separators_blocked_by_the_managed_filter_gets_its_reason(guarded_settings, store):
+def test_sin_missed_locally_but_blocked_by_the_guardrail_gets_its_reason(guarded_settings, store):
+    # « Mon NAS : 046454286 » est refusé avant le modèle (test_issue_77_suite.py) : ce texte-ci ne l'est pas.
     response = _reply_blocked_by_guardrail(
-        guarded_settings, store, _blocked_input(**_pii("CA_SOCIAL_INSURANCE_NUMBER")), "Mon NAS : 046454286."
+        guarded_settings, store, _blocked_input(**_pii("CA_SOCIAL_INSURANCE_NUMBER")), "Mes chiffres : 130692543."
     )
     assert response["error"] == {"code": "guardrail_blocked", "message": SIN_MESSAGE_FR, "details": SIN_DETAILS}
 

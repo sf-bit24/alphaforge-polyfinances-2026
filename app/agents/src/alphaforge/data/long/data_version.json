@@ -525,5 +525,226 @@
         "url": "yfinance.download('ZST.TO', period='max', interval='1d', auto_adjust=False)"
       }
     }
+  },
+  "daily": {
+    "data_sha256": "65fdafd41d92fc47",
+    "built_utc": "2026-11-15T20:36:56+00:00",
+    "last_date": "2026-11-15",
+    "n_tickers": 32,
+    "files": {
+      "daily_prices.parquet": "f5b6938084ab9af559ec2d4cabf02aa2f58cb54d83f0ce043b5c53283505f8f3",
+      "fx_daily.parquet": "4e2b4909218c91ba63b69b2dcff3f7e8e0273ff745f8ce676556c859bdc221bb",
+      "corporate_actions.parquet": "93d9f24914dce78bb823e601dc83436a7b7f2903d25d2f444f00f97592c3255c"
+    },
+    "raw_manifests": {
+      "yfinance_daily": {
+        "RY.TO.csv": {
+          "url": "yfinance.download('RY.TO', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:37+00:00",
+          "sha256": "1ba3d62b50257e0afc3ff237e11c2660704589c5688ad666e60cd75955e5fd61",
+          "bytes": 497197
+        },
+        "TD.TO.csv": {
+          "url": "yfinance.download('TD.TO', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:37+00:00",
+          "sha256": "fd561ae432f0a5755f7e00a2346c051477f34f45816bba5dbdc0bb851287d760",
+          "bytes": 497219
+        },
+        "MFC.TO.csv": {
+          "url": "yfinance.download('MFC.TO', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:38+00:00",
+          "sha256": "c0390b7656006d1569590a809546babed94cc9971d94f734c3cdccca67ff5d59",
+          "bytes": 429087
+        },
+        "ENB.TO.csv": {
+          "url": "yfinance.download('ENB.TO', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:38+00:00",
+          "sha256": "c1473051ff5b1d5b84fc4d892b6a9d58ebe5628cf2ce910403cf2883944dbef2",
+          "bytes": 495102
+        },
+        "CNQ.TO.csv": {
+          "url": "yfinance.download('CNQ.TO', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:39+00:00",
+          "sha256": "b90412f5d1287151551f6750b03087ba45d33170ef64919e19fedc5871f0e5e2",
+          "bytes": 513880
+        },
+        "CNR.TO.csv": {
+          "url": "yfinance.download('CNR.TO', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:40+00:00",
+          "sha256": "3799f0c563f825a1be04a98699e6db5debe51826b5b9229d3ce339ea62fc3736",
+          "bytes": 471859
+        },
+        "FTS.TO.csv": {
+          "url": "yfinance.download('FTS.TO', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:40+00:00",
+          "sha256": "6c1716f5c4c55153083646c8043723823b7f4d2b752a1a03ae3c3aaccd177ce6",
+          "bytes": 485171
+        },
+        "ATD.TO.csv": {
+          "url": "yfinance.download('ATD.TO', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:41+00:00",
+          "sha256": "cce9075c9fa3164c1e4ccb011b806e760ff4d940c7b0c3402c88c1153c0da61b",
+          "bytes": 453569
+        },
+        "SHOP.TO.csv": {
+          "url": "yfinance.download('SHOP.TO', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:41+00:00",
+          "sha256": "1c224cc71c6339bce55b9098535be752eb6c52f7d4bf7aacee3ca78caf111ff9",
+          "bytes": 182303
+        },
+        "CSU.TO.csv": {
+          "url": "yfinance.download('CSU.TO', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:42+00:00",
+          "sha256": "5760cc4bd2673c6773e5d1b29b54b3daa9a3abc599ac5d74506a09a2f630d679",
+          "bytes": 275310
+        },
+        "AAPL.csv": {
+          "url": "yfinance.download('AAPL', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:42+00:00",
+          "sha256": "906c4d843680c077303c4df9eafe4bab388fcd355bd1ffd10c0cffcfc3285b35",
+          "bytes": 766762
+        },
+        "MSFT.csv": {
+          "url": "yfinance.download('MSFT', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:43+00:00",
+          "sha256": "56fcaf1580d741f0b2d01150adac2af019d4ec942d975ae996eca73ff5b06933",
+          "bytes": 646719
+        },
+        "NVDA.csv": {
+          "url": "yfinance.download('NVDA', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:43+00:00",
+          "sha256": "88d2e834d4ff94a660cbf188eee4c7aa977344ec5b8480e969549a27fe1ab313",
+          "bytes": 469342
+        },
+        "GOOGL.csv": {
+          "url": "yfinance.download('GOOGL', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:44+00:00",
+          "sha256": "83ab473a34d416277700673a980a9a44f6f338413b1f66d4224a74f85f36386a",
+          "bytes": 363609
+        },
+        "AMZN.csv": {
+          "url": "yfinance.download('AMZN', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:44+00:00",
+          "sha256": "4ac1c97daaa45c0d217f3333a6d00d29aec6500030ac73ecb14b97c6de898d84",
+          "bytes": 480511
+        },
+        "TSLA.csv": {
+          "url": "yfinance.download('TSLA', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:45+00:00",
+          "sha256": "5fa0072789d64e105940381ba68c5e298752406a22d8c6d6ef7b3baaa24f776e",
+          "bytes": 267941
+        },
+        "JPM.csv": {
+          "url": "yfinance.download('JPM', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:46+00:00",
+          "sha256": "3240142a0650f3e2b83f9f6a16824d67bb58be9c302433e21031fb9768d7573c",
+          "bytes": 729139
+        },
+        "JNJ.csv": {
+          "url": "yfinance.download('JNJ', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:47+00:00",
+          "sha256": "b9121366b602da5603fc6a5faa9e070c4112e3607e3f61d6755d76eb51220cb9",
+          "bytes": 994831
+        },
+        "PG.csv": {
+          "url": "yfinance.download('PG', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:47+00:00",
+          "sha256": "fa2ada7570389e3deab210d166cc9dd71a6eb720756e69ea642f7617159e8f6a",
+          "bytes": 982535
+        },
+        "XOM.csv": {
+          "url": "yfinance.download('XOM', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:48+00:00",
+          "sha256": "ccdc7e2f4cc8b910d92c1479d9459babd698ee3662a71189850c820f16ac3bb6",
+          "bytes": 976792
+        },
+        "XIU.TO.csv": {
+          "url": "yfinance.download('XIU.TO', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:49+00:00",
+          "sha256": "0e2ffe746fc6c4ffb8da662ff260ad0403b47d35b232208ecad142bfd1f7d8d6",
+          "bytes": 431980
+        },
+        "SPY.csv": {
+          "url": "yfinance.download('SPY', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:50+00:00",
+          "sha256": "bea46e0dcb19ce5caac1bb3b2722e510ea4389b708183417996417b8557c524b",
+          "bytes": 525181
+        },
+        "QQQ.csv": {
+          "url": "yfinance.download('QQQ', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:50+00:00",
+          "sha256": "2e14eae9d33bf905ae3f3ea8503094f7a39ba72e3b02c80c4564344bfe8c2700",
+          "bytes": 441849
+        },
+        "ESGV.csv": {
+          "url": "yfinance.download('ESGV', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:50+00:00",
+          "sha256": "0adf47ba66010f651bbd5d0c0c858f5c837234b98798a089d0cdc75308d7ed01",
+          "bytes": 126294
+        },
+        "XBB.TO.csv": {
+          "url": "yfinance.download('XBB.TO', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:51+00:00",
+          "sha256": "fd654c24fc605263afbe29658dacdc09434f4ec2834339ba26c39f9d5d25a2f5",
+          "bytes": 403725
+        },
+        "ZST.TO.csv": {
+          "url": "yfinance.download('ZST.TO', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:51+00:00",
+          "sha256": "2131b4e6486fd21c5a1ada0909e6797ea73cab319713678a483b8f7f5b27df4f",
+          "bytes": 236285
+        },
+        "AGG.csv": {
+          "url": "yfinance.download('AGG', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:52+00:00",
+          "sha256": "12a2d60f26bd5231f7e2a4c3708483e2e3eb0c49a1ad9a1e603a648381682bc5",
+          "bytes": 364084
+        },
+        "TLT.csv": {
+          "url": "yfinance.download('TLT', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:53+00:00",
+          "sha256": "bbc7b2479c46e6c051c67a924abb88303c25a9fe13653b935539810cfd34023c",
+          "bytes": 385766
+        },
+        "GLD.csv": {
+          "url": "yfinance.download('GLD', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:53+00:00",
+          "sha256": "c6d45975b39c02f0908883e648839e1d6bb0187fac7d439191228a00780e28b4",
+          "bytes": 350026
+        },
+        "BTC-USD.csv": {
+          "url": "yfinance.download('BTC-USD', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:53+00:00",
+          "sha256": "81e6edfdd91ab8cd4ac72000075c4b2979e0109849a6d71301e481462a2c398c",
+          "bytes": 271404
+        },
+        "ETH-USD.csv": {
+          "url": "yfinance.download('ETH-USD', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:54+00:00",
+          "sha256": "64a431696a7908e5e026790a8aff3d495df271e358bd4d4455f9a5b3145b951f",
+          "bytes": 216973
+        },
+        "XRE.TO.csv": {
+          "url": "yfinance.download('XRE.TO', period='max', interval='1d', auto_adjust=False, actions=True)",
+          "retrieved_utc": "2026-11-15T20:36:54+00:00",
+          "sha256": "f4730ee9ea68202e3775fb9c7148faae888cc899fb2a7902a0949d5259daba18",
+          "bytes": 378065
+        }
+      },
+      "bankofcanada": {
+        "FXUSDCAD.csv": {
+          "bytes": 56857,
+          "retrieved_utc": "2026-11-15T20:36:35+00:00",
+          "sha256": "8eab96e57c4093ed7e7640a5f969dd8265ecf24af5dff08af8c88d05276d958f",
+          "url": "https://www.bankofcanada.ca/valet/observations/FXUSDCAD/csv?start_date=2017-01-01"
+        },
+        "V41690973.csv": {
+          "bytes": 8742,
+          "retrieved_utc": "2026-11-15T20:36:35+00:00",
+          "sha256": "6ddd200fb50ebdc5712d8b340eecbf34de5fb1509754bbe8f7cfca0b6cf7c4f8",
+          "url": "https://www.bankofcanada.ca/valet/observations/V41690973/csv?start_date=1990-01-01"
+        }
+      }
+    }
   }
 }

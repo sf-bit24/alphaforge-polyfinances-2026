@@ -64,13 +64,16 @@ describe("guardrail notice for personal data (#77)", () => {
 });
 
 describe("A2 card promise (#77)", () => {
-  it("says a SIN is refused and other personal details are masked", () => {
+  // Le garde-fou refuse en entrée le NAS, les numéros de carte et les mots de passe; il masque à la sortie
+  // les courriels, téléphones et adresses (bedrock.tf). La carte ne dit pas que les premiers sont masqués.
+  it("says a SIN, a card number or a password is refused, and other details are masked", () => {
     const fr = dictionaries.fr.portfolioInput.privacy;
-    expect(fr).toContain("Un NAS est refusé");
-    expect(fr).toContain("courriels");
-    expect(fr).not.toContain("masque les renseignements personnels détectés");
+    expect(fr).toContain("Un NAS, un numéro de carte ou un mot de passe est refusé");
+    expect(fr).toContain("D’autres renseignements, comme les courriels, sont masqués");
+    expect(fr).not.toMatch(/masque les (autres )?renseignements personnels/);
     const en = dictionaries.en.portfolioInput.privacy;
-    expect(en).toContain("A SIN is refused");
-    expect(en).toContain("email addresses");
+    expect(en).toContain("A SIN, a card number or a password is refused");
+    expect(en).toContain("Other details, such as email addresses, are masked");
+    expect(en).not.toMatch(/masks (other )?personal details/);
   });
 });

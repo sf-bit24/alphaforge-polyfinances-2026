@@ -227,7 +227,7 @@ const fr = {
     analyzing: "A2 analyse votre portefeuille…",
     skip: "Passer cette étape",
     privacy:
-      "N’indiquez aucun numéro de compte : tout reste fictif. Un NAS est refusé : retirez-le avant l’envoi. Le garde-fou masque les autres renseignements personnels, comme les courriels, dans les réponses d’A2.",
+      "N’indiquez aucun numéro de compte : tout reste fictif. Un NAS, un numéro de carte ou un mot de passe est refusé : retirez-le avant l’envoi. D’autres renseignements, comme les courriels, sont masqués dans les réponses d’A2.",
     reading: "Lecture des fichiers…",
     example: "Insérer un exemple",
     units: { bytes: "o", kilobytes: "Ko", megabytes: "Mo" },
@@ -811,7 +811,7 @@ const en: Dictionary = {
     analyzing: "A2 is analysing your portfolio…",
     skip: "Skip this step",
     privacy:
-      "Do not include any account number: everything stays fictitious. A SIN is refused: remove it before sending. The guardrail masks other personal details, such as email addresses, in A2’s replies.",
+      "Do not include any account number: everything stays fictitious. A SIN, a card number or a password is refused: remove it before sending. Other details, such as email addresses, are masked in A2’s replies.",
     reading: "Reading files…",
     example: "Insert an example",
     units: { bytes: "B", kilobytes: "KB", megabytes: "MB" },

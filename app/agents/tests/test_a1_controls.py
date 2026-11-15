@@ -318,3 +318,37 @@ def test_generated_budget_is_enforced_by_finish(q):
     session.data["followup_counts"] = {"generated": 8, "open": 0}
     ninth = a1_turn(q, session, [])._finish("x", [approach], False)
     assert ninth["status"] == "error" and "budget of 8 generated questions is reached" in ninth["reason"]
+
+
+def test_numbers_are_read_once_and_quotes_match_whole_words():
+    assert a1.numbers_in("3 000 $") == {3000} and a1.numbers_in("3k") == {3000}
+    assert a1.numbers_in("1 500 $/mois") == {1500} and a1.numbers_in("10, 20") == {10, 20}
+    assert a1.numbers_in("dans 12 15 ans") == {12, 15}
+    assert not a1.number_in_quote(3, "je peux perdre 3k") and not a1.number_in_quote(30, "30 000$")
+    assert not a1.quote_found("0", ["J'ai 30 000 $"]) and not a1.quote_found("30", ["J'ai 300 000 $"])
+    assert a1.quote_found("30 000 $", ["J'ai 30 000 $ de côté"])
+
+
+def test_a_replaced_confirmed_value_stays_until_confirmation(q):
+    attitude = "risk_tolerance.risk_attitude"
+    session = session_with(q, {attitude: "large"})
+    session.set_fact(attitude, "moderate", "a1:2", confirmed=False)
+    assert session.values()[attitude] == "large"  # la valeur confirmée reste en vigueur
+    assert list(session.unconfirmed()) == [attitude]
+    context = a1.build_context(q, session, locale="fr", turn=3, journal=[], new_answers=[], portfolio=None)
+    assert context["to_confirm"][0]["replaces"] == "Accepter de fortes variations"
+    session.reject_fact(attitude, "a1:3", question_id="cf_3_1")
+    assert session.facts[attitude] == {**session.facts[attitude], "value": "large", "provenance": "settings"}
+    assert "confirmed" not in session.facts[attitude]
+    assert session.new_journal[-1]["value"] == "large" and session.new_journal[-1]["previous"] == "moderate"
+    session.set_fact(attitude, "moderate", "a1:4", confirmed=False)
+    session.confirm_fact(attitude, "a1:5", question_id="cf_5_1")
+    assert session.values()[attitude] == "moderate" and "replaces" not in session.facts[attitude]
+
+
+def test_a_value_whose_condition_is_waiting_is_confirmed_after_it(q):
+    session = session_with(q, {"constraints.liquidity_need": "none"})
+    session.set_fact("constraints.liquidity_need", "some", "a1:2", confirmed=False)
+    session.set_fact("constraints.withdrawal_pct_12m", 20, "a1:2", confirmed=False)
+    questions, targets = a1.confirmation_questions(q, session, turn=2, locale="fr")
+    assert list(targets.values()) == ["constraints.liquidity_need"]

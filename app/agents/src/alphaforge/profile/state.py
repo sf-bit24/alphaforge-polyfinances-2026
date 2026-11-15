@@ -127,13 +127,22 @@ class ClientSession:
     def turn(self) -> int:
         return int(self.data.get("turn") or 0)
 
+    def confirmed_facts(self) -> dict[str, dict[str, Any]]:
+        """Faits confirmés. Un fait tiré d'un texte libre (``confirmed: false``) n'y entre qu'après la
+        confirmation de l'investisseur; s'il remplace une valeur confirmée, c'est elle (``replaces``) qui compte
+        en attendant. Un fait sans la clé ``confirmed`` est confirmé."""
+        out = {}
+        for field_id, fact in self.facts.items():
+            if fact.get("confirmed") is not False:
+                out[field_id] = fact
+            elif isinstance(fact.get("replaces"), dict):
+                out[field_id] = fact["replaces"]
+        return out
+
     def values(self) -> dict[str, Any]:
-        """Valeurs confirmées. Un fait tiré d'un texte libre (``confirmed: false``) n'y entre qu'après la
-        confirmation de l'investisseur : complétude, scores, conditions ``when``, arrêt et ``ProfileView`` ne le
-        voient pas. Un fait sans la clé ``confirmed`` est confirmé."""
-        return {
-            field_id: fact.get("value") for field_id, fact in self.facts.items() if fact.get("confirmed") is not False
-        }
+        """Valeurs confirmées : complétude, scores, conditions ``when``, arrêt et ``ProfileView`` ne voient pas
+        une valeur qui attend sa confirmation."""
+        return {field_id: fact.get("value") for field_id, fact in self.confirmed_facts().items()}
 
     def unconfirmed(self) -> dict[str, dict[str, Any]]:
         """Faits tirés d'un texte libre qui attendent la confirmation de l'investisseur."""
@@ -191,13 +200,18 @@ class ClientSession:
         if not PROVENANCE.match(provenance):
             raise ValueError(f"invalid provenance {provenance!r}")
         at = at or clock.iso()
-        previous = self.facts.get(field_id, {}).get("value")
+        existing = self.facts.get(field_id) or {}
+        previous = existing.get("value")
         if value is None:
             self.facts.pop(field_id, None)
         else:
             self.facts[field_id] = {"value": value, "provenance": provenance, "at": at}
             if not confirmed:
                 self.facts[field_id]["confirmed"] = False
+                # Une valeur confirmée remplacée par un texte libre reste en vigueur jusqu'à la confirmation.
+                replaced = existing.get("replaces") if existing.get("confirmed") is False else existing
+                if replaced:
+                    self.facts[field_id]["replaces"] = {k: replaced[k] for k in ("value", "provenance", "at")}
         entry: dict[str, Any] = {
             "at": at,
             "kind": "answer",
@@ -220,6 +234,7 @@ class ClientSession:
             raise ValueError(f"invalid provenance {provenance!r}")
         fact = self.facts[field_id]
         fact.pop("confirmed", None)
+        fact.pop("replaces", None)
         self.new_journal.append(
             {
                 "at": clock.iso(),
@@ -230,6 +245,27 @@ class ClientSession:
                 "question_id": question_id,
             }
         )
+
+    def reject_fact(self, field_id: str, provenance: str, *, question_id: str | None = None) -> None:
+        """L'investisseur refuse une valeur tirée d'un texte libre : la valeur confirmée qu'elle remplaçait revient,
+        sinon le champ redevient manquant. Le journal garde la valeur refusée dans ``previous``."""
+        replaced = (self.facts.get(field_id) or {}).get("replaces")
+        if isinstance(replaced, dict):
+            rejected = self.facts[field_id]["value"]
+            self.facts[field_id] = dict(replaced)
+            entry: dict[str, Any] = {
+                "at": clock.iso(),
+                "kind": "answer",
+                "provenance": provenance,
+                "field": field_id,
+                "value": replaced["value"],
+                "previous": rejected,
+            }
+            if question_id:
+                entry["question_id"] = question_id
+            self.new_journal.append(entry)
+        else:
+            self.set_fact(field_id, None, provenance, question_id=question_id)
 
     def record_answer(self, question_id: str, value: Any) -> None:
         self.answers[question_id] = {"value": value, "at": clock.iso()}

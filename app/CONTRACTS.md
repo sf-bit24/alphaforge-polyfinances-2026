@@ -284,7 +284,7 @@ sources:
 data: {}                          # données structurées lues par le code (profil, positions, série…)
 ```
 
-- Dans `profil.md`, un fait tiré d'un texte libre porte `confirmed: false` (`data.facts.<champ>`) jusqu'à la réponse à sa question `cf_`. Il n'entre ni dans `ProfileView`, ni dans la complétude, ni dans les scores. Un fait sans la clé `confirmed` est confirmé.
+- Dans `profil.md`, un fait tiré d'un texte libre porte `confirmed: false` (`data.facts.<champ>`) jusqu'à la réponse à sa question `cf_`. Il n'entre ni dans `ProfileView`, ni dans la complétude, ni dans les scores. S'il remplace une valeur confirmée, il la garde dans `replaces` (`value`, `provenance`, `at`, facultatif) : elle reste en vigueur jusqu'à la réponse, et « non » la rétablit. Un fait sans la clé `confirmed` est confirmé.
 - `journal.md` porte ses entrées dans `data.entries[]`, en ajout seulement, une entrée par événement : `{at, kind, provenance, ...}`.
   - `kind` vaut `answer` (`field`, `value`, `question_id`?, `option`?, `previous`?), `message` ou `stage` (`value`, `previous`, `note`).
   - `option` (facultatif) : identifiant de la tranche choisie quand une question à choix renseigne un champ numérique (`number`, `money`, `percent`). `value` est alors le nombre que le code a écrit dans le champ, tiré de `questionnaire.yaml` (option `number`) ou calculé par le code pour une relance.

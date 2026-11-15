@@ -278,6 +278,60 @@ def test_free_text_value_is_kept_only_after_yes(settings, store):
     assert [q["id"] for q in third["questions"]] == ["a1_3_1"]
 
 
+def test_no_restores_the_base_answer_a_free_text_value_replaced(settings, store):
+    factory = ScriptedFactory(
+        [[update("risk_tolerance.risk_attitude", "moderate", "des variations moyennes")], [finish("Noté.")]],
+        [[finish("Merci.", [APPROACH_QUESTION])]],
+    )
+    service = make_service(settings, store, factory)
+    client_id = started(service)
+    before = service.handle({"action": "session.resume", "client_id": client_id})
+    first = service.handle(
+        {"action": "followup.reply", "client_id": client_id, "message": "J'accepte des variations moyennes."}
+    )
+    assert first["questions"][0]["id"] == "cf_1_1"
+    assert first["completeness"]["score"] == before["completeness"]["score"]
+    assert first["profile"]["risk"] == before["profile"]["risk"]
+    attitude = next(f for f in first["profile"]["facts"] if f["field"] == "risk_tolerance.risk_attitude")
+    assert attitude["value"] == "large" and attitude["provenance"] == "base:q_risk_attitude"
+    second = service.handle(
+        {"action": "followup.reply", "client_id": client_id, "answers": [{"question_id": "cf_1_1", "value": False}]}
+    )
+    attitude = next(f for f in second["profile"]["facts"] if f["field"] == "risk_tolerance.risk_attitude")
+    assert attitude["value"] == "large" and attitude["provenance"] == "base:q_risk_attitude"
+    stored = okf.parse(store.get(profile_key(client_id)).text).data["facts"]["risk_tolerance.risk_attitude"]
+    assert "confirmed" not in stored and "replaces" not in stored
+
+
+def test_no_on_a_condition_drops_the_values_that_depended_on_it(settings, store):
+    both = (
+        "tool",
+        "update_profile",
+        {
+            "updates": [
+                {"field": "constraints.liquidity_need", "value": "some", "evidence": "une petite partie"},
+                {"field": "constraints.withdrawal_pct_12m", "value": 20, "evidence": "environ 20 %"},
+            ]
+        },
+    )
+    factory = ScriptedFactory(
+        [[both], [finish("Noté.", [APPROACH_QUESTION])]],
+        [[finish("Merci.", [LOSS_QUESTION])]],
+    )
+    service = make_service(settings, store, factory)
+    client_id = started(service)
+    first = service.handle(
+        {"action": "followup.reply", "client_id": client_id, "message": "Je retire une petite partie, environ 20 %."}
+    )
+    assert [q["id"] for q in first["questions"]] == ["cf_1_1", "a1_1_1"]  # la part attend la liquidité
+    service.handle(
+        {"action": "followup.reply", "client_id": client_id, "answers": [{"question_id": "cf_1_1", "value": False}]}
+    )
+    stored = okf.parse(store.get(profile_key(client_id)).text).data["facts"]
+    assert stored["constraints.liquidity_need"]["value"] == "none"
+    assert "constraints.withdrawal_pct_12m" not in stored
+
+
 def test_third_open_question_of_the_session_is_refused(settings, store):
     goal = {"field": "objective.goal_detail", "kind": "text", "prompt": "Que voulez-vous accomplir ?"}
     explore = {"kind": "text", "prompt": "Qu'aimeriez-vous ajouter ?", "dimension": "context"}

@@ -193,15 +193,17 @@ def build_context(
         spec = q.fields.get(field_id)
         if spec is None:
             continue
-        (to_confirm if field_id in waiting else known).append(
-            {
-                "field": field_id,
-                "label": spec.label_text(locale),
-                "value": fact.get("value"),
-                "shown_as": q.format_value(field_id, fact.get("value"), locale),
-                "provenance": fact.get("provenance"),
-            }
-        )
+        item = {
+            "field": field_id,
+            "label": spec.label_text(locale),
+            "value": fact.get("value"),
+            "shown_as": q.format_value(field_id, fact.get("value"), locale),
+            "provenance": fact.get("provenance"),
+        }
+        replaced = fact.get("replaces") if field_id in waiting else None
+        if isinstance(replaced, dict):
+            item["replaces"] = q.format_value(field_id, replaced.get("value"), locale)  # en vigueur d'ici là
+        (to_confirm if field_id in waiting else known).append(item)
     missing = [
         _field_brief(q, field_id, locale, values)
         for field_id in rules.missing_fields(q, values)
@@ -563,14 +565,24 @@ def normalize_quote(text: str) -> str:
 
 
 def quote_found(evidence: Any, texts: list[str]) -> bool:
-    """La citation figure mot pour mot (après normalisation) dans au moins un texte de l'investisseur."""
+    """La citation figure mot pour mot (après normalisation) dans au moins un texte de l'investisseur, sur des
+    limites de mots : « 0 » ne se trouve pas dans « 30 000 »."""
     if not isinstance(evidence, str):
         return False
     needle = normalize_quote(evidence)
-    return bool(needle) and any(needle in normalize_quote(text) for text in texts if isinstance(text, str))
+    if not needle:
+        return False
+    pattern = re.compile(
+        ("" if not needle[0].isalnum() else r"(?<!\w)")
+        + re.escape(needle)
+        + ("" if not needle[-1].isalnum() else r"(?!\w)")
+    )
+    return any(pattern.search(normalize_quote(text)) for text in texts if isinstance(text, str))
 
 
-_NUMBER = re.compile(r"(\d(?:[\d ,.]*\d)?)(\s*k(?![a-z]))?")
+# Un nombre : des chiffres, avec des séparateurs simples (espace, virgule, point) suivis d'un chiffre, puis un
+# suffixe k facultatif. « 10, 20 » donne deux nombres : la virgule y est suivie d'une espace.
+_NUMBER = re.compile(r"(?<![\d.,])(\d+(?:[ ,.]\d+)*)(\s*k(?![a-z]))?")
 
 
 def _parse_number(raw: str) -> set[float]:
@@ -596,17 +608,19 @@ def _parse_number(raw: str) -> set[float]:
 
 
 def numbers_in(text: str) -> set[float]:
-    """Nombres d'une citation : « 3 000 », « 3000 », « 3 000 $ », « 3,5 », « 3k »."""
+    """Nombres d'une citation : « 3 000 », « 3000 », « 3 000 $ », « 3,5 », « 3k » (3000 seulement)."""
     found: set[float] = set()
     for match in _NUMBER.finditer(normalize_quote(text)):
         raw, kilo = match.group(1), bool(match.group(2))
         parts = raw.split(" ")
-        # « 3 000 » se lit 3000, mais « dans 12 15 » garde aussi chaque nombre séparé.
-        for piece in {raw, *(part for part in parts if part == "0" or not part.startswith("0"))}:
+        if len(parts) > 1 and not all(re.fullmatch(r"\d{3}(?:[,.]\d+)?", part) for part in parts[1:]):
+            # « dans 12 15 ans » : des nombres séparés, pas un groupement des milliers.
+            pieces = parts
+        else:
+            pieces = [raw]  # « 3 000 » : un seul nombre, 3000
+        for index, piece in enumerate(pieces):
             for number in _parse_number(piece):
-                found.add(number)
-                if kilo and piece in (raw, parts[-1]):
-                    found.add(number * 1000)
+                found.add(number * 1000 if kilo and index == len(pieces) - 1 else number)
     return found
 
 
@@ -1109,8 +1123,10 @@ def confirmation_questions(
     ``boolean``, ``field`` nul) et la table question → champ visé, gardée hors de la question.
     """
     order = {field_id: index for index, field_id in enumerate(q.fields)}
+    values = session.values()
     waiting = sorted(
-        (field_id for field_id in session.unconfirmed() if field_id in q.fields),
+        # Une valeur dont le champ ne s'applique pas encore (sa condition attend elle aussi) est confirmée après.
+        (f for f in session.unconfirmed() if f in q.fields and q.applicable(q.fields[f].when, values)),
         key=lambda field_id: (-q.fields[field_id].weight, order[field_id]),
     )
     questions, targets = [], {}

@@ -125,6 +125,11 @@ export function reviewIndex(portfolio: PortfolioView) {
 
 type ReviewIndex = ReturnType<typeof reviewIndex>;
 
+/*
+ * The table uses the automatic layout and must fit the review card (about 1190 px wide from 1440 px on), with the
+ * notes in the Status column. A `truncate` line counts at its full length in that layout: each one has a max width,
+ * otherwise a long raw CSV line widens its column and pushes Status out of the card.
+ */
 const CELL =
   "w-full rounded-md border-0 bg-white px-2 py-1.5 text-sm text-ink-950 ring-1 ring-ink-200 ring-inset focus:ring-2 focus:ring-navy focus:outline-none aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-critical";
 
@@ -143,7 +148,7 @@ function IdentityCells({ row, issue, rowLabel, confirming, onChange }: RowCellsP
   const base = row.base;
   return (
     <>
-      <td className="w-28 px-2 py-2">
+      <td className="w-32 px-2 py-2">
         <input
           value={row.ticker}
           onChange={(event) => onChange({ ticker: event.target.value })}
@@ -153,10 +158,14 @@ function IdentityCells({ row, issue, rowLabel, confirming, onChange }: RowCellsP
           className={cn(CELL, "min-w-24 font-mono uppercase")}
           disabled={confirming}
         />
-        {base.raw ? <p className="mt-1 truncate font-mono text-[0.65rem] text-ink-400" title={base.raw}>{base.raw}</p> : null}
+        {base.raw ? (
+          <p className="mt-1 max-w-28 truncate font-mono text-[0.65rem] text-ink-400" title={base.raw}>
+            {base.raw}
+          </p>
+        ) : null}
       </td>
       <td className="max-w-40 px-2 py-2">
-        <p className="truncate font-medium text-ink-900" title={base.name ?? undefined}>
+        <p className="max-w-36 truncate font-medium text-ink-900" title={base.name ?? undefined}>
           {base.name ?? "—"}
         </p>
         {base.asset_class ? <p className="text-xs text-ink-500">{t.assetClasses[base.asset_class]}</p> : null}
@@ -262,16 +271,19 @@ function StatusBadge({ row }: { row: Row }) {
   return <Badge tone="warning">{t.review.unresolved}</Badge>;
 }
 
-/** The row's status, then why A2 could not value it (unless its notes already say so), then its notes. */
+/**
+ * The row's status, then why A2 could not value it (unless its notes already say so), then its notes. The column
+ * has a fixed width; the notes wrap inside it, even a long word or a URL.
+ */
 function StatusCell({ row, unresolved }: { row: Row; unresolved: UnresolvedItem | undefined }) {
   const base = row.base;
   return (
-    <td className="px-2 py-2">
+    <td className="w-52 px-2 py-2">
       <StatusBadge row={row} />
       {unresolved && unresolved.reason !== base.notes ? (
-        <p className="mt-1 max-w-48 text-[0.7rem] leading-snug text-warning-ink">{unresolved.reason}</p>
+        <p className="mt-1 text-[0.7rem] leading-snug wrap-anywhere text-warning-ink">{unresolved.reason}</p>
       ) : null}
-      {base.notes ? <p className="mt-1 max-w-48 text-[0.7rem] leading-snug text-ink-500">{base.notes}</p> : null}
+      {base.notes ? <p className="mt-1 text-[0.7rem] leading-snug wrap-anywhere text-ink-500">{base.notes}</p> : null}
     </td>
   );
 }
@@ -350,7 +362,7 @@ export function PositionsTable({ rows, review, confirming, onChange, onDelete }:
   const { t } = useI18n();
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1080px] text-sm">
+      <table className="w-full min-w-max text-sm lg:min-w-[1080px]">
         <ReviewTableHead />
         <tbody>
           {rows.length === 0 ? (

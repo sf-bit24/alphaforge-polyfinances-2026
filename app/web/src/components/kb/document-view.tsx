@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import { callMessages, getKbDocument } from "@/lib/client/api";
 import { useAsync } from "@/lib/client/use-async";
 import { formatDateTime } from "@/lib/i18n/locale";
+import { okfTypeLabel } from "@/lib/i18n/okf-types";
 import { useI18n } from "@/lib/i18n/provider";
 import { parseOkf } from "@/lib/okf";
 import { Badge } from "@/components/ui/badge";
@@ -91,7 +92,7 @@ function MetadataFields({ front }: { front: Record<string, unknown> }) {
     <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
       {front.type ? (
         <Meta label={t.documentView.type}>
-          <Badge tone="brand">{String(front.type)}</Badge>
+          <Badge tone="brand">{okfTypeLabel(String(front.type), locale)}</Badge>
         </Meta>
       ) : null}
       {front.status ? <Meta label={t.documentView.status}>{String(front.status)}</Meta> : null}

@@ -161,8 +161,8 @@ def style_inputs_from_view(view: dict[str, Any], portfolio: dict[str, Any] | Non
     """Variables du profil court (Brain 3993936) → ``StyleInputs`` de l'étape 0, sans changer ``InvestorProfile``.
 
     Ne fait que lire : aucune valeur n'est inventée (une variable absente reste vide et ne déclenche rien).
-    Les codes absents de ``questionnaire.yaml`` sur master (behavior.hype_*, exclusion_strictness,
-    employment_sector, sell_threshold_pct, quiz_*) sont lus s'ils existent : à aligner avec le volet profil.
+    Chaque champ lu est déclaré dans ``questionnaire.yaml`` (version 2026-11-15.1 pour behavior.hype_*,
+    exclusion_strictness, employment_sector, sell_threshold_pct et quiz_*, de poids nul) ; un test le vérifie.
     """
     from alphaforge.finance.strategy.style import StyleInputs
 

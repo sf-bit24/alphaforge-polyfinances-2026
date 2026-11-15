@@ -336,7 +336,7 @@ resource "aws_s3_object" "scenarios_code" {
 check "scenarios_code_bundle" {
   assert {
     condition     = !var.scenarios_enabled || length(local.scenarios_code_files) == 2
-    error_message = "scenarios_enabled = true mais infra/build/scenarios/{run.sh,scenarios.zip} est absent : package.sh doit tourner avec ALPHAFORGE_PACKAGE_SCENARIOS=1 (variable de depot GitHub du meme nom pour la CI). Une execution de ${local.scenarios_name} echouera."
+    error_message = "scenarios_enabled = true mais infra/build/scenarios/{run.sh,scenarios.zip} est absent : package.sh doit tourner avec ALPHAFORGE_PACKAGE_SCENARIOS=1 (en CI : a brancher dans app.yml, voir app/CONTRACTS.md section 10). Une execution de ${local.scenarios_name} echouera."
   }
 }
 

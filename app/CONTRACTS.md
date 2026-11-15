@@ -462,7 +462,7 @@ runtimes de la version 1. Les schémas Pydantic sont dans `app/agents/src/alphaf
 
 ## 10. Scénarios probabilistes (facultatif)
 
-Ajout facultatif à la version 1, activé par la variable Terraform `scenarios_enabled` (faux par défaut : avec `false`, le plan ne change rien pour les scénarios). Le bundle du job n'est construit que si `ALPHAFORGE_PACKAGE_SCENARIOS=1` (variable de dépôt GitHub du même nom pour la CI), à poser avec `scenarios_enabled = true`. Simulation seulement : la table décrit l'incertitude du risque selon un modèle, ce n'est pas une prévision. Infra : `infrastructure/infra/scenarios.tf`; code : `app/agents/src/alphaforge/scenarios/`.
+Ajout facultatif à la version 1, activé par la variable Terraform `scenarios_enabled` (faux par défaut : avec `false`, le plan ne change rien pour les scénarios). Le bundle du job n'est construit que si `ALPHAFORGE_PACKAGE_SCENARIOS=1` (en CI : ajouter `ALPHAFORGE_PACKAGE_SCENARIOS: ${{ vars.ALPHAFORGE_PACKAGE_SCENARIOS || '0' }}` à l'étape `package.sh` de `.github/workflows/app.yml`, pas encore fait car le jeton de l'équipe n'a pas le droit `workflow`; absente, la variable vaut 0), à poser avec `scenarios_enabled = true`. Simulation seulement : la table décrit l'incertitude du risque selon un modèle, ce n'est pas une prévision. Infra : `infrastructure/infra/scenarios.tf`; code : `app/agents/src/alphaforge/scenarios/`.
 
 ```mermaid
 flowchart LR

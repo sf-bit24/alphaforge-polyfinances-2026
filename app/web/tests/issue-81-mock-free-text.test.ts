@@ -206,6 +206,12 @@ describe("issue #81 (suite): the negation of a high-interest debt, in English an
     "Je n'ai jamais eu de dettes.",
     "Je n'ai pas de carte de crédit.",
     "J'ai aussi une hypothèque à 6 % et je n'ai pas de dettes de carte de crédit.",
+    // « ni », "neither", "nor", and « autre », "other" (review of the suite).
+    "Je n'ai ni dette ni prêt.",
+    "Je n'ai aucune autre dette.",
+    "Je n'ai pas d'autre dette que l'hypothèque.",
+    "I have no other debt.",
+    "I have neither debt nor loans.",
   ])("« %s » records no high-interest debt", (message) => {
     expect(debt(message)).toBe(false);
   });
@@ -219,6 +225,10 @@ describe("issue #81 (suite): the negation of a high-interest debt, in English an
     "J'ai plus de dettes que d'épargne.",
     "Je n'arrive pas à rembourser ma carte de crédit.",
     "Non, j'ai des dettes sur mes cartes de crédit.",
+    "Je n'ai ni épargne ni plan, seulement des dettes.",
+    "Neither my savings nor my income covers my credit card debt.",
+    "J'ai d'autres dettes.",
+    "I have other debts.",
   ])("« %s » records a high-interest debt", (message) => {
     expect(debt(message)).toBe(true);
   });

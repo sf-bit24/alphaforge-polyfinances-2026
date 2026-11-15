@@ -141,13 +141,13 @@ const DEBT = String.raw`(?:dettes?|debts?|cartes? de crédit|credit[- ]cards?)`;
 const SOME_DEBT = new RegExp(DEBT);
 
 /**
- * A negation, then only words that keep it on the debt: « je n'ai pas de dette », « aucune dette de carte de
- * crédit », "no credit card debt", "I don't have any high-interest debt". "I can't pay off my credit card"
+ * A negation, then only words that keep it on the debt: « je n'ai pas de dette », « ni dette ni prêt », « aucune
+ * autre dette », "no credit card debt", "I don't have any high-interest debt". "I can't pay off my credit card"
  * and « j'ai plus de dettes que d'épargne » stay debts.
  */
 const NO_DEBT = new RegExp(
-  String.raw`(?:\b(?:pas|aucune?|sans|z[ée]ro|jamais|no|not|never|without)|n't|n'\w+ plus)` +
-    String.raw`(?:\s+(?:de|have|any|had|eu|vraiment|really|high[- ]interest|consumer|outstanding))*\s+${DEBT}|\bdebt[- ]free\b`,
+  String.raw`(?:\b(?:pas|aucune?|sans|z[ée]ro|jamais|ni|no|not|never|neither|nor|without)|n't|n'\w+ plus)` +
+    String.raw`(?:\s+(?:de|d'autres?|autres?|other|have|any|had|eu|vraiment|really|high[- ]interest|consumer|outstanding))*\s+${DEBT}|\bdebt[- ]free\b`,
 );
 
 function debtFact(lower: string): ExtractedFact | null {

@@ -2,7 +2,7 @@
 
 import { CircleCheck, Send } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { AnswerValue, ClientState, Question } from "@/lib/contract/schemas";
 import { displayAnswer } from "@/lib/client/answers";
 import type { ReplyInput } from "@/lib/client/session-store";
@@ -54,10 +54,37 @@ function YanMessage({ message }: { message: string }) {
   );
 }
 
+/**
+ * The own-words text of a batch, kept outside its card (#77). The card makes way for Yan's reply while the request
+ * runs; when the message is refused (a SIN, the guardrail) or the model is down, the card comes back with the text
+ * still in the box, as on the dashboard and in A2's card. Keyed by client and batch, dropped once the text is sent.
+ */
+export interface OwnWordsDraft {
+  writing: boolean;
+  text: string;
+}
+const NO_DRAFT: OwnWordsDraft = { writing: false, text: "" };
+const ownWordsDrafts = new Map<string, OwnWordsDraft>();
+
+export const ownWordsKey = (clientId: string | null, questions: Question[]) => `${clientId ?? ""}:${questions.map((question) => question.id).join("|")}`;
+export const keptOwnWords = (key: string): OwnWordsDraft => ownWordsDrafts.get(key) ?? NO_DRAFT;
+export function keepOwnWords(key: string, draft: OwnWordsDraft | null): void {
+  if (draft) ownWordsDrafts.set(key, draft);
+  else ownWordsDrafts.delete(key);
+}
+
+function useOwnWords(key: string): [OwnWordsDraft, (draft: OwnWordsDraft) => void] {
+  const [draft, setDraft] = useState(() => keptOwnWords(key));
+  const update = (next: OwnWordsDraft) => {
+    keepOwnWords(key, next);
+    setDraft(next);
+  };
+  return [draft, update];
+}
+
 /** Answering in one's own words: the text goes to Yan with the answers given so far. */
-function OwnWords({ busy, onSend, onBack }: { busy: boolean; onSend: (text: string) => void; onBack: () => void }) {
+function OwnWords({ busy, text, setText, onSend, onBack }: { busy: boolean; text: string; setText: (text: string) => void; onSend: (text: string) => void; onBack: () => void }) {
   const { t } = useI18n();
-  const [text, setText] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => ref.current?.focus({ preventScroll: true }), []);
   const submit = (event: FormEvent) => {
@@ -119,6 +146,25 @@ function FollowupActions({ canSkip, canStop, busy, on }: ActionsProps) {
   );
 }
 
+interface WritingProps {
+  say: ReactNode;
+  busy: boolean;
+  draft: OwnWordsDraft;
+  setDraft: (draft: OwnWordsDraft) => void;
+  onSend: (text: string) => void;
+}
+
+/** Yan's line, the own-words box with the kept text, and the notice of a refused message under it. */
+function WritingCard({ say, busy, draft, setDraft, onSend }: WritingProps) {
+  return (
+    <>
+      <AssistantLine>{say}</AssistantLine>
+      <OwnWords busy={busy} text={draft.text} setText={(text) => setDraft({ writing: true, text })} onSend={onSend} onBack={() => setDraft({ ...draft, writing: false })} />
+      <ReplyError />
+    </>
+  );
+}
+
 const answerOf = (question: Question, value: AnswerValue, display: string): ReplyAnswer => ({
   question_id: question.id,
   value,
@@ -135,28 +181,29 @@ function FollowupBatch({ state, visible, interacted, message }: Omit<FollowupPro
   const session = useSession();
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<ReplyAnswer[]>([]);
-  const [writing, setWriting] = useState(false);
+  const draftKey = ownWordsKey(session.clientId, state.questions);
+  const [draft, setDraft] = useOwnWords(draftKey);
   const questions = state.questions;
   const question = questions[index];
   if (!question) return null;
   const busy = !visible || session.pending === "followup.reply";
   const last = index === questions.length - 1;
-  const send = (input: ReplyInput) => void session.reply(input);
+  const send = (input: ReplyInput) =>
+    void session.reply(input).then((ok) => {
+      if (ok) keepOwnWords(draftKey, null);
+    });
   const next = (collected: ReplyAnswer[]) => {
     if (last) return send({ answers: collected });
     setAnswers(collected);
     setIndex(index + 1);
   };
   const say = index === 0 && message ? <YanMessage message={message} /> : t.journey.say.same[index % t.journey.say.same.length];
-  const on = { skip: () => next(answers), write: () => setWriting(true), stop: () => send({ answers, stop: true }) };
+  const on = { skip: () => next(answers), write: () => setDraft({ ...draft, writing: true }), stop: () => send({ answers, stop: true }) };
   return (
     <>
       <DoneBadge index={index} total={questions.length} />
-      {writing ? (
-        <>
-          <AssistantLine>{say}</AssistantLine>
-          <OwnWords busy={busy} onSend={(text) => send({ answers, message: text })} onBack={() => setWriting(false)} />
-        </>
+      {draft.writing ? (
+        <WritingCard say={say} busy={busy} draft={draft} setDraft={setDraft} onSend={(text) => send({ answers, message: text })} />
       ) : (
         <QuestionCard
           key={question.id}
@@ -173,19 +220,29 @@ function FollowupBatch({ state, visible, interacted, message }: Omit<FollowupPro
   );
 }
 
+/** The failure of the last `followup.reply`, if any: a refused message, a model down. */
+function ReplyError() {
+  const session = useSession();
+  const error = session.error && session.errorAction === "followup.reply" ? session.error : null;
+  if (!error) return null;
+  return (
+    <div className={styles.notice}>
+      <ErrorNotice error={error} onRetry={session.retry} onDismiss={session.dismissError} />
+    </div>
+  );
+}
+
 /** While Yan reads the answers and prepares its questions: its words as they come. */
 function Thinking({ first }: { first: boolean }) {
   const { t } = useI18n();
   const session = useSession();
-  const error = session.error && session.errorAction === "followup.reply" ? session.error : null;
+  const failed = Boolean(session.error) && session.errorAction === "followup.reply";
   return (
     <>
       <DoneBadge index={0} total={0} />
       <AssistantLine>{first ? t.journey.end.thinking : t.journey.end.thinkingNext}</AssistantLine>
-      {error ? (
-        <div className={styles.notice}>
-          <ErrorNotice error={error} onRetry={session.retry} onDismiss={session.dismissError} />
-        </div>
+      {failed ? (
+        <ReplyError />
       ) : (
         <span className={styles.typing} role="status" aria-label={t.assistant.writing}>
           <i />
@@ -271,7 +328,8 @@ export function FollowupStage({ state, visible, interacted, onRestart }: Followu
   useAutoStart(state);
   if (state.stage === "complete") return <ProfileReady onRestart={onRestart} />;
   const replying = session.pending === "followup.reply";
-  const failed = Boolean(session.error) && session.errorAction === "followup.reply";
+  // A message written in one's own words and refused comes back in its card, with the notice under the box.
+  const failed = Boolean(session.error) && session.errorAction === "followup.reply" && !keptOwnWords(ownWordsKey(session.clientId, state.questions)).writing;
   if (replying || failed || session.conversation.length === 0) return <Thinking first={session.conversation.length === 0} />;
   if (state.questions.length === 0) return <NoMoreQuestions state={state} />;
   const lastAgent = session.conversation.findLast((entry) => entry.role === "agent");

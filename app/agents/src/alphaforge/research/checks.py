@@ -37,6 +37,8 @@ class ResearchCandidate:
     target: str
     dedupe: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    # Synthèse : citations dont l'élément double un document existant ou un autre élément de la collecte.
+    refs: dict[str, ResearchCandidate] = field(default_factory=dict)
 
 
 def list_staged(store: Store, run_id: str) -> list[tuple[str, Any]]:
@@ -159,6 +161,9 @@ def validate_research(
     seen: dict[str, str] = {}
     cache: dict[str, Any] = {}
     briefs: list[tuple[str, dict[str, Any]]] = []
+    # Élément vérifié mais doublon : une synthèse qui le cite renvoie au document déjà écrit (ou retenu).
+    refs: dict[str, ResearchCandidate] = {}
+    by_key: dict[str, ResearchCandidate] = {}
     for key, item in staged:
 
         def reject(reason: str, key: str = key) -> None:
@@ -235,26 +240,32 @@ def validate_research(
                 continue
         if path in existing_keys:
             reject(f"doublon d'un document existant : {path}")
+            refs[item["id"]] = ResearchCandidate(key=key, item=item, target=path)
             continue
         duplicate_of = next((seen[k] for k in dedupe if k in seen), None)
         if duplicate_of:
             reject(f"doublon dans la collecte : {duplicate_of}")
+            if duplicate_of in by_key:
+                refs[item["id"]] = by_key[duplicate_of]
             continue
         for k in dedupe:
             seen[k] = key
-        accepted.append(ResearchCandidate(key=key, item=item, target=path, dedupe=dedupe, tags=data.get("tags") or []))
+        candidate = ResearchCandidate(key=key, item=item, target=path, dedupe=dedupe, tags=data.get("tags") or [])
+        accepted.append(candidate)
+        by_key[key] = candidate
     by_id = {c.item["id"]: c for c in accepted}
     for key, item in briefs:
         data = item.get("data") or {}
         citations = [c for c in data.get("citations") or [] if isinstance(c, str)]
-        missing_ids = [c for c in citations if c not in by_id]
+        resolved = {c: by_id.get(c) or refs.get(c) for c in citations}
+        missing_ids = [c for c, found in resolved.items() if found is None]
         if not citations or missing_ids:
             rejected.append(
                 {"key": key, "reason": "synthèse : citations absentes ou non retenues " + ", ".join(missing_ids[:4])}
             )
             continue
-        values = [n for c in citations for n in items.allowed_numbers(by_id[c].item)]
-        dates = [d for c in citations for d in items.allowed_dates(by_id[c].item)]
+        values = [n for c in citations for n in items.allowed_numbers(resolved[c].item)]
+        dates = [d for c in citations for d in items.allowed_dates(resolved[c].item)]
         missing = documents.grounded(f"{item['title']} {data.get('text') or ''}", values, dates)
         if missing:
             rejected.append({"key": key, "reason": "synthèse : nombres non fondés " + ", ".join(missing[:4])})
@@ -263,7 +274,8 @@ def validate_research(
         if path in existing_keys:
             rejected.append({"key": key, "reason": f"doublon d'un document existant : {path}"})
             continue
-        accepted.append(ResearchCandidate(key=key, item=item, target=path, dedupe=[path]))
+        brief_refs = {c: found for c, found in resolved.items() if c not in by_id}
+        accepted.append(ResearchCandidate(key=key, item=item, target=path, dedupe=[path], refs=brief_refs))
     return accepted, rejected, quarantined
 
 

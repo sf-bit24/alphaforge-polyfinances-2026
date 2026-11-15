@@ -497,3 +497,37 @@ def test_quote_documents_are_filed_under_their_symbol(fake_http, store):
     quote = {**finding, "kind": "quote", "values": {"value": "1.4257", "symbol": "COAX26"}, "issuers": []}
     item = items_mod.build_item(quote)
     assert item["data"]["symbol"] == "COAX26"
+
+
+def test_brief_citing_an_item_already_in_the_base_links_the_existing_document(store, fake_http):
+    fake_http.add("https://www.bankofcanada.ca/valet/observations/", VALET_FX)
+    item = items_mod.build_item(fx_finding(store), summary="USD/CAD à 1,4257 le 13 novembre.")
+    store.put_text("general/donnees/fxusdcad/2026-11-13.md", "---\ntype: Data Series\n---\n")
+    stage(store, item)
+    brief = {
+        "id": "brief-x",
+        "kind": "brief",
+        "title": "USD/CAD en novembre 2026",
+        "url": None,
+        "source": "AlphaForge AI (A0, synthèse de recherche)",
+        "published_at": "2026-11-15T00:00:00Z",
+        "observed_at": None,
+        "retrieved_at": "2026-11-15T00:00:00Z",
+        "language": "fr",
+        "tickers": [],
+        "summary": "x",
+        "data": {
+            "text": "Le dollar américain valait 1,4257 $ CA le 13 novembre 2026.",
+            "citations": [item["id"]],
+            "question": "q",
+            "subjects": ["E2"],
+            "gaps": [],
+        },
+    }
+    store.put_json("staging/run1/router/brief-x.json", brief)
+    result = supervisor.curate(
+        run_id="run1", store=store, trace=Trace("fr"), model_factory=ScriptedFactory(), model_id="scripted"
+    )
+    briefs = [k for k in result["written"] if k.startswith("general/recherches/")]
+    assert len(briefs) == 1, result["rejected"]
+    assert "donnees/fxusdcad/2026-11-13.md" in store.get_text(briefs[0]).text

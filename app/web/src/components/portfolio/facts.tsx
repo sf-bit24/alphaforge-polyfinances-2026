@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
-import type { DecisionFact, FactLabel } from "@/lib/contract/portfolio";
+import { createContext, useContext, useState, type ReactNode } from "react";
+import type { DecisionFact, FactLabel, FactSource } from "@/lib/contract/portfolio";
 import { formatDateTime, formatDate } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
 import type { FactIndex, TraceIndex } from "@/lib/portfolio/decision";
@@ -86,11 +86,83 @@ export function FactChips({ ids, limit = 6 }: { ids: readonly string[]; limit?: 
   );
 }
 
-function FactCard({ fact }: { fact: DecisionFact }) {
+/** A term of a definition list and its value. */
+function Entry({ term, mono = false, children }: { term: string; mono?: boolean; children: ReactNode }) {
+  return (
+    <>
+      <dt>{term}</dt>
+      <dd className={mono ? p.mono : undefined}>{children}</dd>
+    </>
+  );
+}
+
+/** Where a fact comes from: dataset, processing, link, licence, retrieval time and checksum. */
+function SourceEntries({ source }: { source: FactSource }) {
+  const { t, locale } = useI18n();
+  const f = t.portfolioView.fact;
+  return (
+    <dl className={p.kv}>
+      <Entry term={f.dataset} mono>
+        {source.dataset}
+      </Entry>
+      {source.processing ? <Entry term={f.processing}>{source.processing}</Entry> : null}
+      {source.url ? (
+        <Entry term={f.url}>
+          <a href={source.url} target="_blank" rel="noreferrer noopener">
+            {source.url}
+          </a>
+        </Entry>
+      ) : null}
+      {source.licence ? <Entry term={f.licence}>{source.licence}</Entry> : null}
+      {source.retrieved_utc ? <Entry term={f.retrieved}>{formatDateTime(source.retrieved_utc, locale)}</Entry> : null}
+      {source.sha256 ? (
+        <Entry term={f.sha} mono>
+          {source.sha256}
+        </Entry>
+      ) : null}
+    </dl>
+  );
+}
+
+/** The step of the trace that produced a fact: agent, tool, outcome, summary, model and time. */
+function TraceStep({ traceId }: { traceId: string }) {
   const { t, locale } = useI18n();
   const { trace } = useDecisionLookup();
   const f = t.portfolioView.fact;
-  const event = trace.get(fact.trace_id);
+  const event = trace.get(traceId);
+  return (
+    <div className={p.subCard}>
+      <h4>{f.trace}</h4>
+      <dl className={p.kv}>
+        <Entry term={f.id} mono>
+          {traceId}
+        </Entry>
+        {event ? (
+          <>
+            <Entry term={f.agent}>{event.agent}</Entry>
+            {event.tool ? (
+              <Entry term={f.tool} mono>
+                {event.tool}
+              </Entry>
+            ) : null}
+            <Entry term={t.portfolioView.constraints.state}>{t.portfolioView.trace.status[event.status] ?? event.status}</Entry>
+            {event.output_summary ? <Entry term={f.summary}>{event.output_summary}</Entry> : null}
+            {event.model_id ? (
+              <Entry term={f.model} mono>
+                {event.model_id}
+              </Entry>
+            ) : null}
+            <Entry term={t.portfolioView.meta.created}>{formatDateTime(event.started_utc, locale)}</Entry>
+          </>
+        ) : null}
+      </dl>
+    </div>
+  );
+}
+
+function FactCard({ fact }: { fact: DecisionFact }) {
+  const { t, locale } = useI18n();
+  const f = t.portfolioView.fact;
   return (
     <article className={p.factCard}>
       <div className={p.statementHead}>
@@ -99,101 +171,23 @@ function FactCard({ fact }: { fact: DecisionFact }) {
       </div>
       <p className={p.factBig}>{formatFact(fact)}</p>
       <dl className={p.kv}>
-        <dt>{f.id}</dt>
-        <dd className={p.mono}>{fact.fact_id}</dd>
-        <dt>{f.unit}</dt>
-        <dd>{fact.unit}{fact.currency ? ` (${fact.currency})` : ""}</dd>
-        {fact.as_of ? (
-          <>
-            <dt>{f.asOf}</dt>
-            <dd>{formatDate(fact.as_of, locale)}</dd>
-          </>
-        ) : null}
-        {fact.published ? (
-          <>
-            <dt>{f.published}</dt>
-            <dd>{formatDate(fact.published, locale)}</dd>
-          </>
-        ) : null}
+        <Entry term={f.id} mono>
+          {fact.fact_id}
+        </Entry>
+        <Entry term={f.unit}>
+          {fact.unit}
+          {fact.currency ? ` (${fact.currency})` : ""}
+        </Entry>
+        {fact.as_of ? <Entry term={f.asOf}>{formatDate(fact.as_of, locale)}</Entry> : null}
+        {fact.published ? <Entry term={f.published}>{formatDate(fact.published, locale)}</Entry> : null}
       </dl>
       <div className={p.subCard}>
         <h4>{f.sources}</h4>
         {fact.sources.map((source, index) => (
-          <dl key={`${source.dataset}-${index}`} className={p.kv}>
-            <dt>{f.dataset}</dt>
-            <dd className={p.mono}>{source.dataset}</dd>
-            {source.processing ? (
-              <>
-                <dt>{f.processing}</dt>
-                <dd>{source.processing}</dd>
-              </>
-            ) : null}
-            {source.url ? (
-              <>
-                <dt>{f.url}</dt>
-                <dd>
-                  <a href={source.url} target="_blank" rel="noreferrer noopener">
-                    {source.url}
-                  </a>
-                </dd>
-              </>
-            ) : null}
-            {source.licence ? (
-              <>
-                <dt>{f.licence}</dt>
-                <dd>{source.licence}</dd>
-              </>
-            ) : null}
-            {source.retrieved_utc ? (
-              <>
-                <dt>{f.retrieved}</dt>
-                <dd>{formatDateTime(source.retrieved_utc, locale)}</dd>
-              </>
-            ) : null}
-            {source.sha256 ? (
-              <>
-                <dt>{f.sha}</dt>
-                <dd className={p.mono}>{source.sha256}</dd>
-              </>
-            ) : null}
-          </dl>
+          <SourceEntries key={`${source.dataset}-${index}`} source={source} />
         ))}
       </div>
-      <div className={p.subCard}>
-        <h4>{f.trace}</h4>
-        <dl className={p.kv}>
-          <dt>{f.id}</dt>
-          <dd className={p.mono}>{fact.trace_id}</dd>
-          {event ? (
-            <>
-              <dt>{f.agent}</dt>
-              <dd>{event.agent}</dd>
-              {event.tool ? (
-                <>
-                  <dt>{f.tool}</dt>
-                  <dd className={p.mono}>{event.tool}</dd>
-                </>
-              ) : null}
-              <dt>{t.portfolioView.constraints.state}</dt>
-              <dd>{t.portfolioView.trace.status[event.status] ?? event.status}</dd>
-              {event.output_summary ? (
-                <>
-                  <dt>{f.summary}</dt>
-                  <dd>{event.output_summary}</dd>
-                </>
-              ) : null}
-              {event.model_id ? (
-                <>
-                  <dt>{f.model}</dt>
-                  <dd className={p.mono}>{event.model_id}</dd>
-                </>
-              ) : null}
-              <dt>{t.portfolioView.meta.created}</dt>
-              <dd>{formatDateTime(event.started_utc, locale)}</dd>
-            </>
-          ) : null}
-        </dl>
-      </div>
+      <TraceStep traceId={fact.trace_id} />
     </article>
   );
 }

@@ -13,7 +13,7 @@ import threading
 from datetime import date, timedelta
 from typing import Any
 
-from .. import clock, starter
+from .. import clock, market
 from ..agentkit import ModelFactory, bedrock_model_factory
 from ..config import Settings
 from ..errors import AppError, error_response, ok_response
@@ -58,7 +58,7 @@ def _valid_since(since: Any) -> str:
 def _valid_tickers(tickers: Any) -> list[str]:
     """Symboles demandés, en majuscules et sans doublon; l'univers du jeu de départ par défaut."""
     if tickers is None:
-        return list(starter.universe())
+        return list(market.universe())
     if not isinstance(tickers, list) or not tickers or len(tickers) > MAX_TICKERS:
         raise AppError("bad_request", f"tickers doit être une liste de 1 à {MAX_TICKERS} symboles.")
     symbols = []

@@ -154,6 +154,7 @@ def build_portfolio(
             book.add(f"emphasis.{k}", f"Poids de la lentille {k}", v, "%", dataset="policy_compiler/emphasis.yaml")
             for k, v in comp.emphasis.items()
         ]
+        holding_fids = _holding_facts(book, profile)
     if comp.decision_kind or comp.policy is None:
         kind = comp.decision_kind or "incomplet"
         expl = Explanation(
@@ -232,6 +233,14 @@ def build_portfolio(
         if r1.status != "optimal":
             raise RuntimeError(f"mandat infaisable : {r1.infeasible_rules}")
         book.data_version = r1.data_version
+        # Données de marché quotidiennes (alphaforge.market) lues par l'étape 0 : leur version entre dans celle de
+        # la décision. En repli sur le jeu de départ (figé), rien ne change.
+        if strat is not None:
+            from alphaforge import market
+
+            mv = market.data_version()
+            if mv.get("source") == "market" and mv.get("version"):
+                book.data_version = f"{book.data_version}+market:{mv['version']}"
         # Lot E, OKF général : avec le magasin OKF (OkfMarketStore), la version des données couvre aussi les
         # (clé, ETag) des fondamentaux de general/societes/, lus ici une fois pour toute la décision. Jamais les
         # actualités : une nouvelle ne change ni le mandat ni la version des données.
@@ -438,6 +447,8 @@ def build_portfolio(
         ],
         strategy=strat_final,
     )
+    if holding_fids:
+        expl.data_used.insert(1, _holding_statement(book, holding_fids))
     report: list[str] = []
     if rephrase_explanation if rephrase_explanation is not None else mode == "llm":
         try:
@@ -491,6 +502,59 @@ def build_portfolio(
         grounding=grounding,
         strategy=strat,
     )
+
+
+HOLDINGS_DATASET = "client:portefeuille-existant.md (positions évaluées par profile/portfolio.py)"
+
+
+def _holding_facts(book: FactBook, profile: InvestorProfile) -> list[str]:
+    """Portefeuille existant (``profile.holdings``, valeurs en CAD calculées par le code d'A2) : nombre de positions,
+    valeur totale et plus grande position, avec sa part du patrimoine investissable s'il est connu."""
+    if not profile.holdings:
+        return []
+    total = sum(h.market_value for h in profile.holdings)
+    top = max(profile.holdings, key=lambda h: (h.market_value, h.ticker))
+    ids = [
+        book.add(
+            "holdings.n", "Positions existantes évaluées", len(profile.holdings), "positions", dataset=HOLDINGS_DATASET
+        ),
+        book.add(
+            "holdings.total", "Valeur du portefeuille existant", total, "CAD", dataset=HOLDINGS_DATASET, currency="CAD"
+        ),
+        book.add(
+            "holdings.top",
+            f"Plus grande position existante ({top.ticker})",
+            top.market_value,
+            "CAD",
+            dataset=HOLDINGS_DATASET,
+            currency="CAD",
+        ),
+    ]
+    if profile.investable_wealth:
+        ids.append(
+            book.add(
+                "holdings.top_share",
+                f"Part de {top.ticker} dans le patrimoine investissable",
+                top.market_value / profile.investable_wealth,
+                "%",
+                dataset=HOLDINGS_DATASET,
+                processing="valeur de la position / investable_wealth",
+            )
+        )
+    return ids
+
+
+def _holding_statement(book: FactBook, fids: list[str]) -> Statement:
+    f = book.facts
+    ticker = f["holdings.top"].label_fr.rsplit("(", 1)[-1].rstrip(")")
+    text = (
+        f"Portefeuille existant pris en compte : {fmt(f['holdings.n'].value, 'positions')} positions évaluées, "
+        f"{fmt(f['holdings.total'].value, 'CAD')} au total ; la plus grande, {ticker}, vaut "
+        f"{fmt(f['holdings.top'].value, 'CAD')}"
+    )
+    if "holdings.top_share" in f:
+        text += f", soit {fmt(f['holdings.top_share'].value, '%')} du patrimoine investissable"
+    return Statement(text_fr=text + ".", fact_ids=fids)
 
 
 def _style_counterfactuals(book, comp, profile, as_of, strat, style_inputs, cfs, protect=()) -> list[Statement]:

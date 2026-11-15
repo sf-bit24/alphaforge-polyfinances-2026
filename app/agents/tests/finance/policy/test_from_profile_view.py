@@ -58,3 +58,19 @@ def test_missing_amount_is_incomplete_not_invented():
     v["facts"] = [x for x in v["facts"] if x["field"] != "context.amount_cad"]
     p = investor_profile_from_view(v, "8f0c1c2e-0000-4000-8000-000000000002")
     assert p.status.value == "INCOMPLETE" and p.investable_wealth is None
+
+
+def test_style_inputs_read_only_fields_declared_by_the_questionnaire():
+    """Un champ renommé côté profil ne doit pas disparaître en silence de l'étape 0 (la variable resterait vide)."""
+    import inspect
+    import re
+
+    from alphaforge.finance.policy import from_profile_view
+    from alphaforge.profile.questionnaire import Questionnaire
+
+    src = inspect.getsource(from_profile_view.style_inputs_from_view)
+    read = set(re.findall(r'g\("([^"]+)"\)', src))  # tout argument de g(), même mal orthographié
+    read |= {f"knowledge.{k}" for k in re.findall(r'"(quiz_[a-z_]+)"', src)}
+    assert len(read) >= 20, sorted(read)  # l'extraction elle-même ne doit pas se vider
+    missing = sorted(read - set(Questionnaire.load().fields))
+    assert missing == [], missing

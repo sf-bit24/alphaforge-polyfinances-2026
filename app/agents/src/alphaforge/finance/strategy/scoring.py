@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from alphaforge import starter
+from alphaforge import market
 from alphaforge.finance.backtest import data as bt_data
 from alphaforge.finance.backtest import metrics as bt_metrics
 from alphaforge.finance.contracts import PolicySpec
@@ -53,7 +53,7 @@ def compute_candidates(policy: PolicySpec, as_of, cfg: StrategyConfig | None = N
     cfg = cfg or load_strategy()
     iso = _iso(as_of)
     catalog = bt_data.load_assets()
-    uni = starter.universe()
+    uni = market.universe()
     out: list[Candidate] = []
     for t in single_stocks(policy):
         vals, status, details = stock_features(t, iso, cfg)

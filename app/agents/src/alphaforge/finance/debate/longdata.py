@@ -18,7 +18,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from alphaforge.finance.backtest.paths import DEFAULT_DATA_DIR, LONG_PARQUETS, long_data_available
+from alphaforge.finance.backtest.paths import DAILY_PARQUETS, DEFAULT_DATA_DIR, LONG_PARQUETS, long_data_available
 from alphaforge.store import Store
 
 logger = logging.getLogger("alphaforge.portfolio")
@@ -53,6 +53,19 @@ def ensure_long_data(store: Store, prefix: str = KEY_PREFIX, target: Path = TARG
         if digest != expected:
             raise LongDataError(f"sha256 inattendu pour {name} : {digest[:12]} au lieu de {expected[:12]}")
         (target / name).write_bytes(obj.body)
+    # Données quotidiennes (alphaforge.market) : facultatives, prises seulement si le manifeste les déclare toutes.
+    if all((manifest.get("files") or {}).get(n) for n in DAILY_PARQUETS):
+        for name in DAILY_PARQUETS:
+            obj = store.get(prefix + name)
+            digest = hashlib.sha256(obj.body).hexdigest() if obj is not None else None
+            if digest != manifest["files"][name]:
+                raise LongDataError(f"données quotidiennes absentes ou altérées : {prefix}{name}")
+            (target / name).write_bytes(obj.body)
+        if manifest.get("daily"):
+            version_path = target / "data_version.json"
+            version = json.loads(version_path.read_text()) if version_path.is_file() else {}
+            version["daily"] = manifest["daily"]
+            version_path.write_text(json.dumps(version, indent=2, default=str))
     os.environ["ALPHAFORGE_BT_DATA"] = str(target)
     logger.info("long data ready in %s (data_sha256=%s)", target, manifest.get("data_sha256"))
     return target

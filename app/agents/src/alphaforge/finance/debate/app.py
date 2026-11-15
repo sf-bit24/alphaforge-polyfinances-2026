@@ -33,6 +33,7 @@ async def invoke(payload, context=None):
     cs, ms = _stores()
     yield {"event": "start", "profile_id": payload["profile_id"]}
     profile = cs.load_profile(payload["profile_id"])
+    ms.note_client_inputs(cs.inputs)  # portefeuille existant : dans la version des données
     style_inputs = None
     if payload.get("strategy", True):
         from alphaforge.finance.policy.from_profile_view import style_inputs_from_view

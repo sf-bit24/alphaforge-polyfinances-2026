@@ -30,6 +30,9 @@ LONG_PARQUETS = (
     "fx_monthly.parquet",
     "lookthrough_us_mkt.parquet",
 )
+# Daily market data (alphaforge.market), also written by build_data. Optional: the engine does not need them, and
+# alphaforge.market falls back to the starter dataset when they are absent.
+DAILY_PARQUETS = ("daily_prices.parquet", "fx_daily.parquet", "corporate_actions.parquet")
 
 
 def data_dir() -> Path:
@@ -64,3 +67,10 @@ def long_data_available(modules: tuple[str, ...] = ("numpy", "pandas")) -> bool:
     if any(importlib.util.find_spec(module) is None for module in modules):
         return False
     return all((data_dir() / name).is_file() for name in LONG_PARQUETS)
+
+
+def daily_data_available(modules: tuple[str, ...] = ("pandas", "pyarrow")) -> bool:
+    """True when the daily market parquets are in ``data_dir()`` and ``modules`` are importable."""
+    if any(importlib.util.find_spec(module) is None for module in modules):
+        return False
+    return all((data_dir() / name).is_file() for name in DAILY_PARQUETS)

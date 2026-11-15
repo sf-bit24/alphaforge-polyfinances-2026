@@ -27,6 +27,7 @@ import urllib.request
 import zlib
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import override
 
 ALLOWED_HOSTS = frozenset(
     {
@@ -82,6 +83,14 @@ class HttpResponse:
         return self.body.decode("utf-8", errors="replace")
 
 
+@dataclass(frozen=True)
+class _Limits:
+    """Bornes d'une requête : délai en secondes, taille de la réponse en octets (y compris après décompression)."""
+
+    timeout: float
+    max_bytes: int
+
+
 def _respect_interval(host: str) -> None:
     interval = _MIN_INTERVAL.get(host)
     if not interval:
@@ -108,6 +117,7 @@ class _AllowlistRedirects(urllib.request.HTTPRedirectHandler):
         super().__init__()
         self.allowed = None if allowed is None else frozenset(allowed)
 
+    @override
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         _check_url(newurl, self.allowed)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
@@ -122,6 +132,7 @@ class _RobotsRedirects(urllib.request.HTTPRedirectHandler):
 
     max_redirections = 5
 
+    @override
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         parsed = urllib.parse.urlsplit(newurl)
         host = parsed.hostname or ""
@@ -141,7 +152,7 @@ def get_robots(url: str, *, timeout: float = 8.0, max_bytes: int = 500_000) -> H
     if parsed.scheme != "https" or parsed.path != "/robots.txt" or not parsed.hostname:
         raise FetchError("not a robots.txt URL", url=url)
     _respect_interval(parsed.hostname)
-    return _send(_ROBOTS_OPENER, url, USER_AGENT, timeout, max_bytes)
+    return _send(_ROBOTS_OPENER, url, USER_AGENT, _Limits(timeout, max_bytes))
 
 
 def _opener(allowed: Iterable[str] | None) -> urllib.request.OpenerDirector:
@@ -177,14 +188,15 @@ def http_get(
     host = _check_url(url, allowed_hosts)
     _respect_interval(host)
     opener = _opener(allowed_hosts)
+    limits = _Limits(timeout, max_bytes)
     try:
-        return _send(opener, url, user_agent_for(host), timeout, max_bytes)
+        return _send(opener, url, user_agent_for(host), limits)
     except FetchError as exc:
         fallback = FALLBACK_USER_AGENTS.get(host)
         refused = exc.status == 403 or str(exc).startswith("network error")
         if fallback is None or not refused:
             raise
-        return _send(opener, url, fallback, timeout, max_bytes)
+        return _send(opener, url, fallback, limits)
 
 
 def post_json(
@@ -199,12 +211,12 @@ def post_json(
     host = _check_url(url, allowed_hosts)
     _respect_interval(host)
     data = json.dumps(payload).encode("utf-8")
-    return _send(_opener(allowed_hosts), url, user_agent_for(host), timeout, max_bytes, data=data)
+    return _send(_opener(allowed_hosts), url, user_agent_for(host), _Limits(timeout, max_bytes), data=data)
 
 
 def _get_once(url: str, user_agent: str, timeout: float, max_bytes: int) -> HttpResponse:
     """Compatibilité : une requête GET avec la liste d'hôtes par défaut."""
-    return _send(_OPENER, url, user_agent, timeout, max_bytes)
+    return _send(_OPENER, url, user_agent, _Limits(timeout, max_bytes))
 
 
 _KEPT_HEADERS = ("Last-Modified", "ETag", "Date", "Content-Type", "Retry-After", "Location")
@@ -214,8 +226,7 @@ def _send(
     opener: urllib.request.OpenerDirector,
     url: str,
     user_agent: str,
-    timeout: float,
-    max_bytes: int,
+    limits: _Limits,
     *,
     data: bytes | None = None,
 ) -> HttpResponse:
@@ -226,12 +237,12 @@ def _send(
         url, data=data, headers=headers, method="POST" if data is not None else "GET"
     )
     try:
-        with opener.open(request, timeout=timeout) as response:
-            body = response.read(max_bytes + 1)
-            if len(body) > max_bytes:
+        with opener.open(request, timeout=limits.timeout) as response:
+            body = response.read(limits.max_bytes + 1)
+            if len(body) > limits.max_bytes:
                 raise FetchError("response too large", url=url)
             if response.headers.get("Content-Encoding") == "gzip":
-                body = _gunzip(body, max_bytes, url)
+                body = _gunzip(body, limits.max_bytes, url)
             kept = {name: response.headers[name] for name in _KEPT_HEADERS if response.headers.get(name)}
             final_url = response.geturl() if hasattr(response, "geturl") else url
             return HttpResponse(

@@ -1,0 +1,39 @@
+# Univers de la couche de données de marché (alphaforge.market), tenu par le volet finance.
+# Les 31 actifs du jeu de départ (mêmes colonnes que data/starter/assets_universe.csv), plus des actifs proposés.
+# Un actif « proposed: true » n'entre pas dans market.universe() tant que le volet finance ne l'a pas validé
+# (ALPHAFORGE_MARKET_INCLUDE_PROPOSED=1 l'ajoute, pour essai). build_data télécharge aussi ses prix quotidiens.
+version: 1
+assets:
+  - {asset_id: A01, ticker: "RY.TO", name: "Royal Bank of Canada", asset_class: equity, market: TSX, currency: CAD, sector: "Financials"}
+  - {asset_id: A02, ticker: "TD.TO", name: "Toronto-Dominion Bank", asset_class: equity, market: TSX, currency: CAD, sector: "Financials"}
+  - {asset_id: A03, ticker: "MFC.TO", name: "Manulife Financial", asset_class: equity, market: TSX, currency: CAD, sector: "Financials"}
+  - {asset_id: A04, ticker: "ENB.TO", name: "Enbridge", asset_class: equity, market: TSX, currency: CAD, sector: "Energy"}
+  - {asset_id: A05, ticker: "CNQ.TO", name: "Canadian Natural Resources", asset_class: equity, market: TSX, currency: CAD, sector: "Energy"}
+  - {asset_id: A06, ticker: "CNR.TO", name: "Canadian National Railway", asset_class: equity, market: TSX, currency: CAD, sector: "Industrials"}
+  - {asset_id: A07, ticker: "FTS.TO", name: "Fortis", asset_class: equity, market: TSX, currency: CAD, sector: "Utilities"}
+  - {asset_id: A08, ticker: "ATD.TO", name: "Alimentation Couche-Tard", asset_class: equity, market: TSX, currency: CAD, sector: "Consumer Staples"}
+  - {asset_id: A09, ticker: "SHOP.TO", name: "Shopify", asset_class: equity, market: TSX, currency: CAD, sector: "Information Technology"}
+  - {asset_id: A10, ticker: "CSU.TO", name: "Constellation Software", asset_class: equity, market: TSX, currency: CAD, sector: "Information Technology"}
+  - {asset_id: A11, ticker: "AAPL", name: "Apple", asset_class: equity, market: NASDAQ, currency: USD, sector: "Information Technology"}
+  - {asset_id: A12, ticker: "MSFT", name: "Microsoft", asset_class: equity, market: NASDAQ, currency: USD, sector: "Information Technology"}
+  - {asset_id: A13, ticker: "NVDA", name: "NVIDIA", asset_class: equity, market: NASDAQ, currency: USD, sector: "Information Technology"}
+  - {asset_id: A14, ticker: "GOOGL", name: "Alphabet (Class A)", asset_class: equity, market: NASDAQ, currency: USD, sector: "Communication Services"}
+  - {asset_id: A15, ticker: "AMZN", name: "Amazon", asset_class: equity, market: NASDAQ, currency: USD, sector: "Consumer Discretionary"}
+  - {asset_id: A16, ticker: "TSLA", name: "Tesla", asset_class: equity, market: NASDAQ, currency: USD, sector: "Consumer Discretionary"}
+  - {asset_id: A17, ticker: "JPM", name: "JPMorgan Chase", asset_class: equity, market: NYSE, currency: USD, sector: "Financials"}
+  - {asset_id: A18, ticker: "JNJ", name: "Johnson & Johnson", asset_class: equity, market: NYSE, currency: USD, sector: "Health Care"}
+  - {asset_id: A19, ticker: "PG", name: "Procter & Gamble", asset_class: equity, market: NYSE, currency: USD, sector: "Consumer Staples"}
+  - {asset_id: A20, ticker: "XOM", name: "Exxon Mobil", asset_class: equity, market: NYSE, currency: USD, sector: "Energy"}
+  - {asset_id: A21, ticker: "XIU.TO", name: "iShares S&P/TSX 60 Index ETF", asset_class: etf_equity, market: TSX, currency: CAD, sector: "Broad market (Canada)"}
+  - {asset_id: A22, ticker: "SPY", name: "SPDR S&P 500 ETF Trust", asset_class: etf_equity, market: NYSE Arca, currency: USD, sector: "Broad market (U.S.)"}
+  - {asset_id: A23, ticker: "QQQ", name: "Invesco QQQ Trust (Nasdaq-100)", asset_class: etf_equity, market: NASDAQ, currency: USD, sector: "Broad market (U.S. growth/tech-heavy)"}
+  - {asset_id: A24, ticker: "ESGV", name: "Vanguard ESG U.S. Stock ETF", asset_class: etf_equity, market: Cboe BZX, currency: USD, sector: "Broad market (U.S., ESG-screened)"}
+  - {asset_id: A25, ticker: "XBB.TO", name: "iShares Core Canadian Universe Bond Index ETF", asset_class: etf_bond, market: TSX, currency: CAD, sector: "Bonds (Canada aggregate)"}
+  - {asset_id: A26, ticker: "ZST.TO", name: "BMO Ultra Short-Term Bond ETF", asset_class: etf_bond, market: TSX, currency: CAD, sector: "Bonds (Canada ultra short-term)"}
+  - {asset_id: A27, ticker: "AGG", name: "iShares Core U.S. Aggregate Bond ETF", asset_class: etf_bond, market: NYSE Arca, currency: USD, sector: "Bonds (U.S. aggregate)"}
+  - {asset_id: A28, ticker: "TLT", name: "iShares 20+ Year Treasury Bond ETF", asset_class: etf_bond, market: NASDAQ, currency: USD, sector: "Bonds (U.S. long Treasury)"}
+  - {asset_id: A29, ticker: "GLD", name: "SPDR Gold Shares", asset_class: etf_commodity, market: NYSE Arca, currency: USD, sector: "Gold"}
+  - {asset_id: A30, ticker: "BTC-USD", name: "Bitcoin", asset_class: crypto, market: Crypto (24/7), currency: USD, sector: "Crypto asset"}
+  - {asset_id: A31, ticker: "ETH-USD", name: "Ether", asset_class: crypto, market: Crypto (24/7), currency: USD, sector: "Crypto asset"}
+  # Immobilier : aucun actif dans le jeu de départ. À confirmer par le volet finance (plan, lot A).
+  - {asset_id: P01, ticker: "XRE.TO", name: "iShares S&P/TSX Capped REIT Index ETF", asset_class: etf_equity, market: TSX, currency: CAD, sector: "Real Estate", proposed: true}

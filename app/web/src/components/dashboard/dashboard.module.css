@@ -344,11 +344,11 @@
   gap: 12px;
   align-items: flex-start;
 }
-/* Yan's head (components/yan): it stands on its own, without a disc. */
+/* Yan, the pixel robot (components/yan): it stands on its own, without a disc. */
 .avatar {
-  width: 34px;
-  height: 34px;
-  margin-top: -3px;
+  width: 32px;
+  height: 32px;
+  margin-top: -2px;
 }
 .body {
   min-width: 0;

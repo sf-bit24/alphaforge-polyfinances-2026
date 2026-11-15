@@ -155,6 +155,19 @@
   gap: 18px;
   align-items: center;
 }
+/* Yan hovers in the sky right of the title, as in the demo video; above it where the right has no room. */
+.landingYan {
+  position: absolute;
+  top: -6px;
+  left: calc(100% + 16px);
+}
+@media (max-width: 1080px) {
+  .landingYan {
+    top: -72px;
+    left: auto;
+    right: 0;
+  }
+}
 /* The landing text stands on the city: a soft white veil behind it keeps every line readable. */
 .landing::before {
   content: "";
@@ -275,11 +288,11 @@
   gap: 12px;
   align-items: flex-start;
 }
-/* Yan's head (components/yan): it stands on its own, without a disc. */
+/* Yan, the pixel robot (components/yan): it stands on its own, without a disc. */
 .avatar {
-  width: 34px;
-  height: 34px;
-  margin-top: -3px;
+  width: 32px;
+  height: 32px;
+  margin-top: -2px;
 }
 .say p {
   font-size: 15px;
@@ -876,6 +889,12 @@
   .skip {
     right: 16px;
     bottom: auto;
+  }
+  .landingYan {
+    position: static;
+    width: 48px;
+    height: 48px;
+    margin-bottom: 4px;
   }
   .landing h1 {
     font-size: 30px;

@@ -11,6 +11,7 @@ Format d'échange ``.csv.gz`` (export runtime, lu sans pyarrow) :
 
 Une valeur vide = rendement absent (NaN). Format long, une ligne par (mois, actif) observé.
 """
+
 from __future__ import annotations
 
 import csv
@@ -45,13 +46,51 @@ def _norm_frame(frame: pd.DataFrame) -> pd.DataFrame:
     return f.astype(float)
 
 
+def _read_csv_records(text: str) -> tuple[str, dict[str, list[tuple[str, str, float]]]]:
+    """Version des données (commentaire de tête) et enregistrements (date, actif, rendement) par devise."""
+    lines = text.splitlines()
+    version = ""
+    if lines and lines[0].startswith("#"):
+        first = lines.pop(0)
+        if first.startswith(_VERSION_PREFIX):
+            version = first[len(_VERSION_PREFIX) :].strip()
+    reader = csv.reader(lines)
+    header = next(reader, None)
+    if header != CSV_HEADER:
+        raise ValueError(f"en-tête inattendu {header}, attendu {CSV_HEADER}")
+    recs: dict[str, list[tuple[str, str, float]]] = {"CAD": [], "USD": []}
+    for row in reader:
+        if not row:
+            continue
+        d, a, rc, ru = row
+        for ccy, v in (("CAD", rc), ("USD", ru)):
+            if v.strip() != "":
+                recs[ccy].append((d, a, float(v)))
+    return version, recs
+
+
+def _wide(rs: list[tuple[str, str, float]]) -> pd.DataFrame:
+    """Format long (date, actif, rendement) -> matrice mois x actifs."""
+    if not rs:
+        return pd.DataFrame(dtype=float)
+    df = pd.DataFrame(rs, columns=["date", "asset_id", "r"])
+    df["date"] = pd.to_datetime(df["date"])
+    return df.pivot(index="date", columns="asset_id", values="r").sort_index()
+
+
 class PitReturns:
     """Matrice de rendements mensuels simples (lignes = fins de mois, colonnes = asset_id), NaN avant
     le début d'un actif. ``currency`` est la devise des rendements de ``frame``. ``alt`` (optionnel)
     contient les mêmes rendements dans l'autre devise (CAD <-> USD), conservé pour l'export."""
 
-    def __init__(self, frame: pd.DataFrame, data_version: str, currency: str = "CAD",
-                 alt: pd.DataFrame | None = None, horizon=None):
+    def __init__(
+        self,
+        frame: pd.DataFrame,
+        data_version: str,
+        currency: str = "CAD",
+        alt: pd.DataFrame | None = None,
+        horizon=None,
+    ):
         self.currency = currency.upper()
         if self.currency not in ("CAD", "USD"):
             raise ValueError("currency doit être 'CAD' ou 'USD'")
@@ -74,7 +113,12 @@ class PitReturns:
             raise LookaheadError(f"horizon {t.date()} au-delà de l'horizon de la vue {self._horizon.date()}")
         v = PitReturns.__new__(PitReturns)
         v.currency, v._frame, v._alt, v.data_version, v._horizon = (
-            self.currency, self._frame, self._alt, self.data_version, t)
+            self.currency,
+            self._frame,
+            self._alt,
+            self.data_version,
+            t,
+        )
         return v
 
     def _check(self, t: pd.Timestamp) -> None:
@@ -128,12 +172,12 @@ class PitReturns:
         avec les rendements <= ``t``. ``months`` = nombre de derniers mois gardés (None = tout).
         La base 1,0 est posée sur la fenêtre retenue : seuls les ratios (moyenne mobile, momentum)
         ont un sens. NaN tant qu'un actif n'a pas de rendement."""
-        R = self.upto(t)
+        rets = self.upto(t)
         if assets is not None:
-            R = R.reindex(columns=list(assets))
+            rets = rets.reindex(columns=list(assets))
         if months is not None:
-            R = R.iloc[-int(months):]
-        return (1.0 + R).cumprod(skipna=True).where(R.notna())
+            rets = rets.iloc[-int(months) :]
+        return (1.0 + rets).cumprod(skipna=True).where(rets.notna())
 
     # ------------------------------------------------------------------ constructeurs
     @classmethod
@@ -148,7 +192,7 @@ class PitReturns:
         explicit = assets is not None
         ids = list(assets) if explicit else list(load_assets().index)
 
-        def _load(ccy: str, must: bool) -> pd.DataFrame:
+        def _load(ccy: str, *, must: bool) -> pd.DataFrame:
             cols = {}
             for a in ids:
                 try:
@@ -158,41 +202,15 @@ class PitReturns:
                         raise
             return pd.DataFrame(cols).sort_index()
 
-        main = _load(cur, explicit)
-        alt = _load(other, False).reindex(columns=main.columns)
+        main = _load(cur, must=explicit)
+        alt = _load(other, must=False).reindex(columns=main.columns)
         return cls(main, data_version()["data_sha256"], cur, alt=alt)
 
     @classmethod
     def from_csv_gz(cls, path_or_bytes: str | Path | bytes, currency: str = "CAD") -> PitReturns:
         """Lit l'export ``.csv.gz`` (voir le docstring du module). Std-lib csv + pandas, sans pyarrow."""
         raw = path_or_bytes if isinstance(path_or_bytes, bytes | bytearray) else Path(path_or_bytes).read_bytes()
-        text = gzip.decompress(bytes(raw)).decode("utf-8")
-        lines = text.splitlines()
-        version = ""
-        if lines and lines[0].startswith("#"):
-            first = lines.pop(0)
-            if first.startswith(_VERSION_PREFIX):
-                version = first[len(_VERSION_PREFIX):].strip()
-        reader = csv.reader(lines)
-        header = next(reader, None)
-        if header != CSV_HEADER:
-            raise ValueError(f"en-tête inattendu {header}, attendu {CSV_HEADER}")
-        recs = {"CAD": [], "USD": []}
-        for row in reader:
-            if not row:
-                continue
-            d, a, rc, ru = row
-            for ccy, v in (("CAD", rc), ("USD", ru)):
-                if v.strip() != "":
-                    recs[ccy].append((d, a, float(v)))
-
-        def _wide(rs: list) -> pd.DataFrame:
-            if not rs:
-                return pd.DataFrame(dtype=float)
-            df = pd.DataFrame(rs, columns=["date", "asset_id", "r"])
-            df["date"] = pd.to_datetime(df["date"])
-            return df.pivot(index="date", columns="asset_id", values="r").sort_index()
-
+        version, recs = _read_csv_records(gzip.decompress(bytes(raw)).decode("utf-8"))
         cur = currency.upper()
         other = "USD" if cur == "CAD" else "CAD"
         main, alt = _wide(recs[cur]), _wide(recs[other])
@@ -239,8 +257,10 @@ class PitReturns:
 
     def __repr__(self) -> str:
         h = self._horizon.date() if self._horizon is not None else None
-        return (f"PitReturns({self.currency}, {len(self._frame)} mois x {len(self._frame.columns)} actifs, "
-                f"horizon={h}, data_version={self.data_version[:12]})")
+        return (
+            f"PitReturns({self.currency}, {len(self._frame)} mois x {len(self._frame.columns)} actifs, "
+            f"horizon={h}, data_version={self.data_version[:12]})"
+        )
 
 
 __all__ = ["CSV_HEADER", "LookaheadError", "PitReturns", "month_end"]

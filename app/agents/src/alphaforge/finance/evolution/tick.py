@@ -12,6 +12,7 @@ Ordre fixe, documenté dans la fiche Brain ``references/calibration/evolution-po
 
 Aucun LLM ici. SIMULATION SEULEMENT : chaque mouvement est un « événement de rééquilibrage illustratif ».
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -66,6 +67,7 @@ def _level(dec: Decision) -> str:
 @dataclass
 class BuildOutcome:
     """Ce que le moteur F1 → F4 rend pour fixer (ou refixer) la cible stratégique."""
+
     target: dict[str, float]
     policy: PolicySpec
     level: str
@@ -78,8 +80,11 @@ def default_build(profile: InvestorProfile, as_of: date) -> BuildOutcome:
 
     from ..debate.pipeline import build_portfolio
 
-    kw: dict[str, Any] = {"mode": "rules", "rephrase_explanation": False,
-                          "decision_id": f"dec-{profile.profile_id[:16]}-{as_of:%Y%m}"}   # déterministe (digest)
+    kw: dict[str, Any] = {
+        "mode": "rules",
+        "rephrase_explanation": False,
+        "decision_id": f"dec-{profile.profile_id[:16]}-{as_of:%Y%m}",
+    }  # déterministe (digest)
     # étape 0 (style et sélection, PR #43) : comportement par défaut du produit, gardé tel quel ; le rejeu reste
     # reproductible (la stratégie est déterministe). EVOLUTION_STRATEGY=0 la désactive pour comparer.
     import os
@@ -97,15 +102,16 @@ def default_build(profile: InvestorProfile, as_of: date) -> BuildOutcome:
 @dataclass
 class Trajectory:
     """État mutable d'une trajectoire simulée (un client, une fenêtre)."""
+
     client_id: str
-    profile: InvestorProfile               # profil ANCRÉ (profile_at) : les horizons raccourcissent avec le temps
+    profile: InvestorProfile  # profil ANCRÉ (profile_at) : les horizons raccourcissent avec le temps
     origin: date
     cfg: EvolutionConfig
     pit: PitReturns
     weights: dict[str, float]
     value_cad: float
-    base_target: dict[str, float]          # cible stratégique de F1 → F4 (avant overlays)
-    target: dict[str, float]               # cible effective (après overlays bornés)
+    base_target: dict[str, float]  # cible stratégique de F1 → F4 (avant overlays)
+    target: dict[str, float]  # cible effective (après overlays bornés)
     policy: PolicySpec
     level: str
     perf: PerfTracker
@@ -124,7 +130,7 @@ class Trajectory:
     life_event: dict | None = None
     managed_account: bool = False
     reprofile_pending: bool = False
-    glide_pending: bool = False            # changement de cible étalé : la suite du glissement reste plafonnée
+    glide_pending: bool = False  # changement de cible étalé : la suite du glissement reste plafonnée
     decisions: list[Decision] = field(default_factory=list)
     build_fn: Callable[[InvestorProfile, date], BuildOutcome] = default_build
     overlay_fn: Callable[..., tuple[dict, list[OverlayState], list[Fact]]] | None = None
@@ -137,7 +143,7 @@ class TickOutput:
     version: PortfolioVersion
     facts: list[Fact]
     triggers: list[TriggerFired]
-    proxied: dict[str, str]                # actif -> proxy utilisé ce mois (HYPOTHESE)
+    proxied: dict[str, str]  # actif -> proxy utilisé ce mois (HYPOTHESE)
 
 
 def cushioned(policy: PolicySpec, target: dict[str, float], as_of: date, cushion: float) -> dict[str, float]:
@@ -156,7 +162,7 @@ def cushioned(policy: PolicySpec, target: dict[str, float], as_of: date, cushion
 
     try:
         comp = compile_policy(policy, as_of)
-    except (KeyError, ValueError):   # actif hors catalogue (tests synthétiques) : pas de coussin
+    except (KeyError, ValueError):  # actif hors catalogue (tests synthétiques) : pas de coussin
         return dict(target)
     t0 = np.array([float(target.get(a, 0.0)) for a in comp.assets])
     x = cp.Variable(len(comp.assets))
@@ -172,7 +178,7 @@ def cushioned(policy: PolicySpec, target: dict[str, float], as_of: date, cushion
     prob = cp.Problem(cp.Minimize(cp.norm1(x - t0)), cons)
     try:
         prob.solve(solver="HIGHS") if "HIGHS" in cp.installed_solvers() else prob.solve()
-    except Exception:  # noqa: BLE001
+    except Exception:  # solveur en échec : pas de coussin
         return dict(target)
     if x.value is None:
         return dict(target)
@@ -181,25 +187,53 @@ def cushioned(policy: PolicySpec, target: dict[str, float], as_of: date, cushion
     return out if rep is not None and rep.approved else dict(target)
 
 
-def start(client_id: str, profile: InvestorProfile, origin: date, value_cad: float, pit: PitReturns,
-          cfg: EvolutionConfig, *, initial_weights: dict[str, float] | None = None,
-          build_fn: Callable[[InvestorProfile, date], BuildOutcome] = default_build,
-          overlay_fn=None, history: HistoryStore | None = None, asset_class: dict[str, str] | None = None,
-          cash_assets: tuple[str, ...] = ("ZST.TO",)) -> Trajectory:
+def start(  # noqa: PLR0913 - signature publique : replay.py et les tests passent les options par mot-clé
+    client_id: str,
+    profile: InvestorProfile,
+    origin: date,
+    value_cad: float,
+    pit: PitReturns,
+    cfg: EvolutionConfig,
+    *,
+    initial_weights: dict[str, float] | None = None,
+    build_fn: Callable[[InvestorProfile, date], BuildOutcome] = default_build,
+    overlay_fn=None,
+    history: HistoryStore | None = None,
+    asset_class: dict[str, str] | None = None,
+    cash_assets: tuple[str, ...] = ("ZST.TO",),
+) -> Trajectory:
     """Construit la cible stratégique à l'origine (F1 → F4) et ouvre la trajectoire."""
     origin = month_end(origin).date()
     anchored = profile_at(profile, origin)
     out = build_fn(anchored, origin)
-    out = BuildOutcome(target=cushioned(out.policy, _clean(out.target), origin, cfg.bands.cap_cushion),
-                       policy=out.policy, level=out.level, decision=out.decision)
+    out = BuildOutcome(
+        target=cushioned(out.policy, _clean(out.target), origin, cfg.bands.cap_cushion),
+        policy=out.policy,
+        level=out.level,
+        decision=out.decision,
+    )
     w0 = _norm(initial_weights) if initial_weights else dict(out.target)
     return Trajectory(
-        client_id=client_id, profile=anchored, origin=origin, cfg=cfg, pit=pit, weights=w0, value_cad=float(value_cad),
-        base_target=dict(out.target), target=dict(out.target), policy=out.policy, level=out.level,
-        perf=PerfTracker(float(value_cad), cash_assets=cash_assets), history=history,
+        client_id=client_id,
+        profile=anchored,
+        origin=origin,
+        cfg=cfg,
+        pit=pit,
+        weights=w0,
+        value_cad=float(value_cad),
+        base_target=dict(out.target),
+        target=dict(out.target),
+        policy=out.policy,
+        level=out.level,
+        perf=PerfTracker(float(value_cad), cash_assets=cash_assets),
+        history=history,
         decision_id=out.decision.decision_id if out.decision else None,
-        decisions=[out.decision] if out.decision else [], build_fn=build_fn, overlay_fn=overlay_fn,
-        asset_class=dict(asset_class or {}), kyc_confirmed=origin, last_review=origin,
+        decisions=[out.decision] if out.decision else [],
+        build_fn=build_fn,
+        overlay_fn=overlay_fn,
+        asset_class=dict(asset_class or {}),
+        kyc_confirmed=origin,
+        last_review=origin,
     )
 
 
@@ -232,7 +266,7 @@ def _window(policy: PolicySpec, as_of: date):
     from ..portfolio.compile import compile_policy
     from ..portfolio.market import returns_window
 
-    key = (_hash(policy.model_dump(mode="json")), as_of)   # contenu, pas id() : une adresse peut être réutilisée
+    key = (_hash(policy.model_dump(mode="json")), as_of)  # contenu, pas id() : une adresse peut être réutilisée
     if key not in _WINDOWS:
         if len(_WINDOWS) > 64:
             _WINDOWS.clear()
@@ -245,7 +279,7 @@ def _judge(weights: dict[str, float], policy: PolicySpec, as_of: date):
 
     try:
         return check(weights, policy, as_of, window=_window(policy, as_of))
-    except Exception:  # noqa: BLE001 - un historique insuffisant au début d'une fenêtre ne doit pas arrêter le rejeu
+    except Exception:  # un historique insuffisant au début d'une fenêtre ne doit pas arrêter le rejeu
         return None
 
 
@@ -264,10 +298,11 @@ def _limits_tightened(old: PolicySpec, new: PolicySpec) -> list[str]:
     out = []
     for lim in new.limits:
         o = prev.get(lim.rule_id)
-        if o is None:
-            out.append(lim.rule_id)
-        elif (lim.max is not None and (o.max is None or lim.max < o.max - 1e-9)) or (
-                lim.min is not None and (o.min is None or lim.min > o.min + 1e-9)):
+        if (
+            o is None
+            or (lim.max is not None and (o.max is None or lim.max < o.max - 1e-9))
+            or (lim.min is not None and (o.min is None or lim.min > o.min + 1e-9))
+        ):
             out.append(lim.rule_id)
     return sorted(out)
 
@@ -285,227 +320,408 @@ def _step_to(w_from: dict[str, float], w_to: dict[str, float], max_twoway: float
 def tick(traj: Trajectory, month, flow_cad: float = 0.0, *, policy_date: date | None = None) -> TickOutput:
     """Un mois. ``policy_date`` fige la date de la politique (F1, Judge, déclencheurs d'horizon) : utilisé pour
     les rejeux de stress, où l'on applique les rendements d'un mois ancien au portefeuille d'aujourd'hui."""
-    cfg = traj.cfg
     m = month_end(month)
-    d = m.date()
-    pd_ = policy_date or d
-    pit_t = traj.pit.with_horizon(m)                       # point-in-time : toute lecture après t lève LookaheadError
-    facts: list[Fact] = []
-    src_pit = Source(dataset=f"pit:monthly_returns@{traj.pit.data_version}", processing="rendements mensuels CAD")
+    mt = _MonthTick(traj, m, policy_date or m.date(), flow_cad)
+    mt.mark_value()
+    mt.apply_month_flow()
+    mt.recompile_policy()
+    mt.apply_overlays()
+    mt.evaluate_triggers()
+    mt.choose_action()
+    mt.execute_trades()
+    return mt.record_version()
 
-    def fact(key: str, label: str, value, unit: str, status: str = "FAIT", source: Source | None = None) -> str:
-        fid = f"ev.{d:%Y%m}.{key}"
-        facts.append(Fact(fact_id=fid, label_fr=label, value=value if not isinstance(value, float) else round(value, 6),
-                          unit=unit, as_of=d, status=status, sources=[source or src_pit],
-                          trace_id=f"evolution:{traj.client_id[:8]}:{d:%Y%m}"))
+
+class _MonthTick:
+    """Un mois en cours de calcul : le contexte (trajectoire, dates, vue point-in-time), les faits datés du mois et
+    le résultat de chaque étape, posé dans l'ordre fixe du docstring du module. Chaque méthode publique est une
+    étape ; ``tick`` les enchaîne."""
+
+    def __init__(self, traj: Trajectory, m: pd.Timestamp, policy_date: date, flow_cad: float) -> None:
+        self.traj, self.cfg, self.m, self.d, self.pd_ = traj, traj.cfg, m, m.date(), policy_date
+        self.pit_t = traj.pit.with_horizon(m)  # point-in-time : toute lecture après t lève LookaheadError
+        self.flow_cad = flow_cad
+        self.facts: list[Fact] = []
+        self.src_pit = Source(
+            dataset=f"pit:monthly_returns@{traj.pit.data_version}", processing="rendements mensuels CAD"
+        )
+        self.states: list[OverlayState] = []
+        self.alpha = 1.0
+        self.reason: str | None = None
+        self.trades: list[Trade] = []
+        self.rebuilt_for_risk = False
+
+    def fact(  # noqa: PLR0913 - un paramètre par champ du Fact (contrat decision.py), statut et source par mot-clé
+        self,
+        key: str,
+        label: str,
+        value,
+        unit: str,
+        *,
+        status: str = "FAIT",
+        source: Source | None = None,
+    ) -> str:
+        fid = f"ev.{self.d:%Y%m}.{key}"
+        self.facts.append(
+            Fact(
+                fact_id=fid,
+                label_fr=label,
+                value=value if not isinstance(value, float) else round(value, 6),
+                unit=unit,
+                as_of=self.d,
+                status=status,
+                sources=[source or self.src_pit],
+                trace_id=f"evolution:{self.traj.client_id[:8]}:{self.d:%Y%m}",
+            )
+        )
         return fid
 
-    # 1. mise à la valeur de marché
-    r, proxied = _month_returns(traj, pit_t, m)
-    w_drift, gross, _missing = mark_to_market(traj.weights, r)
-    value = traj.value_cad * (1.0 + gross)
-    fid_r = fact("r_portefeuille", "Rendement du portefeuille sur le mois", gross, "%")
-    for a, p in proxied.items():
-        fact(f"proxy.{a}", f"Historique de {a} remplacé par {p}", p, "texte", status="HYPOTHESE")
+    # ------------------------------------------------------------------ 1 à 5 : état du mois avant décision
+    def mark_value(self) -> None:
+        """1. Mise à la valeur de marché avec les rendements du mois (proxy long déclaré si pas d'historique)."""
+        r, self.proxied = _month_returns(self.traj, self.pit_t, self.m)
+        self.w_drift, self.gross, _missing = mark_to_market(self.traj.weights, r)
+        self.value = self.traj.value_cad * (1.0 + self.gross)
+        self.fid_r = self.fact("r_portefeuille", "Rendement du portefeuille sur le mois", self.gross, "%")
+        for a, p in self.proxied.items():
+            self.fact(f"proxy.{a}", f"Historique de {a} remplacé par {p}", p, "texte", status="HYPOTHESE")
 
-    # 2. flux du mois
-    if flow_cad:
-        v_before = value
-        w_drift, value = apply_flow(w_drift, value, flow_cad, traj.target, cfg.flows.contribution_first)
-        flow_cad = value - v_before          # flux effectif (un retrait est plafonné à la valeur)
+    def apply_month_flow(self) -> None:
+        """2. Flux du mois ; ``flow_cad`` devient le flux effectif (un retrait est plafonné à la valeur)."""
+        if not self.flow_cad:
+            return
+        v_before = self.value
+        self.w_drift, self.value = apply_flow(
+            self.w_drift, self.value, self.flow_cad, self.traj.target, self.cfg.flows.contribution_first
+        )
+        self.flow_cad = self.value - v_before
 
-    # 3. glidepath : re-compilation de F1 à la date
-    from ..policy import compile_profile
+    def recompile_policy(self) -> None:
+        """3. Glidepath : re-compilation de F1 à la date sur le profil ancré."""
+        from ..policy import compile_profile
 
-    comp = compile_profile(traj.profile, pd_)
-    level_prev, level_now = traj.level, comp.level
-    # F1 resserre les limites avec le temps même à niveau égal (règle des dollars, horizon) : un resserrement
-    # impose de recalculer la cible ; un simple relâchement est adopté sans mouvement.
-    tightened = _limits_tightened(traj.policy, comp.policy) if comp.policy is not None else []
-    target_changed = comp.policy is not None and (level_now != level_prev or bool(tightened))
-    if comp.policy is not None and not target_changed:
-        traj.policy = comp.policy
-    policy_now = comp.policy or traj.policy      # la politique À LA DATE : Judge et conformité s'y mesurent
+        traj = self.traj
+        comp = compile_profile(traj.profile, self.pd_)
+        self.comp, self.level_prev, self.level_now = comp, traj.level, comp.level
+        # F1 resserre les limites avec le temps même à niveau égal (règle des dollars, horizon) : un resserrement
+        # impose de recalculer la cible ; un simple relâchement est adopté sans mouvement.
+        self.tightened = _limits_tightened(traj.policy, comp.policy) if comp.policy is not None else []
+        self.target_changed = comp.policy is not None and (self.level_now != self.level_prev or bool(self.tightened))
+        if comp.policy is not None and not self.target_changed:
+            traj.policy = comp.policy
+        self.policy_now = comp.policy or traj.policy  # la politique À LA DATE : Judge et conformité s'y mesurent
 
-    # 4. overlays bornés
-    states: list[OverlayState] = []
-    target = dict(traj.base_target)
-    alpha = 1.0
-    if traj.overlay_fn is not None and traj.overlay_active is not None:
-        target, states, ofacts, alpha = _overlays_judged(traj, pit_t, m, w_drift, value, pd_)
-        facts.extend(ofacts)
-    changed_signals = [s.name for s in states if s.active and traj.last_signals.get(s.name) != s.signal]
-    for s in states:
-        traj.last_signals[s.name] = s.signal
+    def apply_overlays(self) -> None:
+        """4. Overlays bornés sur la cible stratégique ; note les signaux qui ont changé."""
+        traj = self.traj
+        self.target = dict(traj.base_target)
+        if traj.overlay_fn is not None and traj.overlay_active is not None:
+            self._overlay_target()
+        self.changed_signals = [s.name for s in self.states if s.active and traj.last_signals.get(s.name) != s.signal]
+        for s in self.states:
+            traj.last_signals[s.name] = s.signal
 
-    # 5. Judge sur les poids dérivés, puis déclencheurs
-    judge_before = _judge(w_drift, policy_now, pd_)
-    # baisse estimée à la fin de ce mois, avant opération (indice TWR ; la référence « cost » est gérée
-    # par les déclencheurs à partir de value_cad et invested_cad)
-    perf_now = traj.perf.snapshot().model_copy(update={
-        "value_cad": value, "invested_cad": traj.perf.initial_value_cad + sum(traj.perf.flows) + flow_cad,
-        "current_drawdown": _dd_twr(traj.perf, gross)})
-    trig = evaluate(TriggerState(
-        as_of=pd_, origin=traj.origin, profile=traj.profile, level_prev=level_prev, level_now=level_now,
-        compile_now=comp, judge_drift=judge_before, perf=perf_now, flow_cad=flow_cad, value_cad=value,
-        kyc_confirmed=traj.kyc_confirmed, last_review=traj.last_review, life_event=traj.life_event,
-        managed_account=traj.managed_account, overlay_signal_changes=changed_signals,
-    ), cfg)
-    blocking = [t for t in trig if t.blocking]
+    def _overlay_target(self) -> None:
+        self.target, self.states, ofacts, self.alpha = _overlays_judged(
+            self.traj, self.pit_t, self.m, self.w_drift, self.value, self.pd_
+        )
+        self.facts.extend(ofacts)
 
-    # 6. échelle d'actions
-    br = breaches(w_drift, target, cfg.bands)
-    w_to, reason = w_drift, None
-    if blocking:
-        # aucune décision stratégique en attendant le profil ; une limite bloquante franchie par la dérive est
-        # tout de même rétablie (conformité minimale) : attendre ne doit jamais laisser une violation en place
-        action = "REPROFILE_REQUIRED"
-        traj.reprofile_pending = True
-        if judge_before is not None and not judge_before.approved:
-            reason, w_to = "compliance", w_drift
-    elif target_changed:
-        action = "REOPTIMIZE"
-        out = traj.build_fn(traj.profile, pd_)
+    def evaluate_triggers(self) -> None:
+        """5. Judge sur les poids dérivés, puis déclencheurs."""
+        traj = self.traj
+        self.judge_before = _judge(self.w_drift, self.policy_now, self.pd_)
+        # baisse estimée à la fin de ce mois, avant opération (indice TWR ; la référence « cost » est gérée
+        # par les déclencheurs à partir de value_cad et invested_cad)
+        perf_now = traj.perf.snapshot().model_copy(
+            update={
+                "value_cad": self.value,
+                "invested_cad": traj.perf.initial_value_cad + sum(traj.perf.flows) + self.flow_cad,
+                "current_drawdown": _dd_twr(traj.perf, self.gross),
+            }
+        )
+        self.trig = evaluate(
+            TriggerState(
+                as_of=self.pd_,
+                origin=traj.origin,
+                profile=traj.profile,
+                level_prev=self.level_prev,
+                level_now=self.level_now,
+                compile_now=self.comp,
+                judge_drift=self.judge_before,
+                perf=perf_now,
+                flow_cad=self.flow_cad,
+                value_cad=self.value,
+                kyc_confirmed=traj.kyc_confirmed,
+                last_review=traj.last_review,
+                life_event=traj.life_event,
+                managed_account=traj.managed_account,
+                overlay_signal_changes=self.changed_signals,
+            ),
+            self.cfg,
+        )
+
+    # ------------------------------------------------------------------ 6 : échelle d'actions et mouvements
+    def choose_action(self) -> None:
+        """6. Échelle d'actions : REPROFILE_REQUIRED > REOPTIMIZE > OVERLAY_SHIFT > REBALANCE_TO_BANDS > HOLD."""
+        traj, max_turnover = self.traj, self.cfg.trading.max_turnover_tick
+        self.br = breaches(self.w_drift, self.target, self.cfg.bands)
+        self.w_to = self.w_drift
+        drift_refused = self.judge_before is not None and not self.judge_before.approved
+        if any(t.blocking for t in self.trig):
+            # aucune décision stratégique en attendant le profil ; une limite bloquante franchie par la dérive est
+            # tout de même rétablie (conformité minimale) : attendre ne doit jamais laisser une violation en place
+            self.action = "REPROFILE_REQUIRED"
+            traj.reprofile_pending = True
+            if drift_refused:
+                self.reason = "compliance"
+        elif self.target_changed:
+            self._reoptimize()
+        elif traj.glide_pending:
+            # suite d'un changement de cible à la hausse : même plafond de rotation chaque mois jusqu'à la cible
+            self.action, self.reason = "REOPTIMIZE", "glidepath"
+            self.w_to = _step_to(self.w_drift, self.target, max_turnover)
+            traj.glide_pending = turnover(self.w_to, self.target)[1] > 1e-6
+        elif self.changed_signals and drift_metric(self.w_drift, self.target) > EPS:
+            self.action, self.reason = "OVERLAY_SHIFT", "overlay"
+            self.w_to = _step_to(self.w_drift, self.target, max_turnover)
+        elif self.br:
+            self.action, self.reason = "REBALANCE_TO_BANDS", "band"
+            self.w_to = rebalance_to_bands(self.w_drift, self.target, self.cfg.bands)
+        elif drift_refused:
+            # la dérive seule fait franchir une limite bloquante (ex. une ligne au plafond qui monte) : opération de
+            # conformité minimale, sans rééquilibrage complet
+            self.action, self.reason = "REBALANCE_TO_BANDS", "compliance"
+        else:
+            self.action = "HOLD"
+
+    def _reoptimize(self) -> None:
+        """Niveau changé ou limites resserrées : nouvelle cible F1 → F4 à la date, overlays compris."""
+        traj = self.traj
+        self.action = "REOPTIMIZE"
+        base, out = self._rebuild_target()
+        traj.base_target, traj.policy, traj.level = base, out.policy, out.level
+        self.target = dict(base)
+        if traj.overlay_fn is not None:
+            self._overlay_target()
+        # niveau en baisse ou limites resserrées : on y va d'un coup ; une hausse se fait par glissement
+        stricter = _rank(self.level_now) < _rank(self.level_prev) or bool(self.tightened)
+        self.w_to = (
+            dict(self.target) if stricter else _step_to(self.w_drift, self.target, self.cfg.trading.max_turnover_tick)
+        )
+        self.reason = "glidepath"
+        traj.glide_pending = turnover(self.w_to, self.target)[1] > 1e-6
+
+    def _rebuild_target(self) -> tuple[dict[str, float], BuildOutcome]:
+        """F1 → F4 à la date de la politique (décision gardée avec les déclencheurs du mois) ; cible coussinée."""
+        traj = self.traj
+        out = traj.build_fn(traj.profile, self.pd_)
         if out.decision is not None:
-            dec = out.decision.model_copy(update={"reprofile_triggers_fired": [t.code for t in trig]})
+            dec = out.decision.model_copy(update={"reprofile_triggers_fired": [t.code for t in self.trig]})
             traj.decisions.append(dec)
             traj.decision_id = dec.decision_id
-        base = cushioned(out.policy, _clean(out.target), pd_, cfg.bands.cap_cushion)
-        traj.base_target, traj.policy, traj.level = base, out.policy, out.level
-        target = dict(base)
-        if traj.overlay_fn is not None:
-            target, states, ofacts, alpha = _overlays_judged(traj, pit_t, m, w_drift, value, pd_)
-            facts.extend(ofacts)
-        # niveau en baisse ou limites resserrées : on y va d'un coup ; une hausse se fait par glissement
-        stricter = _rank(level_now) < _rank(level_prev) or bool(tightened)
-        w_to = dict(target) if stricter else _step_to(w_drift, target, cfg.trading.max_turnover_tick)
-        reason = "glidepath"
-        traj.glide_pending = turnover(w_to, target)[1] > 1e-6
-    elif traj.glide_pending:
-        # suite d'un changement de cible à la hausse : même plafond de rotation chaque mois jusqu'à la cible
-        action, reason = "REOPTIMIZE", "glidepath"
-        w_to = _step_to(w_drift, target, cfg.trading.max_turnover_tick)
-        traj.glide_pending = turnover(w_to, target)[1] > 1e-6
-    elif changed_signals and drift_metric(w_drift, target) > EPS:
-        action = "OVERLAY_SHIFT"
-        w_to, reason = _step_to(w_drift, target, cfg.trading.max_turnover_tick), "overlay"
-    elif br:
-        action = "REBALANCE_TO_BANDS"
-        w_to, reason = rebalance_to_bands(w_drift, target, cfg.bands), "band"
-    elif judge_before is not None and not judge_before.approved:
-        # la dérive seule fait franchir une limite bloquante (ex. une ligne au plafond qui monte) : opération de
-        # conformité minimale, sans rééquilibrage complet
-        action, reason = "REBALANCE_TO_BANDS", "compliance"
-        w_to = w_drift
-    else:
-        action = "HOLD"
+        return cushioned(out.policy, _clean(out.target), self.pd_, self.cfg.bands.cap_cushion), out
 
-    trades: list[Trade] = []
-    w_eff = dict(w_drift)
-    rebuilt_for_risk = False
-    if reason is not None:
-        if reason != "compliance":
-            trades, w_eff = plan_trades(w_drift, w_to, value, reason, cfg.trading.min_trade_cad)
-        # conformité : projection minimale sur les limites linéaires de la politique, depuis les poids obtenus.
-        # Ces opérations passent même sous le montant minimal : une limite bloquante n'est pas négociable. Contrôle
-        # strict (1e-6) en plus du Judge (tolérance 1e-4) : un reliquat d'arrondi ne doit pas dépasser une limite.
-        rep_mid = _judge(w_eff, policy_now, pd_)
-        if (rep_mid is not None and not rep_mid.approved) or _strict_breaches(w_eff, traj, policy_now):
-            w_fix = _project(policy_now, w_eff, pd_, allowed_target=target)
-            if w_fix is not None:
-                extra, w_eff = plan_trades(dict(w_eff), w_fix, value, "liquidation" if reason == "compliance"
-                                           else reason, 0.0)
-                trades = _merge_trades(trades, extra, w_drift, w_eff, value)
-        # une limite de RISQUE (non linéaire) encore violée : retour à la cible...
-        rep_fix = _judge(w_eff, policy_now, pd_)
-        if rep_fix is not None and not rep_fix.approved:
-            extra, w_eff = plan_trades(dict(w_eff), dict(target), value, "band", 0.0)
-            trades = _merge_trades(trades, extra, w_drift, w_eff, value)
-            # ... et si la cible elle-même n'est plus approuvée à cette date (mesure de risque sur un historique
-            # glissant), le moteur la recalcule : F1 → F4 à la date, puis mouvement vers la nouvelle cible
-            rep_t = _judge(w_eff, policy_now, pd_)
-            if rep_t is not None and not rep_t.approved and action != "REOPTIMIZE":
-                out = traj.build_fn(traj.profile, pd_)
-                if out.decision is not None:
-                    dec = out.decision.model_copy(update={"reprofile_triggers_fired": [t.code for t in trig]})
-                    traj.decisions.append(dec)
-                    traj.decision_id = dec.decision_id
-                base = cushioned(out.policy, _clean(out.target), pd_, cfg.bands.cap_cushion)
-                traj.base_target, traj.policy, policy_now = base, out.policy, out.policy
-                target = dict(base)
-                extra, w_eff = plan_trades(dict(w_eff), dict(target), value, "reoptimize", 0.0)
-                trades = _merge_trades(trades, extra, w_drift, w_eff, value)
-                if action != "REPROFILE_REQUIRED":
-                    action = "REOPTIMIZE"
-                rebuilt_for_risk = True
-        if reason == "compliance":
-            reason = "liquidation"
-    ow, tw = turnover(w_drift, w_eff)
-    cost = cost_cad(ow, value, cfg.trading.cost_bps)
-    value_after = value - cost
-    judge_after = _judge(w_eff, policy_now, pd_) if trades else judge_before
+    def execute_trades(self) -> None:
+        """Mouvements vers ``w_to``, puis rétablissement des limites ; coût et Judge après l'opération."""
+        self.w_eff = dict(self.w_drift)
+        if self.reason is not None:
+            if self.reason != "compliance":
+                self.trades, self.w_eff = plan_trades(
+                    self.w_drift, self.w_to, self.value, self.reason, self.cfg.trading.min_trade_cad
+                )
+            self._restore_linear_limits()
+            self._restore_risk_limits()
+            if self.reason == "compliance":
+                self.reason = "liquidation"
+        self.ow, self.tw = turnover(self.w_drift, self.w_eff)
+        self.cost = cost_cad(self.ow, self.value, self.cfg.trading.cost_bps)
+        self.value_after = self.value - self.cost
+        self.judge_after = _judge(self.w_eff, self.policy_now, self.pd_) if self.trades else self.judge_before
 
-    # 7. performance, version, faits
-    r_net = (value_after - flow_cad) / traj.value_cad - 1.0 if traj.value_cad > 0 else 0.0
-    cash = traj.perf.cash_assets[0] if traj.perf.cash_assets else None
-    traj.perf.update(d, r_net, value_after, flow_cad, ow, cost, w_eff,
-                     r_cash=pit_t.month(m).get(cash) if cash and cash in pit_t.assets else None)
-    snap = traj.perf.snapshot()
-    fact("valeur", "Valeur du portefeuille en fin de mois, après coûts", value_after, "CAD")
-    if rebuilt_for_risk:
-        fact("cible_recalculee", "Cible recalculée : l'ancienne n'était plus approuvée par le Judge à cette date",
-             "recalculée", "texte",
-             source=Source(dataset="portfolio/judge.py", processing="check(cible, politique, t)"))
-    if tightened:
-        fact("limites_resserrees", "Limites resserrées par F1 à cette date", ", ".join(tightened), "texte",
-             source=Source(dataset="policy/risk_levels.yaml", processing="compile_profile(profil ancré, t)"))
-    fid_dd = fact("baisse", "Baisse depuis le plus haut (indice TWR)", snap.current_drawdown, "%")
-    fid_drift = fact("derive", "Dérive Σ|w−w*|/2 avant opération", drift_metric(w_drift, target), "%")
-    fid_to = fact("rotation", "Rotation aller simple du mois", ow, "%")
-    fid_cost = fact("cout", "Coût estimé des mouvements", cost, "CAD",
-                    source=Source(dataset=cfg.src("trading.cost_bps"),
-                                  processing=f"{cfg.trading.cost_bps} pb × rotation"))
-    fid_lvl = fact("niveau", "Niveau de risque F1 à la date", level_now, "niveau",
-                   source=Source(dataset="policy/risk_levels.yaml", processing="compile_profile(profil ancré, t)"))
-    if alpha < 1.0:
-        fact("overlay_alpha", "Part du déplacement des overlays conservée après contrôle du Judge", alpha, "%")
-    band_ids = [fact(f"bande.{a}", f"Écart de {a} à sa cible", w_drift.get(a, 0.0) - target.get(a, 0.0), "%")
-                for a in br]
-    seen_codes: Counter[str] = Counter()
-    for t in trig:
-        seen_codes[t.code] += 1
-        key = t.code if seen_codes[t.code] == 1 else f"{t.code}.{seen_codes[t.code]}"
-        val = t.value if isinstance(t.value, (int, float, str)) else str(t.value)
-        fact(f"declencheur.{key}", t.message_fr, val, _trigger_unit(t) if isinstance(val, (int, float)) else "texte",
-             source=Source(dataset=t.threshold_source, processing="seuil du déclencheur"))
+    def _restore_linear_limits(self) -> None:
+        """Conformité : projection minimale sur les limites linéaires de la politique, depuis les poids obtenus.
 
-    seq = traj.seq + 1
-    vid = version_id(traj.client_id, seq, d)
-    event = RebalanceEvent(
-        event_id=f"ev-{vid}", month=d, action=action, drift=round(drift_metric(w_drift, target), 9), breaches=br,
-        triggers=trig, overlays=states, trades=trades, flow_cad=flow_cad, turnover_oneway=ow, turnover_twoway=tw,
-        cost_cad=round(cost, 2),
-        judge_before=_verdict(judge_before), judge_after=_verdict(judge_after),
-        judge_violations_after=list(judge_after.blocking_violations) if judge_after is not None else [],
-        fact_ids=[fid_r, fid_dd, fid_drift, fid_to, fid_cost, fid_lvl, *band_ids],
-    )
-    version = PortfolioVersion(
-        version_id=vid, parent_version_id=traj.last_version_id, seq=seq, client_id=traj.client_id,
-        profile_version=traj.profile.version, decision_id=traj.decision_id, as_of=d, weights=_norm(w_eff),
-        value_cad=round(value_after, 2), target=_norm(target), level=level_now,
-        policy_hash=_hash(policy_now.model_dump(mode="json")), data_version=traj.pit.data_version,
-        config_hash=cfg.sha256, event=event,
-    )
-    if traj.history is not None:
-        traj.history.append(version)
+        Ces opérations passent même sous le montant minimal : une limite bloquante n'est pas négociable. Contrôle
+        strict (1e-6) en plus du Judge (tolérance 1e-4) : un reliquat d'arrondi ne doit pas dépasser une limite.
+        """
+        rep_mid = _judge(self.w_eff, self.policy_now, self.pd_)
+        if not (
+            (rep_mid is not None and not rep_mid.approved) or _strict_breaches(self.w_eff, self.traj, self.policy_now)
+        ):
+            return
+        w_fix = _project(self.policy_now, self.w_eff, self.pd_, allowed_target=self.target)
+        if w_fix is None:
+            return
+        kind = "liquidation" if self.reason == "compliance" else self.reason
+        extra, self.w_eff = plan_trades(dict(self.w_eff), w_fix, self.value, kind, 0.0)
+        self.trades = _merge_trades(self.trades, extra, self.w_drift, self.w_eff, self.value)
 
-    traj.weights, traj.value_cad, traj.target = version.weights, value_after, dict(target)
-    if action not in ("REPROFILE_REQUIRED", "REOPTIMIZE"):
-        traj.level = level_now   # un re-profilage en attente ne doit pas « consommer » un changement de niveau
-    traj.seq, traj.last_version_id, traj.overlay_states = seq, vid, states
-    if any(t.code == "REVIEW_DUE" for t in trig):
-        traj.last_review = d
-    return TickOutput(version=version, facts=facts, triggers=trig, proxied=proxied)
+    def _restore_risk_limits(self) -> None:
+        """Une limite de RISQUE (non linéaire) encore violée : retour à la cible.
+
+        Si la cible elle-même n'est plus approuvée à cette date (mesure de risque sur un historique glissant), le
+        moteur la recalcule : F1 → F4 à la date, puis mouvement vers la nouvelle cible.
+        """
+        rep_fix = _judge(self.w_eff, self.policy_now, self.pd_)
+        if rep_fix is None or rep_fix.approved:
+            return
+        self._move_to_target("band")
+        rep_t = _judge(self.w_eff, self.policy_now, self.pd_)
+        if rep_t is None or rep_t.approved or self.action == "REOPTIMIZE":
+            return
+        traj = self.traj
+        base, out = self._rebuild_target()
+        traj.base_target, traj.policy, self.policy_now = base, out.policy, out.policy
+        self.target = dict(base)
+        self._move_to_target("reoptimize")
+        if self.action != "REPROFILE_REQUIRED":
+            self.action = "REOPTIMIZE"
+        self.rebuilt_for_risk = True
+
+    def _move_to_target(self, reason: str) -> None:
+        extra, self.w_eff = plan_trades(dict(self.w_eff), dict(self.target), self.value, reason, 0.0)
+        self.trades = _merge_trades(self.trades, extra, self.w_drift, self.w_eff, self.value)
+
+    # ------------------------------------------------------------------ 7 : performance, faits, version
+    def record_version(self) -> TickOutput:
+        """7. Performance, faits pour l'explication, nouvelle version chaînée ; la trajectoire avance d'un mois."""
+        traj = self.traj
+        r_net = (self.value_after - self.flow_cad) / traj.value_cad - 1.0 if traj.value_cad > 0 else 0.0
+        cash = traj.perf.cash_assets[0] if traj.perf.cash_assets else None
+        traj.perf.update(
+            self.d,
+            r_net,
+            self.value_after,
+            self.flow_cad,
+            self.ow,
+            self.cost,
+            self.w_eff,
+            r_cash=self.pit_t.month(self.m).get(cash) if cash and cash in self.pit_t.assets else None,
+        )
+        version = self._new_version(self._event_facts())
+        if traj.history is not None:
+            traj.history.append(version)
+        traj.weights, traj.value_cad, traj.target = version.weights, self.value_after, dict(self.target)
+        if self.action not in ("REPROFILE_REQUIRED", "REOPTIMIZE"):
+            traj.level = self.level_now  # un re-profilage en attente ne doit pas « consommer » un changement de niveau
+        traj.seq, traj.last_version_id, traj.overlay_states = version.seq, version.version_id, self.states
+        if any(t.code == "REVIEW_DUE" for t in self.trig):
+            traj.last_review = self.d
+        return TickOutput(version=version, facts=self.facts, triggers=self.trig, proxied=self.proxied)
+
+    def _event_facts(self) -> list[str]:
+        """Faits de fin de mois ; rend les identifiants cités par l'événement."""
+        cfg, w_drift, target = self.cfg, self.w_drift, self.target
+        self._decision_facts()
+        ids = [
+            self.fid_r,
+            self.fact(
+                "baisse", "Baisse depuis le plus haut (indice TWR)", self.traj.perf.snapshot().current_drawdown, "%"
+            ),
+            self.fact("derive", "Dérive Σ|w−w*|/2 avant opération", drift_metric(w_drift, target), "%"),
+            self.fact("rotation", "Rotation aller simple du mois", self.ow, "%"),
+            self.fact(
+                "cout",
+                "Coût estimé des mouvements",
+                self.cost,
+                "CAD",
+                source=Source(dataset=cfg.src("trading.cost_bps"), processing=f"{cfg.trading.cost_bps} pb × rotation"),
+            ),
+            self.fact(
+                "niveau",
+                "Niveau de risque F1 à la date",
+                self.level_now,
+                "niveau",
+                source=Source(dataset="policy/risk_levels.yaml", processing="compile_profile(profil ancré, t)"),
+            ),
+        ]
+        if self.alpha < 1.0:
+            self.fact(
+                "overlay_alpha", "Part du déplacement des overlays conservée après contrôle du Judge", self.alpha, "%"
+            )
+        ids += [
+            self.fact(f"bande.{a}", f"Écart de {a} à sa cible", w_drift.get(a, 0.0) - target.get(a, 0.0), "%")
+            for a in self.br
+        ]
+        self._trigger_facts()
+        return ids
+
+    def _decision_facts(self) -> None:
+        """Valeur après coûts, et ce qui a fait bouger la cible ce mois-ci (recalcul pour le risque, limites F1)."""
+        self.fact("valeur", "Valeur du portefeuille en fin de mois, après coûts", self.value_after, "CAD")
+        if self.rebuilt_for_risk:
+            self.fact(
+                "cible_recalculee",
+                "Cible recalculée : l'ancienne n'était plus approuvée par le Judge à cette date",
+                "recalculée",
+                "texte",
+                source=Source(dataset="portfolio/judge.py", processing="check(cible, politique, t)"),
+            )
+        if self.tightened:
+            self.fact(
+                "limites_resserrees",
+                "Limites resserrées par F1 à cette date",
+                ", ".join(self.tightened),
+                "texte",
+                source=Source(dataset="policy/risk_levels.yaml", processing="compile_profile(profil ancré, t)"),
+            )
+
+    def _trigger_facts(self) -> None:
+        """Un fait par déclencheur ; un code répété reçoit un suffixe (.2, .3...) pour garder des ids uniques."""
+        seen_codes: Counter[str] = Counter()
+        for t in self.trig:
+            seen_codes[t.code] += 1
+            key = t.code if seen_codes[t.code] == 1 else f"{t.code}.{seen_codes[t.code]}"
+            val = t.value if isinstance(t.value, int | float | str) else str(t.value)
+            self.fact(
+                f"declencheur.{key}",
+                t.message_fr,
+                val,
+                _trigger_unit(t) if isinstance(val, int | float) else "texte",
+                source=Source(dataset=t.threshold_source, processing="seuil du déclencheur"),
+            )
+
+    def _new_version(self, fact_ids: list[str]) -> PortfolioVersion:
+        traj, w_drift, target = self.traj, self.w_drift, self.target
+        seq = traj.seq + 1
+        vid = version_id(traj.client_id, seq, self.d)
+        judge_after = self.judge_after
+        event = RebalanceEvent(
+            event_id=f"ev-{vid}",
+            month=self.d,
+            action=self.action,
+            drift=round(drift_metric(w_drift, target), 9),
+            breaches=self.br,
+            triggers=self.trig,
+            overlays=self.states,
+            trades=self.trades,
+            flow_cad=self.flow_cad,
+            turnover_oneway=self.ow,
+            turnover_twoway=self.tw,
+            cost_cad=round(self.cost, 2),
+            judge_before=_verdict(self.judge_before),
+            judge_after=_verdict(judge_after),
+            judge_violations_after=list(judge_after.blocking_violations) if judge_after is not None else [],
+            fact_ids=fact_ids,
+        )
+        return PortfolioVersion(
+            version_id=vid,
+            parent_version_id=traj.last_version_id,
+            seq=seq,
+            client_id=traj.client_id,
+            profile_version=traj.profile.version,
+            decision_id=traj.decision_id,
+            as_of=self.d,
+            weights=_norm(self.w_eff),
+            value_cad=round(self.value_after, 2),
+            target=_norm(target),
+            level=self.level_now,
+            policy_hash=_hash(self.policy_now.model_dump(mode="json")),
+            data_version=traj.pit.data_version,
+            config_hash=self.cfg.sha256,
+            event=event,
+        )
 
 
 def _strict_breaches(w: dict[str, float], traj: Trajectory, policy: PolicySpec | None = None) -> list[str]:
@@ -513,12 +729,18 @@ def _strict_breaches(w: dict[str, float], traj: Trajectory, policy: PolicySpec |
 
     try:
         return linear_breaches(w, policy or traj.policy, traj.asset_class, tol=1e-6) if traj.asset_class else []
-    except Exception:  # noqa: BLE001
+    except Exception:  # contrôle strict indisponible : le Judge reste la référence
         return []
 
 
-def _overlays_judged(traj: Trajectory, pit_t: PitReturns, m: pd.Timestamp, w_drift: dict[str, float], value: float,
-                     pd_: date) -> tuple[dict[str, float], list[OverlayState], list[Fact], float]:
+def _overlays_judged(  # noqa: PLR0913 - signature gardée : test_tick_review l'appelle telle quelle
+    traj: Trajectory,
+    pit_t: PitReturns,
+    m: pd.Timestamp,
+    w_drift: dict[str, float],
+    value: float,
+    pd_: date,
+) -> tuple[dict[str, float], list[OverlayState], list[Fact], float]:
     """Cible après overlays, puis contrôle du Judge sur la CIBLE elle-même (limites de risque comprises).
 
     Les bornes des overlays ne couvrent que les limites linéaires ; si la cible déplacée viole une limite de risque
@@ -535,7 +757,7 @@ def _overlays_judged(traj: Trajectory, pit_t: PitReturns, m: pd.Timestamp, w_dri
     if _turnover2(base, target) <= EPS:
         return target, states, ofacts, 1.0
     rep = _judge(target, traj.policy, pd_)
-    if rep is None:    # Judge indisponible : aucune garantie sur les limites de risque -> pas de déplacement
+    if rep is None:  # Judge indisponible : aucune garantie sur les limites de risque -> pas de déplacement
         return dict(base), [s.model_copy(update={"clipped": True, "delta": {}}) for s in states], ofacts, 0.0
     if rep.approved:
         return target, states, ofacts, 1.0
@@ -549,8 +771,9 @@ def _overlays_judged(traj: Trajectory, pit_t: PitReturns, m: pd.Timestamp, w_dri
         else:
             hi = mid
     alpha = lo
-    scaled = [s.model_copy(update={"clipped": True, "delta": {a: v * alpha for a, v in s.delta.items()}})
-              for s in states]
+    scaled = [
+        s.model_copy(update={"clipped": True, "delta": {a: v * alpha for a, v in s.delta.items()}}) for s in states
+    ]
     return _mix(base, target, alpha), scaled, ofacts, alpha
 
 
@@ -563,8 +786,9 @@ def _turnover2(a: dict[str, float], b: dict[str, float]) -> float:
     return turnover(a, b)[1]
 
 
-def _project(policy: PolicySpec, w: dict[str, float], as_of: date,
-             allowed_target: dict[str, float] | None = None) -> dict[str, float] | None:
+def _project(
+    policy: PolicySpec, w: dict[str, float], as_of: date, allowed_target: dict[str, float] | None = None
+) -> dict[str, float] | None:
     """Changement minimal (norme L1) qui remet ``w`` dans les limites linéaires de la politique.
 
     Contrairement à ``optimizer.project`` (moindres carrés, qui étale de petits poids sur tout l'univers),
@@ -604,8 +828,9 @@ def _project(policy: PolicySpec, w: dict[str, float], as_of: date,
     return _norm({a: v for a, v in out.items() if v >= 1e-7})
 
 
-def _merge_trades(a: list[Trade], b: list[Trade], w0: dict[str, float], w1: dict[str, float],
-                  value: float) -> list[Trade]:
+def _merge_trades(
+    a: list[Trade], b: list[Trade], w0: dict[str, float], w1: dict[str, float], value: float
+) -> list[Trade]:
     """Fusionne deux séries de mouvements en une seule par actif (de ``w0`` à ``w1``)."""
     reason = {t.asset_id: t.reason for t in a}
     reason.update({t.asset_id: t.reason for t in b if t.asset_id not in reason})
@@ -613,8 +838,16 @@ def _merge_trades(a: list[Trade], b: list[Trade], w0: dict[str, float], w1: dict
     for asset in sorted(reason):
         f, t = w0.get(asset, 0.0), w1.get(asset, 0.0)
         if abs(t - f) > EPS:
-            out.append(Trade(asset_id=asset, w_from=f, w_to=t, dw=t - f, amount_cad=round((t - f) * value, 2),
-                             reason=reason[asset]))
+            out.append(
+                Trade(
+                    asset_id=asset,
+                    w_from=f,
+                    w_to=t,
+                    dw=t - f,
+                    amount_cad=round((t - f) * value, 2),
+                    reason=reason[asset],
+                )
+            )
     return out
 
 

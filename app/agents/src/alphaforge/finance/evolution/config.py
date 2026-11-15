@@ -1,4 +1,5 @@
 """Chargement de ``evolution.yaml`` (seule configuration de l'évolution), validé et empreinté."""
+
 from __future__ import annotations
 
 import hashlib
@@ -21,7 +22,7 @@ class Bands(_C):
     rel: float = Field(gt=0, le=1)
     min_abs: float = Field(ge=0, le=0.1)
     trade_mode: Literal["half", "edge", "full"]
-    cap_cushion: float = Field(default=0.0, ge=0, le=0.05)   # absent = pas de coussin
+    cap_cushion: float = Field(default=0.0, ge=0, le=0.05)  # absent = pas de coussin
 
 
 class Trading(_C):
@@ -52,7 +53,7 @@ class Gate(_C):
 
 
 class Overlays(_C):
-    model_config = ConfigDict(extra="allow", frozen=True)   # un bloc par overlay, lu par chaque module
+    model_config = ConfigDict(extra="allow", frozen=True)  # un bloc par overlay, lu par chaque module
     order: list[str]
     common: dict
 

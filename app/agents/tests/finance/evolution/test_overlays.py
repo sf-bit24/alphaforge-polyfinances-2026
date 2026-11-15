@@ -287,7 +287,7 @@ def test_gate_pbo_aligned_on_dates(monkeypatch):
         return real_pbo(m, *a, **k)
 
     monkeypatch.setattr(G, "_simulate", sim)
-    monkeypatch.setattr(G.V, "pbo_cscv", pbo)
+    monkeypatch.setattr(V, "pbo_cscv", pbo)
     evaluate_gate("tsmom", r, r.index[-1], TARGET, policy(), CLS, cfg, asset_tags=TAGS)
     starts = {s.index[0] for s in sims}
     assert len(starts) > 1                                           # préchauffages réellement différents

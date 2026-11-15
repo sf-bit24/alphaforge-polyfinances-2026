@@ -4,6 +4,8 @@
  * Messages are produced in both languages at once, so a locale change re-renders them.
  */
 import type { Exposures, KnowledgeLevel, Locale } from "@/lib/contract/schemas";
+import { MockError } from "./envelope";
+import { containsSin } from "./personal-data";
 import { formatMoney, formatPercent } from "./profile";
 import type { L, QuestionDef } from "./questions";
 import { PRICE_DATE } from "./starter";
@@ -15,6 +17,9 @@ function both(build: (locale: Locale) => string): L {
   return { fr: build("fr"), en: build("en") };
 }
 
+/** What replaces a personal detail in the screened text, in the investor's language. */
+const MASKED: L = { fr: "[masqué]", en: "[masked]" };
+
 export interface Screening {
   text: string;
   masked: number;
@@ -23,26 +28,49 @@ export interface Screening {
   offTopic: boolean;
 }
 
+/** Personal data masked by the guardrail; amounts, quantities, prices and dates stay as they are. */
 const PII_PATTERNS: RegExp[] = [
+  // Email address.
   /[\w.+-]+@[\w-]+\.[\w.]+/g,
+  // Account numbers, before the phone pattern can take a part of them.
+  // Digit groups joined by dashes: 123-45678-9, transit-institution-account 12345-003-1234567.
+  /\b\d{3,5}-\d{3,5}-\d{1,12}\b/g,
+  // Digits after an account word with its number marker, on the same line: "compte no 123 45678 9",
+  // "no de compte : 12345", "account #12345", "transit 12345". Without the marker ("mon compte : 50 000",
+  // "compte 2 500 parts"), the number is an amount or a quantity; only the 123 45678 9 form may hold spaces.
+  /(?<=\b(?:(?:compte|account|acct)[ \t]*(?:n[o°º]\.?|#|num[ée]ro|number)|(?:n[o°º]\.?|num[ée]ro)[ \t]*(?:de[ \t]*)?compte|transit|folio)[ \t]*:?[ \t]*)(?:\d{3} \d{5} \d\b|\d[\d-]{3,}\d)(?!\d|[,.]\d)/gi,
+  // Nine digits that are not refused as a SIN (containsSin): a CUSIP, a quantity, a number that fails the Luhn key.
   /\b\d{3}[ -]?\d{3}[ -]?\d{3}\b/g,
+  // Phone number.
   /\b\d{3}[ .-]?\d{3}[ .-]?\d{4}\b/g,
-  /\b\d{7,}\b/g,
+  // Any other long number, unless it is an amount ("1500000 $").
+  /(?<!\$\s?)\b\d{7,}\b(?![.,]\d|\s?\$)/g,
 ];
+
+/** The refusal of a SIN, like `personal_data_error` of agentkit.py in the real runtime. */
+const SIN_REFUSAL: L = {
+  fr: "Votre message contient un renseignement personnel (NAS) : retirez-le, puis renvoyez-le.",
+  en: "Your message contains personal information (SIN): remove it, then send it again.",
+};
 
 const ADVICE = /(dois-je|devrais-je|est-ce que je (dois|devrais)|faut-il (que j'|acheter|vendre)|recommandez|conseillez|should i|do you recommend|would you recommend|tell me (what|which) to)[^.?!]{0,80}(achet|vend|invest|plac|buy|sell|invest)/i;
 const TRANSACTION = /(passe[rz]? (un |l'|des )?ordres?|ex[ée]cute[rz]? (la |une )?transaction|ach[eè]te[rz]?[^.?!]{0,30}pour moi|vend[sz]?[^.?!]{0,30}pour moi|place (an |the )?order|execute (a |the )?trade|buy [^.?!]{0,30}for me|sell [^.?!]{0,30}for me)/i;
 const ON_TOPIC = /(argent|placement|investi|épargne|epargne|retraite|maison|risque|bourse|action|fonds|dette|revenu|urgence|compte|celi|reer|money|invest|saving|retire|house|home|risk|stock|fund|debt|income|emergency|account|tfsa|rrsp|portfolio|portefeuille)/i;
 const OFF_TOPIC = /(météo|meteo|weather|recette|recipe|blague|joke|sport|hockey|film|movie|série télé|tv show)/i;
 
-/** Guardrail on the investor's free text: mask personal data, flag advice requests. */
-export function screenMessage(message: string): Screening {
+/**
+ * Guardrail on the investor's free text: refuse a SIN (`guardrail_blocked`, before anything is read or written),
+ * mask the other personal data, flag advice requests.
+ */
+export function screenMessage(message: string, locale: Locale = "fr"): Screening {
+  // Refused instead of masked, with the rule of the real runtime (personal-data.ts, personal_data.py).
+  if (containsSin(message)) throw new MockError("guardrail_blocked", SIN_REFUSAL, { reason: "personal_data", entity: "CA_SIN" });
   let text = message;
   let masked = 0;
   for (const pattern of PII_PATTERNS) {
     text = text.replace(pattern, () => {
       masked += 1;
-      return "[masqué]";
+      return MASKED[locale];
     });
   }
   return {
@@ -60,10 +88,45 @@ export interface ExtractedFact {
   note: L;
 }
 
+/** Numbers in words, one to twelve, as investors write a number of months. */
+const NUMBER_WORDS: Record<string, number> = Object.fromEntries(
+  [
+    ["un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix", "onze", "douze"],
+    ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"],
+  ].flatMap((words) => words.map((word, index) => [word, index + 1])),
+);
+
+/** A number of months, in digits or in words ("six-month" too); « dix-huit » or "twenty-four" is not read as « huit » or "four". */
+const MONTHS = new RegExp(`(?:\\b(\\d{1,2})|(?<![\\w-])(${Object.keys(NUMBER_WORDS).join("|")}))[\\s-]*(?:mois|months?)\\b`, "g");
+
+/** Words that tie a number of months to money set aside. */
+const SAVINGS = /urgence|emergency|coussin|cushion|précaution|precaution|côté|aside|épargne|savings/g;
+
+/** Characters between two matches of the same text. */
+const gap = (left: RegExpExecArray, right: RegExpExecArray) =>
+  Math.max(0, right.index - (left.index + left[0].length), left.index - (right.index + right[0].length));
+
+/**
+ * The number of months nearest a savings word of the same clause: « dans un mois, j'achète une
+ * maison; j'ai 4 mois de côté » reads 4. A comma does not end the clause (« côté épargne, j'ai six mois »).
+ */
+function savedMonths(lower: string): RegExpExecArray | null {
+  let nearest: { months: RegExpExecArray; distance: number } | null = null;
+  for (const clause of lower.split(/[.;!?]/)) {
+    const savings = [...clause.matchAll(SAVINGS)];
+    for (const months of clause.matchAll(MONTHS)) {
+      const distance = Math.min(...savings.map((word) => gap(months, word)));
+      if (distance < (nearest?.distance ?? Infinity)) nearest = { months, distance };
+    }
+  }
+  return nearest?.months ?? null;
+}
+
 function emergencyFundFact(lower: string): ExtractedFact | null {
-  const months = /(\d{1,2})\s*(mois|months?)/.exec(lower);
-  if (!months || !/(urgence|emergency|coussin|cushion|précaution|precaution|côté|aside|épargne|savings)/.test(lower)) return null;
-  const value = Number(months[1]);
+  const months = savedMonths(lower);
+  if (!months) return null;
+  const [, digits, word = ""] = months;
+  const value = Number(digits ?? NUMBER_WORDS[word]);
   return {
     field: "risk_capacity.emergency_fund",
     value,
@@ -71,11 +134,25 @@ function emergencyFundFact(lower: string): ExtractedFact | null {
   };
 }
 
+/** A high-interest debt in the investor's words. */
+const DEBT = String.raw`(?:dettes?|debts?|cartes? de crédit|credit[- ]cards?)`;
+const SOME_DEBT = new RegExp(DEBT);
+
+/**
+ * A negation, then only words that keep it on the debt: « je n'ai pas de dette », « ni dette ni prêt », « aucune
+ * autre dette », "no credit card debt", "I don't have any high-interest debt". "I can't pay off my credit card"
+ * and « j'ai plus de dettes que d'épargne » stay debts.
+ */
+const NO_DEBT = new RegExp(
+  String.raw`(?:\b(?:pas|aucune?|sans|z[ée]ro|jamais|ni|no|not|never|neither|nor|without)|n't|n'\w+ plus)` +
+    String.raw`(?:\s+(?:de|d'autres?|autres?|other|have|any|had|eu|vraiment|really|high[- ]interest|consumer|outstanding))*\s+${DEBT}|\bdebt[- ]free\b`,
+);
+
 function debtFact(lower: string): ExtractedFact | null {
-  if (/(pas|aucune?|no|zero|zéro|sans)\s+(de\s+|d')?(dettes?|debts?)/.test(lower)) {
+  if (NO_DEBT.test(lower)) {
     return { field: "risk_capacity.high_interest_debt", value: false, note: { fr: "aucune dette à taux élevé", en: "no high-interest debt" } };
   }
-  if (/(dettes?|debts?|carte de crédit|credit card)/.test(lower)) {
+  if (SOME_DEBT.test(lower)) {
     return { field: "risk_capacity.high_interest_debt", value: true, note: { fr: "une dette à taux élevé", en: "high-interest debt" } };
   }
   return null;
@@ -111,34 +188,40 @@ function purposeFact(message: string, lower: string): ExtractedFact | null {
 
 type ChoicePattern = [pattern: RegExp, choice: string];
 
+/**
+ * Read on the investor's text, not lowered: "AI" counts in capitals only, since a lower-case
+ * « ai » is the French verb (j'ai, j'en ai, ai-je), and so is "AI" after an apostrophe (J'AI).
+ */
 const THEME_PATTERNS: ChoicePattern[] = [
-  [/(tech|technolog|\bia\b|\bai\b|intelligence artificielle|artificial intelligence)/, "technology"],
-  [/(énergie propre|energie propre|clean energy|renouvelable|renewable)/, "clean_energy"],
-  [/(dividende|dividend)/, "dividends"],
-  [/(santé|sante|health)/, "health"],
+  [/(\btechs?\b|technolog|\bia\b|intelligence artificielle|artificial intelligence)/i, "technology"],
+  [/(?<!')\bAI\b/, "technology"],
+  [/(énergie propre|energie propre|clean energy|renouvelable|renewable)/i, "clean_energy"],
+  [/(dividende|dividend)/i, "dividends"],
+  // « santé », not the end of « suffisante » or « intéressante ».
+  [/(\bsant[ée]|health)/i, "health"],
 ];
 
 const EXCLUSION_PATTERNS: ChoicePattern[] = [
   [/(tabac|tobacco)/, "tobacco"],
-  [/(armes?\b|armement|weapons?)/, "weapons"],
+  [/(\barmes?\b|armement|weapons?)/, "weapons"],
   [/(pétrol|petrol|fossile|fossil|\boil\b)/, "fossil_fuels"],
   [/(crypto)/, "crypto"],
 ];
 
 /** The choices already made plus those the text mentions, or null when it mentions no new one. */
-function withMentionedChoices(current: unknown, lower: string, patterns: ChoicePattern[]): string[] | null {
+function withMentionedChoices(current: unknown, text: string, patterns: ChoicePattern[]): string[] | null {
   const choices = new Set<string>(Array.isArray(current) ? (current as string[]) : []);
   const before = choices.size;
   for (const [pattern, choice] of patterns) {
-    if (pattern.test(lower)) choices.add(choice);
+    if (pattern.test(text)) choices.add(choice);
   }
   if (choices.size === before) return null;
   choices.delete("none");
   return [...choices];
 }
 
-function themesFact(lower: string, current: Map<string, unknown>): ExtractedFact | null {
-  const themes = withMentionedChoices(current.get("preferences.themes"), lower, THEME_PATTERNS);
+function themesFact(text: string, current: Map<string, unknown>): ExtractedFact | null {
+  const themes = withMentionedChoices(current.get("preferences.themes"), text, THEME_PATTERNS);
   if (!themes) return null;
   return { field: "preferences.themes", value: themes, note: { fr: "vos thèmes d'intérêt", en: "your themes of interest" } };
 }
@@ -152,14 +235,16 @@ function exclusionsFact(lower: string, current: Map<string, unknown>): Extracted
 
 /** Rule-based reading of a free-text message (what A1's update-KB tool would store). */
 export function extractFacts(message: string, current: Map<string, unknown>): ExtractedFact[] {
-  const lower = message.toLowerCase();
+  // The patterns use the straight apostrophe; keyboards often type the typographic one (j’ai).
+  const text = message.replace(/’/g, "'");
+  const lower = text.toLowerCase();
   const facts = [
     emergencyFundFact(lower),
     debtFact(lower),
     liquidityFact(lower),
     withdrawalFact(lower),
     purposeFact(message, lower),
-    themesFact(lower, current),
+    themesFact(text, current),
     exclusionsFact(lower, current),
   ];
   return facts.filter((fact) => fact !== null);

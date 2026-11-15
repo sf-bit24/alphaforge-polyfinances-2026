@@ -26,12 +26,16 @@ def finish(message, questions=(), complete=False):
 
 # Valeurs confirmées après les réponses de base de conftest.BASE_ANSWERS : bande gt10, montant 10 000 $.
 BASE_VALUES = {"horizon.horizon_band": "gt10", "context.amount_cad": 10000}
+# Le montant vient de la tranche 10k_50k : 10 000 $ n'en est que la borne basse (#75).
+BASE_BANDS = {"context.amount_cad": default_questionnaire().question("q_amount").option_band("10k_50k")}
 
 
 def tranches(field, values=None, locale="fr"):
     return [
         {"value": t["value"], "label": t["label"]}
-        for t in numeric_choices(default_questionnaire(), field, values or BASE_VALUES, locale)
+        for t in numeric_choices(
+            default_questionnaire(), field, values or BASE_VALUES, locale, bands=None if values else BASE_BANDS
+        )
     ]
 
 
@@ -108,7 +112,9 @@ def test_a1_first_turn_records_facts_and_asks_questions(settings, store):
     horizon, loss = response["questions"][1], response["questions"][2]
     assert horizon["kind"] == loss["kind"] == "single_choice"
     assert [o["value"] for o in horizon["options"]] == ["10to15", "15to20", "20to30", "30plus"]
-    assert loss["options"][1] == {"value": "2_5to5pct", "label": "De 250 $ à moins de 500 $ (2,5 à 5 %)"}
+    # Les parts sont celles de la borne basse du montant, pas du montant de l'investisseur (#75).
+    label = "De 250 $ à moins de 500 $ (2,5 à 5 % de 10\u202f000 $)"
+    assert loss["options"][1] == {"value": "2_5to5pct", "label": label}
     assert (horizon["min"], horizon["unit"]) == (None, None)
     # La table des tranches reste hors de la question envoyée.
     stored = okf.parse(store.get(profile_key(client_id)).text).data

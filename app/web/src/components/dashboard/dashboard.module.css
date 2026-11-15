@@ -118,7 +118,9 @@
   min-height: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: repeat(3, minmax(0, 1fr));
+  /* Equal rows, except that a row never gets shorter than its content: a longer tile (the horizon
+     refined by ranges) takes the room the short ones leave, and nothing is hidden under the tile's edge. */
+  grid-template-rows: repeat(3, minmax(min-content, 1fr));
   gap: 12px;
 }
 @media (max-width: 1099px) {
@@ -182,6 +184,36 @@
   font-size: 12px;
   color: var(--ink-2);
 }
+/* A text capped in lines (the horizon tile): its row grows to fit it (.bento), the cap only bounds that
+   growth. Past it, an ellipsis, never a text hidden under the next one. */
+.clamp2,
+.clamp3,
+.clamp5 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: none;
+}
+.clamp2 {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.clamp3 {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+.clamp5 {
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+}
+/* Between 1100 and 1279 px the grid still has a fixed height but its tiles are narrow: one line less,
+   so that the longest horizon stays within the assistant's frame (the tooltip keeps the full text). */
+@media (min-width: 1100px) and (max-width: 1279px) {
+  .clamp5 {
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+  }
+}
 .tNavy {
   background: #eef2f8;
   border-color: #d3dcea;
@@ -207,6 +239,14 @@
   border-color: #f5cdcf;
   color: #c4161c;
   grid-row: span 2;
+}
+/* With the fixed-height grid, the two-row tile does not size the rows: Chrome would share its content
+   equally between both rows, even when one is already tall (the horizon), and push the last row past the
+   assistant's frame. It fills the rows the other tiles set, never less than two equal rows. */
+@media (min-width: 1100px) {
+  .tRed {
+    contain: size;
+  }
 }
 .tRed .ic {
   margin-bottom: 0;
@@ -253,7 +293,7 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.v2 {
+.tileText {
   margin-top: 12px;
   font-size: 13px;
   line-height: 1.5;
@@ -717,6 +757,15 @@
   margin-top: 8px;
   font-size: 12px;
   color: var(--ink-3);
+}
+.hints {
+  margin-top: 8px;
+}
+.hints .hint {
+  margin-top: 0;
+}
+.hints .hint + .hint {
+  margin-top: 2px;
 }
 .error {
   margin-top: 4px;

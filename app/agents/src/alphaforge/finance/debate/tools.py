@@ -17,8 +17,9 @@ from alphaforge.finance.contracts.profile import InvestorProfile
 from alphaforge.finance.portfolio import analysis
 from alphaforge.finance.portfolio.judge import check
 from alphaforge.finance.portfolio.market import returns_window
+from alphaforge.finance.strategy.labels import sector_fr
 
-from .facts import FactBook
+from .facts import FactBook, fmt
 
 ENGINE = "alphaforge.finance.backtest (rendements mensuels, data/long)"
 
@@ -59,17 +60,24 @@ def wealth(profile: InvestorProfile) -> float | None:
     return profile.investable_wealth
 
 
+def years_fr(years: float) -> str:
+    """Durée d'un libellé au format français : 7.0 → « 7 ans », 1.0 → « 1 an », 2.5 → « 2,5 ans »."""
+    value = float(years)
+    return f"{value:g}".replace(".", ",") + (" ans" if value >= 2 else " an")
+
+
 # ------------------------------------------------------------------------- preuves de base
 def timeline_evidence(c: LensContext) -> list[str]:
     b, p, w = c.book, c.label, _held(c.weights)
     h = shortest_horizon(c.profile)
     ids = [b.add(f"{p}.horizon", "Horizon le plus court des objectifs", h, "années", dataset="profile")]
     hr = analysis.horizon_report(w, max(h, 1.0), c.as_of)
+    years = f"{max(h, 1.0):.0f}"
     if hr.worst is not None:
         ids += [
             b.add(
                 f"{p}.horizon_worst",
-                f"Pire rendement composé sur {max(h, 1.0):.0f} an(s), historique",
+                f"Pire rendement composé sur {years} an{'s' if int(years) > 1 else ''}, historique",
                 hr.worst,
                 "%",
                 dataset=ENGINE,
@@ -152,7 +160,7 @@ def risk_evidence(c: LensContext) -> list[str]:
                         max(-s.period_return, 0.0) * investable_cad,
                         "CAD",
                         dataset=ENGINE,
-                        processing=f"perte × patrimoine investissable déclaré ({investable_cad:,.0f} $)",
+                        processing=f"perte × patrimoine investissable déclaré ({fmt(investable_cad, 'CAD')})",
                     )
                 )
     if c.profile.max_acceptable_loss_cad is not None:
@@ -192,7 +200,7 @@ def diversity_evidence(c: LensContext, tags=("tech", "energy", "financials")) ->
         ids.append(
             b.add(
                 f"{p}.lt.{t}",
-                f"Exposition consolidée « {t} » (look-through)",
+                f"Exposition consolidée au {sector_fr(t)} (look-through)",
                 v,
                 "%",
                 dataset=ENGINE,
@@ -290,11 +298,12 @@ def _horizon_distribution(tool, c: LensContext, run: Callable):
         (pire cas, part des fenêtres en perte). Renvoie des fact_id à citer."""
 
         def f(years):
-            hr = analysis.horizon_report(_held(c.weights), max(float(years), 1.0), c.as_of)
+            h = max(float(years), 1.0)  # horizon réellement mesuré, celui que le libellé nomme
+            hr = analysis.horizon_report(_held(c.weights), h, c.as_of)
             return [
                 c.book.add(
                     f"{c.label}.h{years}.worst",
-                    f"Pire rendement sur {years} ans",
+                    f"Pire rendement sur {years_fr(h)}",
                     hr.worst,
                     "%",
                     dataset=ENGINE,
@@ -302,7 +311,7 @@ def _horizon_distribution(tool, c: LensContext, run: Callable):
                 ),
                 c.book.add(
                     f"{c.label}.h{years}.neg",
-                    f"Part des fenêtres de {years} ans en perte",
+                    f"Part des fenêtres de {years_fr(h)} en perte",
                     hr.share_negative,
                     "%",
                     dataset=ENGINE,
@@ -326,7 +335,7 @@ def _exposure(tool, c: LensContext, run: Callable):
             return [
                 c.book.add(
                     f"{c.label}.lt.{tag}",
-                    f"Exposition consolidée « {tag} »",
+                    f"Exposition consolidée au {sector_fr(tag)}",
                     lt.exposures.get(tag),
                     "%",
                     dataset=ENGINE,

@@ -7,6 +7,7 @@ import { formatMoney, formatPercent, formatSignedMoney, formatSignedPercent } fr
 import { useI18n } from "@/lib/i18n/provider";
 import { GROUPS, SAMPLE_FACTS, groupWeight, samplePortfolio, tr } from "@/lib/sample/portfolio";
 import { cn } from "@/components/ui/cn";
+import { horizonTileText } from "./bento-text";
 import styles from "./dashboard.module.css";
 
 const ICON = { className: styles.ic, strokeWidth: 1.75, "aria-hidden": true } as const;
@@ -78,7 +79,7 @@ export function SampleBento() {
   );
 }
 
-/** The existing portfolio once confirmed (its five largest asset classes), or what version 2 adds. */
+/** The existing portfolio once confirmed (its five largest asset classes), or the way to the simulated portfolio. */
 function PortfolioTile({ portfolio }: { portfolio: ClientState["portfolio"] }) {
   const { t, locale } = useI18n();
   const confirmed = portfolio && portfolio.status === "confirmed" ? portfolio : null;
@@ -106,16 +107,49 @@ function PortfolioTile({ portfolio }: { portfolio: ClientState["portfolio"] }) {
         </>
       ) : (
         <>
-          <span className={styles.numText}>{t.dash.real.v2Title}</span>
-          <p className={styles.lbl}>{t.dash.real.v2Lead}</p>
-          <p className={styles.v2}>{t.dash.real.v2Text}</p>
+          <span className={styles.numText}>{t.dash.real.simulated.title}</span>
+          <p className={styles.lbl}>{t.dash.real.simulated.lead}</p>
+          <p className={styles.tileText}>{t.dash.real.simulated.text(t.appNav.portfolio, t.portfolioView.personas.self.name)}</p>
+          <Link className={styles.more} href="/portfolio">
+            {t.dash.real.simulated.cta}
+          </Link>
         </>
       )}
     </div>
   );
 }
 
-/** `local` and `aws` modes: what version 1 computes, the profile and the existing portfolio. */
+/**
+ * The horizon band as the figure, then the label, the other horizon facts and the objective. Each text
+ * is capped in lines so that none hides the next; the capped ones keep their full text as a tooltip,
+ * and in full in the profile panel (« Les cinq dimensions »).
+ */
+function HorizonTile({ profile }: { profile: ClientState["profile"] }) {
+  const { t } = useI18n();
+  const { figure, details } = horizonTileText(profile.dimensions.horizon.summary);
+  const objective = profile.dimensions.objective.summary;
+  return (
+    <div className={cn(styles.tile, styles.tGold)}>
+      <Compass {...ICON} />
+      <span className={cn(styles.numText, styles.clamp2)} title={figure}>
+        {figure}
+      </span>
+      <p className={styles.lbl}>{t.dash.real.horizon}</p>
+      {details ? (
+        <p className={cn(styles.sub, styles.clamp5)} title={details}>
+          {details}
+        </p>
+      ) : null}
+      {objective ? (
+        <p className={cn(styles.sub, styles.clamp3)} title={objective}>
+          {objective}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** `local` and `aws` modes: what the code computes, the profile and the existing portfolio. */
 export function ProfileBento({ state }: { state: ClientState }) {
   const { t, locale } = useI18n();
   const { profile, completeness, portfolio } = state;
@@ -143,12 +177,7 @@ export function ProfileBento({ state }: { state: ClientState }) {
         </p>
       </div>
       <PortfolioTile portfolio={portfolio} />
-      <div className={cn(styles.tile, styles.tGold)}>
-        <Compass {...ICON} />
-        <span className={styles.numText}>{profile.dimensions.horizon.summary ?? "—"}</span>
-        <p className={styles.lbl}>{t.dash.real.horizon}</p>
-        {profile.dimensions.objective.summary ? <p className={styles.sub}>{profile.dimensions.objective.summary}</p> : null}
-      </div>
+      <HorizonTile profile={profile} />
       <div className={cn(styles.tile, styles.tGreen)}>
         <GraduationCap {...ICON} />
         <span className={styles.numText}>{profile.knowledge_level ? t.knowledgeLevels[profile.knowledge_level] : "—"}</span>

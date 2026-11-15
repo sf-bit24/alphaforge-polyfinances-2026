@@ -6,7 +6,7 @@ from typing import Any
 
 from ..trace import Trace
 from . import rules
-from .questionnaire import Questionnaire, format_fact
+from .questionnaire import Questionnaire, format_fact, labeled
 from .state import ClientSession
 
 VIEW_DIMENSIONS = (
@@ -28,7 +28,7 @@ def dimension_summary(
     locale: str,
 ) -> str | None:
     """Résumé d'une dimension à partir des faits confirmés. Un fait répondu par une tranche montre la tranche,
-    pas la borne que le code retient (``format_fact``)."""
+    pas la borne que le code retient (``format_fact``). Le séparateur suit la langue (``labeled``)."""
     values = {field_id: fact.get("value") for field_id, fact in facts.items()}
     if dimension == "risk_tolerance":
         return rules.level_label(questionnaire, risk["tolerance"], locale)
@@ -41,7 +41,7 @@ def dimension_summary(
         if not questionnaire.applicable(spec.when, values):
             continue
         text = format_fact(spec, facts[spec.id], locale)
-        parts.append(text if spec.type == "enum" else f"{spec.label_text(locale)} : {text}")
+        parts.append(text if spec.type == "enum" else labeled(spec.label_text(locale), text, locale))
     return " · ".join(parts) or None
 
 

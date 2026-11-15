@@ -16,7 +16,7 @@ from .. import clock, okf
 from ..store import ConflictError, Store
 from ..trace import Trace
 from . import rules
-from .questionnaire import Questionnaire, fact_band, format_fact
+from .questionnaire import Questionnaire, fact_band, format_fact, labeled
 
 UUID4 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 STAGES = ("base_questions", "existing_portfolio", "portfolio_review", "followups", "complete")
@@ -592,15 +592,17 @@ def _risk_line(questionnaire: Questionnaire, risk: dict[str, Any], locale: str) 
     capacity = rules.level_label(questionnaire, risk["capacity"], locale) or "—"
     effective = rules.level_label(questionnaire, risk["effective"], locale, effective=True) or "—"
     if locale == "en":
-        return f"- Risk tolerance : {tolerance} · Risk capacity : {capacity} · Effective risk : {effective}"
-    return f"- Tolérance au risque : {tolerance} · Capacité : {capacity} · Risque effectif : {effective}"
+        parts = (("Risk tolerance", tolerance), ("Risk capacity", capacity), ("Effective risk", effective))
+    else:
+        parts = (("Tolérance au risque", tolerance), ("Capacité", capacity), ("Risque effectif", effective))
+    return "- " + " · ".join(labeled(label, text, locale) for label, text in parts)
 
 
 def _completeness_line(questionnaire: Questionnaire, score: float, locale: str) -> str:
     reached, threshold, cap = round(score * 100), round(questionnaire.threshold * 100), round(questionnaire.cap * 100)
     if locale == "en":
-        return f"- Completeness : {reached} % (threshold {threshold} %, displayed cap {cap} %)"
-    return f"- Complétude : {reached} % (seuil {threshold} %, plafond affiché {cap} %)"
+        return f"- Completeness: {reached}% (threshold {threshold}%, displayed cap {cap}%)"
+    return f"- {labeled('Complétude', f'{reached} % (seuil {threshold} %, plafond affiché {cap} %)', locale)}"
 
 
 def _fact_rows_by_dimension(questionnaire: Questionnaire, session: ClientSession, locale: str) -> dict[str, list[str]]:
@@ -657,8 +659,8 @@ def render_profile_body(
             else "Profil fictif, simulation seulement : aucune transaction réelle ni conseil financier personnalisé."
         ),
         "",
-        f"- {'Stage' if is_english else 'Étape'} : `{session.stage}`",
-        f"- {'Knowledge level' if is_english else 'Niveau de connaissances'} : {level_text}",
+        f"- {labeled('Stage' if is_english else 'Étape', f'`{session.stage}`', locale)}",
+        f"- {labeled('Knowledge level' if is_english else 'Niveau de connaissances', level_text, locale)}",
         _risk_line(questionnaire, risk, locale),
         _completeness_line(questionnaire, score["score"], locale),
         "",

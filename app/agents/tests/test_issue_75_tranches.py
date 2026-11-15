@@ -1,4 +1,5 @@
-"""#75 : une réponse par tranche reste une tranche partout où elle est montrée.
+"""#75 : une réponse par tranche reste une tranche partout où elle est montrée. #80, point 5 : le séparateur
+des résumés suit la langue.
 
 Le code garde la borne prudente comme valeur du fait (inchangée, lue par le volet finance) et la tranche choisie
 avec le fait (``band``). Le résumé, ``profil.md``, les notes de la base du client et le contexte d'A1 citent la
@@ -9,6 +10,7 @@ calculés par le code par une espace fine insécable (``THIN``).
 """
 
 import json
+import re
 
 import pytest
 
@@ -16,6 +18,7 @@ from alphaforge import okf
 from alphaforge.finance.policy.from_profile_view import investor_profile_from_view
 from alphaforge.profile import a1, brain
 from alphaforge.profile.questionnaire import default_questionnaire, format_fact, numeric_choices
+from alphaforge.profile.service import render_portfolio_body
 from alphaforge.profile.state import ClientSession, journal_key, profile_key
 
 from .conftest import ScriptedFactory, answer_base, make_service
@@ -247,3 +250,49 @@ def test_a_free_text_value_replaces_the_band_and_a_refusal_restores_it(settings,
     assert session.facts[AMOUNT]["band"] == band and session.facts[AMOUNT]["value"] == 10000
     session.set_fact(AMOUNT, 45000, "a1:1")  # nombre exact : plus de tranche
     assert "band" not in session.facts[AMOUNT] and AMOUNT not in session.bands()
+
+
+# ---------------------------------------------------------------------- #80, point 5 : séparateur
+def test_english_summaries_have_no_space_before_the_colon(settings, store):
+    service = make_service(settings, store)
+    client_id, response = started(service, locale="en")
+    summaries = [view["summary"] for view in response["profile"]["dimensions"].values() if view["summary"]]
+    constraints = response["profile"]["dimensions"]["constraints"]["summary"]
+    assert "Account types: TFSA, RRSP" in constraints
+    assert "Share to withdraw within 12 months: 10% to less than 25%" in constraints
+    assert response["profile"]["dimensions"]["context"]["summary"].startswith(
+        "Amount to invest: $10,000 to less than $50,000 ($10,000 used as a cautious figure)"
+    )
+    assert not any(re.search(r"\s:", summary) for summary in summaries)
+    body = okf.parse(store.get(profile_key(client_id)).text).body
+    assert not re.search(r"\s:", body)
+    assert (
+        "- Completeness: " in body and "- Risk tolerance: " in body and "| Emergency fund | less than 1 month |" in body
+    )
+
+
+def test_french_summaries_put_a_no_break_space_before_the_colon(settings, store):
+    service = make_service(settings, store)
+    client_id, response = started(service)
+    summaries = [view["summary"] for view in response["profile"]["dimensions"].values() if view["summary"]]
+    assert response["profile"]["dimensions"]["context"]["summary"].startswith(f"Montant à investir{NBSP}: de 10 000 $")
+    assert not any(re.search(f"[^{NBSP}]:", summary) for summary in summaries)
+    body = okf.parse(store.get(profile_key(client_id)).text).body
+    assert f"- Complétude{NBSP}: " in body and f"- Tolérance au risque{NBSP}: " in body
+
+
+def test_existing_portfolio_summary_follows_the_language():
+    view = {
+        "status": "draft",
+        "exposures": {"total_value_cad": 1342.0, "flags": []},
+        "fx": {"rate": 1.4255, "date": "2026-11-12", "source": "starter:fx_usdcad_daily.csv"},
+        "positions": [],
+        "unresolved": [{"raw": "XYZ fund", "reason": "not found"}],
+    }
+    english = render_portfolio_body(view, "en")
+    assert (
+        "- Status: `draft`" in english and "- Total value: 1342.0 CAD" in english and "- XYZ fund: not found" in english
+    )
+    assert " :" not in english
+    french = render_portfolio_body(view, "fr")
+    assert f"- Statut{NBSP}: `draft`" in french and f"- XYZ fund{NBSP}: not found" in french

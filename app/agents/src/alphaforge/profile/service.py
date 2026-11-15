@@ -37,6 +37,7 @@ from .questionnaire import (
     QuestionSpec,
     band_brief,
     default_questionnaire,
+    labeled,
     reason_text,
 )
 from .state import ClientSession, is_client_id, load_journal_entries, portfolio_key, trace_key
@@ -1019,8 +1020,10 @@ class ProfileService:
 
 
 def _summary_lines(view: dict[str, Any], *, en: bool) -> list[str]:
-    """Titre, avertissement, synthèse et en-tête du tableau des positions."""
+    """Titre, avertissement, synthèse et en-tête du tableau des positions; le séparateur suit la langue."""
     exposures = view["exposures"]
+    locale = "en" if en else "fr"
+    status, total = f"`{view['status']}`", f"{exposures['total_value_cad']} CAD"
     return [
         "# " + ("Existing portfolio" if en else "Portefeuille existant"),
         "",
@@ -1031,11 +1034,11 @@ def _summary_lines(view: dict[str, Any], *, en: bool) -> list[str]:
             else "Portefeuille fictif, simulation seulement. Prix, valeurs et expositions calculés par le code."
         ),
         "",
-        f"- {'Status' if en else 'Statut'} : `{view['status']}`",
-        f"- {'Total value' if en else 'Valeur totale'} : {exposures['total_value_cad']} CAD",
-        f"- {'USD/CAD rate' if en else 'Taux USD/CAD'} : {view['fx']['rate']}"
+        f"- {labeled('Status' if en else 'Statut', status, locale)}",
+        f"- {labeled('Total value' if en else 'Valeur totale', total, locale)}",
+        f"- {labeled('USD/CAD rate' if en else 'Taux USD/CAD', str(view['fx']['rate']), locale)}"
         f" ({view['fx']['date']}, {view['fx']['source']})",
-        f"- {'Flags' if en else 'Constats'} : {', '.join(exposures['flags']) or '—'}",
+        f"- {labeled('Flags' if en else 'Constats', ', '.join(exposures['flags']) or '—', locale)}",
         "",
         "| id | ticker | "
         + (
@@ -1063,11 +1066,15 @@ def _position_row(position: dict[str, Any]) -> str:
 def _unresolved_lines(view: dict[str, Any], *, en: bool) -> list[str]:
     if not view["unresolved"]:
         return []
+    locale = "en" if en else "fr"
     return [
         "",
         "## " + ("Unresolved lines" if en else "Lignes non évaluées"),
         "",
-        *(f"- {str(line['raw']).replace('|', '/')} : {line['reason']}" for line in view["unresolved"]),
+        *(
+            f"- {labeled(str(line['raw']).replace('|', '/'), str(line['reason']), locale)}"
+            for line in view["unresolved"]
+        ),
     ]
 
 

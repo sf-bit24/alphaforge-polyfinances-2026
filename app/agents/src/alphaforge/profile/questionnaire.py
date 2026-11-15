@@ -703,6 +703,15 @@ def format_fact(spec: FieldSpec, fact: dict[str, Any] | None, locale: str) -> st
     return f"{text[:-1]}; {note})" if text.endswith(")") else f"{text} ({note})"
 
 
+def label_separator(locale: str) -> str:
+    """Séparateur d'un libellé et de sa valeur : « : » en anglais, espace insécable puis « : » en français."""
+    return ": " if locale == "en" else "\u00a0: "
+
+
+def labeled(label: str, text: str, locale: str) -> str:
+    return f"{label}{label_separator(locale)}{text}"
+
+
 # ---------------------------------------------------------------------- fonctions partagées
 def default_min(kind: str) -> float | None:
     return {"money": 0, "percent": 0, "scale": 1}.get(kind)

@@ -227,7 +227,7 @@ const fr = {
     analyzing: "A2 analyse votre portefeuille…",
     skip: "Passer cette étape",
     privacy:
-      "N’indiquez aucun numéro de compte : tout reste fictif. Le garde-fou masque les renseignements personnels détectés.",
+      "N’indiquez aucun numéro de compte : tout reste fictif. Un NAS, un numéro de carte ou un mot de passe est refusé : retirez-le avant l’envoi. D’autres renseignements, comme les courriels, sont masqués dans les réponses d’A2.",
     reading: "Lecture des fichiers…",
     example: "Insérer un exemple",
     units: { bytes: "o", kilobytes: "Ko", megabytes: "Mo" },
@@ -582,12 +582,19 @@ const fr = {
       guardrail_blocked: {
         title: "Le cadre responsable a retenu ce message",
         hint: "AlphaForge AI ne passe aucun ordre et ne donne aucun conseil personnalisé. Rien n’a été enregistré et votre texte reste dans la zone de saisie : reformulez-le autour de votre profil, puis renvoyez-le.",
+        // `details.reason` du runtime : un renseignement personnel (NAS…) a été refusé, sans rapport avec un conseil.
+        reasons: {
+          personal_data: {
+            title: "Le cadre responsable a retenu un renseignement personnel",
+            hint: "AlphaForge AI refuse le NAS et les autres numéros sensibles (carte de paiement, carte d’assurance maladie, NIP, mot de passe) : le modèle ne les reçoit pas et ils ne sont pas enregistrés. Votre texte reste dans la zone de saisie : le reste de vos informations n’est pas perdu.",
+          },
+        },
       },
       model_error: {
         title: "Le modèle n’a pas pu répondre cette fois",
         hint: "Sa réponse a été filtrée ou refusée, ou le modèle est momentanément indisponible. Votre saisie est conservée : réessayez dans un instant, ou reformulez votre message.",
       },
-    } as Record<string, { title: string; hint: string } | undefined>,
+    } as Record<string, { title: string; hint: string; reasons?: Record<string, { title: string; hint: string } | undefined> } | undefined>,
     network: "Impossible de joindre le serveur Next.js local.",
     invalidResponse: "Réponse non conforme au contrat (validation zod).",
     noResult: "Le flux s’est terminé sans résultat.",
@@ -804,7 +811,8 @@ const en: Dictionary = {
     analyze: "Analyze with A2",
     analyzing: "A2 is analysing your portfolio…",
     skip: "Skip this step",
-    privacy: "Do not include any account number: everything stays fictitious. The guardrail masks personal details it detects.",
+    privacy:
+      "Do not include any account number: everything stays fictitious. A SIN, a card number or a password is refused: remove it before sending. Other details, such as email addresses, are masked in A2’s replies.",
     reading: "Reading files…",
     example: "Insert an example",
     units: { bytes: "B", kilobytes: "KB", megabytes: "MB" },
@@ -1151,6 +1159,12 @@ const en: Dictionary = {
       guardrail_blocked: {
         title: "The responsible framework held this message back",
         hint: "AlphaForge AI places no order and gives no personalized advice. Nothing was saved and your text is still in the input box: rephrase it around your profile, then send it again.",
+        reasons: {
+          personal_data: {
+            title: "The responsible framework held back personal information",
+            hint: "AlphaForge AI refuses a SIN and other sensitive numbers (payment card, health card, PIN, password): the model does not receive them and they are not saved. Your text is still in the input box: the rest of your information is not lost.",
+          },
+        },
       },
       model_error: {
         title: "The model could not answer this time",

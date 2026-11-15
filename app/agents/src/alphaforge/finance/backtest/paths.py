@@ -24,8 +24,12 @@ DEFAULT_DATA_DIR = ALPHAFORGE_DIR / "data" / "long"
 DEFAULT_STARTER_DIR = ALPHAFORGE_DIR / "data" / "starter"
 PROFILES_DIR = PACKAGE_DIR / "profiles"
 # Processed files written by build_data (not versioned).
-LONG_PARQUETS = ("monthly_returns.parquet", "inflation_monthly.parquet", "fx_monthly.parquet",
-                 "lookthrough_us_mkt.parquet")
+LONG_PARQUETS = (
+    "monthly_returns.parquet",
+    "inflation_monthly.parquet",
+    "fx_monthly.parquet",
+    "lookthrough_us_mkt.parquet",
+)
 
 
 def data_dir() -> Path:
@@ -43,7 +47,7 @@ def profile_dirs() -> list[Path]:
     """Directories searched (in order) for ``<id>.yaml`` when a profile is given by id."""
     env = os.environ.get("ALPHAFORGE_BT_PROFILES")
     if env:
-        return [Path(p) for p in env.split(os.pathsep) if p]
+        return [Path(folder) for folder in env.split(os.pathsep) if folder]
     return [PROFILES_DIR]
 
 
@@ -57,6 +61,6 @@ def results_dir() -> Path:
 
 def long_data_available(modules: tuple[str, ...] = ("numpy", "pandas")) -> bool:
     """True when the processed parquets are in ``data_dir()`` and ``modules`` are importable (used to skip tests)."""
-    if any(importlib.util.find_spec(m) is None for m in modules):
+    if any(importlib.util.find_spec(module) is None for module in modules):
         return False
-    return all((data_dir() / f).is_file() for f in LONG_PARQUETS)
+    return all((data_dir() / name).is_file() for name in LONG_PARQUETS)

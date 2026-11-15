@@ -29,7 +29,7 @@ from .esg import esg_exclusions, esg_preference
 from .explain import grounding_check, rephrase, skeleton
 from .facts import FactBook, fmt, sha256_json
 from .merge import apply_amendments
-from .schemas import LENSES, DebateRound
+from .schemas import LENS_FR, LENSES, DebateRound
 from .tools import LensContext, lens_evidence
 
 DEFAULT_AS_OF = date(2026, 9, 30)
@@ -154,7 +154,8 @@ def build_portfolio(
             processing=f"R = {comp.R:.1f}",
         )
         _emph_ids = [
-            book.add(f"emphasis.{k}", f"Poids de la lentille {k}", v, "%", dataset="policy_compiler/emphasis.yaml")
+            book.add(f"emphasis.{k}", f"Poids de la lentille {LENS_FR.get(k, k)}", v, "%",
+                     dataset="policy_compiler/emphasis.yaml")
             for k, v in comp.emphasis.items()
         ]
         holding_fids = _holding_facts(book, profile)
@@ -451,7 +452,7 @@ def build_portfolio(
         counterfactual_stmts=cf_stmts,
         request_fids=req_fids,
         limits_extra=[
-            f"Objection maintenue par la lentille « {lens} » au second tour."
+            f"Objection maintenue par la lentille « {LENS_FR.get(lens, lens)} » au second tour."
             for lens, v in verdicts.items()
             if v == "objection_maintenue"
         ],
@@ -596,11 +597,12 @@ def _style_counterfactuals(book, comp, profile, as_of, strat, style_inputs, cfs,
         if rr.status != "optimal" or rr.risk_value is None:
             continue
         f_style = book.add(
-            f"cf.style.{label}.style", "Style testé", alt.decision.style, "texte", dataset="contrefactuel"
+            f"cf.style.{label}.style", "Style testé", STYLE_FR[alt.decision.style], "texte", dataset="contrefactuel",
+            processing=alt.decision.style,
         )
         f_risk = book.add(
             f"cf.style.{label}.risk",
-            f"Risque minimisé avec le style {alt.decision.style}",
+            f"Risque minimisé avec le style {STYLE_FR[alt.decision.style]}",
             rr.risk_value,
             "%",
             dataset="optimizer:F2",

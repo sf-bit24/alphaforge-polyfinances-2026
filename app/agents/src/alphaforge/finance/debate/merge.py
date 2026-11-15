@@ -25,7 +25,7 @@ from alphaforge.finance.contracts.policy import Limit, PolicySpec, Selector
 from alphaforge.finance.strategy.okf_facts import ESG_FACT_PREFIX, FILING_FACT_PREFIX, NEWS_FACT_PREFIX
 from alphaforge.finance.strategy.rules import clamp_strategy_floors
 
-from .schemas import PRIORITY, AppliedAmendment, LensReport
+from .schemas import LENS_FR, PRIORITY, AppliedAmendment, LensReport
 
 FLOOR_RATIO = 0.6
 NEWS_REJECT_FR = "une actualité ne justifie jamais un changement du mandat (rumeur ≠ fait)"
@@ -136,7 +136,7 @@ def apply_amendments(
                     selector=Selector(assets=[a.target]),
                     max=0.0,
                     blocking=True,
-                    derived_from=f"lentille {lens}",
+                    derived_from=f"lentille {LENS_FR.get(lens, lens)}",
                     source=f"fact:{a.evidence_fact_ids[0]}",
                     description_fr=a.reason_fr[:200],
                 )

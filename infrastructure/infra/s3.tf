@@ -153,7 +153,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
   depends_on = [aws_s3_bucket_versioning.this]
 }
 
-# Base generale de depart (methodologie), versionnee dans app/knowledge/general
+# Base generale de depart (methodologie, societes), versionnee dans app/knowledge/general
 # et copiee dans infra/build/knowledge/ par le job package_agents. Les
 # documents ecrits par A6 vivent sous d'autres prefixes (actualites/,
 # donnees/) et ne sont pas geres par Terraform.

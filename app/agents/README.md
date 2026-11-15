@@ -45,6 +45,7 @@ app/agents/
       staging.py, service.py     éléments collectés, tâche asynchrone et marqueur _done.json
   tests/                         pytest, sans réseau ni AWS (modèle scripté pour la vraie boucle Strands)
 app/knowledge/general/methodologie/   documents de méthodologie versionnés (poussés sous general/ par Terraform)
+app/knowledge/general/societes/       chiffres publiés d'ATD et de CSU, relevés à la main (poussés de même)
 ```
 
 ## Lancer en local

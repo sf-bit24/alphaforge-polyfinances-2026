@@ -4,11 +4,11 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import type { ClientState, Locale } from "@/lib/contract/schemas";
 import { useSession } from "@/lib/client/session";
 import type { Dictionary } from "@/lib/i18n/dictionary";
-import { formatPercent } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
 import { DEMO, DEMO_CHIPS, type DemoKey } from "@/lib/sample/assistant-demo";
 import { tr } from "@/lib/sample/portfolio";
 import { cn } from "@/components/ui/cn";
+import { composeHints } from "./assistant-offer";
 import { PendingReply, Thread, ThreadEntries, ThreadNotices, threadView, type ThreadView } from "./assistant-thread";
 import styles from "./dashboard.module.css";
 import { IntroScene, SuggestionChips, type IntroChip } from "./intro-scene";
@@ -69,14 +69,17 @@ function MessageForm({ form, replying }: { form: FollowupForm; replying: boolean
   );
 }
 
-/** The input's hint, and during the follow-ups whether they can be stopped yet. */
+/** The input's hint, and during the follow-ups whether they can be stopped yet: one line each. */
 function ComposeHint({ followups, completeness }: { followups: boolean; completeness: ClientState["completeness"] }) {
   const { t, locale } = useI18n();
   return (
-    <p className={styles.hint}>
-      {t.assistant.hint}
-      {followups ? ` ${completeness.ready ? t.followups.stopHintReady : t.followups.stopHintLocked(formatPercent(completeness.score, locale))}` : ""}
-    </p>
+    <div className={styles.hints}>
+      {composeHints(t, locale, followups, completeness).map((line) => (
+        <p key={line} className={styles.hint}>
+          {line}
+        </p>
+      ))}
+    </div>
   );
 }
 

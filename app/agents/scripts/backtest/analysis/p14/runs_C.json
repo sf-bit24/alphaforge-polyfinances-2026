@@ -1,0 +1,6 @@
+{
+ "p14_etudes_usd_libre:rolling:10:0": "results/p14_etudes_usd_libre/20261114T235314Z_rolling_h10.json",
+ "p14_etudes_usd_libre:non_overlapping:10:1": "results/p14_etudes_usd_libre/20261114T235448Z_non_overlapping_h10.json",
+ "p14_etudes_usd_volonte:rolling:10:0": "results/p14_etudes_usd_volonte/20261114T235527Z_rolling_h10.json",
+ "p14_etudes_usd_volonte:non_overlapping:10:1": "results/p14_etudes_usd_volonte/20261114T235641Z_non_overlapping_h10.json"
+}

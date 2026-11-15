@@ -26,5 +26,13 @@ src/alphaforge/data/long/*.parquet
 src/alphaforge/data/long/raw/
 # Traces écrites par le moteur hors d'un checkout (défaut ./backtest-results).
 backtest-results/
+# Études (scripts/backtest) : les traces brutes (~650 Mo) sont reproductibles ; seules les synthèses
+# results/*_analysis/ et results/decisions/ sont versionnées. data_ext/ = copies dérivées locales des études.
+scripts/backtest/results/*
+!scripts/backtest/results/*_analysis/
+!scripts/backtest/results/decisions/
+scripts/backtest/results/**/*_scratch*
+scripts/backtest/analysis/*/data_ext/
+scripts/backtest/**/*.log
 *.xls
 *.xlsx

@@ -1,0 +1,159 @@
+{
+ "rules": "Persona 14 - apply the readable derivation rules to the stage-A sweeps. SIMULATION ONLY.\nPROPOSALS TO BE VALIDATED BY THE TEAM. Reads results/p14_analysis/sweep_*.csv and energy_style_ca_eq.csv,\nwrites results/p14_analysis/derived_thresholds.json.\n\nR-CAP (capacity, per pocket, CAD 1977+ = Tyler's currency): largest equity share of the ex-energy core whose\n      longest REAL underwater spell (full sample, peak -> recovery of real wealth) <= horizon / 2\n      (\"a loss must be recovered in real terms within half of the horizon, so the second half still serves the goal\").\n      Capacity max_drawdown = full-sample nominal max DD of that mix, rounded UP to the next 5 pts.\nR-WILL (willingness): AMF Q10 answer INFERRED from \"tol\u00e9rance d\u00e9clar\u00e9e \u00e9lev\u00e9e\" = case \"30 %\" [inf].\nR-MIN (31-103CP): applied limit = min(capacity, willingness).\nR-ENERGY: largest direct energy weight e (look-through, incl. CA_EQ loading) such that the p90 (across rolling\n      windows of the pocket horizon) of TOTAL-WEALTH max drawdown, central scenario h = 1/2, rises by at most\n      b = 10 % of the pocket's drawdown limit vs e = 0. Era: CAD 1977+ (min over eras reported).\nR-EMPLOYER: largest CNQ.TO weight k such that, in the worst rolling window (5 and 10 y, step 3 m, CAD 1995+), the\n      financial portfolio max drawdown rises by at most b = 10 % of the pocket's drawdown limit vs k = 0\n      (same convention as Amira's single-stock rule R-IDIO).\nR-CAEQ: CA_EQ / XIU.TO cap implied by the energy cap: (energy cap) / (CA_EQ energy loading), loading = return-based\n      estimate (energy_style_ca_eq.csv; full sample and 2007-2016 / 2017-2026 blocks as sensitivity).\n",
+ "ca_eq_energy_loading_full": 0.239,
+ "ca_eq_energy_loading_blocks": {
+  "1977-01..1986-12": 0.3228,
+  "1987-01..1996-12": 0.3028,
+  "1997-01..2006-12": 0.2142,
+  "2007-01..2016-12": 0.4321,
+  "2017-01..2026-09": 0.1055
+ },
+ "pockets": {
+  "etudes": {
+   "energy_base_implicit_ca_eq": 0.0358,
+   "energy_lookthrough_limit_L": 0.086,
+   "energy_lookthrough_limit_rule": "L = implicit energy of the sweep base (eq share x 0.3 x CA_EQ loading) + direct cap (CAD, h=1/2, b)",
+   "horizon_years": 10,
+   "capacity_rule_limit_months": 60.0,
+   "capacity": {
+    "CAD 1977+": {
+     "equity_share": 0.5,
+     "full_maxdd": 0.16132906426236582,
+     "real_underwater_months": 58,
+     "capacity_maxdd": 0.2
+    },
+    "USD 1926+": {
+     "equity_share": null,
+     "note": "no mix with real underwater <= 60 months",
+     "min_real_underwater_months": 123
+    }
+   },
+   "willingness_q10_inferred": 0.3,
+   "capacity_maxdd": 0.2,
+   "applied_maxdd": 0.2,
+   "binding": "capacit\u00e9",
+   "amf_profile_retained": "3 \u00c9quilibr\u00e9 (Q7) -> Q10 case of profile 3 = 15 % (sensitivity)",
+   "budget_b": 0.02,
+   "energy_direct_cap": 0.05,
+   "energy_cap_cad": 0.05,
+   "energy_cap_usd": 0.15,
+   "energy_cap_sensitivity": {
+    "CAD 1977+|h=0.333|b=0.010": 0.025,
+    "CAD 1977+|h=0.333|b=0.020": 0.075,
+    "CAD 1977+|h=0.333|b=0.030": 0.1,
+    "CAD 1977+|h=0.333|b=0.040": 0.1,
+    "CAD 1977+|h=0.500|b=0.010": 0.025,
+    "CAD 1977+|h=0.500|b=0.020": 0.05,
+    "CAD 1977+|h=0.500|b=0.030": 0.075,
+    "CAD 1977+|h=0.500|b=0.040": 0.1,
+    "CAD 1977+|h=0.667|b=0.010": 0.05,
+    "CAD 1977+|h=0.667|b=0.020": 0.1,
+    "CAD 1977+|h=0.667|b=0.030": 0.15,
+    "CAD 1977+|h=0.667|b=0.040": 0.2,
+    "USD 1926+|h=0.333|b=0.010": 0.075,
+    "USD 1926+|h=0.333|b=0.020": 0.15,
+    "USD 1926+|h=0.333|b=0.030": 0.2,
+    "USD 1926+|h=0.333|b=0.040": 0.3,
+    "USD 1926+|h=0.500|b=0.010": 0.1,
+    "USD 1926+|h=0.500|b=0.020": 0.15,
+    "USD 1926+|h=0.500|b=0.030": 0.2,
+    "USD 1926+|h=0.500|b=0.040": 0.2,
+    "USD 1926+|h=0.667|b=0.010": 0.05,
+    "USD 1926+|h=0.667|b=0.020": 0.1,
+    "USD 1926+|h=0.667|b=0.030": 0.15,
+    "USD 1926+|h=0.667|b=0.040": 0.2
+   },
+   "employer_cap_cnq": 0.025,
+   "employer_cap_sensitivity": {
+    "b=0.010": 0.0,
+    "b=0.020": 0.025,
+    "b=0.030": 0.05,
+    "b=0.040": 0.075
+   },
+   "ca_eq_cap_implied_if_no_direct_energy": {
+    "full_loading": 0.36,
+    "1977-01..1986-12": 0.266,
+    "1987-01..1996-12": 0.284,
+    "1997-01..2006-12": 0.401,
+    "2007-01..2016-12": 0.199,
+    "2017-01..2026-09": 0.815
+   }
+  },
+  "retraite": {
+   "energy_base_implicit_ca_eq": 0.0502,
+   "energy_lookthrough_limit_L": 0.15,
+   "energy_lookthrough_limit_rule": "L = implicit energy of the sweep base (eq share x 0.3 x CA_EQ loading) + direct cap (CAD, h=1/2, b)",
+   "horizon_years": 16,
+   "capacity_rule_limit_months": 96.0,
+   "capacity": {
+    "CAD 1977+": {
+     "equity_share": 0.7,
+     "full_maxdd": 0.2589100759802504,
+     "real_underwater_months": 76,
+     "capacity_maxdd": 0.3
+    },
+    "USD 1926+": {
+     "equity_share": null,
+     "note": "no mix with real underwater <= 96 months",
+     "min_real_underwater_months": 123
+    }
+   },
+   "willingness_q10_inferred": 0.3,
+   "capacity_maxdd": 0.3,
+   "applied_maxdd": 0.3,
+   "binding": "\u00e9galit\u00e9",
+   "amf_profile_retained": "3 \u00c9quilibr\u00e9 (Q7) -> Q10 case of profile 3 = 15 % (sensitivity)",
+   "budget_b": 0.03,
+   "energy_direct_cap": 0.1,
+   "energy_cap_cad": 0.1,
+   "energy_cap_usd": 0.3,
+   "energy_cap_sensitivity": {
+    "CAD 1977+|h=0.333|b=0.010": 0.1,
+    "CAD 1977+|h=0.333|b=0.020": 0.1,
+    "CAD 1977+|h=0.333|b=0.030": 0.15,
+    "CAD 1977+|h=0.333|b=0.040": 0.15,
+    "CAD 1977+|h=0.500|b=0.010": 0.025,
+    "CAD 1977+|h=0.500|b=0.020": 0.05,
+    "CAD 1977+|h=0.500|b=0.030": 0.1,
+    "CAD 1977+|h=0.500|b=0.040": 0.1,
+    "CAD 1977+|h=0.667|b=0.010": 0.05,
+    "CAD 1977+|h=0.667|b=0.020": 0.1,
+    "CAD 1977+|h=0.667|b=0.030": 0.15,
+    "CAD 1977+|h=0.667|b=0.040": 0.2,
+    "USD 1926+|h=0.333|b=0.010": 0.15,
+    "USD 1926+|h=0.333|b=0.020": 0.3,
+    "USD 1926+|h=0.333|b=0.030": 0.45,
+    "USD 1926+|h=0.333|b=0.040": 0.45,
+    "USD 1926+|h=0.500|b=0.010": 0.2,
+    "USD 1926+|h=0.500|b=0.020": 0.2,
+    "USD 1926+|h=0.500|b=0.030": 0.3,
+    "USD 1926+|h=0.500|b=0.040": 0.3,
+    "USD 1926+|h=0.667|b=0.010": 0.05,
+    "USD 1926+|h=0.667|b=0.020": 0.1,
+    "USD 1926+|h=0.667|b=0.030": 0.15,
+    "USD 1926+|h=0.667|b=0.040": 0.2
+   },
+   "employer_cap_cnq": 0.05,
+   "employer_cap_sensitivity": {
+    "b=0.010": 0.0,
+    "b=0.020": 0.025,
+    "b=0.030": 0.05,
+    "b=0.040": 0.075
+   },
+   "ca_eq_cap_implied_if_no_direct_energy": {
+    "full_loading": 0.628,
+    "1977-01..1986-12": 0.465,
+    "1987-01..1996-12": 0.495,
+    "1997-01..2006-12": 0.7,
+    "2007-01..2016-12": 0.347,
+    "2017-01..2026-09": 1.422
+   }
+  }
+ },
+ "household": {
+  "energy_direct_cap": 0.05,
+  "energy_lookthrough_limit_L": 0.086,
+  "employer_cap_cnq": 0.025,
+  "rule": "household level = lowest pocket value (one energy factor hits all pockets at once)"
+ }
+}

@@ -1,0 +1,97 @@
+{
+ "source": {
+  "prices": "/mnt/c/Users/User/Desktop/ecole/hackoton/source/Datathon2026/Datathon2026/alphaforge_starter/prices_daily.csv",
+  "rates": "/mnt/c/Users/User/Desktop/ecole/hackoton/source/Datathon2026/Datathon2026/alphaforge_starter/macro_rates.csv"
+ },
+ "method": "OLS weekly price return (close) on weekly change in GoC 2y / 10y yields; duration = -beta",
+ "assets": {
+  "XBB.TO": {
+   "n_weeks": 261,
+   "start": "2021-11-19",
+   "end": "2026-11-13",
+   "duration_vs_d2": 5.36,
+   "r2_vs_d2": 0.679,
+   "duration_vs_d10": 6.52,
+   "r2_vs_d10": 0.938,
+   "duration_vs_best_mix": {
+    "weight_2y": 0.0,
+    "duration": 6.52,
+    "r2": 0.938
+   },
+   "total_return_2022_adj_close": -0.1166
+  },
+  "ZST.TO": {
+   "n_weeks": 261,
+   "start": "2021-11-19",
+   "end": "2026-11-13",
+   "duration_vs_d2": 0.02,
+   "r2_vs_d2": 0.0,
+   "duration_vs_d10": 0.0,
+   "r2_vs_d10": 0.0,
+   "duration_vs_best_mix": {
+    "weight_2y": 1.0,
+    "duration": 0.02,
+    "r2": 0.0
+   },
+   "total_return_2022_adj_close": 0.0122
+  },
+  "AGG": {
+   "n_weeks": 261,
+   "start": "2021-11-19",
+   "end": "2026-11-13",
+   "duration_vs_d2": 4.22,
+   "r2_vs_d2": 0.544,
+   "duration_vs_d10": 5.09,
+   "r2_vs_d10": 0.741,
+   "duration_vs_best_mix": {
+    "weight_2y": 0.0,
+    "duration": 5.09,
+    "r2": 0.741
+   },
+   "total_return_2022_adj_close": -0.1302
+  },
+  "TLT": {
+   "n_weeks": 261,
+   "start": "2021-11-19",
+   "end": "2026-11-13",
+   "duration_vs_d2": 8.8,
+   "r2_vs_d2": 0.374,
+   "duration_vs_d10": 12.47,
+   "r2_vs_d10": 0.702,
+   "duration_vs_best_mix": {
+    "weight_2y": 0.0,
+    "duration": 12.47,
+    "r2": 0.702
+   },
+   "total_return_2022_adj_close": -0.3123
+  }
+ },
+ "rates_2022": {
+  "boc_policy_rate_2021_12_31": 0.25,
+  "boc_policy_rate_2022_12_30": 4.25,
+  "goc_2y_2021_12_31": 0.95,
+  "goc_2y_2022_12_30": 4.06,
+  "goc_10y_2021_12_31": 1.42,
+  "goc_10y_2022_12_30": 3.3
+ },
+ "blend_duration": {
+  "assumption": "XBB.TO effective duration 6.74 y (iShares page, as of 2026-11-12); ZST.TO = empirical vs 2y",
+  "100_xbb": 6.74,
+  "50_xbb_50_zst": 3.38,
+  "30_xbb_40_zst_of_70": 2.9,
+  "fixed_income_share_of_portfolio_for_conservateur": 0.7,
+  "portfolio_level_rate_sensitivity_100_xbb": 4.72,
+  "portfolio_level_rate_sensitivity_50_50": 2.37
+ },
+ "bnc_json_top_level_keys": [
+  "run_id",
+  "created_utc",
+  "disclaimer",
+  "engine_sha256",
+  "data_version",
+  "script",
+  "inputs",
+  "params",
+  "results"
+ ]
+}

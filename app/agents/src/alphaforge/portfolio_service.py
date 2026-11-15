@@ -341,6 +341,8 @@ class PortfolioService:
                     strategy=args["strategy"],
                     style_preference=args["style"],
                     style_inputs=style_inputs,
+                    # Source de l'ancrage Guardrails de l'explication (lue seulement si un guardrail est posé).
+                    grounding_docs=market_store.methodology() if self.settings.guardrail_id else (),
                 )
                 decision_key = client_store.save_decision(result.decision, result.policy)
                 audit = self._audit(result.decision)

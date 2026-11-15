@@ -55,6 +55,7 @@ from alphaforge.profile.views import completeness_view, profile_view
 from alphaforge.store import Store
 
 log = logging.getLogger(__name__)
+METHODOLOGY_PREFIX = "general/methodologie/"
 _NEWS_MONTH = re.compile(r"^general/actualites/(?P<y>\d{4})/(?P<m>\d{2})/")
 
 
@@ -148,6 +149,15 @@ class OkfClientStore:
         return key
 
 
+def _body(text: str) -> str:
+    """Corps d'un document OKF, sans son frontmatter YAML."""
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) == 3:
+            return parts[2].strip()
+    return text.strip()
+
+
 class OkfMarketStore:
     """Preuves datées de la base générale OKF (lot E), lues par le code, sans LLM et sans jamais deviner.
 
@@ -185,6 +195,8 @@ class OkfMarketStore:
         with self._lock:
             self.inputs: dict[str, str] = {}
             self.news_inputs: dict[str, str] = {}
+            self.grounding_inputs: dict[str, str] = {}
+            self._methodology: list[tuple[str, str]] | None = None
             self.rejected: dict[str, str] = {}
             self._fundamentals: dict[str, CompanyFundamentals] | None = None
             self._news_keys: list[str] | None = None
@@ -270,6 +282,22 @@ class OkfMarketStore:
                     log.warning("okf: %s", exc)
             self._esg_items = found
             return found
+
+    def methodology(self) -> list[tuple[str, str]]:
+        """Fiches de méthode de la base générale (``general/methodologie/*.md``, corps sans frontmatter), lues une fois.
+
+        Source de l'ancrage Bedrock Guardrails de l'explication, jamais intrant du calcul : leurs ETag vont dans
+        ``grounding_inputs`` et non dans ``inputs``, donc la version des données de la décision ne change pas.
+        """
+        with self._lock:
+            if self._methodology is None:
+                docs = []
+                for key in self._list(METHODOLOGY_PREFIX, self.grounding_inputs):
+                    got = self._read(key, self.grounding_inputs)
+                    if got is not None:
+                        docs.append((key, _body(got[1])))
+                self._methodology = docs
+            return list(self._methodology)
 
     def _unreadable(self, where: str, exc: Exception, sink: dict[str, str]) -> None:
         """Droits ou réseau : on le note (la version des données le montre), sans bloquer la décision."""

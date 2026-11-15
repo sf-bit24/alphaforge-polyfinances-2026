@@ -2,14 +2,15 @@
 
 Cas du test e2e du 2026-11-15 : profil à 95 % (« Prêt »), 10 000 $, perte maximale de 250 $, fonds d'urgence nul,
 retraits de 25 % sous 12 mois. La règle des dollars le met en PROTECTION (l* = 2,5 % sous min_L_plan) ; la décision
-disait « informations manquantes ou signaux de vulnérabilité » et « Compléter : le profil. ».
+disait « informations manquantes ou signaux de vulnérabilité » et « Compléter : le profil. ». Le vrai profil
+(``REAL_E2E_VIEW``, horizon 3to10 et 5 ans) a une seconde cause : ses retraits sous 12 mois fixent l'horizon à un an.
+Chaque levier affiché est vérifié par une nouvelle compilation du profil modifié.
 
 L'explication se construit sans le moteur (numpy, cvxpy) ; seul le test de ``build_portfolio`` en a besoin.
 """
 
 from __future__ import annotations
 
-import dataclasses
 import re
 from datetime import UTC, date, datetime
 
@@ -18,6 +19,7 @@ import pytest
 from alphaforge.finance.contracts.profile import InvestorProfile
 from alphaforge.finance.debate.explain import no_allocation_explanation, verify
 from alphaforge.finance.debate.facts import FactBook, fmt
+from alphaforge.finance.observability.verify import verify_numbers
 from alphaforge.finance.policy import compile_profile
 from alphaforge.finance.policy.compiler import no_mandate_cause
 from alphaforge.finance.policy.from_profile_view import investor_profile_from_view
@@ -60,9 +62,8 @@ def _explain(profile: InvestorProfile):
     book = FactBook("dec-issue-76")
     with book.step("s0.policy_compiler", tool="compile_profile"):
         level = book.add("level", "Niveau de risque effectif", comp.level, "niveau", dataset="risk_levels.yaml@0.2.0")
-    expl = no_allocation_explanation(
-        book, comp.decision_kind or "incomplet", no_mandate_cause(comp), profile.missing_info, level
-    )
+    cause = no_mandate_cause(comp, profile, AS_OF)
+    expl = no_allocation_explanation(book, comp.decision_kind or "incomplet", cause, profile.missing_info, level)
     return comp, book, expl
 
 
@@ -75,11 +76,14 @@ def _cited(expl) -> set[str]:
 
 
 def _assert_number_rule(book: FactBook, expl) -> None:
-    """Règle du volet (explain.verify, portée par app/web/tests/portfolio.test.ts) : chaque nombre d'une phrase est
-    la valeur formatée (fmt) d'un Fact qu'elle cite ; une phrase sans Fact n'écrit aucun chiffre."""
+    """Règle du volet (explain.verify, portée par app/web/tests/portfolio.test.ts, et observability.verify_numbers) :
+    chaque nombre d'une phrase est la valeur formatée (fmt) d'un Fact qu'elle cite ; une phrase sans Fact n'écrit
+    aucun chiffre."""
     for sec in SECTIONS:
         for st in getattr(expl, sec):
             assert not verify(book, st), (sec, st.text_fr, verify(book, st))
+            check = verify_numbers(st.text_fr, [book.facts[fid] for fid in st.fact_ids])
+            assert check.ok, (sec, st.text_fr, check.unmatched)
             if not st.fact_ids:
                 assert not re.search(r"\d", st.text_fr.replace("N0", "")), st.text_fr
 
@@ -150,30 +154,145 @@ def test_the_lever_is_real_a_loss_of_the_given_amount_allows_an_allocation():
 # --------------------------------------------------------------------------- les autres causes
 
 
-def test_short_horizon_names_the_horizon_and_its_lever():
-    """Bande 3to10 avec retraits sous 12 mois : tous les objectifs sont des seaux prudents, T = 1 an, l_cap = 3,8 %."""
-    comp, book, expl = _explain(_profile(max_loss=5_000, band="3to10"))
+def _apply(profile: InvestorProfile, *changes) -> InvestorProfile:
+    for change in changes:
+        profile = change.apply(profile)
+    return profile
+
+
+def _assert_levers_give_a_mandate(profile: InvestorProfile) -> None:
+    """Chaque levier affiché, appliqué avec les autres (une option d'horizon à la fois), donne un mandat."""
+    comp = compile_profile(profile, AS_OF)
+    levers = no_mandate_cause(comp, profile, AS_OF).levers
+    assert levers.allocation
+    for option in levers.horizon or [None]:
+        changed = _apply(profile, *levers.required, *([option] if option else []))
+        result = compile_profile(changed, AS_OF)
+        assert result.decision_kind is None and result.policy is not None, (option, result.decision_kind)
+
+
+def test_short_horizon_names_the_goal_that_fixes_it_and_a_verified_lever():
+    """Bande 3to10 sans horizon_years (3 ans, envie) et retraits sous 12 mois : tous les objectifs sont des seaux
+    prudents, T = 1 an, l_cap = 3,8 %. Sans les retraits, T = 3 ans ne suffit pas : seul l'horizon principal compte."""
+    profile = _profile(max_loss=5_000, band="3to10")
+    comp, book, expl = _explain(profile)
     rule = no_mandate_cause(comp).dollar_rule
     assert comp.decision_kind == "protection" and not rule.is_below(rule.declared_loss)
     why = " ".join(_texts(expl, "why"))
-    assert "La perte que l'horizon de votre objectif le plus proche permet d'absorber (3,8 %, à 1,0 ans)" in why
-    assert "vous dites" not in why
+    assert "Votre objectif « retraits prévus sous 12 mois » fixe l'horizon de placement à 12,0 mois." in why
+    assert "La perte que cet horizon permet d'absorber (3,8 %)" in why
+    assert "vous dites" not in why and "ans)" not in why
     assert _texts(expl, "what_would_change") == [
-        "Un horizon d'au moins 3,6 ans pour l'objectif le plus proche rendrait une allocation possible."
+        "Un horizon de placement plus long rendrait une allocation possible. Par exemple : un horizon d'au moins "
+        "5,1 ans pour l'objectif « objectif : growth »."
     ]
-    longer = dataclasses.replace(rule, horizon_years=book.facts["protection.required_horizon_years"].value)
-    assert not longer.is_below(longer.horizon_loss)
+    _assert_levers_give_a_mandate(profile)
     _assert_number_rule(book, expl)
 
 
 def test_several_causes_give_several_necessary_levers():
-    _, book, expl = _explain(_profile(max_loss=250, band="3to10"))
+    profile = _profile(max_loss=250, band="3to10")
+    _, book, expl = _explain(profile)
     changes = _texts(expl, "what_would_change")
-    assert len(changes) == 2
-    assert all(t.endswith("serait nécessaire pour qu'une allocation soit possible.") for t in changes)
-    assert changes[0].startswith("Une perte admissible d'au moins 1 299 $")
-    assert changes[1].startswith("Un horizon d'au moins 3,6 ans")
+    assert changes[0] == (
+        "Une perte admissible d'au moins 1 299 $ sur ce montant serait nécessaire pour qu'une allocation soit possible."
+    )
+    assert changes[1].startswith("Un horizon de placement plus long serait nécessaire pour qu'une allocation soit ")
+    assert changes[2].startswith("Ensemble, ces changements rendraient une allocation possible")
+    _assert_levers_give_a_mandate(profile)
     _assert_number_rule(book, expl)
+
+
+# --------------------------------------------------------------------------- le vrai profil e2e (release 84af77a5)
+
+REAL_E2E_VIEW = {  # ProfileView du client 43ba02dd… (OkfClientStore.view), complétude 95 %, « Prêt »
+    "knowledge_level": "intermediate",
+    "risk": {"tolerance": "low_medium", "capacity": "low_medium", "effective": "low_medium"},
+    "facts": [
+        {"field": k, "value": v}
+        for k, v in [
+            ("knowledge.invest_frequency", "rarely"),
+            ("knowledge.news_frequency", "monthly"),
+            ("knowledge.products_known", ["savings_gic"]),
+            ("knowledge.quiz_diversification", "etf"),
+            ("knowledge.quiz_bond_rates", "falls"),
+            ("knowledge.self_assessment", "intermediate"),
+            ("objective.goal", "retirement"),
+            ("horizon.horizon_band", "3to10"),
+            ("risk_tolerance.drop_reaction", "sell_some"),
+            ("risk_tolerance.risk_attitude", "small"),
+            ("risk_tolerance.sell_threshold_pct", "lt5"),
+            ("risk_capacity.emergency_fund", 0),
+            ("risk_capacity.income_stability", "stable"),
+            ("risk_capacity.employment_sector", "finance"),
+            ("risk_capacity.loss_impact", "some"),
+            ("constraints.liquidity_need", "some"),
+            ("constraints.withdrawal_pct_12m", 25),
+            ("constraints.account_types", ["tfsa"]),
+            ("constraints.currency_preference", "cad_usd"),
+            ("preferences.esg_importance", 2),
+            ("preferences.interests", ["technology"]),
+            ("behavior.hype_reaction", "buy_some"),
+            ("behavior.hype_position_share", "2to5"),
+            ("context.amount_cad", 10000),
+            ("context.has_existing_portfolio", False),
+            ("horizon.horizon_years", 5),
+            ("objective.goal_detail", "Je veux préparer ma retraite et garder une réserve pour les imprévus."),
+            ("risk_capacity.max_loss_cad", 250),
+            ("constraints.monthly_contribution_cad", 0),
+            ("horizon.withdrawal_pattern", "gradual"),
+            ("risk_capacity.high_interest_debt", False),
+            ("preferences.approach", "mixed"),
+            ("risk_tolerance.past_drop_behavior", "held"),
+        ]
+    ],
+}
+REAL_COMPLETENESS = {"score": 1.0, "displayed": 0.95, "threshold": 0.7, "ready": True, "missing": []}
+
+
+def _real(**fields) -> InvestorProfile:
+    """Le vrai profil, avec des champs remplacés (None retire le champ)."""
+    facts = [f for f in REAL_E2E_VIEW["facts"] if f["field"] not in fields]
+    facts += [{"field": k, "value": v} for k, v in fields.items() if v is not None]
+    view = {**REAL_E2E_VIEW, "facts": facts}
+    return investor_profile_from_view(view, "43ba02dd-e2e", created_utc=CREATED, completeness=REAL_COMPLETENESS)
+
+
+def test_real_e2e_profile_names_both_causes_and_only_verified_levers():
+    profile = _real()
+    assert profile.status.value == "COMPLETE" and profile.missing_info == []
+    comp, book, expl = _explain(profile)
+    assert comp.decision_kind == "protection" and comp.level == "N0"
+    assert _texts(expl, "why") == [
+        "La perte que vous dites pouvoir absorber (250 $, soit 2,5 % du montant) est sous la plus petite perte de "
+        "planification des portefeuilles possibles (13,0 %) : aucune allocation ne respecte cette limite.",
+        "Votre objectif « retraits prévus sous 12 mois » fixe l'horizon de placement à 12,0 mois. La perte que cet "
+        "horizon permet d'absorber (3,8 %) est sous la plus petite perte de planification des portefeuilles possibles "
+        "(13,0 %) : aucune allocation ne respecte cette limite.",
+    ]
+    assert _texts(expl, "what_would_change") == [
+        "Une perte admissible d'au moins 1 299 $ sur ce montant serait nécessaire pour qu'une allocation soit "
+        "possible.",
+        "Un horizon de placement plus long serait nécessaire pour qu'une allocation soit possible. Par exemple : sans "
+        "l'objectif « retraits prévus sous 12 mois », l'horizon passerait à 5,0 ans ; ou un horizon d'au moins 5,1 ans "
+        "pour l'objectif « objectif : retirement ».",
+        "Ensemble, ces changements rendraient une allocation possible : une nouvelle compilation du profil modifié le "
+        "vérifie.",
+    ]
+    assert "3,6 ans" not in " ".join(_texts(expl, "what_would_change"))
+    _assert_levers_give_a_mandate(profile)
+    _assert_number_rule(book, expl)
+
+
+def test_real_e2e_levers_hold_in_the_questionnaire_terms():
+    """Les mêmes leviers, dits avec les champs du questionnaire ; l'ancien levier (horizon de 3,6 ans) ne suffit pas."""
+    assert compile_profile(_real(**{"risk_capacity.max_loss_cad": 1_299}), AS_OF).decision_kind == "protection"
+    without_withdrawals = _real(**{"risk_capacity.max_loss_cad": 1_299, "constraints.withdrawal_pct_12m": None})
+    assert compile_profile(without_withdrawals, AS_OF).decision_kind is None
+    longer = _real(**{"risk_capacity.max_loss_cad": 1_299, "horizon.horizon_years": 5.1})
+    assert compile_profile(longer, AS_OF).decision_kind is None
+    old_lever = _real(**{"risk_capacity.max_loss_cad": 1_299, "horizon.horizon_years": 3.6})
+    assert compile_profile(old_lever, AS_OF).decision_kind == "protection"
 
 
 def test_high_withdrawals_name_the_withdrawal_rate():

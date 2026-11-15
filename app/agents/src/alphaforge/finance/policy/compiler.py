@@ -12,11 +12,12 @@ import hashlib
 import json
 import math
 import unicodedata
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, time
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 import yaml
 
@@ -1837,6 +1838,7 @@ class DollarRuleProtection:
     withdrawal_rate_max: float | None = None  # q_max
     horizon_years: float | None = None  # T du seau risque
     mu_recovery: float | None = None
+    goal_horizons: dict[str, float] = field(default_factory=dict)  # horizon de chaque objectif (horizon.T_risk)
 
     def is_below(self, loss: float | None) -> bool:
         """Vrai si cette entree de l* est sous min_L_plan : il faut la relever pour qu'une allocation existe."""
@@ -1888,6 +1890,7 @@ class NoMandateCause:
     confidence: float | None
     completeness_min: float | None
     dollar_rule: DollarRuleProtection | None
+    levers: ProtectionLevers | None = None  # leviers de la regle des dollars, verifies par compilation
 
     @property
     def profile_protection(self) -> bool:
@@ -1915,6 +1918,7 @@ def _dollar_rule_protection(trace: list[dict[str, Any]]) -> DollarRuleProtection
     loss_budget = (_last_record(trace, "dollar_rule.l_star") or {}).get("inputs", {})
     declared = (_last_record(trace, "dollar_rule.l_declared") or {}).get("inputs", {})
     loss_capacity = (_last_record(trace, "dollar_rule.l_cap") or {}).get("inputs", {})
+    risk_horizon = (_last_record(trace, "horizon.T_risk") or {}).get("inputs", {})
     return DollarRuleProtection(
         l_star=protection["inputs"]["l_star"],
         min_planning_loss=protection["inputs"]["min_L_plan"],
@@ -1928,15 +1932,28 @@ def _dollar_rule_protection(trace: list[dict[str, Any]]) -> DollarRuleProtection
         withdrawal_rate_max=loss_capacity.get("q_max"),
         horizon_years=loss_capacity.get("T"),
         mu_recovery=loss_capacity.get("mu_recovery"),
+        goal_horizons=dict(risk_horizon.get("goal_horizons") or {}),
     )
 
 
-def no_mandate_cause(result: CompileResult) -> NoMandateCause:
+def no_mandate_cause(
+    result: CompileResult,
+    profile: InvestorProfile | None = None,
+    as_of: date | None = None,
+    compile_fn: Callable[[InvestorProfile, date], CompileResult] | None = None,
+) -> NoMandateCause:
     """Cause enregistree d'une decision sans allocation, lue dans ``result.trace`` (regles ``status``,
-    ``dollar_rule.*`` et ``decision_kind``) : l'explication la cite au lieu d'un texte generique."""
+    ``dollar_rule.*`` et ``decision_kind``) : l'explication la cite au lieu d'un texte generique.
+
+    Avec le profil compile et sa date, la cause porte aussi les leviers de la regle des dollars, chacun verifie par
+    une nouvelle compilation (``compile_fn``, ``compile_profile`` par defaut) du profil modifie."""
     status = _last_record(result.trace, "status") or {}
     status_inputs = status.get("inputs", {})
     kind = _last_record(result.trace, "decision_kind") or {}
+    dollar_rule = _dollar_rule_protection(result.trace)
+    levers = None
+    if dollar_rule is not None and profile is not None and as_of is not None:
+        levers = protection_levers(profile, as_of, dollar_rule, compile_fn or compile_profile)
     return NoMandateCause(
         decision_kind=result.decision_kind,
         profile_status=status_inputs.get("profile_status"),
@@ -1944,5 +1961,176 @@ def no_mandate_cause(result: CompileResult) -> NoMandateCause:
         must_have_missing=list(kind.get("inputs", {}).get("must_have_missing") or []),
         confidence=status_inputs.get("confidence"),
         completeness_min=status_inputs.get("completeness_min"),
-        dollar_rule=_dollar_rule_protection(result.trace),
+        dollar_rule=dollar_rule,
+        levers=levers,
     )
+
+
+# --------------------------------------------------------------------------- leviers de la regle des dollars
+
+SHORT_NEED_YEARS = 1.0  # un besoin a un an ou moins (« retraits prevus sous 12 mois ») a un horizon fixe
+HORIZON_STEP_YEARS = 0.1  # pas des horizons testes ; un seau vise horizon <= T_max, on teste T_max + 0.1
+SAME_HORIZON_YEARS = 1e-4  # horizon.T_risk arrondit les horizons a 4 decimales
+
+
+@dataclass(frozen=True)
+class GoalRef:
+    """Objectif du profil vise par un levier, avec son horizon a la date de calcul (trace horizon.T_risk)."""
+
+    goal_id: str
+    label: str
+    horizon_years: float
+
+
+@dataclass(frozen=True)
+class ProfileChange:
+    """Changement du profil propose comme levier de la regle des dollars."""
+
+    kind: Literal["max_loss_cad", "max_loss_pct", "withdrawal_rate", "goal_horizon", "without_goal"]
+    value: float | None = None  # perte en $ ou en part de W, taux de retrait annuel, horizon en annees
+    goal: GoalRef | None = None
+    horizon_after: float | None = None  # T du seau risque une fois le changement applique
+
+    def apply(self, profile: InvestorProfile) -> InvestorProfile:
+        data = profile.model_dump()
+        if self.kind == "max_loss_cad":
+            data["max_acceptable_loss_cad"] = self.value
+        elif self.kind == "max_loss_pct":
+            data["max_acceptable_loss_pct"] = self.value
+        elif self.kind == "without_goal":
+            data["goals"] = [goal for goal in data["goals"] if goal["goal_id"] != self.goal.goal_id]
+        elif self.kind == "goal_horizon":
+            for goal in data["goals"]:
+                if goal["goal_id"] == self.goal.goal_id:
+                    goal.update(horizon_years=self.value, target_date=None)
+        else:  # withdrawal_rate : retraits recurrents ramenes a value * W par an, au prorata
+            total = sum(goal["recurring_withdrawal"] or 0.0 for goal in data["goals"])
+            for goal in data["goals"]:
+                if goal["recurring_withdrawal"]:
+                    goal["recurring_withdrawal"] *= self.value * profile.investable_wealth / total
+        return InvestorProfile.model_validate(data)
+
+
+@dataclass(frozen=True)
+class ProtectionLevers:
+    """Leviers de la regle des dollars, verifies par une nouvelle compilation du profil modifie.
+
+    ``required`` releve chaque entree de l* sous min_L_plan autre que l'horizon (perte declaree, retraits). Quand
+    l'horizon est trop court, chaque option de ``horizon``, appliquee avec ``required``, leve dollar_rule.protection ;
+    seules les options verifiees sont gardees.
+    """
+
+    required: tuple[ProfileChange, ...]
+    horizon: tuple[ProfileChange, ...]
+    horizon_short: bool  # le terme d'horizon de l_cap est sous min_L_plan
+    horizon_goal: GoalRef | None  # objectif dont l'horizon fixe T, s'il est seul
+    lifted: bool  # required avec chaque option d'horizon : plus de dollar_rule.protection
+    allocation: bool  # ... et chacune de ces compilations donne un mandat (decision_kind None)
+
+
+def _compile_changed(
+    profile: InvestorProfile, as_of: date, compile_fn: Callable, changes: list[ProfileChange]
+) -> CompileResult:
+    for change in changes:
+        profile = change.apply(profile)
+    return compile_fn(profile, as_of)
+
+
+def _dollar_rule_blocks(result: CompileResult) -> bool:
+    return _last_record(result.trace, "dollar_rule.protection") is not None
+
+
+def _risk_horizon(result: CompileResult) -> float | None:
+    return (_last_record(result.trace, "horizon.T_risk") or {}).get("output")
+
+
+def _goal_refs(profile: InvestorProfile, as_of: date, rule: DollarRuleProtection) -> list[GoalRef]:
+    return [
+        GoalRef(goal.goal_id, goal.label, rule.goal_horizons.get(goal.goal_id, _goal_horizon(goal, as_of)))
+        for goal in profile.goals
+    ]
+
+
+def _total_withdrawals(profile: InvestorProfile) -> float:
+    return sum(goal.recurring_withdrawal or 0.0 for goal in profile.goals)
+
+
+def _required_changes(profile: InvestorProfile, rule: DollarRuleProtection) -> tuple[ProfileChange, ...]:
+    """Pertes declarees (en $ et en %) relevees a min_L_plan, retraits recurrents ramenes au taux admis."""
+    floor_loss = rule.min_planning_loss
+    changes = []
+    if rule.declared_loss_cad is not None and rule.wealth and rule.is_below(rule.declared_loss_cad / rule.wealth):
+        changes.append(ProfileChange("max_loss_cad", ceil_step(floor_loss * rule.wealth, 1)))
+    if rule.is_below(rule.declared_loss_pct):
+        changes.append(ProfileChange("max_loss_pct", ceil_step(floor_loss, 0.001)))
+    if rule.is_below(rule.withdrawal_loss) and profile.investable_wealth and _total_withdrawals(profile):
+        changes.append(ProfileChange("withdrawal_rate", floor_step(rule.allowed_withdrawal_rate(), 0.001)))
+    return tuple(changes)
+
+
+def _longer_horizons(goal: GoalRef, rule: DollarRuleProtection) -> list[float]:
+    """Horizons a tester pour un objectif, croissants : le T qui suffit a l_cap (avec ou sans reserve de retraits),
+    et la sortie de chaque seau prudent (T_max + 0.1)."""
+    buckets = _load_yaml(str(DEFAULT_YAML))["buckets"]
+    needed = rule.required_horizon_years()
+    values = {round(bucket["T_max"] + HORIZON_STEP_YEARS, 6) for bucket in buckets["rules"]}
+    if needed is not None:
+        values |= {ceil_step(needed, HORIZON_STEP_YEARS)}
+        values |= {ceil_step(needed - buckets["withdrawal_reserve_years"], HORIZON_STEP_YEARS)}
+    return sorted(value for value in values if value > goal.horizon_years + EPSILON)
+
+
+def _horizon_candidates(goal: GoalRef, goals: list[GoalRef], rule: DollarRuleProtection) -> list[ProfileChange]:
+    """Un besoin a un an ou moins garde son horizon : on l'ote, si d'autres objectifs restent. Sinon, son horizon
+    s'allonge."""
+    if goal.horizon_years <= SHORT_NEED_YEARS + EPSILON and len(goals) > 1:
+        return [ProfileChange("without_goal", goal=goal)]
+    return [ProfileChange("goal_horizon", value, goal) for value in _longer_horizons(goal, rule)]
+
+
+def _horizon_options(
+    profile: InvestorProfile,
+    as_of: date,
+    rule: DollarRuleProtection,
+    required: tuple[ProfileChange, ...],
+    compile_fn: Callable,
+) -> tuple[ProfileChange, ...]:
+    """Pour chaque objectif, le premier changement qui, avec ``required``, leve dollar_rule.protection."""
+    goals = _goal_refs(profile, as_of, rule)
+    options = []
+    for goal in sorted(goals, key=lambda ref: ref.horizon_years):
+        for candidate in _horizon_candidates(goal, goals, rule):
+            result = _compile_changed(profile, as_of, compile_fn, [*required, candidate])
+            if not _dollar_rule_blocks(result):
+                options.append(replace(candidate, horizon_after=_risk_horizon(result)))
+                break
+    return tuple(options)
+
+
+def _horizon_goal(goals: list[GoalRef], rule: DollarRuleProtection) -> GoalRef | None:
+    """L'objectif dont l'horizon est T, s'il est seul (une reserve de retraits decale T : aucun ne l'est alors)."""
+    if rule.horizon_years is None:
+        return None
+    fixing = [goal for goal in goals if abs(goal.horizon_years - rule.horizon_years) < SAME_HORIZON_YEARS]
+    return fixing[0] if len(fixing) == 1 else None
+
+
+def protection_levers(
+    profile: InvestorProfile, as_of: date, rule: DollarRuleProtection, compile_fn: Callable
+) -> ProtectionLevers:
+    """Leviers qui levent la regle des dollars, chacun verifie par ``compile_fn`` sur le profil modifie."""
+    required = _required_changes(profile, rule)
+    horizon_short = rule.is_below(rule.horizon_loss)
+    options = _horizon_options(profile, as_of, rule, required, compile_fn) if horizon_short else ()
+    combos = [[*required, option] for option in options] or [list(required)]
+    results = [_compile_changed(profile, as_of, compile_fn, combo) for combo in combos]
+    lifted = (bool(options) or not horizon_short) and not any(_dollar_rule_blocks(result) for result in results)
+    return ProtectionLevers(
+        required=required,
+        horizon=options,
+        horizon_short=horizon_short,
+        horizon_goal=_horizon_goal(_goal_refs(profile, as_of, rule), rule),
+        lifted=lifted,
+        allocation=lifted and all(result.decision_kind is None for result in results),
+    )
+

@@ -161,7 +161,8 @@ def build_portfolio(
         holding_fids = _holding_facts(book, profile)
     if comp.decision_kind or comp.policy is None:
         kind = comp.decision_kind or "incomplet"
-        expl = no_allocation_explanation(book, kind, no_mandate_cause(comp), profile.missing_info, level_fid)
+        cause = no_mandate_cause(comp, profile, as_of, compile_fn)
+        expl = no_allocation_explanation(book, kind, cause, profile.missing_info, level_fid)
         d = Decision(
             decision_id=did,
             profile_id=profile.profile_id,

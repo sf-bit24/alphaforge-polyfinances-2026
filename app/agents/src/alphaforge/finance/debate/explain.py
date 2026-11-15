@@ -14,7 +14,13 @@ import re
 from dataclasses import dataclass, field
 
 from alphaforge.finance.contracts.decision import Explanation, Statement
-from alphaforge.finance.policy.compiler import DollarRuleProtection, NoMandateCause, ceil_step, floor_step
+from alphaforge.finance.policy.compiler import (
+    DollarRuleProtection,
+    GoalRef,
+    NoMandateCause,
+    ProfileChange,
+    ProtectionLevers,
+)
 
 from .facts import FactBook, fmt
 
@@ -331,6 +337,7 @@ def grounding_check(
 MUST_HAVE_FR = {"investable_wealth": "le montant à investir", "goals.horizon": "l'horizon de placement"}
 PLANNING_LOSS_FR = "la plus petite perte de planification des portefeuilles possibles"
 SAME_VALUE = 1e-12
+NECESSARY_FR = " serait nécessaire pour qu'une allocation soit possible"
 
 
 def no_allocation_explanation(
@@ -425,7 +432,6 @@ def _protection_explanation(
     tid = book.facts[level_fid].trace_id
     why: list[Statement] = []
     change: list[Statement] = []
-    levers: list[tuple[str, list[str]]] = []
     limits = [
         Statement(
             text_fr=f"En mode protection, le niveau reste {fmt(book.facts[level_fid].value, 'niveau')} et aucune "
@@ -460,10 +466,10 @@ def _protection_explanation(
             )
         )
     if cause.dollar_rule is not None:
-        facts = _ProtectionFacts(book, cause.dollar_rule, tid)
+        facts = _ProtectionFacts(book, cause.dollar_rule, cause.levers, tid)
         data_used.append(facts.rule_statement())
-        rule_why, levers = facts.causes()
-        why += rule_why
+        why += facts.why()
+        change += facts.lever_statements(others=len(change))
         limits.append(
             Statement(
                 text_fr="Les pertes de planification viennent de l'historique (pire baisse observée, plus une marge) : "
@@ -479,28 +485,40 @@ def _protection_explanation(
                 fact_ids=[level_fid],
             )
         )
+    if not change:
         change.append(
             Statement(
                 text_fr="Revoir votre situation avec une personne qualifiée avant toute proposition.", label="HYPOTHESE"
             )
         )
-    # Un seul levier suffit à rendre une allocation possible ; avec plusieurs causes, chacun est nécessaire.
-    alone = len(levers) + len(change) == 1
-    tail = " rendrait une allocation possible." if alone else " serait nécessaire pour qu'une allocation soit possible."
-    change += [Statement(text_fr=subject + tail, fact_ids=ids) for subject, ids in levers]
     return Explanation(data_used=data_used, why=why, limits=limits, what_would_change=change)
+
+
+def _duration(years: float) -> tuple[float, str]:
+    """Horizon affiché : en mois sous deux ans (« 12,0 mois »), en années au-delà."""
+    return (round(years * 12, 4), "mois") if years < 2 else (years, "ans")
+
+
+def _covered(book: FactBook, text: str, fact_ids: list[str]) -> bool:
+    """Vrai si chaque nombre du texte est la valeur d'un Fact cité : le libellé d'un objectif (« retraits prévus sous
+    12 mois ») peut alors être cité tel quel sans enfreindre la règle des nombres."""
+    values = {float(book.facts[fid].value) for fid in fact_ids if isinstance(book.facts[fid].value, int | float)}
+    values |= {float(n) for n in allowed_numbers(book, fact_ids)}
+    return all(float(n) in values for n in numbers(text))
 
 
 @dataclass
 class _ProtectionFacts:
-    """Facts de la règle des dollars en PROTECTION (``dollar_rule.protection`` et ses entrées), rattachés à l'étape
-    de compilation, et les phrases qui les citent."""
+    """Facts de la règle des dollars en PROTECTION (``dollar_rule.protection``, ses entrées et ses leviers vérifiés),
+    rattachés à l'étape de compilation, et les phrases qui les citent."""
 
     book: FactBook
     rule: DollarRuleProtection
+    levers: ProtectionLevers | None
     trace_id: str
     star: str = field(init=False)  # Fact de l*
     floor: str = field(init=False)  # Fact de min_L_plan
+    goal_facts: dict[str, str] = field(default_factory=dict)  # objectif -> Fact de son horizon
 
     def __post_init__(self) -> None:
         self.star = self.add(
@@ -555,8 +573,8 @@ class _ProtectionFacts:
             fact_ids=[self.star, self.floor],
         )
 
-    def causes(self) -> tuple[list[Statement], list[tuple[str, list[str]]]]:
-        """Phrases « pourquoi » et leviers (sujet, Facts) : chaque entrée de l* sous min_L_plan."""
+    # ------------------------------------------------------------------ pourquoi : chaque entrée de l* trop basse
+    def why(self) -> list[Statement]:
         rule = self.rule
         found = [
             part
@@ -567,23 +585,9 @@ class _ProtectionFacts:
             )
             if part is not None
         ]
-        if not found:  # l* sous min_L_plan sans entrée identifiée : la règle elle-même
-            need = self.add(
-                "min_loss_pct",
-                "Perte admissible minimale pour une allocation, en part du montant",
-                ceil_step(rule.min_planning_loss, 0.001),
-                "%",
-                "min_L_plan arrondi au dixième de point supérieur",
-            )
-            found = [
-                (
-                    self.below(f"La perte admissible retenue ({self.v(self.star)})", [self.star]),
-                    (f"Une perte admissible d'au moins {self.v(need)} du montant", [need]),
-                )
-            ]
-        return [why for why, _ in found], [lever for _, lever in found]
+        return found or [self.below(f"La perte admissible retenue ({self.v(self.star)})", [self.star])]
 
-    def _declared(self) -> tuple[Statement, tuple[str, list[str]]]:
+    def _declared(self) -> Statement:
         rule = self.rule
         pct = self.loss(
             "l_declared",
@@ -600,27 +604,11 @@ class _ProtectionFacts:
                 "trace dollar_rule.l_declared",
                 dataset="profil : max_acceptable_loss_cad",
             )
-            need = self.add(
-                "min_loss_cad",
-                "Perte admissible minimale pour une allocation",
-                ceil_step(rule.min_planning_loss * rule.wealth, 1),
-                "CAD",
-                "min_L_plan × W, arrondi au dollar supérieur",
-            )
             said = f"La perte que vous dites pouvoir absorber ({self.v(cad)}, soit {self.v(pct)} du montant)"
-            lever = f"Une perte admissible d'au moins {self.v(need)} sur ce montant"
-            return self.below(said, [cad, pct]), (lever, [need])
-        need = self.add(
-            "min_loss_pct",
-            "Perte admissible minimale pour une allocation, en part du montant",
-            ceil_step(rule.min_planning_loss, 0.001),
-            "%",
-            "min_L_plan arrondi au dixième de point supérieur",
-        )
-        said = f"La perte que vous dites pouvoir absorber ({self.v(pct)} du montant)"
-        return self.below(said, [pct]), (f"Une perte admissible d'au moins {self.v(need)} du montant", [need])
+            return self.below(said, [cad, pct])
+        return self.below(f"La perte que vous dites pouvoir absorber ({self.v(pct)} du montant)", [pct])
 
-    def _horizon(self) -> tuple[Statement, tuple[str, list[str]]]:
+    def _horizon(self) -> Statement:
         rule = self.rule
         loss = self.loss(
             "horizon_loss",
@@ -628,30 +616,28 @@ class _ProtectionFacts:
             rule.horizon_loss,
             "1 - (1 + mu_recovery)^-T, terme de l_cap",
         )
-        years = self.add(
-            "horizon_years",
-            "Horizon de l'objectif le plus proche (T)",
-            rule.horizon_years,
-            "ans",
-            "trace dollar_rule.l_cap",
+        value, unit = _duration(rule.horizon_years)
+        horizon = self.add(
+            "horizon",
+            "Horizon de placement retenu (T du seau risque)",
+            value,
+            unit,
+            "trace horizon.T_risk et dollar_rule.l_cap",
         )
-        need = self.add(
-            "required_horizon_years",
-            "Horizon minimal pour une allocation",
-            ceil_step(rule.required_horizon_years(), 0.1),
-            "ans",
-            "T tel que 1 - (1 + mu_recovery)^-T atteigne min_L_plan, arrondi au dixième supérieur",
-        )
-        said = (
-            f"La perte que l'horizon de votre objectif le plus proche permet d'absorber ({self.v(loss)}, "
-            f"à {self.v(years)})"
-        )
-        return self.below(said, [loss, years]), (
-            f"Un horizon d'au moins {self.v(need)} pour l'objectif le plus proche",
-            [need],
+        goal = self.levers.horizon_goal if self.levers else None
+        if goal is not None:
+            self.goal_facts[goal.goal_id] = horizon
+        if goal is not None and _covered(self.book, goal.label, [horizon]):
+            text = f"Votre objectif « {goal.label} » fixe l'horizon de placement à {self.v(horizon)}."
+        else:
+            text = f"L'horizon de placement retenu est de {self.v(horizon)}."
+        return Statement(
+            text_fr=f"{text} La perte que cet horizon permet d'absorber ({self.v(loss)}) est sous {PLANNING_LOSS_FR} "
+            f"({self.v(self.floor)}) : aucune allocation ne respecte cette limite.",
+            fact_ids=[horizon, loss, self.floor],
         )
 
-    def _withdrawals(self) -> tuple[Statement, tuple[str, list[str]]]:
+    def _withdrawals(self) -> Statement:
         rule = self.rule
         loss = self.loss(
             "withdrawal_loss",
@@ -666,16 +652,96 @@ class _ProtectionFacts:
             "%",
             "trace dollar_rule.l_cap",
         )
-        need = self.add(
-            "allowed_withdrawal_rate",
-            "Retraits maximaux par an pour une allocation",
-            floor_step(rule.allowed_withdrawal_rate(), 0.001),
-            "%",
-            "q_max × (1 - min_L_plan), arrondi au dixième de point inférieur",
-        )
         said = (
             f"La perte que vos retraits prévus permettent d'absorber ({self.v(loss)}, pour des retraits de "
             f"{self.v(rate)} du montant par an)"
         )
-        lever = f"Un taux de retrait d'au plus {self.v(need)} du montant par an"
-        return self.below(said, [loss, rate]), (lever, [need])
+        return self.below(said, [loss, rate])
+
+    # ------------------------------------------------------------------ leviers vérifiés par compilation
+    def lever_statements(self, others: int) -> list[Statement]:
+        """Un énoncé par levier vérifié. Seul, il « rendrait une allocation possible » (la compilation du profil
+        modifié donne un mandat) ; avec d'autres causes, chacun « serait nécessaire »."""
+        levers = self.levers
+        if levers is None:  # leviers non calculés (profil absent) : la règle, sans chiffre
+            return [
+                Statement(
+                    text_fr="Une perte admissible plus élevée ou un horizon de placement plus long serait nécessaire "
+                    "pour qu'une allocation soit possible.",
+                    label="HYPOTHESE",
+                )
+            ]
+        parts = [self._required_lever(change) for change in levers.required]
+        alone = len(parts) + int(levers.horizon_short) + others == 1 and levers.allocation
+        tail = " rendrait une allocation possible" if alone else NECESSARY_FR
+        out = [Statement(text_fr=f"{subject}{tail}.", fact_ids=ids) for subject, ids in parts]
+        if levers.horizon_short:
+            out.append(self._horizon_lever(levers, tail))
+        if levers.allocation and not alone and others == 0:
+            out.append(
+                Statement(
+                    text_fr="Ensemble, ces changements rendraient une allocation possible : une nouvelle compilation "
+                    "du profil modifié le vérifie.",
+                )
+            )
+        return out
+
+    def _required_lever(self, change: ProfileChange) -> tuple[str, list[str]]:
+        verified = "seuil de la règle des dollars, vérifié par une nouvelle compilation du profil modifié"
+        if change.kind == "max_loss_cad":
+            fid = self.add("min_loss_cad", "Perte admissible minimale pour une allocation", change.value, "CAD",
+                           f"min_L_plan × W, arrondi au dollar supérieur ; {verified}")
+            return f"Une perte admissible d'au moins {self.v(fid)} sur ce montant", [fid]
+        if change.kind == "max_loss_pct":
+            fid = self.add("min_loss_pct", "Perte admissible minimale pour une allocation, en part du montant",
+                           change.value, "%", f"min_L_plan arrondi au dixième de point supérieur ; {verified}")
+            return f"Une perte admissible d'au moins {self.v(fid)} du montant", [fid]
+        fid = self.add("allowed_withdrawal_rate", "Retraits maximaux par an pour une allocation", change.value, "%",
+                       f"q_max × (1 - min_L_plan), arrondi au dixième de point inférieur ; {verified}")
+        return f"Un taux de retrait d'au plus {self.v(fid)} du montant par an", [fid]
+
+    def _horizon_lever(self, levers: ProtectionLevers, tail: str) -> Statement:
+        if not levers.horizon:
+            return Statement(
+                text_fr=f"Un horizon de placement plus long{tail} ; aucun changement d'un seul objectif ne suffit ici.",
+                label="HYPOTHESE",
+            )
+        texts, ids = [], []
+        for option in levers.horizon:
+            text, option_ids = self._horizon_option(option)
+            texts.append(text)
+            ids += option_ids
+        return Statement(
+            text_fr=f"Un horizon de placement plus long{tail}. Par exemple : " + " ; ou ".join(texts) + ".",
+            fact_ids=list(dict.fromkeys(ids)),
+        )
+
+    def _horizon_option(self, option: ProfileChange) -> tuple[str, list[str]]:
+        goal = option.goal
+        name, ids = self._goal_name(goal)
+        if option.kind == "without_goal":
+            after = self._horizon_after(option)
+            return f"sans {name}, l'horizon passerait à {self.v(after)}", [*ids, after]
+        target = self.add(f"lever.{goal.goal_id}.horizon", f"Horizon testé pour l'objectif « {goal.label} »",
+                          *_duration(option.value), "plus petit horizon testé qui lève la règle des dollars")
+        text = f"un horizon d'au moins {self.v(target)} pour {name}"
+        if _duration(option.horizon_after) != _duration(option.value):  # réserve de retraits : T ne vaut pas l'horizon
+            after = self._horizon_after(option)
+            text += f", l'horizon passerait à {self.v(after)}"
+            ids.append(after)
+        return text, [*ids, target]
+
+    def _horizon_after(self, option: ProfileChange) -> str:
+        return self.add(f"lever.{option.goal.goal_id}.horizon_after", "Horizon de placement après ce changement",
+                        *_duration(option.horizon_after), "trace horizon.T_risk de la compilation du profil modifié")
+
+    def _goal_name(self, goal: GoalRef) -> tuple[str, list[str]]:
+        """« l'objectif « libellé » », ou « votre objectif à 5,0 ans » si le libellé a des nombres non sourcés."""
+        fid = self.goal_facts.get(goal.goal_id)
+        if fid is None:
+            fid = self.add(f"goal.{goal.goal_id}.horizon", f"Horizon de l'objectif « {goal.label} »",
+                           *_duration(goal.horizon_years), "trace horizon.T_risk")
+            self.goal_facts[goal.goal_id] = fid
+        if _covered(self.book, goal.label, [fid]):
+            return f"l'objectif « {goal.label} »", [fid]
+        return f"votre objectif à {self.v(fid)}", [fid]

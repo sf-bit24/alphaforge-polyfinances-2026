@@ -1,0 +1,92 @@
+{
+  "schema_version": "0.1.0",
+  "profile_id": "demo-robert",
+  "version": 1,
+  "created_utc": "2026-11-14T00:00:00Z",
+  "status": "COMPLETE",
+  "mode": "persona",
+  "age": 62,
+  "province": null,
+  "language": "fr",
+  "plain_language": false,
+  "knowledge_level": "intermediaire",
+  "experience_note": null,
+  "goals": [
+    {
+      "goal_id": "decaissement",
+      "label": "revenu de retraite",
+      "priority": "besoin",
+      "amount": null,
+      "currency": "CAD",
+      "target_date": null,
+      "horizon_years": 7.0,
+      "min_success_prob": null,
+      "beneficiary": null,
+      "legal_owner": null,
+      "recurring_withdrawal": 30000.0,
+      "indexed_to_inflation": null
+    }
+  ],
+  "household": [],
+  "household_rule": null,
+  "tolerance_declared": {
+    "value": 35.0,
+    "label": null,
+    "method": null,
+    "confidence": 0.7
+  },
+  "tolerance_tested": {
+    "value": 52.0,
+    "label": null,
+    "method": null,
+    "confidence": 0.6
+  },
+  "capacity_assessed": null,
+  "capacity_rationale": null,
+  "composure": {
+    "value": 30.0,
+    "label": null,
+    "method": null,
+    "confidence": null
+  },
+  "max_acceptable_loss_pct": null,
+  "max_acceptable_loss_cad": 120000.0,
+  "investable_wealth": 900000.0,
+  "monthly_expenses": 6500.0,
+  "emergency_fund_months": 8.0,
+  "income": null,
+  "debts": [],
+  "recurring_liabilities": [],
+  "pensions": [
+    {
+      "kind": "PD",
+      "monthly_amount": 3400.0,
+      "start_age": null,
+      "indexed": null
+    }
+  ],
+  "illiquid_assets": [],
+  "employer_equity": [],
+  "future_inflows": [],
+  "holdings": [],
+  "accounts": [],
+  "preferences": {
+    "tilts": [],
+    "value_filters": [],
+    "esg_required": false,
+    "accept_indirect_exposure": null,
+    "reference_currency": "CAD"
+  },
+  "legal_constraints": [],
+  "user_rules": [],
+  "biases": [],
+  "claims": [],
+  "trusted_person_role": null,
+  "trusted_person_consent": false,
+  "unavailable_until": null,
+  "unauthorized_third_parties": [],
+  "consistency_flags": [],
+  "missing_info": [],
+  "confidence": null,
+  "reprofile_triggers": []
+}

@@ -31,6 +31,7 @@ DIMENSIONS = (
     "risk_capacity",
     "constraints",
     "preferences",
+    "behavior",  # réaction à un titre médiatisé (profil court, lu par l'étape 0); hors des cinq dimensions de la vue
     "context",
 )
 KINDS = ("single_choice", "multi_choice", "boolean", "number", "money", "percent", "scale", "text")

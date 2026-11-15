@@ -317,6 +317,10 @@ def _supersession(policy: PolicySpec) -> dict[str, str]:
     """Pour chaque limite rendue inutile par une limite plus stricte sur la même cible."""
     groups: dict[tuple, list] = {}
     for lim in policy.limits:
+        if not lim.blocking:
+            # une limite non bloquante (ex. strat.* de l'étape 0) ne remplace ni ne masque jamais une limite
+            # bloquante : elle reste contrôlée et affichée, sans effet sur le verdict
+            continue
         key = (lim.kind, json.dumps(lim.selector.model_dump(), sort_keys=True))
         groups.setdefault(key, []).append(lim)
     out = {}

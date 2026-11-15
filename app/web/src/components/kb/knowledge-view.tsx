@@ -7,7 +7,7 @@ import { callMessages, listKb, type ApiError } from "@/lib/client/api";
 import { useAsync } from "@/lib/client/use-async";
 import { formatDate } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
-import { generalGroup } from "@/lib/okf";
+import { GENERAL_FOLDERS, generalGroup } from "@/lib/okf";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { cn } from "@/components/ui/cn";
@@ -16,7 +16,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { CollectPanel } from "./collect-panel";
 import { DocumentLoader } from "./document-view";
 
-const GROUP_ORDER = ["index", "methodologie", "notions", "societes", "actualites", "donnees", "other"];
+const GROUP_ORDER = ["index", ...GENERAL_FOLDERS, "other"];
 
 const INDEX_KEY = "general/index.md";
 

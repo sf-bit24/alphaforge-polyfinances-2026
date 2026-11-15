@@ -10,10 +10,11 @@ import {
   StartExecutionCommand,
 } from "@aws-sdk/client-sfn";
 import { parseJsonText, summarizeRunOutput } from "@/lib/contract/collect";
+import type { PortfolioBuildRequest } from "@/lib/contract/portfolio";
 import type { AgentRequest, CollectRequest } from "@/lib/contract/requests";
 import type { ExecutionDetail, ExecutionStatus, ExecutionSummary } from "@/lib/contract/schemas";
 import type { GatewayConfig } from "./config";
-import { profileRuntimeName } from "./config";
+import { portfolioRuntimeName, profileRuntimeName } from "./config";
 import { GatewayError } from "./errors";
 import type { Upstream } from "./upstream";
 
@@ -82,9 +83,8 @@ function awsError(error: unknown, operation: string): GatewayError {
   );
 }
 
-/** ARN of `<prefix>_profile`, found once by name with `ListAgentRuntimes`. */
-export async function resolveProfileRuntime(config: GatewayConfig): Promise<RuntimeInfo> {
-  const name = profileRuntimeName(config);
+/** ARN of a runtime, found once by name with `ListAgentRuntimes`. */
+async function resolveRuntime(config: GatewayConfig, name: string, hint?: { fr: string; en: string }): Promise<RuntimeInfo> {
   const key = `${config.AWS_REGION}:${name}`;
   let pending = cache.runtimes.get(key);
   if (!pending) {
@@ -104,8 +104,8 @@ export async function resolveProfileRuntime(config: GatewayConfig): Promise<Runt
       throw new GatewayError(
         "internal",
         {
-          fr: `Aucun runtime AgentCore nommé ${name} dans ${config.AWS_REGION} : vérifiez ALPHAFORGE_PREFIX et le déploiement Terraform.`,
-          en: `No AgentCore runtime named ${name} in ${config.AWS_REGION}: check ALPHAFORGE_PREFIX and the Terraform deployment.`,
+          fr: `Aucun runtime AgentCore nommé ${name} dans ${config.AWS_REGION} : vérifiez ALPHAFORGE_PREFIX et le déploiement Terraform.${hint ? ` ${hint.fr}` : ""}`,
+          en: `No AgentCore runtime named ${name} in ${config.AWS_REGION}: check ALPHAFORGE_PREFIX and the Terraform deployment.${hint ? ` ${hint.en}` : ""}`,
         },
         502,
         { mode: "aws", runtime: name, region: config.AWS_REGION },
@@ -117,25 +117,69 @@ export async function resolveProfileRuntime(config: GatewayConfig): Promise<Runt
   return pending;
 }
 
+/** ARN of `<prefix>_profile`, found once by name with `ListAgentRuntimes`. */
+export async function resolveProfileRuntime(config: GatewayConfig): Promise<RuntimeInfo> {
+  return resolveRuntime(config, profileRuntimeName(config));
+}
+
+/** ARN of the optional `<prefix>_portfolio` (CONTRACTS.md 12), deployed only with `portfolio_enabled = true`. */
+export async function resolvePortfolioRuntime(config: GatewayConfig): Promise<RuntimeInfo> {
+  return resolveRuntime(config, portfolioRuntimeName(config), {
+    fr: "Le runtime portfolio n'existe qu'avec portfolio_enabled = true.",
+    en: "The portfolio runtime only exists with portfolio_enabled = true.",
+  });
+}
+
 /** `runtimeSessionId`: the client_id for client actions, a stable technical session otherwise. */
 export function sessionIdFor(request: AgentRequest): string {
   if ("client_id" in request && request.client_id) return request.client_id;
   return cache.technicalSession;
 }
 
+/**
+ * `runtimeSessionId` of a portfolio build: the client_id, as for `profile`; for a FICTION demo persona,
+ * a stable session per persona (AgentCore wants at least 33 characters).
+ */
+export function portfolioSessionId(request: PortfolioBuildRequest): string {
+  if (request.client_id) return request.client_id;
+  return `alphaforge-web-persona-${request.persona ?? "none"}-session`.padEnd(33, "0");
+}
+
 /** `aws` mode: InvokeAgentRuntime on the `profile` runtime, qualifier DEFAULT. */
 export async function invokeAws(config: GatewayConfig, request: AgentRequest, stream: boolean, signal: AbortSignal): Promise<Upstream> {
   const runtime = await resolveProfileRuntime(config);
+  return invokeRuntime(config, { runtime, runtimeSessionId: sessionIdFor(request), payload: request, stream }, signal);
+}
+
+/** `aws` mode: `build` on the `portfolio` runtime (JSON only, no streaming in version 1). */
+export async function invokePortfolioAws(config: GatewayConfig, request: PortfolioBuildRequest, signal: AbortSignal): Promise<Upstream> {
+  const runtime = await resolvePortfolioRuntime(config);
+  return invokeRuntime(config, { runtime, runtimeSessionId: portfolioSessionId(request), payload: request, stream: false }, signal);
+}
+
+/** One AgentCore invocation: the runtime and session, the JSON payload, and whether a stream is wanted. */
+interface RuntimeCall {
+  runtime: RuntimeInfo;
+  runtimeSessionId: string;
+  payload: unknown;
+  stream: boolean;
+}
+
+async function invokeRuntime(
+  config: GatewayConfig,
+  { runtime, runtimeSessionId, payload, stream }: RuntimeCall,
+  signal: AbortSignal,
+): Promise<Upstream> {
   let output;
   try {
     output = await agentCore(config.AWS_REGION).send(
       new InvokeAgentRuntimeCommand({
         agentRuntimeArn: runtime.arn,
         qualifier: "DEFAULT",
-        runtimeSessionId: sessionIdFor(request),
+        runtimeSessionId,
         contentType: "application/json",
         accept: stream ? "text/event-stream" : "application/json",
-        payload: new TextEncoder().encode(JSON.stringify(request)),
+        payload: new TextEncoder().encode(JSON.stringify(payload)),
       }),
       { abortSignal: signal },
     );

@@ -3,6 +3,7 @@
  * contract's zod schemas; streamed responses are read event by event.
  */
 import type { z } from "zod";
+import { PortfolioBuildResponse, type PortfolioBuildRequestInput } from "@/lib/contract/portfolio";
 import type { AgentRequestInput, CollectRequest } from "@/lib/contract/requests";
 import {
   ClientState,
@@ -193,4 +194,10 @@ export async function describeExecution(executionArn: string, options: CallOptio
 export async function startCollection(input: CollectRequest, options: CallOptions) {
   const response = await send("/api/collect", { method: "POST", body: JSON.stringify(input) }, options);
   return parseEnvelope(await readJson(response, options), ExecutionStartResponse, options, response.status);
+}
+
+/** `build` on the `portfolio` runtime (CONTRACTS.md 12); the Decision is validated before it reaches the screen. */
+export async function buildPortfolio(input: Omit<PortfolioBuildRequestInput, "action">, options: CallOptions): Promise<PortfolioBuildResponse> {
+  const response = await send("/api/portfolio", { method: "POST", body: JSON.stringify({ action: "build", ...input }) }, options);
+  return parseEnvelope(await readJson(response, options), PortfolioBuildResponse, options, response.status);
 }

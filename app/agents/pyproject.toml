@@ -97,21 +97,23 @@ max-statements = 30
 # Scripts de calibration : pièces de recherche figées, citées par risk_levels.yaml comme source des seuils.
 # Ils ne tournent qu'avec les données longues ; les réécrire sans pouvoir les rejouer changerait la preuve.
 "scripts/calibration/**" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
-# Fichiers gelés : des PR ouvertes les modifient (#43 feat/strategy-step0, #9 collect/open-feeds-declared-ua).
-# Les réécrire maintenant créerait des conflits de fusion. À mettre aux règles après la fusion de ces PR,
-# puis retirer ces lignes.
-"src/alphaforge/finance/debate/**" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
-"src/alphaforge/finance/policy/from_profile_view.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
-"src/alphaforge/collect/fetchers.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
-"src/alphaforge/collect/http.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
-"src/alphaforge/collect/press.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
-"src/alphaforge/profile/kb.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
-"src/alphaforge/okf.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
-"src/alphaforge/starter.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
-# Fichiers que la PR #43 ajoute (absents de master) : même délai.
-"src/alphaforge/finance/strategy/**" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
-"src/alphaforge/portfolio_service.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
-"src/alphaforge/collect/general.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA"]
+# En attente : code pas encore mis aux règles de code propre. Ce sont les fichiers que des PR ouvertes modifiaient
+# pendant le refactor (#43, fusionnée depuis ; #9, fermée) et le code arrivé sur master pendant le refactor
+# (PR #43 à #56). À refaire dans une PR suivante ; retirer la ligne d'un fichier une fois refait.
+"src/alphaforge/finance/debate/**" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
+"src/alphaforge/finance/policy/from_profile_view.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
+"src/alphaforge/collect/fetchers.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
+"src/alphaforge/collect/http.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
+"src/alphaforge/collect/press.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
+"src/alphaforge/profile/kb.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
+"src/alphaforge/okf.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
+"src/alphaforge/starter.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
+"src/alphaforge/finance/strategy/**" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
+"src/alphaforge/finance/evolution/**" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
+"src/alphaforge/finance/backtest/validation_dsr.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
+"src/alphaforge/portfolio_service.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
+"src/alphaforge/collect/general.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
+"scripts/finance/export_web_fixtures.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
 # Les tests du moteur appellent pytest.importorskip (numpy, pandas, scipy) avant leurs imports, pour sauter proprement
 # quand le groupe finance n'est pas installé (CI : uv sync --frozen).
 "tests/finance/backtest/**" = ["E402"]

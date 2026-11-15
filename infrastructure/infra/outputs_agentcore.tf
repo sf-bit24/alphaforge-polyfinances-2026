@@ -15,3 +15,8 @@ output "agentcore_code_key" {
   description = "Objet S3 du code deploye"
   value       = aws_s3_object.agents_code.key
 }
+
+output "agentcore_portfolio_code_key" {
+  description = "Objet S3 du code du runtime portfolio (null si portfolio_enabled = false ou si le zip manque)"
+  value       = one([for o in aws_s3_object.agents_portfolio_code : o.key])
+}

@@ -1,0 +1,111 @@
+{
+  "schema_version": "0.1.0",
+  "profile_id": "demo-mateo",
+  "version": 1,
+  "created_utc": "2026-11-14T00:00:00Z",
+  "status": "COMPLETE",
+  "mode": "persona",
+  "age": 41,
+  "province": null,
+  "language": "fr",
+  "plain_language": false,
+  "knowledge_level": "intermediaire",
+  "experience_note": null,
+  "goals": [
+    {
+      "goal_id": "etudes",
+      "label": "etudes des enfants",
+      "priority": "envie",
+      "amount": null,
+      "currency": "CAD",
+      "target_date": null,
+      "horizon_years": 9.0,
+      "min_success_prob": null,
+      "beneficiary": null,
+      "legal_owner": null,
+      "recurring_withdrawal": null,
+      "indexed_to_inflation": null
+    }
+  ],
+  "household": [
+    {
+      "role": "conjoint",
+      "age": 40,
+      "tolerance": {
+        "value": 45.0,
+        "label": null,
+        "method": null,
+        "confidence": 0.6
+      }
+    }
+  ],
+  "household_rule": "min_tolerance",
+  "tolerance_declared": {
+    "value": 55.0,
+    "label": null,
+    "method": null,
+    "confidence": 0.7
+  },
+  "tolerance_tested": {
+    "value": 50.0,
+    "label": null,
+    "method": null,
+    "confidence": 0.8
+  },
+  "capacity_assessed": null,
+  "capacity_rationale": null,
+  "composure": {
+    "value": 55.0,
+    "label": null,
+    "method": null,
+    "confidence": null
+  },
+  "max_acceptable_loss_pct": 0.25,
+  "max_acceptable_loss_cad": null,
+  "investable_wealth": 400000.0,
+  "monthly_expenses": 9000.0,
+  "emergency_fund_months": 5.0,
+  "income": {
+    "annual_amount": 160000.0,
+    "currency": "CAD",
+    "variability": "stable",
+    "monthly_calendar": null,
+    "sector": null,
+    "employer_ticker": null
+  },
+  "debts": [
+    {
+      "label": "pret auto",
+      "balance": 18000.0,
+      "annual_rate": 0.06,
+      "rate_type": null,
+      "tax_deductible": null
+    }
+  ],
+  "recurring_liabilities": [],
+  "pensions": [],
+  "illiquid_assets": [],
+  "employer_equity": [],
+  "future_inflows": [],
+  "holdings": [],
+  "accounts": [],
+  "preferences": {
+    "tilts": [],
+    "value_filters": [],
+    "esg_required": false,
+    "accept_indirect_exposure": null,
+    "reference_currency": "CAD"
+  },
+  "legal_constraints": [],
+  "user_rules": [],
+  "biases": [],
+  "claims": [],
+  "trusted_person_role": null,
+  "trusted_person_consent": false,
+  "unavailable_until": null,
+  "unauthorized_third_parties": [],
+  "consistency_flags": [],
+  "missing_info": [],
+  "confidence": null,
+  "reprofile_triggers": []
+}

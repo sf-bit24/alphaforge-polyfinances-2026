@@ -68,6 +68,7 @@ def skeleton(
     counterfactual_stmts: list[Statement],
     request_fids: list[str] | None = None,
     limits_extra: list[str] | None = None,
+    strategy: dict | None = None,
 ) -> Explanation:
     f = book.facts
 
@@ -121,7 +122,131 @@ def skeleton(
     ]
     for t in limits_extra or []:
         limits.append(Statement(text_fr=t, fact_ids=[], label="HYPOTHESE"))
+    if strategy is not None:
+        extra = strategy_statements(book, strategy)
+        data_used += extra["data_used"]
+        why += extra["why"]
+        limits += extra["limits"]
     return Explanation(data_used=data_used, why=why, limits=limits, what_would_change=counterfactual_stmts)
+
+
+STYLE_FR = {"defensive": "défensif", "dynamique": "dynamique", "offensive": "offensif"}  # accordé à « style »
+
+
+def strategy_statements(book: FactBook, final: dict | None = None) -> dict[str, list[Statement]]:
+    """Gabarits de l'étape 0 (style et sélection). Tout nombre écrit est la valeur formatée d'un Fact cité ;
+    les règles citées (ACVM, FTSE…) restent dans les Facts, pas dans le texte, pour le vérificateur."""
+    f = book.facts
+    out: dict[str, list[Statement]] = {"data_used": [], "why": [], "limits": []}
+    if "strat.style" not in f:
+        return out
+
+    def v(fid):
+        return fmt(f[fid].value, f[fid].unit) if fid in f else "n.d."
+
+    out["data_used"].append(
+        Statement(
+            text_fr=f"Style de composition retenu : {STYLE_FR.get(f['strat.style'].value, v('strat.style'))}. "
+            "Il ne relève ni le niveau de risque, ni la "
+            "part d'actions visée, ni les budgets de perte : il règle la composition (titres retenus, planchers "
+            "des satellites, plafonds sectoriels). Il peut donc ajouter du risque, toujours sous ces budgets.",
+            fact_ids=["strat.style"],
+            label="HYPOTHESE",
+        )
+    )
+    if "strat.n_candidates" in f:
+        out["data_used"].append(
+            Statement(
+                text_fr=f"Classement des {v('strat.n_candidates')} titres individuels par rangs (volatilité, bêta, "
+                "baisse maximale longue, dividende, corrélation au cœur), sur le jeu de départ et l'historique long.",
+                fact_ids=["strat.n_candidates"],
+                label="HYPOTHESE",
+            )
+        )
+    final = final or {}
+    band = final.get("band_target", "strat.band_target" if "strat.band_target" in f else None)
+    if band and band in f:
+        out["why"].append(
+            Statement(
+                text_fr=f"Part actions visée : {v(band)}, entre {v('strat.e_min')} et "
+                f"{v('strat.e_cap')}. La tolérance place le portefeuille dans sa bande, la capacité la plafonne.",
+                fact_ids=[band, "strat.e_min", "strat.e_cap"],
+                label="HYPOTHESE",
+            )
+        )
+    if "strat.risk_cost" in f and "strat.base_risk" in f:
+        rc = f["strat.risk_cost"].value
+        out["why"].append(
+            Statement(
+                text_fr="Effet du style et de la sélection sur le risque minimisé (CVaR mensuelle) : "
+                f"{'hausse' if rc >= 0 else 'baisse'} de {fmt(abs(rc), '%')} par rapport au mandat de base "
+                f"({v('strat.base_risk')}), dans les budgets du niveau.",
+                fact_ids=["strat.risk_cost", "strat.base_risk"],
+                label="HYPOTHESE",
+            )
+        )
+    floors = final.get("floors") if final else None
+    if floors is None:
+        floors = {k[len("strat.floor.") :]: k for k in f if k.startswith("strat.floor.")}
+    for t, fid in floors.items():
+        rank = f"strat.rank.{t}"
+        ids = [fid, rank, "strat.n_candidates"]
+        cad = f"strat.floor_cad.{t}"
+        text = f"Titre retenu {t} : rang {v(rank)} sur {v('strat.n_candidates')}, plancher de satellite {v(fid)}"
+        if cad in f:
+            text += f", soit {v(cad)}"
+            ids.append(cad)
+        out["why"].append(Statement(text_fr=text + ".", fact_ids=[i for i in ids if i in f], label="HYPOTHESE"))
+    for fid in [k for k in f if k.startswith("strat.sector_cap.")]:
+        tag = fid[len("strat.sector_cap.") :]
+        out["why"].append(
+            Statement(
+                text_fr=f"Plafond d'exposition {tag} (look-through) : {v(fid)}.", fact_ids=[fid], label="HYPOTHESE"
+            )
+        )
+    for fid in [k for k in f if k.startswith("strat.preference_refused.")]:
+        out["why"].append(
+            Statement(
+                text_fr=f"Pourquoi votre profil dit autrement : {f[fid].value}.", fact_ids=[fid], label="HYPOTHESE"
+            )
+        )
+    for fid in [k for k in f if k.startswith("strat.contradiction.")]:
+        out["limits"].append(
+            Statement(
+                text_fr=f"Réponses contradictoires, la plus prudente l'emporte : {f[fid].value}.",
+                fact_ids=[fid],
+                label="HYPOTHESE",
+            )
+        )
+    for fid in [k for k in f if k.startswith("strat.flag.")]:
+        out["limits"].append(
+            Statement(
+                text_fr=f"Signal de comportement « {fid[len('strat.flag.') :]} » : il règle des garde-fous, jamais "
+                "l'allocation.",
+                fact_ids=[fid],
+                label="HYPOTHESE",
+            )
+        )
+    for fid in final.get("clamped", []) if final else []:
+        out["limits"].append(
+            Statement(text_fr="Le débat a abaissé ou retiré un choix du style : la prudence l'emporte.",
+                      fact_ids=[fid], label="HYPOTHESE")
+        )
+    for fid in [k for k in f if k.startswith("strat.fallback.")]:
+        out["limits"].append(
+            Statement(text_fr="Le style a été allégé pour rester faisable.", fact_ids=[fid], label="HYPOTHESE")
+        )
+    out["limits"].append(
+        Statement(
+            text_fr="Les règles du style et de la sélection sont des hypothèses de conception à valider par "
+            "l'équipe. L'univers a "
+            "été choisi aujourd'hui (biais du survivant) : un bon rang passé ne prédit pas les rendements, et le "
+            "momentum sur douze mois hors dernier mois n'est montré qu'en sensibilité.",
+            fact_ids=[],
+            label="HYPOTHESE",
+        )
+    )
+    return out
 
 
 def rephrase(
@@ -173,6 +298,8 @@ def grounding_check(
     """Filet final : ancrage contextuel Bedrock Guardrails (si un guardrail est configuré)."""
     if not guardrail_id:
         return None
+    if not guardrail_version or str(guardrail_version).upper() == "DRAFT":
+        raise ValueError("guardrail : version numérotée requise (jamais DRAFT)")
     import boto3
 
     src = json.dumps(
@@ -182,7 +309,7 @@ def grounding_check(
     text = " ".join(s.text_fr for sec in (expl.data_used, expl.why, expl.limits, expl.what_would_change) for s in sec)
     r = boto3.client("bedrock-runtime", region_name=region).apply_guardrail(
         guardrailIdentifier=guardrail_id,
-        guardrailVersion=guardrail_version or "DRAFT",
+        guardrailVersion=guardrail_version,
         source="OUTPUT",
         content=[
             {"text": {"text": src, "qualifiers": ["grounding_source"]}},

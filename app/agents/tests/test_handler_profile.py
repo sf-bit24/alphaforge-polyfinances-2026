@@ -112,7 +112,14 @@ def test_base_answers_through_to_followups(service, store):
         )
         assert response["ok"], response
         assert response["message"] is None
-    assert seen[:4] == ["q_kn_invest_freq", "q_kn_news", "q_kn_products", "q_kn_self"]
+    assert seen[:6] == [
+        "q_kn_invest_freq",
+        "q_kn_news",
+        "q_kn_products",
+        "q_kn_quiz_diversification",
+        "q_kn_quiz_bond_rates",
+        "q_kn_self",
+    ]
     assert seen[-1] == "q_existing_portfolio"
     assert "q_exclusions" in seen  # q_esg = 4 ouvre la branche des exclusions
     assert "q_project_type" not in seen and "q_withdrawal_pct" not in seen
@@ -212,6 +219,8 @@ def test_correcting_an_answer_prunes_an_abandoned_branch(service):
         ("q_kn_invest_freq", "never"),
         ("q_kn_news", "rarely"),
         ("q_kn_products", ["none"]),
+        ("q_kn_quiz_diversification", "dont_know"),
+        ("q_kn_quiz_bond_rates", "dont_know"),
         ("q_kn_self", "beginner"),
         ("q_goal", "project"),
         ("q_project_type", "home"),
@@ -225,6 +234,57 @@ def test_correcting_an_answer_prunes_an_abandoned_branch(service):
     fields = {f["field"] for f in response["profile"]["facts"]}
     assert "objective.project_type" not in fields
     assert response["questions"][0]["id"] == "q_horizon"
+
+
+def test_short_profile_clicks_reach_the_step0_guardrails(service, store):
+    """Des clics de base à la ProfileView, puis à StyleInputs et aux garde-fous de l'étape 0 (finance)."""
+    from alphaforge.finance.debate.okf_bridge import OkfClientStore
+    from alphaforge.finance.policy.from_profile_view import style_inputs_from_view
+    from alphaforge.finance.strategy.style import behavior_flags
+
+    client_id = start(service)["client_id"]
+    response = answer_base(
+        service,
+        client_id,
+        {
+            "q_kn_news": "daily",
+            "q_kn_quiz_bond_rates": "rises",
+            "q_kn_self": "advanced",
+            "q_sell_threshold": "lt5",
+            "q_employment_sector": "technology",
+            "q_exclusions": ["fossil_fuels"],
+            "q_exclusion_strictness": "absolute",
+            "q_crypto_place": "larger",
+            "q_crypto_max": "gt10",
+            "q_hype_reaction": "buy_some",
+            "q_hype_share": "5to10",
+        },
+    )
+    facts = {f["field"]: f for f in response["profile"]["facts"]}
+    share = facts["behavior.hype_position_share"]
+    assert (share["value"], share["provenance"]) == ("5to10", "base:q_hype_share")
+    assert facts["preferences.crypto_max_pct"]["value"] == "gt10"
+    assert "behavior" not in response["profile"]["dimensions"]  # la vue garde ses dimensions; les faits suffisent
+    view = OkfClientStore(store).view(client_id)[0]  # même lecture que le runtime portfolio
+    inputs = style_inputs_from_view(view)
+    assert inputs.quiz == {"quiz_diversification": "single_stock", "quiz_bond_rates": "rises"}
+    assert (inputs.self_assessment, inputs.news_frequency) == ("advanced", "daily")
+    assert (inputs.hype_reaction, inputs.hype_position_share) == ("buy_some", "5to10")
+    assert inputs.sell_threshold_pct == "lt5" and inputs.employment_sector == "technology"
+    assert inputs.exclusions == ("fossil_fuels",) and inputs.exclusion_strictness == "absolute"
+    flags = behavior_flags(inputs)
+    assert flags.overconfidence and flags.fomo and flags.attention and flags.low_composure
+    assert "risk_tolerance.sell_threshold_pct=lt5" in flags.evidence["low_composure"]
+    assert "knowledge.quiz_bond_rates" in flags.evidence["overconfidence"]
+
+    calm_id = start(service)["client_id"]
+    answer_base(service, calm_id)  # quiz justes, attente, seuil 20 à 30 %, secteur public
+    calm = style_inputs_from_view(OkfClientStore(store).view(calm_id)[0])
+    assert calm.quiz == {"quiz_diversification": "single_stock", "quiz_bond_rates": "falls"}
+    assert (calm.hype_reaction, calm.hype_position_share, calm.employment_sector) == ("wait", None, "public")
+    assert calm.sell_threshold_pct == "20to30" and calm.exclusion_strictness == "small_share_in_fund"
+    quiet = behavior_flags(calm)
+    assert not (quiet.overconfidence or quiet.fomo or quiet.attention or quiet.low_composure)
 
 
 def test_followup_reply_requires_followups_stage(service):

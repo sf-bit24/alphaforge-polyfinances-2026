@@ -36,8 +36,18 @@ const cleanCode = {
 
 /** Tables de textes des deux langues : longues par nature. */
 const dataModules = {
-  files: ["src/lib/i18n/dictionary.ts", "src/lib/i18n/screens.ts"],
+  files: ["src/lib/i18n/dictionary.ts", "src/lib/i18n/portfolio.ts", "src/lib/i18n/screens.ts"],
   rules: { "max-lines": "off" },
+};
+
+/**
+ * Code arrivé sur master pendant le refactor de code propre (écran du portefeuille simulé, PR #52) :
+ * pas encore mis aux règles. Retirer un dossier de la liste une fois refait.
+ */
+const pendingCleanup = {
+  name: "alphaforge/pending-cleanup",
+  files: ["src/components/portfolio/**"],
+  rules: Object.fromEntries(Object.keys(cleanCode.rules).map((rule) => [rule, "off"])),
 };
 
 const eslintConfig = defineConfig([
@@ -45,6 +55,7 @@ const eslintConfig = defineConfig([
   ...nextTs,
   cleanCode,
   dataModules,
+  pendingCleanup,
   globalIgnores([".next/**", "out/**", "build/**", "coverage/**", "next-env.d.ts"]),
 ]);
 

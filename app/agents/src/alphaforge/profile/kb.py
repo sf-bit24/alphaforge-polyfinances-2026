@@ -1,7 +1,8 @@
 """Lecture des bases OKF (``kb.list``, ``kb.get``) et recherche dans la base générale (Knowledge Base).
 
 La recherche passe par ``bedrock-agent-runtime`` ``Retrieve`` quand ``ALPHAFORGE_KB_ID`` est posé;
-sinon elle ne renvoie rien (développement local).
+sinon elle ne renvoie rien (développement local). Un filtre facultatif porte sur les métadonnées des fichiers
+compagnons (``type``, ``ticker``, ``kind``, ``published_epoch``; CONTRACTS.md 5.1) : ``retrieval_filter`` le construit.
 """
 
 from __future__ import annotations
@@ -22,6 +23,19 @@ from .state import is_client_id
 
 logger = logging.getLogger("alphaforge.kb")
 MAX_LIST = 500
+CHUNK_ID_KEY = "x-amz-bedrock-kb-chunk-id"
+# Opérateurs de RetrievalFilter permis sur S3 Vectors (startsWith, stringContains et listContains ne le sont pas).
+_LOGICAL_OPERATORS = ("andAll", "orAll")
+_COMPARISONS = {
+    "equals": (str, int, float, bool),
+    "notEquals": (str, int, float, bool),
+    "greaterThan": (int, float),
+    "greaterThanOrEquals": (int, float),
+    "lessThan": (int, float),
+    "lessThanOrEquals": (int, float),
+    "in": (list,),
+    "notIn": (list,),
+}
 TRACE_JSON = re.compile(r"^clients/[0-9a-f-]{36}/traces/[A-Za-z0-9._-]+\.json$")
 
 
@@ -105,6 +119,46 @@ def check_key(key: Any, client_id: Any, locale: str) -> str:
     )
 
 
+def check_filter(node: Any, depth: int = 0) -> dict[str, Any]:
+    """Vérifie un ``RetrievalFilter`` avant l'appel : une erreur de forme ne doit pas devenir une liste vide."""
+    if not isinstance(node, dict) or len(node) != 1:
+        raise ValueError("a retrieval filter has exactly one operator")
+    ((operator, operand),) = node.items()
+    if operator in _LOGICAL_OPERATORS:
+        if depth >= 2 or not isinstance(operand, list) or len(operand) < 2:
+            raise ValueError(f"{operator} needs at least two filters, with one level of nesting at most")
+        for child in operand:
+            check_filter(child, depth + 1)
+        return node
+    types = _COMPARISONS.get(operator)
+    if types is None:
+        raise ValueError(f"unsupported retrieval filter operator {operator!r} (S3 Vectors)")
+    if not isinstance(operand, dict) or set(operand) != {"key", "value"} or not isinstance(operand["key"], str):
+        raise ValueError(f"{operator} takes {{key, value}}")
+    value = operand["value"]
+    if not isinstance(value, types) or (bool not in types and isinstance(value, bool)):
+        raise ValueError(f"{operator} does not accept {type(value).__name__} values")
+    if isinstance(value, list) and not all(isinstance(item, str) for item in value):
+        raise ValueError(f"{operator} takes a list of strings")
+    return node
+
+
+def retrieval_filter(
+    *, equals: dict[str, Any] | None = None, at_most: dict[str, int | float] | None = None
+) -> dict[str, Any] | None:
+    """``RetrievalFilter`` : ``equals`` pour chaque paire de ``equals``, ``lessThanOrEquals`` pour ``at_most``.
+
+    Exemple : ``retrieval_filter(equals={"ticker": "SHOP.TO"}, at_most={"published_epoch": 1794497400})``. Plusieurs
+    conditions sont réunies par ``andAll``; une seule est renvoyée telle quelle (``andAll`` en demande deux).
+    """
+    conditions = [{"equals": {"key": key, "value": value}} for key, value in (equals or {}).items()]
+    conditions += [{"lessThanOrEquals": {"key": key, "value": value}} for key, value in (at_most or {}).items()]
+    if not conditions:
+        return None
+    node = conditions[0] if len(conditions) == 1 else {"andAll": conditions}
+    return check_filter(node)
+
+
 class KnowledgeSearch:
     """Recherche dans la base générale indexée par Bedrock Knowledge Bases (``Retrieve``)."""
 
@@ -126,14 +180,24 @@ class KnowledgeSearch:
             )
         return self._client
 
-    def search(self, query: str, limit: int = 4) -> list[dict[str, Any]]:
+    def search(self, query: str, limit: int = 4, *, filter: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        """Passages de la base générale; ``filter`` (``RetrievalFilter``, voir ``retrieval_filter``) est facultatif.
+
+        Chaque résultat : ``source`` (URI S3), ``score``, ``excerpt`` et ``chunk_id`` (identifiant du passage dans la
+        Knowledge Base, ``None`` s'il manque). Un filtre mal formé lève ``ValueError`` avant tout appel.
+        """
+        if filter is not None:
+            check_filter(filter)
         if not self.enabled or not query.strip():
             return []
+        vector_search: dict[str, Any] = {"numberOfResults": max(1, min(limit, 8))}
+        if filter is not None:
+            vector_search["filter"] = filter
         try:
             response = self._get_client().retrieve(
                 knowledgeBaseId=self.kb_id,
                 retrievalQuery={"text": query[:1000]},
-                retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": max(1, min(limit, 8))}},
+                retrievalConfiguration={"vectorSearchConfiguration": vector_search},
             )
         except Exception as exc:
             logger.warning("knowledge base retrieve failed: %s", type(exc).__name__)
@@ -143,11 +207,13 @@ class KnowledgeSearch:
             location = item.get("location") or {}
             uri = (location.get("s3Location") or {}).get("uri") or location.get("type")
             text = ((item.get("content") or {}).get("text") or "").strip()
+            metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
             results.append(
                 {
                     "source": uri,
                     "score": round(float(item.get("score") or 0), 3),
                     "excerpt": text[:700] + ("…" if len(text) > 700 else ""),
+                    "chunk_id": metadata.get(CHUNK_ID_KEY),
                 }
             )
         return results

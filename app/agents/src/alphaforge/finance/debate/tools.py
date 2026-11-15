@@ -31,7 +31,7 @@ class LensContext:
     as_of: date
     book: FactBook
     label: str = "candidat"  # préfixe des fact_id (ex. r1, r2, demande)
-    evidence_fn: Callable | None = None  # OkfMarketStore.evidence(ticker, topic, as_of)
+    evidence_fn: Callable | None = None  # OkfMarketStore.evidence(ticker, topic, as_of) : esg, fundamentals, news
     _win: object | None = field(default=None, repr=False)
 
     def win(self):
@@ -314,10 +314,29 @@ def strands_tools(lens: str, c: LensContext) -> list:
 
         return run("esg_evidence", f, ticker=ticker)
 
+    @tool
+    def fundamentals_evidence(ticker: str) -> list[dict]:
+        """Chiffres financiers publiés par une société de la base générale (produits, bénéfice, BPA dilué,
+        levier, dividende), connus à la date de la simulation, avec leur période. Contexte seulement : ils
+        n'entrent pas dans le classement des titres. Liste vide si la société n'est pas couverte."""
+
+        def f(ticker):
+            return c.book.absorb(
+                [
+                    x.model_copy(update={"trace_id": c.book.current})
+                    for x in c.evidence_fn(ticker, "fundamentals", c.as_of) or []
+                ]
+            )
+
+        return run("fundamentals_evidence", f, ticker=ticker)
+
     by_lens = {
         "timeline": [horizon_distribution, stress_episodes],
         "risk": [stress_episodes, horizon_distribution],
         "diversity": [exposure, esg_evidence],
         "constraints": [exposure, esg_evidence],
     }
+    if c.evidence_fn is not None:  # seulement avec le magasin OKF : sans lui, outils (donc rejeux) inchangés
+        by_lens["diversity"] = [*by_lens["diversity"], fundamentals_evidence]
+        by_lens["constraints"] = [*by_lens["constraints"], fundamentals_evidence]
     return by_lens[lens]

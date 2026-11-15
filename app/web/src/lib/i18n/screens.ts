@@ -9,6 +9,7 @@ export const screensFr = {
   appNav: {
     dashboard: "Tableau de bord",
     details: "Détails",
+    portfolio: "Portefeuille simulé",
     profile: "Mon profil",
     knowledge: "Base de connaissances",
     simulation: "Simulation · aucune transaction réelle",
@@ -45,6 +46,7 @@ export const screensFr = {
         risk_capacity: "Votre tolérance est une chose. Je vérifie maintenant votre capacité à encaisser une perte.",
         constraints: "Quelques questions pratiques sur vos comptes et vos contraintes.",
         preferences: "Presque fini : ce qui compte pour vous dans vos placements.",
+        behavior: "Une mise en situation rapide, sans bonne ni mauvaise réponse.",
         context: "Dernière étape : votre situation actuelle.",
       } satisfies Record<Dimension, string>,
       portfolio: "Montrez-moi ce que vous possédez déjà, sous la forme qui vous convient. Je lis les positions, puis le code calcule vos expositions.",
@@ -265,6 +267,7 @@ export const screensEn: Screens = {
   appNav: {
     dashboard: "Dashboard",
     details: "Details",
+    portfolio: "Simulated portfolio",
     profile: "My profile",
     knowledge: "Knowledge base",
     simulation: "Simulation · no real transaction",
@@ -301,6 +304,7 @@ export const screensEn: Screens = {
         risk_capacity: "Your tolerance is one thing. Now I check your capacity to absorb a loss.",
         constraints: "A few practical questions about your accounts and constraints.",
         preferences: "Almost done: what matters to you in your investments.",
+        behavior: "A quick scenario, with no right or wrong answer.",
         context: "Last step: your current situation.",
       } satisfies Record<Dimension, string>,
       portfolio: "Show me what you already own, in whatever form suits you. I read the positions, then the code computes your exposures.",

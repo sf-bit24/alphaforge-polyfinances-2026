@@ -1,0 +1,152 @@
+# finance/strategy/strategy.yaml — AlphaForge AI, étape 0 « stratégie et sélection de titres » v0.1.0
+# SIMULATION ÉDUCATIVE SEULEMENT : jamais un conseil, jamais un ordre.
+#
+# Une seule config pour l'étape 0 ; miroir de la fiche Brain (brain_fiche ci-dessous, même sha256).
+# Toutes les valeurs sont des HYPOTHÈSES DE CONCEPTION, à valider par l'équipe. Aucune n'est tirée des
+# fiches persona (source/profil-investisseur-*.md, source/profils_investisseurs/*) : celles-ci ne servent
+# que d'oracles de test. Le style change la COMPOSITION à risque égal : aucune valeur de ce fichier ne
+# modifie R, le niveau, e_cap, l* ni un budget risk.* de risk_levels.yaml.
+version: "0.1.0"
+status: HYPOTHESE   # hypothèses de conception (jamais des faits de marché), tranchées le 2026-11-15 ci-dessous
+decided:
+  date: "2026-11-15"
+  by: "sf-bit24 (utilisateur), décision déléguée à l'agent hackoton-95"
+  items:
+    - "N2 reste défensive : sa bande 25-40 % couvre le profil BNC Conservateur (30 % d'actions), classé Défensive par la convention d'équipe"
+    - "π n'est pas fixé par style : la tolérance place, la capacité plafonne (rapport de profilage, 31-368) ; faible sang-froid ≤ 0,5"
+    - "τ défensive −0,25 sur tech et energy ; bonus 0,10 ; φ 0,5 / 0,5 / 0,75 ; f_abs 3 % (proposition D5 du backtest)"
+    - "k_default 2, k_max 3, au plus un titre par secteur ; titres non retenus exclus (non_shortlisted: exclude) pour garder la décision explicable"
+    - "poids des indicateurs et fenêtres alignés sur FTSE Russell v8.8 (volatilité 5 ans hebdo, bêta 2 ans quotidien contre l'indice local)"
+    - "une capacité qui lie bloque toute montée de style (prudence) ; momentum en sensibilité seulement"
+    - "codes du profil court absents du questionnaire : lus s'ils existent, à aligner avec le volet profil"
+brain_fiche: architecture/strategie-selection-titres.md
+okf_methodology: general/methodologie/scoring-par-style.md
+inspirations:
+  - "FTSE Russell, Global Factor Index Series Ground Rules v8.8 (2026-07) : §5.3 momentum, §5.7 volatilité, §5.8 rendement, §5.9 bêta, §6.1 inclinaisons"
+  - "Rapport d'équipe « Investor profiling for portfolio construction » (2026-11-14) : la tolérance place dans la bande, la capacité plafonne"
+  - "Wealthfront Investment Methodology (score de risque min(volonté, capacité), allocation fixe par score)"
+
+# ---------------------------------------------------------------------------------------------
+# 1. STYLE (étiquette de composition) ← niveau F1
+#    Convention d'équipe : analyse/relation-profils-actifs/00-cadre.md:40-52 (Défensive = AMF 1-2,
+#    Dynamique = AMF 3-4, Offensive = AMF 5) ; table N↔AMF : analyse/decisions-seuils/rapport-decisions.md:310.
+# ---------------------------------------------------------------------------------------------
+styles: [defensive, dynamique, offensive]
+level_to_style: {N0: defensive, N1: defensive, N2: defensive, N3: dynamique, N4: dynamique, N5: offensive}
+
+preference:
+  max_up: 1                     # une préférence ne monte que d'un cran ; une descente est toujours admise
+  # objective.goal (profil court, questionnaire.yaml) → préférence de style. Le besoin de rendement
+  # n'augmente jamais le risque (31-103CP ; Davies 2017) : « growth » ne change que la composition,
+  # et seulement sans contradiction ni blocage.
+  goal_to_preference: {income: defensive, preservation: defensive, safety_cushion: defensive, growth: offensive}
+  beginner_max_style: dynamique
+  low_tolerance_levels: [N0, N1]   # contradiction « tolérance faible × croissance maximale » (CSA 31-342)
+  high_tolerance_levels: [N4, N5]  # contradiction « connaissance faible × tolérance agressive »
+  short_horizon_years: 3           # contradiction « horizon court × préférence offensive »
+
+# ---------------------------------------------------------------------------------------------
+# 2. POSITION DANS LA BANDE D'ACTIONS (π) — « la tolérance place, la capacité plafonne »
+#    π = 1 si la capacité (ou un plafond d'horizon, de seau, de statut, la règle des dollars) lie ;
+#    sinon π = position de R dans l'intervalle de R du niveau. Plancher g = e_min + π·(e_cap − e_min).
+# ---------------------------------------------------------------------------------------------
+band:
+  rounding: 0.05                # g arrondi au 5 % inférieur
+  low_composure_pi_max: 0.5     # faible sang-froid : π ≤ 0,5 (plan de baisse plutôt que bande haute)
+  incomplete_pi: 0.0            # position d'attente : aucun plancher
+  growth_classes: [equity_us, equity_ca, etf_equity, sector_us, equity_single]   # alloc.growth sans crypto
+
+# ---------------------------------------------------------------------------------------------
+# 3. SECTEURS — généralisation de satellites.theme_tech : cap_t = e_cap·s_ref_t·(1+τ) + φ·l*/δ_t
+#    s_ref : look-through US_MKT de data/long/assets.csv (instantané 2026-09) ; tech : risk_levels
+#    satellites.theme_tech.s_ref. δ : MDD longue CAD arrondie au 5 % sup. (tests/finance/fixtures/
+#    calibration/tails_monthly.csv et tails_sectors.csv, scripts/calibration/tails_sectors.py).
+# ---------------------------------------------------------------------------------------------
+sectors:
+  phi: 0.10
+  rounding: 0.0025
+  tags:
+    tech:       {s_ref: 0.44,   delta: 0.80, source: "risk_levels.yaml#satellites.theme_tech"}
+    energy:     {s_ref: 0.0311, delta: 0.60, source: "data/long/assets.csv US_MKT ; tails_monthly US_IND_ENRGY mdd 0.588"}
+    financials: {s_ref: 0.1132, delta: 0.70, source: "data/long/assets.csv US_MKT ; tails_monthly US_IND_MONEY mdd 0.693"}
+    utilities:  {s_ref: 0.024,  delta: 0.45, source: "data/long/assets.csv US_MKT ; tails_sectors US_IND_UTILS mdd 0.431"}
+    healthcare: {s_ref: 0.0799, delta: 0.50, source: "data/long/assets.csv US_MKT ; tails_sectors US_IND_HLTH mdd 0.479"}
+  tau:
+    defensive: {tech: -0.25, energy: -0.25}
+    dynamique: {}
+    offensive: {}
+  # Capital humain (Ibbotson et al. 2007) : un revenu qui suit un secteur → plafond au poids du marché
+  # (cap = e_cap·s_ref, sans terme satellite) et aucun titre de ce secteur dans la sélection.
+  employment_to_tag: {technology: tech, finance: financials, energy: energy, healthcare: healthcare}
+  employment_to_sector: {technology: "Information Technology", finance: "Financials", energy: "Energy", healthcare: "Health Care"}
+
+# ---------------------------------------------------------------------------------------------
+# 4. INDICATEURS ET SCORE (rangs en percentile ; FTSE §6.1 : vecteur d'inclinaisons par style)
+#    sign +1 : plus haut = mieux classé ; -1 : plus bas = mieux classé. Momentum : sensibilité seulement.
+# ---------------------------------------------------------------------------------------------
+features:
+  vol_weeks: 260                # 5 ans de rendements hebdomadaires (mercredi), ≥ 52 obs (FTSE §5.7)
+  vol_min_obs: 52
+  beta_days: 504                # 2 ans de rendements quotidiens contre l'indice local (FTSE §5.9)
+  beta_min_obs: 250
+  corr_weeks: 260
+  liquidity_days: 63
+  momentum_months: [12, 1]      # 12 mois hors dernier mois (FTSE §5.3) : AFFICHÉ, jamais dans le score
+  local_index: {CAD: XIU.TO, USD: SPY}
+  core: {XIU.TO: 0.5, SPY: 0.5} # cœur de référence (risk_levels.yaml#reference_portfolios : 50/50 CA/US)
+weights:
+  defensive: {vol: [-1, 2], beta: [-1, 1], mdd_long: [-1, 1], dividend_yield: [1, 1], corr_core: [-1, 1]}
+  dynamique: {corr_core: [-1, 2], mdd_long: [-1, 1], dividend_yield: [1, 1], vol: [-1, 1]}
+  offensive: {beta: [1, 2], corr_core: [-1, 1], mdd_long: [-1, 1]}
+bonus:
+  size: 0.10                    # ajout au score (sur [0, 1]) par bonus déclenché
+  style_tags:
+    defensive: [defensive_sector]
+    dynamique: []
+    offensive: [tech, tech_platform, consumer_discretionary, communication]
+  interests:                    # preferences.interests (codes questionnaire.yaml)
+    dividends: {weight_feature: dividend_yield, extra_weight: 1}
+    canadian_companies: {tag: canada}
+    healthcare: {tag: healthcare}
+    technology: {tag: tech}
+  unavailable_interests: [clean_energy]   # aucun actif dans le starter → signalé, renvoyé aux issues #21/#22
+  preference_penalty: -0.10     # exclusion « simple préférence » : pénalité de score, sans exclusion
+
+# ---------------------------------------------------------------------------------------------
+# 5. ÉLIGIBILITÉ, NOMBRE DE TITRES K, PLANCHERS
+# ---------------------------------------------------------------------------------------------
+eligibility:
+  mdd_long_max: 0.80            # = δ de satellites.single_name (risk_levels.yaml) : l'offensive ne retient pas les titres à baisse extrême
+  min_median_dollar_volume_cad: 5000000
+  min_line_cad: 500             # plancher d'un titre en $ si context.amount_cad est connu
+k:
+  k_default: 2                  # approche « mixte » ou sans préférence
+  k_max: 3                      # approche « titres individuels »
+  one_per_sector: true
+floors:
+  phi: {defensive: 0.5, dynamique: 0.5, offensive: 0.75}
+  f_abs: 0.03                   # proposition Brain D5 (titres individuels ≤ 3 %)
+  min_floor: 0.0025
+  overconfidence_mult: 0.5
+non_shortlisted: exclude        # exclude | free : les titres non retenus sortent de l'univers investissable
+
+# ---------------------------------------------------------------------------------------------
+# 6. CODES DU PROFIL COURT (Brain 3993936, variables-profil.md). Les codes absents de
+#    profile/questionnaire.yaml sur master sont ATTENDUS : à aligner avec le volet de Mikael.
+# ---------------------------------------------------------------------------------------------
+profile_codes:
+  approach: {passive: [passive_funds], mixed: [mixed, no_preference], single: [individual_securities]}
+  fomo_hype_reaction: [buy_a_lot]
+  fomo_hype_share: ["5to10", gt10]
+  attention_news: [daily]
+  attention_hype_reaction: [buy_a_lot, buy_some]
+  low_composure_drop_reaction: [sell_all]
+  low_composure_past: [sold]
+  low_composure_sell_threshold: [none, lt5, "5to10"]
+  quiz_correct: {quiz_diversification: single_stock, quiz_bond_rates: falls}
+  overconfident_self: [advanced]
+  products_stocks: stocks
+  currency_cad_only: cad_only
+  exclusion_strictness: {absolute: absolute, fund_tolerated: small_share_in_fund, preference: preference}
+  exclusion_tags: {fossil_fuels: fossil_fuel, tobacco: tobacco, weapons: weapons, gambling: gambling, alcohol: alcohol}
+  concentration_flags: {sector: concentration_sector}

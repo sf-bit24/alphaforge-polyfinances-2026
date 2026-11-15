@@ -54,7 +54,9 @@ locals {
   scenarios_code_prefix = "scenarios/code/${var.release_id}/"
 
   # Bundle construit par app/agents/scripts/package.sh (artefact
-  # agents-package) seulement si ALPHAFORGE_PACKAGE_SCENARIOS=1.
+  # agents-package) si scenarios_enabled = true dans le tfvars de
+  # l'environnement (deploy/envs/<env>.tfvars, lu par package.sh), ou si
+  # ALPHAFORGE_PACKAGE_SCENARIOS=1 (la variable posee l'emporte).
   scenarios_code_files = var.scenarios_enabled ? fileset("${path.module}/build/scenarios", "{run.sh,scenarios.zip}") : toset([])
 
   # Chemins dans le conteneur (contrat avec le code du job).
@@ -150,6 +152,8 @@ locals {
       # (request.json present) fait echouer l'execution ici, avant tout
       # calcul et sans rien reecrire (S3 repond 412 PreconditionFailed).
       # Atomique, et sans droit de plus que s3:PutObject (pas de ListBucket).
+      # Body : un objet JSONata, pas $string(...) : l'integration S3 serialise deja
+      # l'objet en JSON; une chaine serait encodee une seconde fois (request.json illisible).
       "Requete - ecrire" = {
         Type     = "Task"
         Resource = "arn:aws:states:::aws-sdk:s3:putObject"
@@ -158,7 +162,7 @@ locals {
           Key         = "{% 'scenarios/input/requests/' & $runId & '/request.json' %}"
           IfNoneMatch = "*"
           ContentType = "application/json"
-          Body        = "{% $string({'schema': 'scenarios-request/v0.1', 'run_id': $runId, 'release': '${var.release_id}', 'execution': $states.context.Execution.Id, 'requested_at': $now(), 'params': $params}) %}"
+          Body        = "{% {'schema': 'scenarios-request/v0.1', 'run_id': $runId, 'release': '${var.release_id}', 'execution': $states.context.Execution.Id, 'requested_at': $now(), 'params': $params} %}"
         }
         Catch = [{
           ErrorEquals = ["States.ALL"]
@@ -259,7 +263,7 @@ locals {
           Key         = "{% 'scenarios/output/' & $runId & '/_done.json' %}"
           IfNoneMatch = "*"
           ContentType = "application/json"
-          Body        = "{% $string({'status': 'ok', 'run_id': $runId, 'release': '${var.release_id}', 'image': '${var.scenarios_image_uri}', 'processing_job': $job, 'output_prefix': 'scenarios/output/' & $runId & '/', 'table_prefix': 'scenarios/output/' & $runId & '/table/', 'finished_at': $now()}) %}"
+          Body        = "{% {'status': 'ok', 'run_id': $runId, 'release': '${var.release_id}', 'image': '${var.scenarios_image_uri}', 'processing_job': $job, 'output_prefix': 'scenarios/output/' & $runId & '/', 'table_prefix': 'scenarios/output/' & $runId & '/table/', 'finished_at': $now()} %}"
         }
         Next = "Pointeur - ecrire"
       }
@@ -272,7 +276,7 @@ locals {
           Bucket      = local.scenarios_bucket
           Key         = "scenarios/latest.json"
           ContentType = "application/json"
-          Body        = "{% $string({'run_id': $runId, 'release': '${var.release_id}', 'marker': 'scenarios/output/' & $runId & '/_done.json', 'output_prefix': 'scenarios/output/' & $runId & '/', 'manifest': 'scenarios/output/' & $runId & '/manifest.json', 'updated_at': $now()}) %}"
+          Body        = "{% {'run_id': $runId, 'release': '${var.release_id}', 'marker': 'scenarios/output/' & $runId & '/_done.json', 'output_prefix': 'scenarios/output/' & $runId & '/', 'manifest': 'scenarios/output/' & $runId & '/manifest.json', 'updated_at': $now()} %}"
         }
         Next = "Termine"
       }
@@ -293,7 +297,7 @@ locals {
           Key         = "{% 'scenarios/output/' & $runId & '/_done.json' %}"
           IfNoneMatch = "*"
           ContentType = "application/json"
-          Body        = "{% $string($merge([$states.input, {'release': '${var.release_id}', 'finished_at': $now()}])) %}"
+          Body        = "{% $merge([$states.input, {'release': '${var.release_id}', 'finished_at': $now()}]) %}"
         }
         Output = "{% $states.input %}"
         Catch = [{
@@ -336,7 +340,7 @@ resource "aws_s3_object" "scenarios_code" {
 check "scenarios_code_bundle" {
   assert {
     condition     = !var.scenarios_enabled || length(local.scenarios_code_files) == 2
-    error_message = "scenarios_enabled = true mais infra/build/scenarios/{run.sh,scenarios.zip} est absent : package.sh doit tourner avec ALPHAFORGE_PACKAGE_SCENARIOS=1 (en CI : a brancher dans app.yml, voir app/CONTRACTS.md section 10). Une execution de ${local.scenarios_name} echouera."
+    error_message = "scenarios_enabled = true mais infra/build/scenarios/{run.sh,scenarios.zip} est absent : package.sh le construit quand deploy/envs/<env>.tfvars pose scenarios_enabled = true, sauf si ALPHAFORGE_PACKAGE_SCENARIOS=0 est posee (ou si scenarios_enabled vient d'ailleurs que du tfvars, par exemple une variable du workspace HCP Terraform). Voir app/CONTRACTS.md section 10. Une execution de ${local.scenarios_name} echouera."
   }
 }
 

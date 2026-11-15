@@ -7,6 +7,8 @@ Règles :
 3. Garde anti-cliquet : on n'applique pas un amendement qui rend le mandat infaisable ; on n'abaisse
    pas une limite de risque sous ``floor_ratio`` fois sa valeur d'origine (défaut 0,6), pour ne pas
    pousser vers le quasi-encaisse à force de resserrements successifs.
+4. Garde des actualités : un amendement autre que ``flag_only`` qui cite une actualité (``okf.news.*``) est
+   rejeté. Une nouvelle peut être signalée, jamais changer le mandat (rumeur ≠ fait).
 """
 
 from __future__ import annotations
@@ -14,10 +16,13 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from alphaforge.finance.contracts.policy import Limit, PolicySpec, Selector
+from alphaforge.finance.strategy.okf_facts import NEWS_FACT_PREFIX
+from alphaforge.finance.strategy.rules import clamp_strategy_floors
 
 from .schemas import PRIORITY, AppliedAmendment, LensReport
 
 FLOOR_RATIO = 0.6
+NEWS_REJECT_FR = "une actualité ne justifie jamais un changement du mandat (rumeur ≠ fait)"
 _MEASURE_ORDER = {"VARIANCE": 0, "CVAR": 1, "CDAR": 2}  # CDaR = plus prudente (drawdown)
 
 
@@ -44,6 +49,9 @@ def apply_amendments(
         log.append(AppliedAmendment(lens=lens, amendment=a, status="rejete", why_fr=why))
 
     for lens, a in items:
+        if a.kind != "flag_only" and any(f.startswith(NEWS_FACT_PREFIX) for f in a.evidence_fact_ids):
+            reject(lens, a, NEWS_REJECT_FR)
+            continue
         missing = [f for f in a.evidence_fact_ids if f not in known_fact_ids]
         if missing:
             reject(lens, a, f"preuve inconnue : {missing}")
@@ -77,6 +85,9 @@ def apply_amendments(
             lim.max = a.value
         elif a.kind == "require_min_group":
             lim = _limit(new, a.target)
+            if a.target.startswith("strat."):
+                reject(lens, a, "un plancher de style (strat.*) ne peut que baisser : le relever ajouterait du risque")
+                continue
             if lim is None or lim.kind != "group_weight":
                 reject(lens, a, f"limite de groupe inconnue : {a.target}")
                 continue
@@ -116,14 +127,36 @@ def apply_amendments(
             new.risk_measure = tgt
         try:
             new = PolicySpec.model_validate(new.model_dump())
+            if any(lim.rule_id.startswith("strat.") for lim in new.limits):
+                # la prudence l'emporte sur le style : un plafond abaissé abaisse les planchers strat.* liés
+                new, _ = clamp_strategy_floors(new)
         except Exception as exc:  # contrat invalide
             reject(lens, a, f"mandat invalide après amendement : {exc}"[:300])
             continue
+        why_ok = "appliqué"
         if feasible is not None and not feasible(new):
-            reject(lens, a, "rendrait le mandat infaisable")
-            continue
+            relaxed = _relax_strategy_floors(new, feasible)
+            if relaxed is None:
+                reject(lens, a, "rendrait le mandat infaisable")
+                continue
+            # la prudence l'emporte sur le style : les planchers strat.* cèdent avant le resserrement
+            new, why_ok = relaxed, "appliqué ; planchers du style retirés pour rester faisable"
         cur = new
         log.append(
-            AppliedAmendment(lens=lens, amendment=a, status="applique", why_fr="appliqué", before=before, after=after)
+            AppliedAmendment(lens=lens, amendment=a, status="applique", why_fr=why_ok, before=before, after=after)
         )
     return cur, log
+
+
+def _relax_strategy_floors(policy: PolicySpec, feasible: Callable[[PolicySpec], bool]) -> PolicySpec | None:
+    """Retire les planchers strat.* (titres, puis part actions visée) jusqu'à ce que le mandat soit faisable."""
+    for drop in (("strat.floor.",), ("strat.floor.", "strat.growth_floor")):
+        lims = [lim for lim in policy.limits if not lim.rule_id.startswith(drop)]
+        if len(lims) == len(policy.limits):
+            continue
+        data = policy.model_dump()
+        data["limits"] = [lim.model_dump() for lim in lims]
+        cand = PolicySpec.model_validate(data)
+        if feasible(cand):
+            return cand
+    return None

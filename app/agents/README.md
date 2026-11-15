@@ -136,8 +136,14 @@ Le script exporte les dépendances verrouillées (`uv export --frozen --no-dev`)
 plateforme), place `main.py` et le paquet `alphaforge` (YAML et jeu de départ compris) à la racine du zip, retire
 les parquets et `raw/` de `alphaforge/data/long/` s'ils existent localement, retire `__pycache__` et `.pyc`, fixe les droits (644 fichiers, 755 dossiers et exécutables) et produit :
 
-- `<out_dir>/agents.zip` : environ 32 Mo compressé, 70 Mo décompressé (limites vérifiées : 250 Mo et 750 Mo);
-- `<out_dir>/knowledge/` : les fichiers `**/*.md` de `app/knowledge/general/`, à pousser sous `general/`.
+- `<out_dir>/agents.zip` : environ 32 Mo compressé, 72 Mo décompressé (limites vérifiées : 250 Mo et 750 Mo);
+- `<out_dir>/knowledge/` : les fichiers `**/*.md` de `app/knowledge/general/` et leurs éventuels compagnons
+  `**/*.md.metadata.json` (métadonnées de la Knowledge Base, 10 Ko au plus), à pousser sous `general/`;
+- `<out_dir>/agents-portfolio.zip`, seulement si `ALPHAFORGE_PACKAGE_PORTFOLIO=1` (désactivé par défaut) : le même
+  code avec en plus le groupe uv `finance` (`uv export --frozen --no-dev --group finance`), pour le seul runtime
+  `portfolio` (`portfolio_enabled` dans Terraform). Roues `aarch64-manylinux_2_28` et non `manylinux2014` : cvxpy
+  1.9.3 n'a pas de roue linux/arm64 `manylinux2014` (le runtime doit donc avoir un glibc d'au moins 2.28). Mesuré le
+  2026-11-14 : 167 Mo compressé, 515 Mo décompressé, pyarrow compris (sans ses tests).
 
 Le runtime démarre avec `python main.py` (point d'entrée `["main.py"]`, sans `opentelemetry-instrument`).
 
@@ -145,7 +151,7 @@ Le runtime démarre avec `python main.py` (point d'entrée `["main.py"]`, sans `
 
 | Variable | Défaut | Rôle |
 | --- | --- | --- |
-| `AGENT_ROLE` | `profile` | `profile`, `press`, `data`, `supervisor`, `router`, `expert` ou `researcher`. |
+| `AGENT_ROLE` | `profile` | `profile`, `press`, `data`, `supervisor`, `router`, `expert`, `researcher` ou `portfolio` (zip `agents-portfolio.zip`). |
 | `ALPHAFORGE_ENV` | `local` | Environnement, renvoyé par `health`. |
 | `ALPHAFORGE_RELEASE` | `dev` | SHA court du commit, renvoyé dans chaque réponse. |
 | `ALPHAFORGE_REGION` | `AWS_REGION`, sinon `us-east-1` | Région des appels AWS. |

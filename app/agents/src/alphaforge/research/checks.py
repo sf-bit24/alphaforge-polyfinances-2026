@@ -71,17 +71,20 @@ def _hash(item: dict[str, Any]) -> str:
     return staging.short_hash(str(item.get("id")), 8)
 
 
+def source_slug(item: dict[str, Any]) -> str:
+    """Dossier d'un fait ou d'un signal : l'hôte lu, fixé par le code, jamais un libellé écrit par un modèle."""
+    host = str(((item.get("data") or {}).get("provenance") or {}).get("host") or item.get("source") or "")
+    return staging.slugify(host.removeprefix("www."), 50)
+
+
 def target(item: dict[str, Any]) -> str:
+    """Clé d'un élément dans ``general/`` : arborescence fermée de CONTRACTS.md, section 5."""
     kind = item["kind"]
     data = item.get("data") or {}
     observed = str(item.get("observed_at") or item.get("published_at") or "")[:10]
-    if kind == "fact":
-        return (
-            f"general/faits/{staging.slugify(str(data.get('label') or item['title']), 50)}/{observed}-{_hash(item)}.md"
-        )
-    if kind == "signal":
-        slug = staging.slugify(str(data.get("label") or item["title"]), 50)
-        return f"general/signaux/{slug}/{observed}-{_hash(item)}.md"
+    if kind in ("fact", "signal"):
+        folder = "faits" if kind == "fact" else "signaux"
+        return f"general/{folder}/{source_slug(item)}/{observed}-{_hash(item)}.md"
     if kind == "filing":
         owner = (item.get("tickers") or [None])[0] or (data.get("provenance") or {}).get("host") or "depot"
         accession = (data.get("values") or {}).get("accession") or (data.get("values") or {}).get("accessionNumber")

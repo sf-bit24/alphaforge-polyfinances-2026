@@ -13,6 +13,9 @@ Contrôles du code (toujours appliqués, avec leur raison) :
 Puis l'agent relit les éléments retenus comme un éditeur (hors sujet, promotionnel, même événement en double) et
 peut en rejeter, avec une raison. Les marqueurs absents ou en erreur de A4 ou A5 n'empêchent pas la curation.
 A6 ne lance pas l'ingestion de la Knowledge Base : Step Functions s'en charge après le marqueur.
+Chaque document qu'A6 écrit (actualité, donnée, et ceux de la recherche : fait, signal, dépôt, synthèse) l'est avec
+son fichier compagnon ``<clé>.metadata.json`` (type, ticker, kind, published_epoch : filtres de la Knowledge Base,
+CONTRACTS.md 5.1), par ``general.write_document``.
 """
 
 from __future__ import annotations
@@ -33,7 +36,7 @@ from ..errors import AppError
 from ..research import checks as research_checks
 from ..store import Store
 from ..trace import Trace
-from . import staging
+from . import general, staging
 
 MAX_ITEMS = 200
 NEWS_STALE_DAYS = 90
@@ -68,8 +71,9 @@ class Candidate:
 
 
 def _existing_index(store: Store) -> dict[str, set[str]]:
-    news_keys = [info.key for info in store.list("general/actualites/", limit=20000)]
-    data_keys = [info.key for info in store.list("general/donnees/", limit=20000)]
+    # Documents seulement : les fichiers compagnons (.md.metadata.json) ne sont pas des doublons possibles.
+    news_keys = [info.key for info in store.list("general/actualites/", limit=20000) if info.key.endswith(".md")]
+    data_keys = [info.key for info in store.list("general/donnees/", limit=20000) if info.key.endswith(".md")]
     url_hashes, titles = set(), set()
     for key in news_keys:
         stem = key.rsplit("/", 1)[-1].removesuffix(".md")
@@ -718,7 +722,7 @@ def curate(  # noqa: PLR0913 - signature gardée : le service de collecte et les
         if problems:
             rejected.append({"key": candidate.key, "reason": "document OKF invalide : " + "; ".join(problems)})
             continue
-        store.put_text(candidate.target, okf.render(doc))
+        general.write_document(store, candidate.target, doc)
         written.append(candidate.target)
     trace.add(
         "storage",

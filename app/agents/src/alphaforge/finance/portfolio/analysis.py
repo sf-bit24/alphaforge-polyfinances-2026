@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import NamedTuple
 
 import numpy as np
@@ -323,16 +324,29 @@ class LongHistory:
 
 def _spliced_history(asset: str, policy: PolicySpec, end: pd.Timestamp) -> tuple[pd.Series, str | None]:
     """Rendements de ``asset`` jusqu'à ``end``, précédés de ceux de son proxy déclaré avant son lancement ;
-    rend aussi le proxy effectivement raccordé."""
-    own = bt_data.load_returns([asset], end=end, currency=policy.currency)[asset]
+    rend aussi le proxy effectivement raccordé. La série vient du cache de ``_spliced``."""
     declared = policy.history_proxies.get(asset)
-    if declared is None:
-        return own, None
-    proxy = bt_data.load_returns([declared.proxy], end=end, currency=policy.currency)[declared.proxy]
-    before = proxy.loc[: own.index[0] - pd.offsets.MonthEnd(1)]
-    if not len(before):
-        return own, None
-    return pd.concat([before, own]), declared.proxy
+    proxy = declared.proxy if declared is not None else None
+    series, proxied = _spliced(asset, proxy, end, policy.currency, bt_data.data_version().get("data_sha256"))
+    return series, proxy if proxied else None
+
+
+@lru_cache(maxsize=4096)
+def _spliced(
+    asset: str, proxy: str | None, end: pd.Timestamp, currency: str, data_sha: str | None
+) -> tuple[pd.Series, bool]:
+    """Série mensuelle d'un actif ≤ ``end``, raccordée à son proxy avant son lancement (mémoïsée).
+
+    ``data_sha`` fait partie de la clé : de nouvelles données invalident le cache. La série rendue est partagée :
+    les appelants ne la modifient pas (``pd.DataFrame(series)`` copie).
+    """
+    own = bt_data.load_returns([asset], end=end, currency=currency)[asset]
+    if proxy is not None:
+        proxy_returns = bt_data.load_returns([proxy], end=end, currency=currency)[proxy]
+        before = proxy_returns.loc[: own.index[0] - pd.offsets.MonthEnd(1)]
+        if len(before):
+            return pd.concat([before, own]), True
+    return own, False
 
 
 @traced_tool("portfolio.long_history_returns")

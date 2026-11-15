@@ -54,6 +54,18 @@ from . import schema
 
 SUPPORTED_SCHEMAS = ("0.1", "0.2")
 LATEST_KEY = "scenarios/latest.json"
+
+
+def _json_object(doc: object) -> object:
+    """Décode une seconde fois un objet écrit en chaîne JSON par Step Functions (ancien ``$string``)."""
+    if isinstance(doc, str):
+        try:
+            return json.loads(doc)
+        except ValueError:
+            return doc
+    return doc
+
+
 OUTPUT_PREFIX = "scenarios/output/"
 RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
@@ -599,7 +611,7 @@ class ScenarioTableLoader:
         if self.pinned_run_id:
             run_id = self.pinned_run_id
         else:
-            pointer = self.store.get_json(LATEST_KEY)
+            pointer = _json_object(self.store.get_json(LATEST_KEY))
             if not isinstance(pointer, dict) or not pointer.get("run_id"):
                 raise ScenarioTableError(f"pointeur {LATEST_KEY} absent ou sans run_id")
             run_id = str(pointer["run_id"])
@@ -616,7 +628,7 @@ class ScenarioTableLoader:
                 return self._cache
             prefix = f"{OUTPUT_PREFIX}{run_id}/"
             if self.pinned_run_id:
-                marker = self.store.get_json(prefix + "_done.json")
+                marker = _json_object(self.store.get_json(prefix + "_done.json"))
                 if not isinstance(marker, dict) or marker.get("status") != "ok":
                     state = marker.get("status") if isinstance(marker, dict) else "absent"
                     raise ScenarioTableError(f"run {run_id} non terminé avec succès : {prefix}_done.json {state!r}")

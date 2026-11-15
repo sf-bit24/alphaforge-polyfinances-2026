@@ -13,12 +13,14 @@ import type {
   Stage,
   TraceKind,
 } from "@/lib/contract/schemas";
+import { portfolioEn, portfolioFr } from "./portfolio";
 import { screensEn, screensFr } from "./screens";
 
 type Fn<A extends unknown[]> = (...args: A) => string;
 
 const fr = {
   ...screensFr,
+  portfolioView: portfolioFr,
   meta: {
     title: "AlphaForge AI : aide à la décision d’investissement explicable",
     description:
@@ -154,6 +156,7 @@ const fr = {
     risk_capacity: "Capacité de risque",
     constraints: "Contraintes",
     preferences: "Préférences",
+    behavior: "Comportement",
     context: "Contexte",
   } satisfies Record<Dimension, string>,
   dimensionStatus: { known: "Connue", partial: "Partielle", missing: "Manquante" } satisfies Record<DimensionStatus, string>,
@@ -479,6 +482,10 @@ const fr = {
       societes: "Sociétés",
       actualites: "Actualités",
       donnees: "Données",
+      recherches: "Synthèses de recherche",
+      faits: "Faits sourcés",
+      signaux: "Signaux de contexte",
+      depots: "Dépôts réglementaires",
       index: "Index",
       other: "Autres",
     } as Record<string, string>,
@@ -588,6 +595,7 @@ export type Dictionary = typeof fr;
 
 const en: Dictionary = {
   ...screensEn,
+  portfolioView: portfolioEn,
   meta: {
     title: "AlphaForge AI: explainable investment decision aid",
     description:
@@ -723,6 +731,7 @@ const en: Dictionary = {
     risk_capacity: "Risk capacity",
     constraints: "Constraints",
     preferences: "Preferences",
+    behavior: "Behaviour",
     context: "Context",
   },
   dimensionStatus: { known: "Known", partial: "Partial", missing: "Missing" },
@@ -1040,6 +1049,10 @@ const en: Dictionary = {
       societes: "Companies",
       actualites: "News",
       donnees: "Data",
+      recherches: "Research briefs",
+      faits: "Sourced facts",
+      signaux: "Context signals",
+      depots: "Regulatory filings",
       index: "Index",
       other: "Other",
     },

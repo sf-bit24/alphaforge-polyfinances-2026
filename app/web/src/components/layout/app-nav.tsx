@@ -30,6 +30,7 @@ function NavTabs({ pathname }: { pathname: string }) {
   const tabs = [
     { href: "/dashboard", label: t.appNav.dashboard },
     { href: "/details", label: t.appNav.details },
+    { href: "/portfolio", label: t.appNav.portfolio },
     { href: "/", label: t.appNav.profile },
     { href: "/knowledge", label: t.appNav.knowledge },
   ];

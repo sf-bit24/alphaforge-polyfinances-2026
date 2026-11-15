@@ -232,6 +232,12 @@ def build_portfolio(
         if r1.status != "optimal":
             raise RuntimeError(f"mandat infaisable : {r1.infeasible_rules}")
         book.data_version = r1.data_version
+        # Lot E, OKF général : avec le magasin OKF (OkfMarketStore), la version des données couvre aussi les
+        # (clé, ETag) des fondamentaux de general/societes/, lus ici une fois pour toute la décision. Jamais les
+        # actualités : une nouvelle ne change ni le mandat ni la version des données.
+        okf_market = getattr(evidence_fn, "__self__", evidence_fn)
+        if hasattr(okf_market, "inputs"):
+            book.data_version = okf_market.data_version(book.data_version)
         r1_ids, r1_active = _opt_facts(book, "r1", r1, base)
     ctx1 = LensContext(profile, base, r1.weights, as_of, book, label="r1", evidence_fn=evidence_fn)
     ev1 = {lens: lens_evidence(lens, ctx1) for lens in LENSES}

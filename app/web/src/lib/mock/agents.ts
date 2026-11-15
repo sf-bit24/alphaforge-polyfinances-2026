@@ -5,6 +5,7 @@
  */
 import type { Exposures, KnowledgeLevel, Locale } from "@/lib/contract/schemas";
 import { MockError } from "./envelope";
+import { containsSin } from "./personal-data";
 import { formatMoney, formatPercent } from "./profile";
 import type { L, QuestionDef } from "./questions";
 import { PRICE_DATE } from "./starter";
@@ -38,7 +39,7 @@ const PII_PATTERNS: RegExp[] = [
   // "no de compte : 12345", "account #12345", "transit 12345". Without the marker ("mon compte : 50 000",
   // "compte 2 500 parts"), the number is an amount or a quantity; only the 123 45678 9 form may hold spaces.
   /(?<=\b(?:(?:compte|account|acct)[ \t]*(?:n[o°º]\.?|#|num[ée]ro|number)|(?:n[o°º]\.?|num[ée]ro)[ \t]*(?:de[ \t]*)?compte|transit|folio)[ \t]*:?[ \t]*)(?:\d{3} \d{5} \d\b|\d[\d-]{3,}\d)(?!\d|[,.]\d)/gi,
-  // Social insurance number (NAS) not written in three separated groups (123456789); those are refused (SIN_PATTERN).
+  // Nine digits that are not refused as a SIN (containsSin): a CUSIP, a quantity, a number that fails the Luhn key.
   /\b\d{3}[ -]?\d{3}[ -]?\d{3}\b/g,
   // Phone number.
   /\b\d{3}[ .-]?\d{3}[ .-]?\d{4}\b/g,
@@ -46,11 +47,7 @@ const PII_PATTERNS: RegExp[] = [
   /(?<!\$\s?)\b\d{7,}\b(?![.,]\d|\s?\$)/g,
 ];
 
-/**
- * A SIN in three groups of three digits, refused instead of masked, like in the real runtime: the "nas-canadien"
- * regex of the guardrail (bedrock.tf) and `SIN_PATTERN` of agentkit.py, which answers `personal_data_error`.
- */
-const SIN_PATTERN = /\b\d{3}[ -]\d{3}[ -]\d{3}\b/;
+/** The refusal of a SIN, like `personal_data_error` of agentkit.py in the real runtime. */
 const SIN_REFUSAL: L = {
   fr: "Votre message contient un renseignement personnel (NAS) : retirez-le, puis renvoyez-le.",
   en: "Your message contains personal information (SIN): remove it, then send it again.",
@@ -66,7 +63,8 @@ const OFF_TOPIC = /(météo|meteo|weather|recette|recipe|blague|joke|sport|hocke
  * mask the other personal data, flag advice requests.
  */
 export function screenMessage(message: string, locale: Locale = "fr"): Screening {
-  if (SIN_PATTERN.test(message)) throw new MockError("guardrail_blocked", SIN_REFUSAL, { reason: "personal_data", entity: "CA_SIN" });
+  // Refused instead of masked, with the rule of the real runtime (personal-data.ts, personal_data.py).
+  if (containsSin(message)) throw new MockError("guardrail_blocked", SIN_REFUSAL, { reason: "personal_data", entity: "CA_SIN" });
   let text = message;
   let masked = 0;
   for (const pattern of PII_PATTERNS) {

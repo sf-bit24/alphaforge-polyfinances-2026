@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import time
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass, field
@@ -24,6 +23,7 @@ from strands.models import BedrockModel, CacheConfig
 
 from .config import Settings
 from .errors import AppError, pick
+from .personal_data import contains_sin
 from .trace import Trace, compact_value
 
 logger = logging.getLogger("alphaforge.agents")
@@ -31,9 +31,6 @@ logger = logging.getLogger("alphaforge.agents")
 EFFORTS = ("low", "medium", "high")
 ModelFactory = Callable[..., Any]
 
-# Même motif que la regex « nas-canadien » du garde-fou (infrastructure/infra/bedrock.tf) : un NAS écrit en trois
-# groupes de trois chiffres séparés par une espace ou un tiret. Le garde-fou le bloque en entrée (BLOCK).
-SIN_PATTERN = re.compile(r"\b\d{3}[ -]\d{3}[ -]\d{3}\b", re.ASCII)
 SIN_ENTITY = "CA_SIN"
 # Le NAS dans la trace du garde-fou : filtre géré et regex.
 SIN_NAMES = frozenset({"CA_SOCIAL_INSURANCE_NUMBER", "nas-canadien"})
@@ -208,8 +205,9 @@ def personal_data_error(entity: str, trace: Trace, spec: AgentSpec, *, source: s
 
 
 def check_personal_data(prompt: Any, trace: Trace, spec: AgentSpec) -> None:
-    """Refuse avant l'appel au modèle un NAS que le garde-fou bloquerait, pour en donner la vraie raison."""
-    if any(SIN_PATTERN.search(text) for text in guardrail_texts(prompt, guard_tagged=spec.guard_tagged)):
+    """Refuse avant l'appel au modèle un NAS, pour en donner la vraie raison : celui que le garde-fou bloque (trois
+    groupes séparés) et celui qu'il laisse passer (9 chiffres collés, voir ``personal_data.contains_sin``)."""
+    if any(contains_sin(text) for text in guardrail_texts(prompt, guard_tagged=spec.guard_tagged)):
         raise personal_data_error(SIN_ENTITY, trace, spec, source="local")
 
 

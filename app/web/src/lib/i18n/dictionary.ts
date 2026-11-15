@@ -564,7 +564,8 @@ const fr = {
   },
   errors: {
     title: "Une erreur est survenue",
-    code: "Code",
+    /** Badge of the error code: the separator follows the language. */
+    code: ((code: string) => `Code : ${code}`) as Fn<[string]>,
     details: "Détails techniques",
     hints: {
       bad_request: "La requête n’a pas été acceptée.",
@@ -1141,7 +1142,7 @@ const en: Dictionary = {
   },
   errors: {
     title: "Something went wrong",
-    code: "Code",
+    code: (code: string) => `Code: ${code}`,
     details: "Technical details",
     hints: {
       bad_request: "The request was not accepted.",

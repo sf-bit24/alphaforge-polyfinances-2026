@@ -151,7 +151,7 @@ type ChoicePattern = [pattern: RegExp, choice: string];
  * « ai » is the French verb (j'ai, j'en ai, ai-je), and so is "AI" after an apostrophe (J'AI).
  */
 const THEME_PATTERNS: ChoicePattern[] = [
-  [/(\btech\b|technolog|\bia\b|intelligence artificielle|artificial intelligence)/i, "technology"],
+  [/(\btechs?\b|technolog|\bia\b|intelligence artificielle|artificial intelligence)/i, "technology"],
   [/(?<!')\bAI\b/, "technology"],
   [/(énergie propre|energie propre|clean energy|renouvelable|renewable)/i, "clean_energy"],
   [/(dividende|dividend)/i, "dividends"],

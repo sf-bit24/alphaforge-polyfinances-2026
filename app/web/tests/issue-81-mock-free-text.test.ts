@@ -97,6 +97,7 @@ describe("issue #81: themes of interest", () => {
     ["Artificial intelligence and tech companies.", ["technology"]],
     ["La technologie et la santé.", ["technology", "health"]],
     ["Health care and high-tech.", ["technology", "health"]],
+    ["Les techs américaines.", ["technology"]],
   ])("reads the themes of « %s »", (message, themes) => {
     expect(facts(message)["preferences.themes"]).toEqual(themes);
   });

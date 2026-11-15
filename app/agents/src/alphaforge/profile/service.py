@@ -31,7 +31,15 @@ from . import a2 as a2_agent
 from . import brain, kb, rules
 from .agent_runner import AgentRunner
 from .portfolio import ACCOUNT_TYPES, QuoteFetcher, build_view, positions_to_raws
-from .questionnaire import InvalidValueError, Questionnaire, QuestionSpec, default_questionnaire, reason_text
+from .questionnaire import (
+    InvalidValueError,
+    Questionnaire,
+    QuestionSpec,
+    band_brief,
+    default_questionnaire,
+    labeled,
+    reason_text,
+)
 from .state import ClientSession, is_client_id, load_journal_entries, portfolio_key, trace_key
 from .views import client_state
 
@@ -91,8 +99,8 @@ def _message_param(payload: dict[str, Any], locale: str) -> str | None:
 class _PendingQuestions:
     """Questions en attente d'une session, le temps de lire les réponses de l'investisseur.
 
-    Les tables des tranches et les champs visés par les confirmations vivent hors des questions : une question
-    répondue quitte les trois à la fois, et ``save`` réécrit ce qui reste dans la session.
+    Les tables des tranches (nombres et tranches) et les champs visés par les confirmations vivent hors des
+    questions : une question répondue les quitte toutes à la fois, et ``save`` réécrit ce qui reste dans la session.
     """
 
     def __init__(self, questionnaire: Questionnaire, session: ClientSession):
@@ -100,6 +108,8 @@ class _PendingQuestions:
         self.session = session
         self.questions = {item["id"]: item for item in session.data.get("pending_questions") or []}
         self.choices = dict(session.data.get("pending_choices") or {})
+        # Absent d'une session écrite avant les tranches : le fait est alors écrit sans sa tranche.
+        self.bands = dict(session.data.get("pending_bands") or {})
         self.confirmations = dict(session.data.get("pending_confirmations") or {})
 
     def validate(self, answers: list[Any], locale: str) -> list[tuple[dict[str, Any], Any]]:
@@ -152,12 +162,15 @@ class _PendingQuestions:
         session = self.session
         spec = self.questionnaire.fields.get(question.get("field") or "")
         table = self.choices.pop(question["id"], None)
-        option = None
+        bands = self.bands.pop(question["id"], None) or {}
+        option = band = None
         if table and isinstance(value, str) and value in table:
-            # Tranche choisie : le code écrit sa valeur numérique et garde l'identifiant au journal.
+            # Tranche choisie : le code écrit sa valeur numérique, garde l'identifiant au journal et la tranche
+            # avec le fait.
             option, value = value, table[value]
+            band = bands.get(option)
         if spec is not None and value is not None and self.questionnaire.applicable(spec.when, session.values()):
-            session.set_fact(spec.id, value, provenance, question_id=question["id"], option=option)
+            session.set_fact(spec.id, value, provenance, question_id=question["id"], option=option, band=band)
         else:
             session.journal_answer(question["id"], value, provenance)
         session.mark_answered(question["id"], option if option is not None else value)
@@ -168,6 +181,8 @@ class _PendingQuestions:
             "kind": question.get("kind"),
             "value": value,
             **({"option": option} if option is not None else {}),
+            # A1 lit la tranche choisie : la valeur n'en est que le chiffre prudent.
+            **({"band": band_brief(band, session.locale)} if band else {}),
             "prompt": question.get("prompt"),
         }
 
@@ -188,6 +203,7 @@ class _PendingQuestions:
     def save(self) -> None:
         self.session.data["pending_questions"] = list(self.questions.values())
         self.session.data["pending_choices"] = self.choices
+        self.session.data["pending_bands"] = self.bands
         self.session.data["pending_confirmations"] = self.confirmations
 
 
@@ -533,7 +549,14 @@ class ProfileService:
         question = self._base_question(request, session)
         value, option = self._validate_base_answer(request, question, locale)
         session.record_answer(question.id, option if option is not None else value)
-        session.set_fact(question.field.id, value, f"base:{question.id}", question_id=question.id, option=option)
+        session.set_fact(
+            question.field.id,
+            value,
+            f"base:{question.id}",
+            question_id=question.id,
+            option=option,
+            band=question.option_band(option) if option is not None else None,
+        )
         self._prune_branches(session)
         values = session.values()
         if question.field.dimension == "knowledge":
@@ -937,7 +960,12 @@ class ProfileService:
                 },
             )
         session.remember_questions(
-            questions, turn, choices=outcome.choices, confirmations=targets, reasons=outcome.reasons
+            questions,
+            turn,
+            choices=outcome.choices,
+            confirmations=targets,
+            reasons=outcome.reasons,
+            bands=outcome.bands,
         )
 
     def _client_brain(self, request: Request, session: ClientSession) -> None:
@@ -992,8 +1020,10 @@ class ProfileService:
 
 
 def _summary_lines(view: dict[str, Any], *, en: bool) -> list[str]:
-    """Titre, avertissement, synthèse et en-tête du tableau des positions."""
+    """Titre, avertissement, synthèse et en-tête du tableau des positions; le séparateur suit la langue."""
     exposures = view["exposures"]
+    locale = "en" if en else "fr"
+    status, total = f"`{view['status']}`", f"{exposures['total_value_cad']} CAD"
     return [
         "# " + ("Existing portfolio" if en else "Portefeuille existant"),
         "",
@@ -1004,11 +1034,11 @@ def _summary_lines(view: dict[str, Any], *, en: bool) -> list[str]:
             else "Portefeuille fictif, simulation seulement. Prix, valeurs et expositions calculés par le code."
         ),
         "",
-        f"- {'Status' if en else 'Statut'} : `{view['status']}`",
-        f"- {'Total value' if en else 'Valeur totale'} : {exposures['total_value_cad']} CAD",
-        f"- {'USD/CAD rate' if en else 'Taux USD/CAD'} : {view['fx']['rate']}"
+        f"- {labeled('Status' if en else 'Statut', status, locale)}",
+        f"- {labeled('Total value' if en else 'Valeur totale', total, locale)}",
+        f"- {labeled('USD/CAD rate' if en else 'Taux USD/CAD', str(view['fx']['rate']), locale)}"
         f" ({view['fx']['date']}, {view['fx']['source']})",
-        f"- {'Flags' if en else 'Constats'} : {', '.join(exposures['flags']) or '—'}",
+        f"- {labeled('Flags' if en else 'Constats', ', '.join(exposures['flags']) or '—', locale)}",
         "",
         "| id | ticker | "
         + (
@@ -1036,11 +1066,15 @@ def _position_row(position: dict[str, Any]) -> str:
 def _unresolved_lines(view: dict[str, Any], *, en: bool) -> list[str]:
     if not view["unresolved"]:
         return []
+    locale = "en" if en else "fr"
     return [
         "",
         "## " + ("Unresolved lines" if en else "Lignes non évaluées"),
         "",
-        *(f"- {str(line['raw']).replace('|', '/')} : {line['reason']}" for line in view["unresolved"]),
+        *(
+            f"- {labeled(str(line['raw']).replace('|', '/'), str(line['reason']), locale)}"
+            for line in view["unresolved"]
+        ),
     ]
 
 

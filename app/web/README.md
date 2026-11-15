@@ -21,7 +21,7 @@ Le contrat avec les runtimes Python et l'infrastructure est `app/CONTRACTS.md` :
 
 ### Données d'exemple : mode `mock` seulement
 
-La version 1 n'a pas de moteur de portefeuille (A3, lentilles, Judge viennent ensuite). Décision de l'équipe du 2026-11-14 :
+Le tableau de bord, la page Détails et l'assistant ne sont pas branchés sur le moteur de portefeuille (A3, lentilles, Judge) : seule la page `/portfolio` affiche ses décisions. Décision de l'équipe du 2026-11-14 :
 
 - en mode `mock`, les tuiles du tableau de bord, la page Détails et les réponses de l'assistant aux questions suggérées sur le portefeuille (le piège des 50 000 $, l'or, NVDA) reprennent l'exemple des maquettes, marqué « Valeurs d'exemple » et « Exemple simulé » (`src/lib/sample/`, série synthétique calibrée : volatilité 6,1 %, baisse 2022 de −9,8 %, 400 000 $);
 - en modes `local` et `aws`, aucun chiffre inventé : les tuiles montrent ce que le code calcule (complétude, risque retenu, horizon, niveau, portefeuille existant valorisé par A2) et la page Détails annonce la version 2.
@@ -153,7 +153,7 @@ Limites appliquées par le serveur : 5 fichiers de 10 Mo au plus par `portfolio.
 
 ```text
 src/
-  app/                  / (parcours), (app)/ : dashboard, details, knowledge, settings, sous la navigation; routes /api
+  app/                  / (parcours), (app)/ : dashboard, details, portfolio, knowledge, settings, sous la navigation; routes /api
   components/journey/   parcours : scène et personnage, cartes de question, portefeuille existant, synthèse
   components/dashboard/ tableau de bord : tuiles, assistant, scène d'accueil et volée d'oiseaux
   components/details/   détails du portefeuille et graphiques
@@ -167,18 +167,18 @@ src/
   components/portfolio/ portefeuille simulé : décision, faits cliquables, panneau des sources
   lib/journey/          chemin du parcours (panneaux, maison, reprise d'une session)
   lib/client/           appels à la passerelle, session (localStorage), état de l'interface
-  lib/i18n/             dictionnaire typé FR (par défaut) et EN; screens.ts pour les écrans des maquettes
+  lib/i18n/             dictionnaire typé FR (par défaut) et EN; screens.ts pour les écrans des maquettes, portfolio.ts pour le portefeuille simulé, okf-types.ts pour les libellés des types OKF
   lib/sse.ts            parseur SSE (fragments, CR/LF, une ligne JSON par événement)
-tests/                  tests Vitest (contrat, simulateur, passerelle, SSE, parcours, données d'exemple, textes)
+tests/                  tests Vitest (contrat, simulateur, passerelle, SSE, parcours, données d'exemple, portefeuille simulé, textes)
 ```
 
-Les styles des trois écrans des maquettes sont des modules CSS (`*.module.css`) portés des maquettes; les autres composants utilisent Tailwind avec les jetons de `globals.css`.
+Les styles des trois écrans des maquettes sont des modules CSS (`*.module.css`) portés des maquettes; le portefeuille simulé reprend ceux de Détails avec les siens, et Yan, le robot de l'assistant, a le sien. Les autres composants utilisent Tailwind avec les jetons de `globals.css`.
 
 ## Limites connues
 
 - Pas de mode sombre.
 - Le parcours n'offre pas de retour à une question de base déjà répondue : le contrat n'a pas d'action pour la modifier.
-- Les réponses de l'assistant sur le portefeuille sont des exemples écrits d'avance (mode `mock`), en attendant le moteur du volet finance.
+- Les réponses de l'assistant sur le portefeuille sont des exemples écrits d'avance (mode `mock`) : l'assistant n'est pas branché sur le moteur du volet finance, que seule la page `/portfolio` affiche.
 - Le mode `mock` garde tout en mémoire; un redémarrage efface les sessions et les collectes simulées.
 - En mode `mock`, A2 ne lit que le texte et les fichiers texte (CSV, TXT, JSON); en mode `aws`, A2 lit aussi les PDF et les images avec le modèle.
 - La collecte n'est disponible qu'en modes `mock` et `aws`.

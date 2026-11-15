@@ -101,6 +101,53 @@ class PressRun:
         out.sort(key=lambda item: item["published_at"], reverse=True)
         return out
 
+    def _fetch_feed(self, provider: str) -> tuple[str, list[fetchers.NewsCandidate] | None]:
+        try:
+            return provider, fetchers.fetch_press_releases(provider)
+        except fetchers.FetchError as exc:
+            self.warnings.append(f"{provider}: {exc}")
+            return provider, None
+
+    def _fetch_press_releases(self) -> dict[str, Any]:
+        if self._expired():
+            return {"status": "error", "reason": "time budget exhausted; call finish"}
+        if self.press_fetched:
+            return {"status": "error", "reason": "press releases already fetched in this run"}
+        self.press_fetched = True
+        results: list[fetchers.NewsCandidate] = []
+        errors = []
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            for provider, items in pool.map(self._fetch_feed, list(fetchers.PRESS_RELEASE_FEEDS)):
+                if items is None:
+                    errors.append(provider)
+                else:
+                    results.extend(items)
+        fresh = self._add(results)
+        fresh.sort(key=lambda item: not any(t in self.tickers for t in item["tickers"]))
+        return {
+            "status": "ok",
+            "candidates": fresh[:60],
+            "failed_feeds": errors,
+            "total_candidates": len(self.candidates),
+        }
+
+    def _search_news(self, query: str, language: str) -> dict[str, Any]:
+        if self._expired():
+            return {"status": "error", "reason": "time budget exhausted; call finish"}
+        if self.searches >= MAX_SEARCHES:
+            return {"status": "error", "reason": f"at most {MAX_SEARCHES} searches per run"}
+        query = " ".join(str(query).split())[:120]
+        if len(query) < 3:
+            return {"status": "error", "reason": "query too short"}
+        self.searches += 1
+        try:
+            items = fetchers.fetch_gdelt(query, self._since_dt(), language=language)
+        except fetchers.FetchError as exc:
+            self.warnings.append(f"gdelt: {exc}")
+            return {"status": "error", "reason": str(exc)}
+        fresh = self._add(items)
+        return {"status": "ok", "candidates": fresh[:40], "total_candidates": len(self.candidates)}
+
     def tools(self) -> list[Any]:
         run = self
 
@@ -113,37 +160,7 @@ class PressRun:
             inputSchema={"json": {"type": "object", "properties": {}}},
         )
         def fetch_press_releases() -> str:
-            if run._expired():
-                return tool_result({"status": "error", "reason": "time budget exhausted; call finish"})
-            if run.press_fetched:
-                return tool_result({"status": "error", "reason": "press releases already fetched in this run"})
-            run.press_fetched = True
-            results: list[fetchers.NewsCandidate] = []
-            errors = []
-
-            def one(provider: str) -> tuple[str, list[fetchers.NewsCandidate] | None]:
-                try:
-                    return provider, fetchers.fetch_press_releases(provider)
-                except fetchers.FetchError as exc:
-                    run.warnings.append(f"{provider}: {exc}")
-                    return provider, None
-
-            with ThreadPoolExecutor(max_workers=3) as pool:
-                for provider, items in pool.map(one, list(fetchers.PRESS_RELEASE_FEEDS)):
-                    if items is None:
-                        errors.append(provider)
-                    else:
-                        results.extend(items)
-            fresh = run._add(results)
-            fresh.sort(key=lambda item: not any(t in run.tickers for t in item["tickers"]))
-            return tool_result(
-                {
-                    "status": "ok",
-                    "candidates": fresh[:60],
-                    "failed_feeds": errors,
-                    "total_candidates": len(run.candidates),
-                }
-            )
+            return tool_result(run._fetch_press_releases())
 
         @tool(
             name="search_news",
@@ -163,21 +180,7 @@ class PressRun:
             },
         )
         def search_news(query: str, language: str = "fr") -> str:
-            if run._expired():
-                return tool_result({"status": "error", "reason": "time budget exhausted; call finish"})
-            if run.searches >= MAX_SEARCHES:
-                return tool_result({"status": "error", "reason": f"at most {MAX_SEARCHES} searches per run"})
-            query = " ".join(str(query).split())[:120]
-            if len(query) < 3:
-                return tool_result({"status": "error", "reason": "query too short"})
-            run.searches += 1
-            try:
-                items = fetchers.fetch_gdelt(query, run._since_dt(), language=language)
-            except fetchers.FetchError as exc:
-                run.warnings.append(f"gdelt: {exc}")
-                return tool_result({"status": "error", "reason": str(exc)})
-            fresh = run._add(items)
-            return tool_result({"status": "ok", "candidates": fresh[:40], "total_candidates": len(run.candidates)})
+            return tool_result(run._search_news(query, language))
 
         @tool(
             name="stage_news",
@@ -270,7 +273,7 @@ class PressRun:
         return {"results": results, "staged": len(self.staged)}
 
 
-def collect(
+def collect(  # noqa: PLR0913 - même signature que data.collect : le service les appelle avec les mêmes arguments
     *,
     run_id: str,
     since: str,

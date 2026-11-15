@@ -47,7 +47,7 @@ function NoticeTitle({ code, calm }: { code: string; calm: CalmNotice }) {
           calm ? "text-warning-ink ring-warning/40" : "text-critical-ink ring-critical/25",
         )}
       >
-        {t.errors.code} : {code}
+        {t.errors.code(code)}
       </span>
     </p>
   );

@@ -303,8 +303,10 @@ def write_general_index(store: Store, now: str) -> None:
         except okf.OkfError:
             return info.key, info.key
 
-    sections = {"methodologie": [], "societes": [], "actualites": [], "donnees": []}
-    selected = [i for i in infos if i.key.startswith(("general/methodologie/", "general/societes/"))]
+    sections = {"methodologie": [], "notions": [], "societes": [], "actualites": [], "donnees": []}
+    selected = [
+        i for i in infos if i.key.startswith(("general/methodologie/", "general/notions/", "general/societes/"))
+    ]
     selected += [i for i in infos if i.key.startswith("general/actualites/")][:150]
     selected += [i for i in infos if i.key.startswith("general/donnees/")][:150]
     with ThreadPoolExecutor(max_workers=8) as pool:
@@ -316,13 +318,17 @@ def write_general_index(store: Store, now: str) -> None:
     body = [
         "# Base générale d'AlphaForge AI",
         "",
-        "Savoir commun à tous les investisseurs : méthodologie, chiffres publiés des sociétés, actualités datées et "
-        "données publiques. Elle ne "
+        "Savoir commun à tous les investisseurs : méthodologie, notions financières, chiffres publiés des sociétés, "
+        "actualités datées et données publiques. Elle ne "
         "contient rien d'un client. Chaque actualité ou donnée garde sa date de publication et sa date d'observation.",
         "",
         f"## Méthodologie ({counts['methodologie']})",
         "",
         *sorted(sections["methodologie"]),
+        "",
+        f"## Notions financières ({counts['notions']})",
+        "",
+        *sorted(sections["notions"]),
         "",
         f"## Sociétés ({counts['societes']})",
         "",
@@ -340,7 +346,10 @@ def write_general_index(store: Store, now: str) -> None:
     doc = okf.new_doc(
         type="Index",
         title="Base générale",
-        description="Index de la base générale : méthodologie, sociétés, actualités et données publiques datées.",
+        description=(
+            "Index de la base générale : méthodologie, notions financières, sociétés, actualités et données "
+            "publiques datées."
+        ),
         tags=["index", "base-generale"],
         owners=["alphaforge-a6"],
         sensitivity="public",

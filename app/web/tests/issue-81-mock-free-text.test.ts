@@ -181,3 +181,53 @@ describe("issue #81: labels keep their sigla in the profile summary", () => {
     expect(dimensionViews(values, locale).preferences.summary).toBe(summary);
   });
 });
+
+describe("issue #81 (suite): the negation of a high-interest debt, in English and in French", () => {
+  const debt = (message: string) => facts(message)["risk_capacity.high_interest_debt"];
+
+  it.each([
+    "I also have a 6% mortgage and no credit card debt.",
+    "No credit card debt.",
+    "I have no high-interest debt.",
+    "I have no debts.",
+    "I don't have any debt.",
+    "I don’t have any credit card debt.",
+    "I do not have any high interest debt.",
+    "I have never had any debt.",
+    "I am debt-free.",
+    "I have no credit card.",
+    "Zero debt.",
+    "Pas de dette.",
+    "Aucune dette de carte de crédit.",
+    "Je n'ai pas de dette.",
+    "Je n’ai aucune dette.",
+    "Je n'ai pas vraiment de dettes.",
+    "Je n'ai plus de dettes.",
+    "Je n'ai jamais eu de dettes.",
+    "Je n'ai pas de carte de crédit.",
+    "J'ai aussi une hypothèque à 6 % et je n'ai pas de dettes de carte de crédit.",
+  ])("« %s » records no high-interest debt", (message) => {
+    expect(debt(message)).toBe(false);
+  });
+
+  it.each([
+    "I have credit card debt.",
+    "No, I have credit card debt.",
+    "I can't pay off my credit card debt.",
+    "I have no savings and some credit card debt.",
+    "J'ai une dette de carte de crédit.",
+    "J'ai plus de dettes que d'épargne.",
+    "Je n'arrive pas à rembourser ma carte de crédit.",
+    "Non, j'ai des dettes sur mes cartes de crédit.",
+  ])("« %s » records a high-interest debt", (message) => {
+    expect(debt(message)).toBe(true);
+  });
+
+  it("is understood by the simulator in an English session", async () => {
+    const { runtime, current } = await sampleSession("en");
+    const message = "I also have a 6% mortgage and no credit card debt.";
+    const reply = await state(runtime, { action: "followup.reply", client_id: current.client_id, message });
+    expect(reply.profile.facts.find((fact) => fact.field === "risk_capacity.high_interest_debt")?.value).toBe(false);
+    expect(reply.message?.split("\n\n")[0]).toBe("Noted: no high-interest debt.");
+  });
+});

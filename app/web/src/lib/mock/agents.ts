@@ -133,11 +133,25 @@ function emergencyFundFact(lower: string): ExtractedFact | null {
   };
 }
 
+/** A high-interest debt in the investor's words. */
+const DEBT = String.raw`(?:dettes?|debts?|cartes? de crédit|credit[- ]cards?)`;
+const SOME_DEBT = new RegExp(DEBT);
+
+/**
+ * A negation, then only words that keep it on the debt: « je n'ai pas de dette », « aucune dette de carte de
+ * crédit », "no credit card debt", "I don't have any high-interest debt". "I can't pay off my credit card"
+ * and « j'ai plus de dettes que d'épargne » stay debts.
+ */
+const NO_DEBT = new RegExp(
+  String.raw`(?:\b(?:pas|aucune?|sans|z[ée]ro|jamais|no|not|never|without)|n't|n'\w+ plus)` +
+    String.raw`(?:\s+(?:de|have|any|had|eu|vraiment|really|high[- ]interest|consumer|outstanding))*\s+${DEBT}|\bdebt[- ]free\b`,
+);
+
 function debtFact(lower: string): ExtractedFact | null {
-  if (/(pas|aucune?|no|zero|zéro|sans)\s+(de\s+|d')?(dettes?|debts?)/.test(lower)) {
+  if (NO_DEBT.test(lower)) {
     return { field: "risk_capacity.high_interest_debt", value: false, note: { fr: "aucune dette à taux élevé", en: "no high-interest debt" } };
   }
-  if (/(dettes?|debts?|carte de crédit|credit card)/.test(lower)) {
+  if (SOME_DEBT.test(lower)) {
     return { field: "risk_capacity.high_interest_debt", value: true, note: { fr: "une dette à taux élevé", en: "high-interest debt" } };
   }
   return null;

@@ -1,7 +1,8 @@
 # Dépendances du job de scénarios (SageMaker Processing, image Python 3.12) : tout est épinglé (==).
 # Résolu le 2026-11-14 par : uv pip compile --python-version 3.12 --python-platform x86_64-manylinux_2_28 --only-binary :all:
-# Le job lui-même n'utilise que numpy, pandas, pyarrow et pyyaml ; scipy, yfinance, openpyxl et xlrd servent à
-# research/backtest/data/build_data.py (reconstruction des données longues, lancée avant le job).
+# Le job lui-même n'utilise que numpy, pandas, pyarrow et pyyaml ; yfinance, openpyxl et xlrd servent à
+# alphaforge.finance.backtest.build_data (reconstruction des données longues, lancée avant le job par run.sh) ;
+# scipy sert à la validation hors échantillon (scenarios/validation), livrée dans le même bundle.
 beautifulsoup4==4.15.0
 certifi==2026.10.23
 cffi==2.1.1

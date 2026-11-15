@@ -2,7 +2,7 @@
 # Ne pas lancer sur un portable : voir README.md (« Taille du calcul »).
 seed: 20261114
 default_model: sbb_ca          # choix du volet C (VALIDATION.md)
-workers: 16                   # 4 pools × 5 modèles = 20 tâches, une par vCPU
+workers: 8                    # ml.m5.4xlarge (16 vCPU, 64 Gio) : 3-4 Go par processus ; 16 seulement sur ml.m5.8xlarge
 families: [CAD77, CAD71, USD1926]
 models: [sbb, iid, hmm_rs, sbb_ca, hmm_rs_ca]   # _ca = ancrage du niveau des taux sur les 12 derniers mois
 horizons: [1, 3, 5, 10, 15, 20, 30]

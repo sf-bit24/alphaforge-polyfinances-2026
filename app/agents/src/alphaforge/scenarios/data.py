@@ -1,6 +1,7 @@
 """Chargement des données longues et construction des « bassins » (pools) de rendements mensuels par famille.
 
-Entrée : le dossier ``data/processed`` du build long (``monthly_returns.parquet`` au format long
+Entrée : le dossier des données longues de ``alphaforge.finance.backtest.build_data`` (``alphaforge/data/long/`` ou
+``ALPHAFORGE_BT_DATA``) (``monthly_returns.parquet`` au format long
 ``date, asset_id, return_usd, return_cad, source, flag``, ``inflation_monthly.parquet``, ``data_version.json``).
 Le chemin est un paramètre (``--input`` du job) : aucun chemin n'est codé en dur.
 
@@ -157,13 +158,25 @@ class Pool:
         excédentaires sur le cash (donc primes, volatilités et corrélations des excès) sont conservés mois par mois ;
         seul le niveau du cash change. L'inflation est mise à l'échelle de la même façon avec ses propres moyennes
         (``s_infl``), pour que les rendements réels restent cohérents.
+
+        Déflation : si l'une des deux moyennes d'inflation est <= 0, ``s_infl`` serait nul, négatif ou infini (un
+        facteur négatif inverserait le signe de chaque mois d'inflation). L'ancrage de l'inflation devient alors
+        additif, ``infl'_t = infl_t + (moyenne récente − moyenne de la fenêtre)`` : même moyenne visée, écarts
+        mensuels conservés. Signalé par ``infl_anchor = "additive"`` (``"scale"`` sinon). Ne touche que la base
+        réelle; le cas multiplicatif habituel est inchangé (runs validés reproductibles).
         """
         if "CASH" not in self.blocks:
             raise ValueError("ancrage impossible sans bloc CASH")
         j = self.blocks.index("CASH")
         cash = self.R[:, j]
         s = float(cash[-months:].mean() / cash.mean())
-        s_infl = float(self.infl[-months:].mean() / self.infl.mean()) if self.infl.mean() != 0 else 1.0
+        infl_recent, infl_window = float(self.infl[-months:].mean()), float(self.infl.mean())
+        if infl_recent > 0 and infl_window > 0:
+            infl_anchor, s_infl = "scale", infl_recent / infl_window
+            infl = self.infl * s_infl
+        else:
+            infl_anchor, s_infl = "additive", None
+            infl = self.infl + (infl_recent - infl_window)
         R = self.R + (s - 1.0) * cash[:, None]
         R[:, j] = s * cash
         pool = Pool(
@@ -173,7 +186,7 @@ class Pool:
             self.blocks,
             self.dates,
             R,
-            self.infl * s_infl,
+            infl,
             self.hypothese,
             self.data_sha256,
             dict(self.sources),
@@ -182,7 +195,8 @@ class Pool:
         info = {
             "mean_adjust": f"cash_anchor_{months}m",
             "cash_scale": round(s, 4),
-            "infl_scale": round(s_infl, 4),
+            "infl_anchor": infl_anchor,
+            "infl_scale": round(s_infl, 4) if s_infl is not None else None,
             "cash_ann_window": round(float(cash.mean()) * 12, 5),
             "cash_ann_anchor": round(float(cash[-months:].mean()) * 12, 5),
             "infl_ann_window": round(float(self.infl.mean()) * 12, 5),

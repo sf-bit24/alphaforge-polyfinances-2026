@@ -8,16 +8,19 @@
 #                          ni raw/ de alphaforge/data/long) à la racine,
 #                          à côté des dépendances verrouillées (uv.lock), installées en roues aarch64-manylinux2014.
 #   <out_dir>/knowledge/   les fichiers **/*.md de app/knowledge/general/ (Terraform les envoie sous general/).
-#   <out_dir>/scenarios/   seulement si src/alphaforge/scenarios/job.py existe : bundle du job SageMaker Processing
-#                          des scénarios (image scikit-learn d'AWS, Python 3.12, linux/amd64), que Terraform envoie
+#   <out_dir>/scenarios/   seulement si ALPHAFORGE_PACKAGE_SCENARIOS=1 (désactivé par défaut, donc jamais dans un
+#                          déploiement où scenarios_enabled = false) : bundle du job SageMaker Processing des
+#                          scénarios (image scikit-learn d'AWS, Python 3.12, linux/amd64), que Terraform envoie
 #                          sous scenarios/code/<release_id>/ (infrastructure/infra/scenarios.tf) :
 #                            run.sh          point d'entrée du conteneur (scripts/scenarios-run.sh)
 #                            scenarios.zip   alphaforge/__init__.py, alphaforge/scenarios/, le jeu de départ
-#                                            (alphaforge/data/starter/), research/backtest/ s'il existe (fichiers
-#                                            versionnés seulement : jamais data/raw/ ni les parquet, sous licence),
-#                                            et les dépendances du job (scenarios/requirements-job.txt figé par ==,
-#                                            sinon le groupe uv « scenarios » aux versions de uv.lock), en roues
-#                                            x86_64-manylinux_2_28 pour Python 3.12
+#                                            (alphaforge/data/starter/), le constructeur des données longues
+#                                            (alphaforge/finance/__init__.py et finance/backtest/{__init__,
+#                                            build_data,bonds,paths}.py), le catalogue versionné de
+#                                            alphaforge/data/long/ (jamais les parquet ni raw/, sous licence),
+#                                            et les dépendances figées de scenarios/requirements-job.txt, en
+#                                            roues x86_64-manylinux_2_28 pour Python 3.12
+#                          Demandé (=1), il échoue bruyamment au moindre manque (job, constructeur, roue, taille).
 #
 # Le script échoue si une dépendance n'a pas de roue pour la plateforme visée (la plateforme n'est jamais
 # changée en silence), ou si le zip dépasse 250 Mo ou son contenu 750 Mo (limites d'AgentCore).
@@ -32,6 +35,16 @@ if [ "$#" -ne 1 ] || [ -z "$1" ]; then
     echo "usage: $0 <out_dir>" >&2
     exit 2
 fi
+
+# Bundle du job des scénarios (section 6) : 0 (défaut) ou 1, vérifié avant tout travail.
+package_scenarios=${ALPHAFORGE_PACKAGE_SCENARIOS:-0}
+case "$package_scenarios" in
+    0 | 1) ;;
+    *)
+        echo "error: ALPHAFORGE_PACKAGE_SCENARIOS must be 0 or 1 (got '$package_scenarios')" >&2
+        exit 1
+        ;;
+esac
 
 for tool in uv zip find awk; do
     if ! command -v "$tool" >/dev/null 2>&1; then
@@ -155,27 +168,31 @@ done
 set +f
 find "$out_dir/knowledge" -type d -exec chmod 755 {} +
 
-# 6. Job des scénarios (facultatif). Il ne tourne pas dans AgentCore : autre plateforme (linux/amd64, Python de
-#    l'image AWS), et seulement les dépendances du job, jamais celles des runtimes.
+# 6. Job des scénarios (facultatif, ALPHAFORGE_PACKAGE_SCENARIOS=1). Il ne tourne pas dans AgentCore : autre
+#    plateforme (linux/amd64, Python de l'image AWS), et seulement les dépendances du job, jamais celles des
+#    runtimes. Désactivé par défaut : le déploiement (scenarios_enabled = false) ne dépend alors ni de PyPI pour
+#    ces roues, ni de la taille du bundle. Demandé, tout manque est une erreur (pas de bundle incomplet).
 SCEN_PLATFORM=x86_64-manylinux_2_28
 SCEN_PY_VERSION=3.12
 SCEN_MAX_ZIP_BYTES=200000000
 scen_src="$agents_dir/src/alphaforge/scenarios"
+bt_src="$agents_dir/src/alphaforge/finance/backtest"
 scen_out="$out_dir/scenarios"
-repo_root=$(dirname -- "$(dirname -- "$agents_dir")")
 rm -rf -- "$scen_out"
-scen_summary="scenarios: skipped (no src/alphaforge/scenarios/job.py)"
-if [ -f "$scen_src/job.py" ]; then
-    # Dépendances du job : scenarios/requirements-job.txt s'il existe, sinon le groupe uv « scenarios » de
-    # pyproject.toml, aux versions de uv.lock.
+scen_summary="scenarios: skipped (ALPHAFORGE_PACKAGE_SCENARIOS=$package_scenarios)"
+if [ "$package_scenarios" = 1 ]; then
     scen_reqs="$scen_src/requirements-job.txt"
-    if [ ! -f "$scen_reqs" ]; then
-        scen_reqs="$work/scenarios-requirements.txt"
-        if ! (cd -- "$agents_dir" && uv export --frozen --only-group scenarios --no-hashes --no-emit-project --quiet \
-            -o "$scen_reqs"); then
-            echo "error: no requirements-job.txt and no 'scenarios' dependency group in uv.lock" >&2
+    for required in "$scen_src/job.py" "$scen_reqs" "$script_dir/scenarios-run.sh" \
+        "$agents_dir/src/alphaforge/finance/__init__.py" "$bt_src/__init__.py" "$bt_src/build_data.py" \
+        "$bt_src/bonds.py" "$bt_src/paths.py"; do
+        if [ ! -f "$required" ]; then
+            echo "error: scenarios packaging requested but $required is missing" >&2
             exit 1
         fi
+    done
+    if ! command -v git >/dev/null 2>&1 || ! git -C "$agents_dir" rev-parse --git-dir >/dev/null 2>&1; then
+        echo "error: scenarios packaging copies alphaforge/data/long from a git checkout (versioned files only)" >&2
+        exit 1
     fi
     # Chaque dépendance est figée par == : le job doit être reproductible.
     unpinned=$(sed -e 's/#.*//' -e 's/[[:space:]]//g' -- "$scen_reqs" | awk 'NF && !/==/' || true)
@@ -186,7 +203,7 @@ if [ -f "$scen_src/job.py" ]; then
     fi
 
     scen_stage="$work/scenarios"
-    mkdir -p -- "$scen_stage/alphaforge" "$scen_out"
+    mkdir -p -- "$scen_stage" "$scen_out"
     echo "Installing scenarios job dependencies for $SCEN_PLATFORM / Python $SCEN_PY_VERSION (wheels only)..."
     if ! (cd -- "$agents_dir" && uv pip install --quiet \
         --python-platform "$SCEN_PLATFORM" \
@@ -202,44 +219,52 @@ if [ -f "$scen_src/job.py" ]; then
     fi
     rm -rf -- "${scen_stage:?}/bin"
     rm -f -- "$scen_stage/.lock"
-    if [ -e "$scen_stage/alphaforge/__init__.py" ] || [ -e "$scen_stage/alphaforge/scenarios" ]; then
+    # Tests de pyarrow (fichiers parquet d'exemple) : inutiles au job; aucun parquet ne doit partir dans le bundle.
+    rm -rf -- "${scen_stage:?}/pyarrow/tests"
+    if [ -e "$scen_stage/alphaforge" ]; then
         echo "error: a dependency already provides alphaforge/ in the scenarios bundle" >&2
         exit 1
     fi
-    # Seulement le paquet du job et le jeu de départ : le job ne peut pas importer les modules des runtimes
-    # (Strands, AgentCore).
+    # Seulement le paquet du job, le jeu de départ et le constructeur des données longues : le job ne peut pas
+    # importer les modules des runtimes (Strands, AgentCore) ni le reste du volet finance.
+    mkdir -p -- "$scen_stage/alphaforge/finance/backtest" "$scen_stage/alphaforge/data"
     cp -- "$agents_dir/src/alphaforge/__init__.py" "$scen_stage/alphaforge/__init__.py"
     cp -R -- "$scen_src" "$scen_stage/alphaforge/scenarios"
-    mkdir -p -- "$scen_stage/alphaforge/data"
     cp -R -- "$agents_dir/src/alphaforge/data/starter" "$scen_stage/alphaforge/data/starter"
-    # Construction des données longues (research/backtest/data/build_data.py, importé tel quel) : seulement les
-    # fichiers versionnés, donc jamais data/raw/ ni data/processed/*.parquet (licences Yahoo, Moody's, OCDE).
-    backtest_count=0
-    if [ -f "$repo_root/research/backtest/data/build_data.py" ]; then
-        if ! command -v git >/dev/null 2>&1 || ! git -C "$repo_root" rev-parse --git-dir >/dev/null 2>&1; then
-            echo "error: research/backtest/ must be copied from a git checkout (versioned files only)" >&2
-            exit 1
-        fi
-        set -f
-        for rel in $(git -C "$repo_root" ls-files -- research/backtest); do
-            case "$rel" in
-                *[!A-Za-z0-9._/-]*)
-                    echo "error: unexpected character in research/backtest path: $rel" >&2
-                    exit 1
-                    ;;
-                *.parquet | research/backtest/data/raw/*) continue ;;
-            esac
-            mkdir -p -- "$scen_stage/$(dirname -- "$rel")"
-            cp -- "$repo_root/$rel" "$scen_stage/$rel"
-            backtest_count=$((backtest_count + 1))
-        done
-        set +f
-    fi
+    cp -- "$agents_dir/src/alphaforge/finance/__init__.py" "$scen_stage/alphaforge/finance/__init__.py"
+    for mod in __init__ build_data bonds paths; do
+        cp -- "$bt_src/$mod.py" "$scen_stage/alphaforge/finance/backtest/$mod.py"
+    done
+    # Catalogue des données longues (SOURCES.md, assets.csv, ...) : fichiers versionnés seulement, donc jamais
+    # les parquet reconstruits ni raw/ (licences Yahoo, Moody's, OCDE), même présents dans un checkout local.
+    long_count=0
+    set -f
+    for rel in $(git -C "$agents_dir" ls-files -- src/alphaforge/data/long); do
+        case "$rel" in
+            *[!A-Za-z0-9._/-]*)
+                echo "error: unexpected character in data/long path: $rel" >&2
+                exit 1
+                ;;
+            *.parquet | src/alphaforge/data/long/raw/*) continue ;;
+        esac
+        dest="$scen_stage/${rel#src/}"
+        mkdir -p -- "$(dirname -- "$dest")"
+        cp -- "$agents_dir/$rel" "$dest"
+        long_count=$((long_count + 1))
+    done
+    set +f
     find "$scen_stage" -type d -name __pycache__ -prune -exec rm -rf {} +
     find "$scen_stage" -type f \( -name '*.pyc' -o -name '*.pyo' -o -name '.DS_Store' \) -exec rm -f {} +
     find "$scen_stage" -type d -exec chmod 755 {} +
     find "$scen_stage" -type f -perm -100 -exec chmod 755 {} +
     find "$scen_stage" -type f ! -perm -100 -exec chmod 644 {} +
+    # Garde-fou : aucun parquet nulle part dans le bundle, aucun dossier raw/ des données longues.
+    leaked=$(find "$scen_stage" \( -name '*.parquet' -o -path '*/data/long/raw' \) -print | head -n 5)
+    if [ -n "$leaked" ]; then
+        echo "error: licensed data found in the scenarios bundle:" >&2
+        echo "$leaked" >&2
+        exit 1
+    fi
 
     scen_zip="$scen_out/scenarios.zip"
     (cd -- "$scen_stage" && zip -q -r -X "$scen_zip" .)
@@ -252,8 +277,8 @@ if [ -f "$scen_src/job.py" ]; then
     cp -- "$script_dir/scenarios-run.sh" "$scen_out/run.sh"
     chmod 644 "$scen_out/run.sh"
 
-    scen_summary=$(awk -v z="$scen_zip_bytes" -v n="$backtest_count" -v p="$scen_out" 'BEGIN {
-        printf "scenarios: %s (run.sh, scenarios.zip %.1f MB, %d research/backtest files)", p, z / 1e6, n
+    scen_summary=$(awk -v z="$scen_zip_bytes" -v n="$long_count" -v p="$scen_out" 'BEGIN {
+        printf "scenarios: %s (run.sh, scenarios.zip %.1f MB, %d data/long catalog files)", p, z / 1e6, n
     }')
 fi
 

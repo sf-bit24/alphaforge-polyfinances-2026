@@ -20,8 +20,11 @@ Contrôles d'intégrité (refus si l'un échoue, jamais de lecture partielle sil
 - ``schema_version`` lisible (0.1 ou 0.2); ``code_sha`` et ``data_sha256`` de chaque ligne (CSV) ou du document
   (JSON) égaux à ceux du manifeste. Si le CSV n'a pas les colonnes de provenance, elles sont prises au manifeste
   et ``warnings`` le dit;
-- sha256 du fichier égal à ``manifest["table"]["sha256"]`` (ou ``manifest["outputs_sha256"][<chemin>]``) s'il est
-  déclaré. Sinon la table est lue, ``integrity["file_sha256_verified"]`` vaut ``False`` et l'explication le signale;
+- sha256 du fichier déclaré par ``manifest["table"]["sha256"]`` (ou ``manifest["outputs_sha256"][<chemin>]``) et
+  égal à celui du fichier lu. Non déclaré : refus (aucune table non vérifiée n'est lue);
+- run figé (``ScenarioTableLoader(run_id=...)``) : ``scenarios/output/<run_id>/_done.json`` doit exister avec
+  ``status = "ok"`` (marqueur de Step Functions), comme pour un run désigné par ``latest.json``, qui n'est écrit
+  qu'après ce marqueur;
 - nombres lisibles et finis, ci_lo <= ci_hi. Une valeur absente (NaN du job, JSON) retire la métrique, signalé;
   un IC qui n'encadre pas la valeur est gardé tel quel et compté dans ``integrity["ci_not_enclosing"]``
   (l'IC vient du bootstrap des paramètres, la valeur de l'ajustement complet : rien ne garantit l'inclusion).
@@ -82,6 +85,9 @@ MODEL_NAMES_FR = {
 }
 BLOCKS = schema.BLOCKS
 SHORT_HISTORY_BLOCKS = frozenset({"CRYPTO"})  # historique 2014+ : chiffres HYPOTHESE
+# Blocs absents des mélanges testés hors échantillon (VALIDATION.md, « or et crypto non testés ») : un mélange qui
+# en contient n'est jamais « validé ».
+UNVALIDATED_BLOCKS = ("GOLD", "CRYPTO")
 _PLOSS = re.compile(r"^p_loss_gt_(\d{2})$")
 _PMDD = re.compile(r"^p_mdd_gt_(\d{2})$")
 _FLOAT_TOL = 1e-9
@@ -244,7 +250,7 @@ class ScenarioTable:
         return {k[5]: row for k, row in self.rows.items() if k[:5] == prefix}
 
     def source(self) -> dict[str, Any]:
-        """Provenance au format ``Source`` de contracts/decision.py."""
+        """Provenance au format ``Source`` de ``alphaforge.finance.contracts.decision``."""
         return {
             "dataset": f"scenarios:{self.run_id}",
             "url": None,
@@ -310,13 +316,13 @@ def parse_table(
     if manifest.get("run_id", run_id) != run_id:
         raise ScenarioTableError(f"manifeste du run {manifest['run_id']!r}, attendu {run_id!r}")
     actual_sha = sha256_hex(body)
-    if expected_sha256 and expected_sha256 != actual_sha:
+    if not expected_sha256:
+        raise ScenarioTableError(f"sha256 de {table_key} non déclaré par le manifeste : table non vérifiable")
+    if expected_sha256 != actual_sha:
         raise ScenarioTableError(f"sha256 de {table_key} ({actual_sha}) différent du manifeste ({expected_sha256})")
 
     table = ScenarioTable(run_id=run_id, manifest=manifest, table_key=table_key, table_sha256=actual_sha)
-    table.integrity = {"format": "csv", "file_sha256_verified": bool(expected_sha256), "ci_not_enclosing": 0}
-    if not expected_sha256:
-        table.warnings.append(f"sha256 de {table_key} non déclaré par le manifeste : fichier non vérifié")
+    table.integrity = {"format": "csv", "file_sha256_verified": True, "ci_not_enclosing": 0}
     text = (gzip.decompress(body) if table_key.endswith(".gz") else body).decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text))
     absent = [c for c in REQUIRED_COLUMNS if c not in (reader.fieldnames or [])]
@@ -392,7 +398,9 @@ def parse_runtime_json(
     if missing:
         raise ScenarioTableError(f"manifeste incomplet : {missing}")
     actual_sha = sha256_hex(body)
-    if expected_sha256 and expected_sha256 != actual_sha:
+    if not expected_sha256:
+        raise ScenarioTableError(f"sha256 de {key} non déclaré par le manifeste : table non vérifiable, refusée")
+    if expected_sha256 != actual_sha:
         raise ScenarioTableError(f"sha256 de {key} ({actual_sha}) différent du manifeste ({expected_sha256})")
     try:
         doc = json.loads(body.decode("utf-8"))
@@ -412,12 +420,10 @@ def parse_runtime_json(
     table = ScenarioTable(run_id=run_id, manifest=manifest, table_key=key, table_sha256=actual_sha)
     table.integrity = {
         "format": "runtime_json",
-        "file_sha256_verified": bool(expected_sha256),
+        "file_sha256_verified": True,
         "ci_not_enclosing": 0,
         "units": doc.get("units"),
     }
-    if not expected_sha256:
-        table.warnings.append(f"sha256 de {key} non déclaré par le manifeste : fichier non vérifié")
     skipped = 0
     for name, sub in doc["tables"].items():
         if not isinstance(sub, dict) or not isinstance(sub.get("mixes"), dict):
@@ -480,8 +486,9 @@ def _table_entry(manifest: dict[str, Any]) -> tuple[str, str, str | None, str | 
     """(chemin relatif, format, sha256 attendu ou None, note) de la table à lire, d'après le manifeste.
 
     Contrat : ``manifest["table"] = {"file": "runtime/scenarios_runtime.csv", "format": "csv", "sha256": "…"}``
-    (``sha256`` recommandé). Repli tolérant et signalé si ``table`` manque : une sortie compacte déclarée dans
-    ``manifest["outputs"]`` (``runtime_csv`` puis ``runtime_json``). Jamais de chemin par défaut silencieux.
+    (``sha256`` obligatoire, ici ou dans ``outputs_sha256``). Repli tolérant et signalé si ``table`` manque : une
+    sortie compacte déclarée dans ``manifest["outputs"]`` (``runtime_csv`` puis ``runtime_json``). Jamais de chemin
+    par défaut silencieux.
     """
     outputs = manifest.get("outputs") if isinstance(manifest.get("outputs"), dict) else {}
     declared = manifest.get("outputs_sha256") if isinstance(manifest.get("outputs_sha256"), dict) else {}
@@ -545,6 +552,11 @@ class ScenarioTableLoader:
             if self._cache is not None and self._cache.run_id == run_id:
                 return self._cache
             prefix = f"{OUTPUT_PREFIX}{run_id}/"
+            if self.pinned_run_id:
+                marker = self.store.get_json(prefix + "_done.json")
+                if not isinstance(marker, dict) or marker.get("status") != "ok":
+                    state = marker.get("status") if isinstance(marker, dict) else "absent"
+                    raise ScenarioTableError(f"run {run_id} non terminé avec succès : {prefix}_done.json {state!r}")
             manifest = self.store.get_json(prefix + "manifest.json")
             if not isinstance(manifest, dict):
                 raise ScenarioTableError(f"manifeste absent : {prefix}manifest.json")

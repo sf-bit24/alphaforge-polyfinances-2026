@@ -2,7 +2,7 @@
 
     cd app/agents
     uv run --group scenarios python -m alphaforge.scenarios.validation \
-        --input <data/processed> --output <dossier> [--ref <run de référence>] [--workers 12] [--n-paths 4000]
+        --input <données longues> --output <dossier> [--ref <run de référence>] [--workers 12] [--n-paths 4000]
 
 Sorties (``--output``) : ``scores.csv.gz`` (une ligne par famille × modèle × origine × mélange × H),
 ``fits.csv``, ``per_mix.csv``, ``pooled.csv``, ``reliability.csv``, ``pit_hist.csv``, ``checks/*.csv|json``,
@@ -44,7 +44,9 @@ def validation_sha() -> str:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m alphaforge.scenarios.validation")
-    ap.add_argument("--input", required=True, help="dossier data/processed du build long (lecture seule)")
+    ap.add_argument(
+        "--input", required=True, help="dossier des données longues (alphaforge/data/long ou ALPHAFORGE_BT_DATA)"
+    )
     ap.add_argument("--output", required=True)
     ap.add_argument("--ref", default=None, help="dossier d'un run du job (contrôle de monotonie)")
     ap.add_argument("--seed", type=int, default=20261114)

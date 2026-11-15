@@ -95,7 +95,13 @@ jobs:
           python-version: "3.13"
           enable-cache: true
           cache-dependency-glob: app/agents/uv.lock
+      # Bundle du job des scenarios (infra/build/scenarios/) seulement si la
+      # variable de depot ALPHAFORGE_PACKAGE_SCENARIOS vaut 1, a poser avec
+      # scenarios_enabled = true : sinon ni PyPI ni sa taille ne peuvent
+      # bloquer le deploiement.
       - run: sh app/agents/scripts/package.sh infrastructure/infra/build
+        env:
+          ALPHAFORGE_PACKAGE_SCENARIOS: ${{ vars.ALPHAFORGE_PACKAGE_SCENARIOS || '0' }}
       - uses: actions/upload-artifact@v7
         with:
           name: agents-package

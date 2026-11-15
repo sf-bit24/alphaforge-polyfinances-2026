@@ -34,9 +34,10 @@
   ```sh
   cd app/agents
   uv run --group scenarios python -m alphaforge.scenarios.validation \
-    --input ../../../alphaforge-polyfinances-2026/research/backtest/data/processed \
+    --input src/alphaforge/data/long \
     --output <ce dossier> --ref <analyse/scenarios-ref-small> --n-paths 4000 --n-boot 1000 --workers 12
   ```
+  (Le run d'origine lisait le même build, alors sous `research/backtest/data/processed`.)
 - **Identifiants** (`manifest.json`) : `data_sha256` **008f122d5da4f8f7**, `scenarios_package_sha` e74ab820c9b5 (même code
   du volet B que le run de référence), `validation_code_sha` 1bd12840289a, graine 20261114, 54 504 lignes de scores.
   Le résultat ne dépend pas du nombre de processus (testé).
@@ -320,7 +321,7 @@ deux modèles mesure une **incertitude de modèle** qu'il faut montrer à l'util
 
 ## 6. Les 4 questions (NBDB)
 
-**Quelles données ?** Le build long `data/processed` (`data_sha256` 008f122d5da4f8f7, lecture seule) : rendements
+**Quelles données ?** Le build long (`alphaforge.finance.backtest.build_data`, `data_sha256` 008f122d5da4f8f7, lecture seule) : rendements
 mensuels totaux non couverts (French, FRED, Shiller, BdC), pools CAD77 (1977-01 → 2026-09), CAD71, USD1926 et USD1953.
 Les résultats réalisés viennent des mêmes séries, mois T+1 à T+12·H. Aucune donnée ajoutée.
 

@@ -17,7 +17,7 @@ Un seul zip de code (`app/agents`, Python 3.13, linux/arm64) alimente quatre run
 
 Chaque rôle n'a `s3:ListBucket` que sous ses propres préfixes. Pour un objet absent, S3 répond donc 403 (`AccessDenied`) et non 404 : le magasin vérifie alors l'absence par `ListObjectsV2` sur la clé exacte, et ne conclut à un refus que si l'objet existe.
 
-Ajout facultatif (section 10) : le rôle de `profile` lit aussi `scenarios/latest.json` et `scenarios/output/` (lecture et liste seulement), pour l'outil `scenario_risk`.
+Ajout facultatif (section 10), seulement si `scenarios_enabled = true` : le rôle de `profile` lit aussi `scenarios/latest.json` et `scenarios/output/` (lecture et liste seulement), pour l'outil `scenario_risk` (état cible : l'outil n'est pas encore branché dans le runtime).
 
 Variables d'environnement posées par Terraform sur chaque runtime :
 
@@ -462,7 +462,7 @@ runtimes de la version 1. Les schémas Pydantic sont dans `app/agents/src/alphaf
 
 ## 10. Scénarios probabilistes (facultatif)
 
-Ajout facultatif à la version 1, désactivable par la variable Terraform `scenarios_enabled` (vrai par défaut en `sandbox`). Simulation seulement : la table décrit l'incertitude du risque selon un modèle, ce n'est pas une prévision. Infra : `infrastructure/infra/scenarios.tf`; code : `app/agents/src/alphaforge/scenarios/`.
+Ajout facultatif à la version 1, activé par la variable Terraform `scenarios_enabled` (faux par défaut : avec `false`, le plan ne change rien pour les scénarios). Le bundle du job n'est construit que si `ALPHAFORGE_PACKAGE_SCENARIOS=1` (variable de dépôt GitHub du même nom pour la CI), à poser avec `scenarios_enabled = true`. Simulation seulement : la table décrit l'incertitude du risque selon un modèle, ce n'est pas une prévision. Infra : `infrastructure/infra/scenarios.tf`; code : `app/agents/src/alphaforge/scenarios/`.
 
 ```mermaid
 flowchart LR
@@ -473,7 +473,7 @@ flowchart LR
     SM -->|"sources publiques (Internet)"| WEB["FRED, Ken French, Shiller, or, Yahoo Finance"]
     SM -->|"écrit output/<run_id>/"| S3
     SF -->|"_done.json, puis latest.json"| S3
-    P["Runtime profile : outil scenario_risk"] -->|"lit latest.json et output/"| S3
+    P["Runtime profile : outil scenario_risk (état cible, pas encore branché)"] -.->|"lit latest.json et output/"| S3
     A["Athena : alphaforge-sandbox-scenarios"] -->|"table Glue, projection run_id"| S3
 ```
 
@@ -489,15 +489,15 @@ aws stepfunctions start-execution --region us-east-1 \
 
 Entrée : `{"run_id"?: string, "params"?: object}`.
 
-- `run_id` vaut par défaut le nom de l'exécution (un UUID) et suit `^[A-Za-z0-9-]{1,36}$` : il entre dans les clés S3 et dans le nom du job SageMaker, `alphaforge-sandbox-scn-<run_id>`, qui est unique. Un `run_id` déjà utilisé fait donc échouer l'exécution; les sorties d'un run ne sont jamais réécrites.
+- `run_id` vaut par défaut le nom de l'exécution (un UUID) et suit `^[A-Za-z0-9-]{1,36}$` : il entre dans les clés S3 et dans le nom du job SageMaker, `alphaforge-sandbox-scn-<run_id>`. Unicité : `request.json` et les deux marqueurs `_done.json` sont écrits par `PutObject` conditionnel (`IfNoneMatch: "*"`). Un `run_id` déjà utilisé fait échouer l'exécution dès l'écriture de la requête (`RunIdAlreadyUsed`, S3 `PreconditionFailed`), avant tout calcul, sans marqueur; la requête, les sorties et le marqueur d'un run existant ne sont jamais réécrits.
 - `params` est recopié dans `request.json`. `run.sh` n'en accepte que `config` (nom d'une configuration livrée, `small` ou `full`, ou chemin), `seed`, `fitted_through` (`AAAA-MM`) et `workers`, traduits en options de `python -m alphaforge.scenarios.job`. Toute autre clé fait échouer le job avant le calcul.
 
-Sortie : `{"run_id", "processing_job": {"name", "arn", "status", "started_at", "ended_at"}, "latest": "scenarios/latest.json"}`. En cas d'échec du job, la machine écrit `_done.json` avec `status: "error"`, laisse `latest.json` inchangé et échoue (`ScenariosJobFailed`).
+Sortie : `{"run_id", "processing_job": {"name", "arn", "status", "started_at", "ended_at"}, "latest": "scenarios/latest.json"}`. En cas d'échec du job, la machine écrit `_done.json` avec `status: "error"` (s'il n'existe pas déjà), laisse `latest.json` inchangé et échoue (`ScenariosJobFailed`).
 
 ### 10.2 Job SageMaker Processing
 
 - Image : `683313688378.dkr.ecr.us-east-1.amazonaws.com/sagemaker-scikit-learn:1.4-2-py312-1.0.3403.0` (image AWS, Python 3.12, linux/amd64; variable `scenarios_image_uri`, étiquette de build complète obligatoire). Aucune image du projet, aucun ECR du projet.
-- Instance : `ml.m5.4xlarge` × 1, 30 Go, 4 h au plus (variables `scenarios_instance_*`, `scenarios_volume_size_gb`, `scenarios_max_runtime_seconds`).
+- Instance : `ml.m5.4xlarge` × 1, 30 Go, 8 h au plus (28 800 s; variables `scenarios_instance_*`, `scenarios_volume_size_gb`, `scenarios_max_runtime_seconds`). `configs/full.yaml` utilise 8 processus sur cette instance (3 à 4 Go chacun).
 - Réseau : configuration par défaut de SageMaker (sans VPC ni isolation réseau), donc accès Internet sortant, nécessaire pour reconstruire les données depuis les sources publiques.
 - Code : `scenarios/code/<release_id>/` contient `run.sh` et `scenarios.zip`, construits par `app/agents/scripts/package.sh` (section 6 du script) et envoyés par Terraform, comme `runtime/agents-<release>.zip`.
 
@@ -505,10 +505,11 @@ Sortie : `{"run_id", "processing_job": {"name", "arn", "status", "started_at", "
 | --- | --- |
 | `/opt/ml/processing/input/code/` | `run.sh` (point d'entrée : `/bin/sh run.sh --request … --output …`) et `scenarios.zip` |
 | `/opt/ml/processing/input/request/request.json` | `{"schema": "scenarios-request/v0.1", "run_id", "release", "execution", "requested_at", "params"}` |
-| `/opt/ml/processing/app/` | `scenarios.zip` extrait : `alphaforge/scenarios/`, `alphaforge/data/starter/`, `research/backtest/` (fichiers versionnés seulement), dépendances figées |
+| `/opt/ml/processing/app/` | `scenarios.zip` extrait : `alphaforge/scenarios/`, `alphaforge/data/starter/`, `alphaforge/finance/backtest/` (`__init__`, `build_data`, `bonds`, `paths`), le catalogue versionné de `alphaforge/data/long/` (jamais de parquet ni `raw/`), dépendances figées |
+| `/opt/ml/processing/work/long/` | `ALPHAFORGE_BT_DATA` : données longues reconstruites par le job, jamais envoyées dans S3 |
 | `/opt/ml/processing/output/` | tout ce que le job y écrit est envoyé sous `scenarios/output/<run_id>/` à la fin du job |
 
-`run.sh` place `/opt/ml/processing/app` en tête de `sys.path` (fichier `.pth`, lu même sous `python -I`), pose `ALPHAFORGE_STARTER_DIR`, lance `python3 -I research/backtest/data/build_data.py` si ce fichier est présent, puis `python3 -m alphaforge.scenarios.job --input research/backtest/data/processed --output /opt/ml/processing/output` et les options de `params`.
+`run.sh` place `/opt/ml/processing/app` en tête de `sys.path` (fichier `.pth`, lu même sous `python -I`), pose `ALPHAFORGE_STARTER_DIR` et `ALPHAFORGE_BT_DATA=/opt/ml/processing/work/long`, lance `python3 -I -m alphaforge.finance.backtest.build_data` (échec si le module manque au bundle), puis `python3 -m alphaforge.scenarios.job --input $ALPHAFORGE_BT_DATA --output /opt/ml/processing/output` et les options de `params`.
 
 Variables d'environnement du job : `ALPHAFORGE_RUN_ID`, `ALPHAFORGE_RELEASE` (SHA court du commit, à reporter dans `code_sha` ou le manifeste), `ALPHAFORGE_ENV`, `ALPHAFORGE_REGION`, `ALPHAFORGE_IMAGE`, `ALPHAFORGE_STARTER_DIR` (posée par `run.sh`). Le job ne fait aucun appel AWS : il lit et écrit seulement des fichiers locaux.
 
@@ -529,7 +530,8 @@ scenarios/athena-results/                           Athena, expire après 7 jour
 - Hors `general/` : la Knowledge Base n'indexe jamais les scénarios.
 - Le job n'écrit que sous `scenarios/output/` et jamais `_done.json` (refus explicite dans son rôle IAM). Le runtime `profile` lit seulement `scenarios/latest.json` et `scenarios/output/`.
 - Le dossier `table/` ne doit contenir que des fichiers parquet : Athena lit tout ce qui s'y trouve.
-- Les données construites par `build_data.py` (sources sous licence : Yahoo Finance, Moody's, OCDE) restent dans le volume du job; elles ne sont ni versionnées, ni dans le bundle de code, ni dans les sorties.
+- Les données construites par `alphaforge.finance.backtest.build_data` (sources sous licence : Yahoo Finance, Moody's, OCDE) restent dans le volume du job; elles ne sont ni versionnées, ni dans le bundle de code, ni dans les sorties.
+- L'outil `scenario_risk` refuse une table dont le sha256 n'est pas déclaré par le manifeste, et un run figé (`run_id` fixé) dont `_done.json` n'a pas `status: "ok"`.
 
 ### 10.4 Table et requêtes Athena
 

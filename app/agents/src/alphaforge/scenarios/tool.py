@@ -16,8 +16,9 @@ Règles (documentées, testées, aucune extrapolation) :
   bloc vers un autre). En cas d'égalité, le mélange le plus risqué (plus de poids hors BONDS et CASH) est retenu,
   puis l'ordre lexicographique : en cas de doute, on ne choisit pas le mélange le plus rassurant.
 - Horizon : exact s'il est dans la grille; sinon l'horizon de la grille immédiatement inférieur, signalé
-  (``horizon_exact = false``), avec la même probabilité à l'horizon supérieur pour encadrer. Refus sous le plus
-  petit ou au-dessus du plus grand horizon.
+  (``horizon_exact = false``), avec la même probabilité à l'horizon supérieur, à titre de comparaison : ce n'est pas
+  un encadrement garanti (une probabilité de perte n'est pas monotone en horizon). Refus sous le plus petit ou
+  au-dessus du plus grand horizon.
 - Seuil de perte : ``loss_threshold_cad / amount_cad`` en %, **arrondi vers le bas** au palier ``p_loss_gt_XX``
   disponible. Comme P(perte > 15 %) >= P(perte > 17,6 %), la probabilité affichée n'est jamais inférieure à celle
   du seuil demandé (majorant). Sous le plus petit palier, la probabilité du plus petit palier est un minorant
@@ -39,6 +40,7 @@ from .tool_table import (
     BLOCKS,
     DEGRADED_HORIZONS,
     SHORT_HISTORY_BLOCKS,
+    UNVALIDATED_BLOCKS,
     VALIDATED_BASES,
     Row,
     ScenarioTable,
@@ -207,7 +209,13 @@ def pick_loss_bucket(
 
 
 def _metric_view(row: Row, fid: bool = True) -> dict[str, Any]:
-    out = {"value": row.value, "ci_lo": row.ci_lo, "ci_hi": row.ci_hi, "hypothese": row.hypothese}
+    out = {
+        "value": row.value,
+        "ci_lo": row.ci_lo,
+        "ci_hi": row.ci_hi,
+        "hypothese": row.hypothese,
+        "n_paths": row.n_paths,  # borne « < 1/n_paths » d'une probabilité nulle (tool_render.prob)
+    }
     if fid:
         out["fact_id"] = tf.fact_id(row)
     return out
@@ -264,6 +272,11 @@ def _compute(
     visible = [m for m in table.models if table.display(m) != "hidden"]
     if primary not in visible:
         raise Refusal("no_grid", f"modèle {primary!r} absent ou masqué; modèles disponibles : {visible}")
+    if table.display(primary) == "sensitivity_only" and not request["include_sensitivity"]:
+        raise Refusal(
+            "sensitivity_only",
+            f"modèle {primary!r} réservé à l'analyse de sensibilité : le demander avec include_sensitivity = true",
+        )
     raw_horizon = request["horizon_years"]
     if isinstance(raw_horizon, bool) or not isinstance(raw_horizon, int | float) or raw_horizon != int(raw_horizon):
         raise Refusal("bad_horizon", "horizon_years doit être un nombre entier d'années")
@@ -406,7 +419,7 @@ def _compute(
         "validation": table.model_info(primary).get("validation"),
         "validation_by_model": {m: table.model_info(m).get("validation") for m in listed},
         "display": table.display(primary),
-        **_validation_flags(table, primary, horizon["used"], basis),
+        **_validation_flags(table, primary, horizon["used"], basis, grid["mix_weights"]),
         "integrity": {k: v for k, v in table.integrity.items() if k != "units"},
         "table_warnings": list(table.warnings),
         "facts": facts,
@@ -431,14 +444,20 @@ def _compute(
     return result
 
 
-def _validation_flags(table: ScenarioTable, model_id: str, horizon: int, basis: str) -> dict[str, Any]:
-    """``validated`` : horizon dans les horizons validés hors échantillon et base nominale (volet C)."""
+def _validation_flags(
+    table: ScenarioTable, model_id: str, horizon: int, basis: str, mix_weights: Mapping[str, float]
+) -> dict[str, Any]:
+    """``validated`` : horizon dans les horizons validés hors échantillon, base nominale et mélange sans or ni
+    crypto (blocs non testés hors échantillon, VALIDATION.md) (volet C)."""
     horizons, declared = table.validated_horizons(model_id)
     reasons = []
     if horizon not in horizons:
         reasons.append(f"horizon {horizon} ans hors des horizons validés {horizons}")
     if basis not in VALIDATED_BASES:
         reasons.append(f"base {basis} non validée")
+    untested = [b for b in UNVALIDATED_BLOCKS if mix_weights.get(b, 0.0) > 0]
+    if untested:
+        reasons.append(f"mélange avec {', '.join(untested)} : blocs non testés hors échantillon")
     return {
         "validated": not reasons,
         "validation_reasons": reasons,
@@ -546,14 +565,17 @@ Arguments:
   as fractions summing to 1 (or percentages summing to 100). The tool snaps to the nearest grid mix and reports
   the L1 distance; it refuses (status "refus") if the mix is too far from the grid. It never extrapolates.
 - horizon_years: integer horizon. If not in the grid, the nearest LOWER grid horizon is used and flagged
-  (horizon.exact = false), with the next higher horizon shown to bracket it; outside the grid: refusal.
+  (horizon.exact = false), and the same probability at the next higher grid horizon is shown for comparison. It is
+  NOT a guaranteed bound: the value at the requested horizon may lie outside the two. Outside the grid: refusal.
 - loss_threshold_cad and amount_cad: a loss threshold in dollars and the amount invested. The threshold is
   converted to a % and rounded DOWN to the nearest available level, so the probability is not understated.
 - family: historical data family, "CAD77" (CAD, 1977+), "CAD71" (CAD, 1971+) or "USD1926" (USD, 1926+).
 - model_id: main model (default: the table's default model). basis: "nominal" (default) or "real" (after inflation).
-- include_sensitivity: also show the sensitivity-only models (regime models), only for a sensitivity analysis.
+- include_sensitivity: also show the sensitivity-only models (regime models), only for a sensitivity analysis. A
+  sensitivity-only model_id is refused unless include_sensitivity is true.
 
-If validated is false (horizon beyond the out-of-sample validated horizons, or real basis), say clearly that the
+If validated is false (horizon beyond the out-of-sample validated horizons, real basis, or a mix with GOLD or
+CRYPTO, blocks never tested out of sample), say clearly that the
 numbers are NOT validated out of sample. If degraded_calibration is true, say that calibration degrades at long
 horizons.
 

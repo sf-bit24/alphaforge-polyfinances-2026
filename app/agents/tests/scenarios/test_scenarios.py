@@ -310,17 +310,65 @@ def test_job_end_to_end(synthetic_dir, tmp_path):
     entries = {m["model_id"]: m for m in manifest["models"]}
     assert entries["sbb"]["display"] == "compare" and entries["hmm_rs"]["display"] == "sensitivity_only"
     assert entries["sbb"]["validation"]
+    # run_id local (sans ALPHAFORGE_RUN_ID) : le nom du dossier de sortie, lisible par l'outil une fois publié.
+    assert manifest["run_id"] == tmp_path.name
+    from alphaforge.scenarios.tool_table import LATEST_KEY, ScenarioTableLoader
+    from alphaforge.store.local import LocalStore
+
+    store = LocalStore(tmp_path / "kb")
+    prefix = f"scenarios/output/{manifest['run_id']}/"
+    store.put(prefix + declared["file"], body, content_type="text/csv")
+    store.put_json(prefix + "manifest.json", manifest)
+    store.put_json(LATEST_KEY, {"run_id": manifest["run_id"]})
+    assert ScenarioTableLoader(store).load().run_id == manifest["run_id"]
     # même graine -> mêmes octets de table (hors horodatage, qui n'est pas dans la table)
     other = tmp_path / "again"
-    job.run(_tiny_config(), str(synthetic_dir), str(other))
+    job.run(_tiny_config(), str(synthetic_dir), str(other), run_id="run-again")
     assert pd.read_parquet(other / "table" / "scenarios.parquet").equals(table)
 
 
-@pytest.mark.skipif(not os.environ.get("ALPHAFORGE_SCENARIOS_DATA"), reason="ALPHAFORGE_SCENARIOS_DATA non défini")
+def test_job_run_id_resolution(tmp_path, monkeypatch):
+    from alphaforge.scenarios import job
+
+    monkeypatch.delenv("ALPHAFORGE_RUN_ID", raising=False)
+    assert job.resolve_run_id("explicit-1", str(tmp_path)) == "explicit-1"
+    assert job.resolve_run_id(None, str(tmp_path / "local-run")) == "local-run"
+    monkeypatch.setenv("ALPHAFORGE_RUN_ID", "sfn-uuid-1")
+    assert job.resolve_run_id(None, str(tmp_path / "output")) == "sfn-uuid-1"
+    with pytest.raises(ValueError, match="run_id invalide"):
+        job.resolve_run_id("a.b", str(tmp_path))
+
+
+def test_anchor_cash_deflation_keeps_inflation_sign(pool77):
+    """Inflation récente négative : l'ancrage devient additif, sans inverser le signe des mois (M2)."""
+    from dataclasses import replace
+
+    infl = pool77.infl.copy()
+    infl[-12:] = -0.002  # déflation sur les 12 derniers mois
+    pool = replace(pool77, infl=infl)
+    anchored, info = pool.anchor_cash(12)
+    assert info["infl_anchor"] == "additive" and info["infl_scale"] is None
+    assert anchored.infl.mean() == pytest.approx(infl[-12:].mean())
+    assert np.corrcoef(anchored.infl, infl)[0, 1] == pytest.approx(1.0)
+    _, normal = pool77.anchor_cash(12)
+    assert normal["infl_anchor"] == "scale" and normal["infl_scale"] > 0
+
+
+def _real_data_dir() -> Path | None:
+    """Données longues réelles : ALPHAFORGE_SCENARIOS_DATA, sinon celles du moteur de backtest (ALPHAFORGE_BT_DATA ou
+    alphaforge/data/long) si les parquets y sont (jamais versionnés : absents en CI)."""
+    if os.environ.get("ALPHAFORGE_SCENARIOS_DATA"):
+        return Path(os.environ["ALPHAFORGE_SCENARIOS_DATA"])
+    from alphaforge.finance.backtest import paths
+
+    return paths.data_dir() if paths.long_data_available(("numpy", "pandas", "pyarrow")) else None
+
+
+@pytest.mark.skipif(_real_data_dir() is None, reason="données longues absentes (parquets non versionnés)")
 def test_real_data_pools():
     from alphaforge.scenarios.data import load_inputs
 
-    inp = load_inputs(Path(os.environ["ALPHAFORGE_SCENARIOS_DATA"]))
+    inp = load_inputs(_real_data_dir())
     for fam in schema.FAMILIES:
         p = build_pool(inp, fam)
         assert p.n > 500 and not np.isnan(p.R).any()

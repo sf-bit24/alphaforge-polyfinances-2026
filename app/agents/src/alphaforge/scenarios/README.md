@@ -22,7 +22,7 @@ maximale, la CVaR 12 mois, chacun avec un intervalle de confiance issu de l'ince
 | `engine.py` | simulation des portefeuilles, métriques, bootstrap externe, repères historiques | numpy |
 | `job.py` | point d'entrée du job (local ou SageMaker Processing) | numpy, pandas, pyarrow, pyyaml |
 | `configs/small.yaml`, `configs/full.yaml` | configurations livrées | |
-| `requirements-job.txt` | dépendances épinglées pour l'image SageMaker (Python 3.12, avec `build_data.py`) | |
+| `requirements-job.txt` | dépendances épinglées pour l'image SageMaker (Python 3.12, avec `alphaforge.finance.backtest.build_data`) | |
 
 Les fichiers `tool*.py` et `PROPOSAL_PROB_LOSS.md` appartiennent au volet E (outil Strands) ; ils ne lisent que
 `schema.py` et les sorties compactes. Le runtime AgentCore n'a besoin d'aucune dépendance de ce volet.
@@ -31,25 +31,31 @@ Les fichiers `tool*.py` et `PROPOSAL_PROB_LOSS.md` appartiennent au volet E (out
 
 ```sh
 cd app/agents
+# Données longues (une fois ; sources publiques, réseau) : parquets dans alphaforge/data/long/, non versionnés.
+# ALPHAFORGE_BT_DATA=<dossier> pour les écrire ailleurs.
+uv run --group finance --group backtest-data python -I -m alphaforge.finance.backtest.build_data
 uv sync --group scenarios                       # numpy, pandas, pyarrow (groupe optionnel, hors paquet AgentCore)
 uv run --group scenarios python -m alphaforge.scenarios.job \
     --config small \
-    --input ../../../alphaforge-polyfinances-2026/research/backtest/data/processed \
-    --output /tmp/scenarios-small
+    --input src/alphaforge/data/long \
+    --output /tmp/scenarios-small               # run_id du manifeste : --run-id, sinon le nom du dossier
 uv run --group scenarios pytest tests/scenarios  # données synthétiques, sans réseau ni AWS
 ```
 
 Options : `--config` (`small`, `full` ou un chemin YAML/JSON), `--seed`, `--fitted-through YYYY-MM`,
-`--workers N` (une tâche = un pool × un modèle ; résultat identique quel que soit N, vérifié par comparaison
-octet à octet de la table sur la configuration `small`). Sous SageMaker Processing, `--input` et `--output` valent
-par défaut `/opt/ml/processing/input/data` et `/opt/ml/processing/output` ; le job ne fait aucun appel AWS.
+`--workers N` (une tâche = un pool × un modèle ; résultat identique quel que soit N, vérifié une fois à la main par
+comparaison octet à octet de la table sur la configuration `small`), `--run-id`. Sous SageMaker Processing, `run.sh`
+reconstruit les données dans `ALPHAFORGE_BT_DATA` (volume du job) et passe `--input $ALPHAFORGE_BT_DATA` ;
+`--output` vaut `/opt/ml/processing/output`; le job ne fait aucun appel AWS.
 Variables lues : `ALPHAFORGE_RELEASE` (devient `code_sha` s'il est défini et différent de `dev`, sinon
-`code_sha` = empreinte sha256 des modules du job et des configurations), `ALPHAFORGE_RUN_ID` et
-`ALPHAFORGE_STARTER_DIR` (recopiés dans le manifeste).
+`code_sha` = empreinte sha256 des modules du job et des configurations), `ALPHAFORGE_RUN_ID` (`run_id` du
+manifeste si `--run-id` manque ; à défaut, le nom du dossier de sortie) et `ALPHAFORGE_STARTER_DIR` (recopié dans
+le manifeste).
 
 ### Entrée
 
-Le dossier `data/processed` produit par `research/backtest/data/build_data.py` (lecture seule) :
+Le dossier des données longues produit par `alphaforge.finance.backtest.build_data` (`alphaforge/data/long/` ou
+`ALPHAFORGE_BT_DATA`, lecture seule) :
 `monthly_returns.parquet` (format long `date, asset_id, return_usd, return_cad, source, flag`),
 `inflation_monthly.parquet`, `data_version.json`. `data_sha256` est celui de `data_version.json` ; il change à chaque
 retéléchargement (Yahoo recalcule `adj_close`) et il est recopié dans chaque ligne et dans le manifeste. Aucune
@@ -202,7 +208,7 @@ from alphaforge.scenarios.models import fit, rng_for
 from alphaforge.scenarios.engine import simulate_metrics, hist_log_returns, weight_matrix
 
 pool = build_pool(load_inputs(processed_dir), "CAD77")
-fitted = fit(pool, "sbb", fitted_through="1999-12", seed=1)      # aucun mois postérieur n'est lu
+fitted = fit(pool, "sbb", fitted_through="1999-12", seed=1)  # aucun mois postérieur n'est lu
 idx = fitted.simulate_indices(10_000, 60, rng_for(1, "wf", "1999-12"))  # indices dans fitted.pool (≤ 1999-12)
 metrics = simulate_metrics(fitted, ["ca35-us35-bd30-cs00-gd00"], [5], 10_000, rng_for(1, "m"))
 ```
@@ -261,11 +267,11 @@ Mesures sur le poste de développement (WSL2, 24 processeurs logiques, 15 Go de 
 Extrapolation (calcul, pas une mesure) pour `full` (1 066 mélanges, 5 modèles, 100 000 trajectoires,
 50 réplications × 2 000) : le coût est proportionnel à mélanges × trajectoires, soit environ 3,6e-5 s par
 (mélange × trajectoire, deux bases) et par cœur. La tâche la plus longue (CAD77 × un modèle) demande alors
-environ 1 630 s + 1 450 s ≈ 50 min ; l'ensemble environ 10 h-cœur. Avec `workers: 16` (20 tâches pool × modèle),
-compter environ 1 h 30 à 2 h. Mémoire : environ 3 à 4 Go par processus, plus la table finale (environ 2 millions
-de lignes) dans le processus principal. Instance conseillée : `ml.m5.8xlarge` (32 vCPU, 128 Gio) avec
-`--workers 16` ; `ml.m5.4xlarge` (16 vCPU, 64 Gio) avec `--workers 8` reste possible, en environ deux fois plus
-de temps. Si le quota SageMaker manque, lancer `full` avec moins de trajectoires (`n_paths: 20000`) et le déclarer.
+environ 1 630 s + 1 450 s ≈ 50 min ; l'ensemble environ 10 h-cœur. Mémoire : environ 3 à 4 Go par processus,
+plus la table finale (environ 2 millions de lignes) dans le processus principal. `configs/full.yaml` fixe donc
+`workers: 8` pour l'instance par défaut `ml.m5.4xlarge` (16 vCPU, 64 Gio : 8 × 4 Go + le processus principal
+laissent de la marge), soit environ 3 à 4 h (limite du job : 8 h). `workers: 16` seulement sur `ml.m5.8xlarge`
+(32 vCPU, 128 Gio, variable `scenarios_instance_type`), en environ 1 h 30 à 2 h. Si le quota SageMaker manque, lancer `full` avec moins de trajectoires (`n_paths: 20000`) et le déclarer.
 
 ## Premiers résultats (run de référence `small`)
 
@@ -318,3 +324,17 @@ l'ancrage des taux (`sbb_ca`) augmente le risque des mélanges obligataires parc
 moyenne de la fenêtre (s < 1) ; ce ne serait pas le cas avec des taux récents au-dessus. Après la validation C,
 `default_model` vaut `sbb_ca` (voir la section « Validation hors échantillon »).
 
+## Limites connues (non corrigées)
+
+- `status = FAIT` des `Fact` désigne un nombre calculé par le modèle (sortie de simulation), pas un fait observé :
+  décision d'équipe, chaque explication rappelle « c'est un modèle, pas une prévision ».
+- Empreinte des données : la validation C porte sur le build `data_sha256` 008f122d5da4f8f7, mais le job SageMaker
+  reconstruit les données à chaque run (nouveau `data_sha256`, Yahoo recalcule `adj_close`) ; l'écart n'est ni
+  enregistré dans le manifeste ni signalé par l'outil.
+- Deux exécutions concurrentes peuvent faire revenir `scenarios/latest.json` sur le run le plus ancien (le dernier
+  à finir écrit le pointeur) ; lancer les runs l'un après l'autre.
+- Aucun test automatique ne vérifie que la table est identique quel que soit `--workers` (vérification manuelle).
+- Avec `small` (20 réplications × 500), l'IC à 90 % se réduit presque au min et au max des réplications, et
+  `integrity["ci_not_enclosing"]` est un total sur toute la table, pas par point de la grille.
+- Requêtes Athena : la clé KMS du bucket ne délègue pas à IAM ; seul un principal listé dans
+  `kms_admin_principal_arns` (ou un rôle de `local.s3_kms_user_role_arns`) peut lire la table et les résultats.

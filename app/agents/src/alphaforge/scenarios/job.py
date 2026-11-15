@@ -1,10 +1,15 @@
 """Job de précalcul des scénarios (local ou SageMaker Processing).
 
-    python -m alphaforge.scenarios.job --config small --input <processed> --output <dossier>
+    python -m alphaforge.scenarios.job --config small --input <données longues> --output <dossier> [--run-id <id>]
 
-``--config`` : chemin d'un YAML/JSON, ou nom d'une configuration livrée (``small``, ``full``). Sous SageMaker
-Processing, les valeurs par défaut sont les montages standard ``/opt/ml/processing/input/data`` et
-``/opt/ml/processing/output`` : aucun appel AWS (boto3) n'est fait dans le job.
+``--input`` : le dossier des données longues reconstruites par ``alphaforge.finance.backtest.build_data``
+(``ALPHAFORGE_BT_DATA``; sous SageMaker Processing, ``run.sh`` le passe). ``--config`` : chemin d'un YAML/JSON, ou
+nom d'une configuration livrée (``small``, ``full``). Sortie par défaut : ``/opt/ml/processing/output``. Aucun appel
+AWS (boto3) n'est fait dans le job.
+
+``run_id`` du manifeste : ``--run-id``, sinon ``ALPHAFORGE_RUN_ID`` (posé par Step Functions), sinon le nom du
+dossier de sortie. Il doit être le nom du dossier ``scenarios/output/<run_id>/`` où la sortie est publiée : l'outil
+refuse un manifeste dont le ``run_id`` diffère. Un ``run_id`` illisible fait échouer le job avant le calcul.
 
 Sorties (dans ``--output``) :
 
@@ -24,6 +29,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import subprocess  # noqa: S404 - lecture facultative du SHA git, commande fixe
 import sys
 import time
@@ -43,6 +49,8 @@ from .models import StationaryBootstrap, make_model, rng_for
 PACKAGE_DIR = Path(__file__).resolve().parent
 DEFAULT_INPUT = "/opt/ml/processing/input/data"
 DEFAULT_OUTPUT = "/opt/ml/processing/output"
+# Même motif que l'outil (tool_table.RUN_ID_PATTERN) : une clé S3 et un nom de dossier sûrs.
+RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 # Modules du volet B (générateurs et job) : l'empreinte ne dépend pas des fichiers de l'outil (tool*.py).
@@ -314,9 +322,20 @@ def _run_task(cfg: dict[str, Any], pool, mixes: list[str], model_id: str, csha: 
     return key, cols, {**res.fit_info, "bootstrap": res.boot_info}, res.timings
 
 
-def run(cfg: dict[str, Any], input_dir: str, output_dir: str, workers: int | None = None) -> dict[str, Any]:
+def resolve_run_id(run_id: str | None, output_dir: str) -> str:
+    """``run_id`` explicite, sinon ``ALPHAFORGE_RUN_ID``, sinon le nom du dossier de sortie (essai local)."""
+    value = run_id or os.environ.get("ALPHAFORGE_RUN_ID") or Path(output_dir).resolve().name
+    if not RUN_ID_PATTERN.match(value):
+        raise ValueError(f"run_id invalide {value!r} : passer --run-id (motif {RUN_ID_PATTERN.pattern})")
+    return value
+
+
+def run(
+    cfg: dict[str, Any], input_dir: str, output_dir: str, workers: int | None = None, run_id: str | None = None
+) -> dict[str, Any]:
     started = time.perf_counter()
     cfg = copy.deepcopy(cfg)
+    run_id = resolve_run_id(run_id, output_dir)
     out = Path(output_dir)
     (out / "table").mkdir(parents=True, exist_ok=True)
     seed = int(cfg["seed"])
@@ -395,7 +414,7 @@ def run(cfg: dict[str, Any], input_dir: str, output_dir: str, workers: int | Non
         entry["currency"] = meta_pool["currency"]
     manifest = {
         **{k: meta[k] for k in ("schema_version", "data_sha256", "code_sha", "generated_utc")},
-        "run_id": os.environ.get("ALPHAFORGE_RUN_ID") or None,
+        "run_id": run_id,
         "release": os.environ.get("ALPHAFORGE_RELEASE") or None,
         "package_sha": package_sha(),
         "git_sha": git_sha(),
@@ -409,7 +428,7 @@ def run(cfg: dict[str, Any], input_dir: str, output_dir: str, workers: int | Non
         "families": families,
         "licence": (
             "Table dérivée de sources publiques (Ken French, FRED, OCDE, Banque du Canada, Shiller, datahub, Yahoo) : "
-            "voir research/backtest/data/SOURCES.md ; données brutes non redistribuées."
+            "voir alphaforge/data/long/SOURCES.md ; données brutes non redistribuées."
         ),
         "disclaimer": meta["disclaimer"],
         "table": {
@@ -472,13 +491,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, default=None, help="remplace la graine de la configuration")
     parser.add_argument("--workers", type=int, default=None, help="processus parallèles (une tâche = pool × modèle)")
     parser.add_argument("--fitted-through", default=None, help="YYYY-MM : n'utilise aucun mois postérieur")
+    parser.add_argument(
+        "--run-id", default=None, help="run_id du manifeste (défaut : ALPHAFORGE_RUN_ID, sinon le nom de --output)"
+    )
     args = parser.parse_args(argv)
+    try:
+        run_id = resolve_run_id(args.run_id, args.output)
+    except ValueError as exc:
+        parser.error(str(exc))
     cfg = load_config(args.config)
     if args.seed is not None:
         cfg["seed"] = args.seed
     if args.fitted_through:
         cfg["fitted_through"] = args.fitted_through
-    manifest = run(cfg, args.input, args.output, workers=args.workers)
+    manifest = run(cfg, args.input, args.output, workers=args.workers, run_id=run_id)
     print(json.dumps({"rows": manifest["rows"], "total_s": manifest["timings"]["total_s"]}, ensure_ascii=False))
     return 0
 

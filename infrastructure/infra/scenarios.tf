@@ -36,7 +36,7 @@
 # Reseau : configuration SageMaker par defaut (pas de VPC, pas d'isolation
 # reseau), donc acces Internet sortant. Le job en a besoin : il reconstruit
 # les donnees mensuelles 1926-2026 depuis les sources publiques (FRED, Ken
-# French, Shiller, or, Yahoo Finance) par research/backtest/data/build_data.py.
+# French, Shiller, or, Yahoo Finance) par alphaforge.finance.backtest.build_data.
 # Ces donnees ne sont ni versionnees ni dans le bundle de code (licences
 # Yahoo, Moody's, OCDE) : elles vivent seulement dans le volume du job.
 #
@@ -54,7 +54,7 @@ locals {
   scenarios_code_prefix = "scenarios/code/${var.release_id}/"
 
   # Bundle construit par app/agents/scripts/package.sh (artefact
-  # agents-package) ; absent tant que le module du job n'existe pas.
+  # agents-package) seulement si ALPHAFORGE_PACKAGE_SCENARIOS=1.
   scenarios_code_files = var.scenarios_enabled ? fileset("${path.module}/build/scenarios", "{run.sh,scenarios.zip}") : toset([])
 
   # Chemins dans le conteneur (contrat avec le code du job).
@@ -146,16 +146,34 @@ locals {
       }
 
       # Les parametres de l'execution deviennent une entree tracee du job.
+      # Ecriture conditionnelle (IfNoneMatch "*") : un run_id deja utilise
+      # (request.json present) fait echouer l'execution ici, avant tout
+      # calcul et sans rien reecrire (S3 repond 412 PreconditionFailed).
+      # Atomique, et sans droit de plus que s3:PutObject (pas de ListBucket).
       "Requete - ecrire" = {
         Type     = "Task"
         Resource = "arn:aws:states:::aws-sdk:s3:putObject"
         Arguments = {
           Bucket      = local.scenarios_bucket
           Key         = "{% 'scenarios/input/requests/' & $runId & '/request.json' %}"
+          IfNoneMatch = "*"
           ContentType = "application/json"
           Body        = "{% $string({'schema': 'scenarios-request/v0.1', 'run_id': $runId, 'release': '${var.release_id}', 'execution': $states.context.Execution.Id, 'requested_at': $now(), 'params': $params}) %}"
         }
+        Catch = [{
+          ErrorEquals = ["States.ALL"]
+          Output      = "{% {'status': 'error', 'run_id': $runId, 'error': $states.errorOutput} %}"
+          Next        = "Requete refusee"
+        }]
         Next = "Calcul"
+      }
+
+      # Le plus souvent : run_id deja utilise (PreconditionFailed). Aucun
+      # marqueur n'est ecrit, les sorties du run existant restent intactes.
+      "Requete refusee" = {
+        Type  = "Fail"
+        Error = "RunIdAlreadyUsed"
+        Cause = "{% 'request.json non ecrit (run_id deja utilise si PreconditionFailed) : ' & $string($states.input.error) %}"
       }
 
       "Calcul" = {
@@ -239,6 +257,7 @@ locals {
         Arguments = {
           Bucket      = local.scenarios_bucket
           Key         = "{% 'scenarios/output/' & $runId & '/_done.json' %}"
+          IfNoneMatch = "*"
           ContentType = "application/json"
           Body        = "{% $string({'status': 'ok', 'run_id': $runId, 'release': '${var.release_id}', 'image': '${var.scenarios_image_uri}', 'processing_job': $job, 'output_prefix': 'scenarios/output/' & $runId & '/', 'table_prefix': 'scenarios/output/' & $runId & '/table/', 'finished_at': $now()}) %}"
         }
@@ -263,13 +282,16 @@ locals {
         Output = "{% {'run_id': $runId, 'processing_job': $job, 'latest': 'scenarios/latest.json'} %}"
       }
 
-      # Echec du job : marqueur status=error, latest.json inchange.
+      # Echec du job : marqueur status=error, latest.json inchange. Les deux
+      # marqueurs sont ecrits sous condition (IfNoneMatch "*") : un marqueur
+      # existant, celui d'un run reussi par exemple, n'est jamais reecrit.
       "Marqueur d'echec - ecrire" = {
         Type     = "Task"
         Resource = "arn:aws:states:::aws-sdk:s3:putObject"
         Arguments = {
           Bucket      = local.scenarios_bucket
           Key         = "{% 'scenarios/output/' & $runId & '/_done.json' %}"
+          IfNoneMatch = "*"
           ContentType = "application/json"
           Body        = "{% $string($merge([$states.input, {'release': '${var.release_id}', 'finished_at': $now()}])) %}"
         }
@@ -314,7 +336,7 @@ resource "aws_s3_object" "scenarios_code" {
 check "scenarios_code_bundle" {
   assert {
     condition     = !var.scenarios_enabled || length(local.scenarios_code_files) == 2
-    error_message = "scenarios_enabled = true mais infra/build/scenarios/{run.sh,scenarios.zip} est absent : package.sh n'a pas trouve app/agents/src/alphaforge/scenarios/job.py. Une execution de ${local.scenarios_name} echouera."
+    error_message = "scenarios_enabled = true mais infra/build/scenarios/{run.sh,scenarios.zip} est absent : package.sh doit tourner avec ALPHAFORGE_PACKAGE_SCENARIOS=1 (variable de depot GitHub du meme nom pour la CI). Une execution de ${local.scenarios_name} echouera."
   }
 }
 
@@ -324,6 +346,8 @@ check "scenarios_code_bundle" {
 # Step Functions), journalise. Pas de Bedrock, aucun autre prefixe du bucket.
 # -----------------------------------------------------------------------------
 data "aws_iam_policy_document" "scenarios_job_trust" {
+  count = local.scenarios_count
+
   statement {
     effect  = "Allow"
     actions = ["sts:AssumeRole"]
@@ -344,11 +368,13 @@ resource "aws_iam_role" "scenarios_job" {
 
   name               = "${local.prefix}-scenarios-job"
   description        = "Role d'execution du job SageMaker Processing des scenarios."
-  assume_role_policy = data.aws_iam_policy_document.scenarios_job_trust.json
+  assume_role_policy = data.aws_iam_policy_document.scenarios_job_trust[0].json
   tags               = local.common_tags
 }
 
 data "aws_iam_policy_document" "scenarios_job" {
+  count = local.scenarios_count
+
   statement {
     sid       = "BucketLocation"
     actions   = ["s3:GetBucketLocation"]
@@ -420,7 +446,7 @@ resource "aws_iam_role_policy" "scenarios_job" {
 
   name   = "scenarios-job"
   role   = aws_iam_role.scenarios_job[0].id
-  policy = data.aws_iam_policy_document.scenarios_job.json
+  policy = data.aws_iam_policy_document.scenarios_job[0].json
 }
 
 # Journaux du job, chiffres par la cle des journaux du projet (stepfunctions.tf)
@@ -459,6 +485,8 @@ resource "aws_iam_role" "scenarios" {
 }
 
 data "aws_iam_policy_document" "scenarios" {
+  count = local.scenarios_count
+
   statement {
     sid     = "WriteRequestMarkerPointer"
     actions = ["s3:PutObject"]
@@ -491,7 +519,7 @@ data "aws_iam_policy_document" "scenarios" {
   statement {
     sid       = "PassJobRole"
     actions   = ["iam:PassRole"]
-    resources = aws_iam_role.scenarios_job[*].arn
+    resources = [aws_iam_role.scenarios_job[0].arn]
     condition {
       test     = "StringEquals"
       variable = "iam:PassedToService"
@@ -526,7 +554,7 @@ resource "aws_iam_role_policy" "scenarios" {
 
   name   = "scenarios"
   role   = aws_iam_role.scenarios[0].id
-  policy = data.aws_iam_policy_document.scenarios.json
+  policy = data.aws_iam_policy_document.scenarios[0].json
 }
 
 resource "aws_sfn_state_machine" "scenarios" {

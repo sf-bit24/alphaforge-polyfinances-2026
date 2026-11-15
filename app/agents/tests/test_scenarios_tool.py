@@ -11,7 +11,6 @@ import json
 import subprocess
 import sys
 import textwrap
-from pathlib import Path
 
 import pytest
 
@@ -23,7 +22,7 @@ from alphaforge.scenarios.tool import (
     make_scenario_risk_tool,
     normalize_weights,
 )
-from alphaforge.scenarios.tool_render import money, pct, render_fr
+from alphaforge.scenarios.tool_render import _interval, money, pct, prob, render_fr
 from alphaforge.scenarios.tool_table import (
     LATEST_KEY,
     ScenarioTableError,
@@ -137,6 +136,7 @@ def table(kb):
 
 
 ON_GRID = {"CA_EQ": 0.15, "US_MKT": 0.25, "BONDS": 0.45, "CASH": 0.10, "GOLD": 0.05}
+NO_GOLD = {"CA_EQ": 0.10, "US_MKT": 0.10, "BONDS": 0.60, "CASH": 0.20}  # MIXES[2], sans or ni crypto
 
 
 # --------------------------------------------------------------------------- chargeur
@@ -155,6 +155,30 @@ def test_loader_reads_latest_verifies_and_caches(kb, table):
         ScenarioTableLoader(kb).load()
 
 
+def _parse(run_id, manifest, key, body):
+    return parse_table(run_id, manifest, key, body, expected_sha256=manifest["table"]["sha256"])
+
+
+def test_parse_table_refuses_undeclared_sha256():
+    body = dumps_table(fictive_rows()[:10])
+    manifest = build_manifest("r", body, code_sha=CODE_SHA, data_sha256=DATA_SHA)
+    with pytest.raises(ScenarioTableError, match="non déclaré"):
+        parse_table("r", manifest, "t.csv", body)
+
+
+def test_pinned_run_requires_done_marker_ok(tmp_path):
+    store = LocalStore(tmp_path)
+    publish(store)
+    prefix = f"scenarios/output/{RUN_ID}/"
+    with pytest.raises(ScenarioTableError, match="_done.json"):
+        ScenarioTableLoader(store, run_id=RUN_ID).load()
+    store.put_json(prefix + "_done.json", {"status": "error", "run_id": RUN_ID})
+    with pytest.raises(ScenarioTableError, match="'error'"):
+        ScenarioTableLoader(store, run_id=RUN_ID).load()
+    store.put_json(prefix + "_done.json", {"status": "ok", "run_id": RUN_ID})
+    assert ScenarioTableLoader(store, run_id=RUN_ID).load().run_id == RUN_ID
+
+
 def test_loader_refuses_inconsistent_rows(tmp_path):
     store = LocalStore(tmp_path)
     rows = fictive_rows()
@@ -166,11 +190,11 @@ def test_loader_refuses_inconsistent_rows(tmp_path):
     rows[0]["ci_hi"] = rows[0]["value"] - 1
     body = dumps_table(rows)
     with pytest.raises(ScenarioTableError, match="ci_lo > ci_hi"):
-        parse_table("r", build_manifest("r", body, code_sha=CODE_SHA, data_sha256=DATA_SHA), "t.csv", body)
+        _parse("r", build_manifest("r", body, code_sha=CODE_SHA, data_sha256=DATA_SHA), "t.csv", body)
     rows = fictive_rows()
     rows[0]["value"] = rows[0]["ci_hi"] + 0.01  # IC valide qui n'encadre pas la valeur : gardé, compté
     body = dumps_table(rows)
-    kept = parse_table("r", build_manifest("r", body, code_sha=CODE_SHA, data_sha256=DATA_SHA), "t.csv", body)
+    kept = _parse("r", build_manifest("r", body, code_sha=CODE_SHA, data_sha256=DATA_SHA), "t.csv", body)
     assert kept.integrity["ci_not_enclosing"] == 1
     with pytest.raises(ScenarioTableError, match="pointeur"):
         ScenarioTableLoader(LocalStore(tmp_path / "vide")).load()
@@ -179,7 +203,7 @@ def test_loader_refuses_inconsistent_rows(tmp_path):
 def test_loader_accepts_schema_01_without_basis():
     rows = [{k: v for k, v in r.items() if k not in ("basis", "currency", "hypothese")} for r in fictive_rows()[:30]]
     body = dumps_table(rows).replace(b",nominal,", b",,")
-    table = parse_table(
+    table = _parse(
         "r", build_manifest("r", body, code_sha=CODE_SHA, data_sha256=DATA_SHA, schema_version="0.1"), "t.csv", body
     )
     assert {k[4] for k in table.rows} == {"nominal"}
@@ -312,31 +336,15 @@ def test_crypto_mix_is_hypothese(table):
         f["status"] == "HYPOTHESE" for f in result["facts"] if f["fact_id"].startswith(f"scn.{MODELS[0]}")
     )
     assert any("crypto" in s["text_fr"] for s in result["explanation"]["limits"])
+    assert result["validated"] is False and any("CRYPTO" in r for r in result["validation_reasons"])
 
 
 def _load_contracts():
-    """Valide avec le vrai contrat pydantic s'il est lisible dans le dépôt git (branche finance), sinon saute."""
-    for ref in (
-        "origin/feat/finance-integration:app/agents/src/alphaforge/finance/contracts/decision.py",
-        "feat/finance-engine:contracts/decision.py",
-        "origin/feat/finance-engine:contracts/decision.py",
-    ):
-        try:
-            source = subprocess.run(
-                ["git", "show", ref], capture_output=True, text=True, check=True, cwd=Path(__file__).parent, timeout=20
-            ).stdout
-        except (subprocess.SubprocessError, OSError):
-            continue
-        import types
-
-        module = types.ModuleType("decision_contract_for_test")
-        sys.modules[module.__name__] = module  # pydantic résout les annotations différées via sys.modules
-        try:
-            exec(compile(source, "decision.py", "exec"), module.__dict__)
-        except ImportError:
-            pytest.skip("pydantic absent")
-        return module.__dict__
-    pytest.skip("contracts/decision.py introuvable dans git")
+    """Le vrai contrat pydantic (alphaforge.finance.contracts.decision); saute si pydantic n'est pas installé
+    (CI : uv sync --frozen sans le groupe finance)."""
+    pytest.importorskip("pydantic")
+    decision = pytest.importorskip("alphaforge.finance.contracts.decision")
+    return vars(decision)
 
 
 def test_facts_validate_against_real_contract_when_available(table):
@@ -368,6 +376,22 @@ def test_render_fr_four_questions(table):
     assert pct(0.123) == "12 %" and pct(0.042) == "4,2 %" and money(20000) == "20 000 $"
     refused = render_fr(compute_scenario_risk(table, {"US_MKT": 1}, 5))
     assert refused["headline"].startswith("Aucun chiffre produit")
+
+
+def test_probability_rounding_never_understates():
+    # Arrondi au plus proche pour les autres métriques, vers le haut / le bas pour les probabilités.
+    assert pct(0.1249) == "12 %" and pct(0.1249, "up") == "13 %" and pct(0.1249, "down") == "12 %"
+    assert pct(0.0401, "up") == "4,1 %" and pct(0.0409, "down") == "4 %" and pct(0.125, "up") == "13 %"
+    assert pct(0.12, "up") == "12 %" and pct(0.0996, "up") == "10 %" and pct(0.043, "up") == "4,3 %"
+    # Probabilité nulle : aucune trajectoire sur n, donc « < 1/n ».
+    assert prob(0.0, 2000) == "< 0,05 %" and prob(0.0, 500) == "< 0,2 %" and prob(0.0, 3000) == "< 0,034 %"
+    assert prob(0.0, 2000, "down") == "0 %" and prob(0.0, None) == "0 %"
+    view = {"value": 0.0, "ci_lo": 0.0, "ci_hi": 0.0041, "n_paths": 2000}
+    assert _interval(view, "p_loss_gt_20") == "< 0,05 % [IC 90 % : 0 %–0,5 %]"
+    assert _interval(dict(view, ci_hi=0.0), "p_loss_gt_20") == "< 0,05 % [IC 90 % : 0 %–0,05 %]"
+    view = {"value": 0.1249, "ci_lo": 0.1049, "ci_hi": 0.1401, "n_paths": 2000}
+    assert _interval(view, "p_mdd_gt_20") == "13 % [IC 90 % : 10 %–15 %]"
+    assert _interval(view, "ret_ann_p10") == "12 % [IC 90 % : 10 %–14 %]"
 
 
 def test_strands_tool_and_ledger(kb):
@@ -492,18 +516,21 @@ def test_runtime_json_integrity_checks(tmp_path):
         ScenarioTableLoader(store).load()
 
 
-def test_runtime_json_without_declared_sha_is_flagged(tmp_path):
+def test_runtime_json_without_declared_sha_is_refused(tmp_path):
     store = LocalStore(tmp_path / "nosha")
+    publish_runtime(store, declare_sha=False)
+    with pytest.raises(ScenarioTableError, match="non déclaré"):
+        ScenarioTableLoader(store).load()
+
+
+def test_runtime_json_nan_is_dropped_and_flagged(tmp_path):
+    store = LocalStore(tmp_path / "nan")
     doc = runtime_doc(fictive_rows())
     first = next(iter(doc["tables"].values()))
     first["mixes"][MIXES[1]]["nominal"]["5"]["cvar95_12m"] = [None, None, None]  # NaN du job
-    publish_runtime(store, doc, declare_sha=False)
+    publish_runtime(store, doc)
     rt = ScenarioTableLoader(store).load()
-    assert rt.integrity["file_sha256_verified"] is False
-    assert any("non vérifié" in w for w in rt.warnings) and any("NaN" in w for w in rt.warnings)
-    result = compute_scenario_risk(rt, ON_GRID, 5)
-    assert result["integrity"]["file_sha256_verified"] is False
-    assert any("intégrité du fichier non vérifiée" in s["text_fr"] for s in result["explanation"]["limits"])
+    assert rt.integrity["file_sha256_verified"] is True and any("NaN" in w for w in rt.warnings)
 
 
 JOB_CSV_COLUMNS = ("model_id", "family", "mix_id", "horizon_years", "basis", "metric", "value", "ci_lo", "ci_hi")
@@ -522,14 +549,14 @@ def test_agreed_format_manifest_table_runtime_csv(tmp_path):
         "code_sha": CODE_SHA,
         "seed": 7,
         "config": {"fitted_through": "2026-09", "simulation": {"n_paths": 2000}, "models": list(MODELS)},
-        "table": {"file": "runtime/scenarios_runtime.csv", "format": "csv"},
+        "table": {"file": "runtime/scenarios_runtime.csv", "format": "csv", "sha256": hashlib.sha256(body).hexdigest()},
         "outputs": {"table": "table/scenarios.parquet"},
     }
     store.put_json(prefix + "manifest.json", manifest)
     store.put_json(LATEST_KEY, {"run_id": RUN_ID, "release": CODE_SHA})
     rt = ScenarioTableLoader(store).load()
     assert rt.table_key == prefix + "runtime/scenarios_runtime.csv" and rt.integrity["format"] == "csv"
-    assert rt.integrity["row_provenance"] is False and rt.integrity["file_sha256_verified"] is False
+    assert rt.integrity["row_provenance"] is False and rt.integrity["file_sha256_verified"] is True
     result = compute_scenario_risk(rt, ON_GRID, 5, loss_threshold_cad=20000, amount_cad=100000)
     assert result["status"] == "ok" and result["n_paths"] == 2000 and result["seed"] == 7
     assert result["fitted_through"] == "2026-09" and result["code_sha"] == CODE_SHA
@@ -612,7 +639,9 @@ def test_display_default_and_compare_only(tmp_path):
     assert not any("hmm_rs" in f["fact_id"] or ".iid." in f["fact_id"] for f in result["facts"])
     sens = compute_scenario_risk(t, ON_GRID, 3, include_sensitivity=True)
     assert [m["model_id"] for m in sens["all_models"]] == ["sbb_ca", "sbb", "hmm_rs"]
-    explicit = compute_scenario_risk(t, ON_GRID, 3, model_id="hmm_rs")
+    refused = compute_scenario_risk(t, ON_GRID, 3, model_id="hmm_rs")
+    assert refused["status"] == "refus" and refused["error"]["code"] == "sensitivity_only"
+    explicit = compute_scenario_risk(t, ON_GRID, 3, model_id="hmm_rs", include_sensitivity=True)
     assert explicit["status"] == "ok" and explicit["model_id"] == "hmm_rs"
     assert [m["model_id"] for m in explicit["all_models"]] == ["sbb_ca", "sbb", "hmm_rs"]
     hidden = compute_scenario_risk(t, ON_GRID, 3, model_id="iid")
@@ -626,34 +655,40 @@ def test_display_fallback_without_manifest_field(tmp_path):
     t = display_table(tmp_path, display=False)
     assert t.default_model == "sbb_ca"
     assert [t.display(m) for m in JOB_MODELS] == ["default", "compare", "sensitivity_only", "hidden"]
-    result = compute_scenario_risk(t, ON_GRID, 3)
+    result = compute_scenario_risk(t, NO_GOLD, 3)
     assert [m["model_id"] for m in result["all_models"]] == ["sbb_ca", "sbb"]
     assert result["validated_horizons_declared"] is False and result["validated"] is True
 
 
 def test_validated_flags_and_limits(tmp_path):
     t = display_table(tmp_path)
-    short = compute_scenario_risk(t, ON_GRID, 3)
+    short = compute_scenario_risk(t, NO_GOLD, 3)
     assert short["validated"] is True and short["degraded_calibration"] is False
-    texts = [s["text_fr"] for s in short["explanation"]["limits"]]
-    assert any("sous-estiment le risque obligataire en période de hausse des taux" in x for x in texts)
+    limits = short["explanation"]["limits"]
+    texts = [s["text_fr"] for s in limits]
+    assert any("hausses de taux testées" in s["text_fr"] and s["label"] == "FAIT" for s in limits)
+    assert any("pourrait donc être plus grande" in s["text_fr"] and s["label"] == "HYPOTHESE" for s in limits)
     assert any("FICTIF : couverture p10-p90 de sbb_ca sur 1-10 ans." in x for x in texts)
     assert any("FICTIF : couverture p10-p90 de sbb sur 1-10 ans." in x for x in texts)
     for horizon in (5, 10):
-        r = compute_scenario_risk(t, ON_GRID, horizon)
+        r = compute_scenario_risk(t, NO_GOLD, horizon)
         assert r["validated"] is True and r["degraded_calibration"] is True
         assert any("calibration dégradée à long horizon" in s["text_fr"] for s in r["explanation"]["limits"])
-    long = compute_scenario_risk(t, ON_GRID, 20)
+    long = compute_scenario_risk(t, NO_GOLD, 20)
     assert long["status"] == "ok" and long["validated"] is False and not long["degraded_calibration"]
     assert any("non validé hors échantillon" in s["text_fr"] for s in long["explanation"]["limits"])
-    real = compute_scenario_risk(t, ON_GRID, 3, basis="real")
+    real = compute_scenario_risk(t, NO_GOLD, 3, basis="real")
     assert real["validated"] is False and "base real non validée" in real["validation_reasons"]
     assert "non validé hors échantillon" in real["explanation"]["text"]
+    # Or ou crypto : blocs jamais testés hors échantillon, même à un horizon validé en base nominale.
+    gold = compute_scenario_risk(t, ON_GRID, 3)
+    assert gold["validated"] is False and not gold["degraded_calibration"]
+    assert any("GOLD" in r and "non testés" in r for r in gold["validation_reasons"])
 
 
 def test_tool_exposes_include_sensitivity_and_validated(tmp_path, kb):
     owner = make_scenario_risk_tool(kb)
     spec = owner.tool().tool_spec
     assert "include_sensitivity" in spec["inputSchema"]["json"]["properties"]
-    payload = json.loads(owner.tool()(weights=ON_GRID, horizon_years=3))
+    payload = json.loads(owner.tool()(weights=NO_GOLD, horizon_years=3))
     assert payload["validated"] is True and "degraded_calibration" in payload

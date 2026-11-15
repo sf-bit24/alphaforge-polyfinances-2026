@@ -143,15 +143,19 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
     }
   }
 
-  # Resultats des requetes Athena (scenarios.tf) : jetables.
-  rule {
-    id     = "athena-results-expire"
-    status = "Enabled"
-    filter {
-      prefix = "scenarios/athena-results/"
-    }
-    expiration {
-      days = 7
+  # Resultats des requetes Athena (scenarios.tf) : jetables. Seulement si
+  # scenarios_enabled, pour que false laisse le bucket inchange.
+  dynamic "rule" {
+    for_each = var.scenarios_enabled ? ["athena-results-expire"] : []
+    content {
+      id     = rule.value
+      status = "Enabled"
+      filter {
+        prefix = "scenarios/athena-results/"
+      }
+      expiration {
+        days = 7
+      }
     }
   }
 

@@ -4,7 +4,7 @@ Proposition du volet E (intégration de l'outil `scenario_risk`), 2026-11-14. St
 propriétaires de F1 (compilateur de mandat) et de F4 (Judge)**. Aucun fichier de F1 ou F4 n'est modifié ici.
 Simulation seulement, jamais un conseil.
 
-Référence lue (lecture seule) : `origin/feat/finance-integration`, `app/agents/src/alphaforge/finance/`
+Référence lue (lecture seule, depuis fusionnée dans master) : `app/agents/src/alphaforge/finance/`
 (`contracts/policy.py`, `portfolio/compile.py`, `portfolio/judge.py`). La spécification suit la forme de
 `CVAR12M` : même `Limit`, même `ConstraintCheck`, mêmes noms de champs.
 
@@ -35,22 +35,23 @@ class Selector(_Strict):
     ...
     measure: RiskMeasure | None = None
     loss_level: float | None = Field(default=None, gt=0, le=1)  # PROB_LOSS : L, fraction du montant
-    horizon_years: int | None = Field(default=None, ge=1)       # PROB_LOSS : H, années
+    horizon_years: int | None = Field(default=None, ge=1)  # PROB_LOSS : H, années
 
 
 class ScenarioBlock(_Strict):
     """Bloc de la table de scénarios qui représente un actif de l'engine (ex. XIU.TO -> CA_EQ)."""
+
     block: Literal["CA_EQ", "US_MKT", "BONDS", "CASH", "GOLD", "CRYPTO"]
-    source: str                                   # justification du rapprochement
+    source: str  # justification du rapprochement
     status: Literal["HYPOTHESE"] = "HYPOTHESE"
 
 
 class PolicySpec(_Strict):
     ...
     scenario_blocks: dict[str, ScenarioBlock] = Field(default_factory=dict)  # requis si une limite PROB_LOSS
-    scenario_family: Literal["CAD77", "CAD71", "USD1926"] = "CAD77"          # cohérente avec currency
-    scenario_model_id: str | None = None          # None : modèle par défaut du manifeste de la table
-    scenario_run_id: str | None = None            # None : scenarios/latest.json ; sinon run figé (rejeu)
+    scenario_family: Literal["CAD77", "CAD71", "USD1926"] = "CAD77"  # cohérente avec currency
+    scenario_model_id: str | None = None  # None : modèle par défaut du manifeste de la table
+    scenario_run_id: str | None = None  # None : scenarios/latest.json ; sinon run figé (rejeu)
 ```
 
 Validation ajoutée à `Limit._bounds` : si `selector.measure == "PROB_LOSS"`, `loss_level` et `horizon_years`
@@ -74,9 +75,13 @@ une limite `PROB_LOSS` exige que chaque actif de `universe` hors `excluded` ait 
 
    table = ScenarioTableLoader(store, run_id=policy.scenario_run_id).load()
    res = compute_scenario_risk(
-       table, weights=w_blocs, horizon_years=sel.horizon_years,
-       loss_threshold_cad=sel.loss_level, amount_cad=1.0,       # L en fraction : montant unitaire
-       family=policy.scenario_family, model_id=policy.scenario_model_id,
+       table,
+       weights=w_blocs,
+       horizon_years=sel.horizon_years,
+       loss_threshold_cad=sel.loss_level,
+       amount_cad=1.0,  # L en fraction : montant unitaire
+       family=policy.scenario_family,
+       model_id=policy.scenario_model_id,
    )
    ```
 3. **Valeur comparée à α : la borne haute `ci_hi` de l'IC à 90 %** (prudence, suggestion retenue). La valeur
@@ -103,14 +108,20 @@ une limite `PROB_LOSS` exige que chaque actif de `universe` hors `excluded` ait 
 5. **Fact et ConstraintCheck**, avec l'aide `add(...)` existante, sans nouveau champ :
 
    ```python
-   add(f"{rr.rule_id}:max",
+   add(
+       f"{rr.rule_id}:max",
        rr.limit.description_fr or f"P(perte > {L:.0%} sur {H} ans), borne haute IC 90 %",
-       rr.limit.derived_from, rr.hi,
-       ci_hi if res["status"] == "ok" else -1.0,          # -1 = non vérifiable, comme STRESS_2022
-       "probabilité (fraction)", violated, active, rr.limit.blocking,
-       proc,                                              # voir ci-dessous
-       "HYPOTHESE")                                       # modèle + rattachement des actifs aux blocs
-   facts.extend(Fact.model_validate(f) for f in res["facts"])   # value, ci_lo, ci_hi, distance L1, autres modèles
+       rr.limit.derived_from,
+       rr.hi,
+       ci_hi if res["status"] == "ok" else -1.0,  # -1 = non vérifiable, comme STRESS_2022
+       "probabilité (fraction)",
+       violated,
+       active,
+       rr.limit.blocking,
+       proc,  # voir ci-dessous
+       "HYPOTHESE",
+   )  # modèle + rattachement des actifs aux blocs
+   facts.extend(Fact.model_validate(f) for f in res["facts"])  # value, ci_lo, ci_hi, distance L1, autres modèles
    ```
 
    `proc` (champ `Source.processing`) : `scenario_risk <model_id>, famille <family>, mix <mix_id> (L1 <d>),
@@ -119,7 +130,7 @@ une limite `PROB_LOSS` exige que chaque actif de `universe` hors `excluded` ait 
    trace du Judge (`parent_id = trace_id` du Judge) : la conclusion se retrace jusqu'au fichier de la table et au
    code qui l'a produit.
 
-   Les `Fact` de l'outil sont déjà au format `contracts/decision.py` (mêmes clés, `extra="forbid"`), avec des
+   Les `Fact` de l'outil sont déjà au format `alphaforge.finance.contracts.decision` (mêmes clés, `extra="forbid"`), avec des
    identifiants stables (`scn.<model>.<famille>.<mix>.<H>y.<base>.<métrique>[.ci_lo|.ci_hi]`).
 
 ## 4. Ce que `PROB_LOSS` ajoute à `STRESS_2022`, `MDD` et `CVAR12M`

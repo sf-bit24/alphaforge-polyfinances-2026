@@ -1,9 +1,12 @@
-"""``Fact`` et ``TraceEvent`` de l'outil ``scenario_risk``, au format de contracts/decision.py (v0.1.0).
+"""``Fact`` et ``TraceEvent`` de l'outil ``scenario_risk``, au format de ``alphaforge.finance.contracts.decision``
+(v0.1.0, pydantic, ``extra="forbid"``).
 
-Le contrat vit sur la branche ``feat/finance-engine`` (pydantic, ``extra="forbid"``) et n'est pas encore sur
-master : on ne l'importe pas. Ce module produit des dictionnaires **avec exactement les mêmes clés**, que le Judge
-ou l'agent d'explicabilité valident par ``Fact.model_validate(d)`` / ``TraceEvent.model_validate(d)`` une fois le
-contrat fusionné. Correspondance :
+On n'importe pas le contrat : le runtime AgentCore n'installe pas pydantic hors du groupe ``finance``. Ce module
+produit des dictionnaires **avec exactement les mêmes clés**, que le Judge ou l'agent d'explicabilité valident par
+``Fact.model_validate(d)`` / ``TraceEvent.model_validate(d)``; ``tests/test_scenarios_tool.py`` le vérifie contre le
+vrai module quand pydantic est installé. ``status = FAIT`` désigne ici un nombre **calculé** par le modèle sur les
+données (une sortie de simulation, pas un fait observé) : décision d'équipe, rappelée dans chaque explication
+(« c'est un modèle, pas une prévision »). Correspondance :
 
 | contrat (decision.py)        | valeur produite ici                                                        |
 | ---------------------------- | -------------------------------------------------------------------------- |

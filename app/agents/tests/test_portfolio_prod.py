@@ -47,3 +47,85 @@ def test_audit_is_skipped_without_terraform_variables(portfolio_settings, store,
     monkeypatch.delenv("ALPHAFORGE_TRACE_BUCKET", raising=False)
     res = service_with(portfolio_settings, store, FakeEngine()).handle({"action": "build", "persona": "mateo"})
     assert res["audit"] is None
+
+
+# --------------------------------------------------------------------------- trace X-Ray de la décision
+
+OTEL_ID = "6a1f0c3e9b2d4f7a8c5e1b3d7f9a2c4e"
+
+
+class RootSpanTelemetry:
+    """Télémétrie factice : enregistre ce qui se passe pendant le span racine."""
+
+    def __init__(self, events):
+        self.events = events
+        self.open = False
+
+    def span(self, name, **attrs):
+        import contextlib
+
+        @contextlib.contextmanager
+        def cm():
+            self.open = True
+            self.events.append(("open", name, attrs))
+            yield
+            self.open = False
+            self.events.append(("close", name))
+
+        return cm()
+
+    def current_ids(self):
+        return (OTEL_ID, "1b2c3d4e5f6a7b8c") if self.open else (None, None)
+
+    def flush(self):
+        self.events.append(("flush", self.open))
+
+
+def test_root_span_wraps_build_save_and_audit_then_flushes(portfolio_settings, store, monkeypatch):  # noqa: F811
+    events = []
+    telemetry = RootSpanTelemetry(events)
+    engine = FakeEngine()
+    loaded = engine.load()
+    loaded["telemetry"] = telemetry
+    build = loaded["pipeline"].build_portfolio
+
+    def build_in_span(*args, **kwargs):
+        events.append(("build", telemetry.open))
+        return build(*args, **kwargs)
+
+    loaded["pipeline"].build_portfolio = build_in_span
+    from alphaforge import portfolio_service
+
+    def fake_audit(self, decision):
+        events.append(("audit", telemetry.open))
+        return {"otel_trace_id": telemetry.current_ids()[0]}
+
+    monkeypatch.setattr(portfolio_service.PortfolioService, "_audit", fake_audit)
+    service = portfolio_service.PortfolioService(portfolio_settings, store, engine=lambda: loaded)
+    res = service.handle({"action": "build", "persona": "amira", "mode": "rules"})
+    assert res["ok"] is True, res
+    assert events[0] == ("open", "portfolio.build", {"profile_id": "demo-amira", "persona": "amira", "mode": "rules"})
+    assert events[1:] == [("build", True), ("audit", True), ("close", "portfolio.build"), ("flush", False)]
+    assert res["audit"]["otel_trace_id"] == OTEL_ID
+    assert res["xray_trace_id"] == "1-6a1f0c3e-9b2d4f7a8c5e1b3d7f9a2c4e"
+
+
+def test_no_trace_id_without_a_tracer(portfolio_settings, store):  # noqa: F811
+    res = service_with(portfolio_settings, store, FakeEngine()).handle({"action": "build", "persona": "mateo"})
+    assert res["ok"] is True and res["xray_trace_id"] is None
+
+
+@pytest.mark.parametrize(
+    ("otel", "xray"),
+    [
+        (OTEL_ID, "1-6a1f0c3e-9b2d4f7a8c5e1b3d7f9a2c4e"),
+        (None, None),
+        ("", None),
+        ("XYZ", None),
+        (OTEL_ID.upper(), None),
+    ],
+)
+def test_xray_trace_id_format(otel, xray):
+    from alphaforge.portfolio_service import xray_trace_id
+
+    assert xray_trace_id(otel) == xray

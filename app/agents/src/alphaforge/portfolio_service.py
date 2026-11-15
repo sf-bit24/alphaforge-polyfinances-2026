@@ -17,6 +17,7 @@ Simulation seulement : aucune transaction, aucun conseil personnalisé.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import re
@@ -265,34 +266,39 @@ class PortfolioService:
             if args["strategy"]:
                 style_inputs = engine["style_inputs_from_view"](client_store.view(args["client_id"])[0])
         as_of = args["as_of"] or pipeline.DEFAULT_AS_OF
+        telemetry = engine.get("telemetry")
         try:
-            result = pipeline.build_portfolio(
-                profile,
-                as_of,
-                request=pipeline.Request(**args["request"]) if args["request"] else None,
-                mode=args["mode"],
-                evidence_fn=market_store.evidence,
-                guardrail_id=self.settings.guardrail_id,
-                guardrail_version=self.settings.guardrail_version,
-                strategy=args["strategy"],
-                style_preference=args["style"],
-                style_inputs=style_inputs,
-            )
+            # Span racine : les outils du moteur (optimize, judge.check, strategy.select…) et l'audit
+            # partagent une seule trace X-Ray, que la décision enregistrée cite (audit.otel_trace_id).
+            with self._root_span(telemetry, profile_id=args["client_id"], persona=args["persona"], mode=args["mode"]):
+                trace_id = self._trace_id(telemetry)
+                result = pipeline.build_portfolio(
+                    profile,
+                    as_of,
+                    request=pipeline.Request(**args["request"]) if args["request"] else None,
+                    mode=args["mode"],
+                    evidence_fn=market_store.evidence,
+                    guardrail_id=self.settings.guardrail_id,
+                    guardrail_version=self.settings.guardrail_version,
+                    strategy=args["strategy"],
+                    style_preference=args["style"],
+                    style_inputs=style_inputs,
+                )
+                decision_key = client_store.save_decision(result.decision, result.policy)
+                audit = self._audit(result.decision)
         finally:
-            telemetry = engine.get("telemetry")
             if telemetry is not None:
                 try:
-                    telemetry.flush()
+                    telemetry.flush()  # après la fermeture du span racine, pour qu'il soit exporté
                 except Exception:
                     logger.exception("telemetry flush failed")
-        decision_key = client_store.save_decision(result.decision, result.policy)
-        audit = self._audit(result.decision)
         return {
             "client_id": args["client_id"],
             "persona": args["persona"],
             "persona_label": persona_label,
             "fiction": bool(args["persona"]),
             "audit": audit,
+            "xray_trace_id": xray_trace_id(trace_id),
             "as_of": as_of.isoformat(),
             "mode": args["mode"],
             "simulation_only": True,
@@ -311,6 +317,22 @@ class PortfolioService:
             "strategy": result.strategy.summary() if result.strategy is not None else None,
         }
 
+    @staticmethod
+    def _root_span(telemetry: Any, **attrs: Any) -> contextlib.AbstractContextManager[Any]:
+        span = getattr(telemetry, "span", None)
+        if span is None:
+            return contextlib.nullcontext()
+        try:
+            return span("portfolio.build", **attrs)
+        except Exception:  # la télémétrie ne doit jamais empêcher une simulation
+            logger.exception("root span failed")
+            return contextlib.nullcontext()
+
+    @staticmethod
+    def _trace_id(telemetry: Any) -> str | None:
+        current_ids = getattr(telemetry, "current_ids", None)
+        return current_ids()[0] if current_ids is not None else None
+
     def _audit(self, decision: Any) -> dict[str, Any] | None:
         """Chaîne d'audit (finance/observability/audit.py) : tête dans DynamoDB, décision dans le bucket de traces.
         Seulement si Terraform a posé la table et le bucket ; un échec est rapporté sans annuler la simulation."""
@@ -327,7 +349,15 @@ class PortfolioService:
                 root,
                 aws={"region": self.settings.region, "bucket": bucket, "decisions_table": table},
             )
-            return {k: entry.get(k) for k in ("seq", "record_hash", "prev_hash", "s3_key", "otel_trace_id")}
+            kept = {k: entry.get(k) for k in ("seq", "record_hash", "prev_hash", "s3_key", "otel_trace_id")}
+            return {**kept, "xray_trace_id": xray_trace_id(kept["otel_trace_id"])}
         except Exception as exc:
             logger.exception("audit record failed")
             return {"error": type(exc).__name__}
+
+
+def xray_trace_id(otel_trace_id: str | None) -> str | None:
+    """Identifiant OpenTelemetry (32 hex) vers le format X-Ray ``1-<8 hex>-<24 hex>`` (console, get-trace-summaries)."""
+    if not otel_trace_id or not re.fullmatch(r"[0-9a-f]{32}", otel_trace_id):
+        return None
+    return f"1-{otel_trace_id[:8]}-{otel_trace_id[8:]}"

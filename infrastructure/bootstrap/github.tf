@@ -24,6 +24,20 @@ variable "github_repository" {
   default     = "sf-bit24/alphaforge-polyfinances-2026"
 }
 
+# Formes du sub qu'envoie GitHub pour ce repo. Le repo a le reglage
+# « immutable subject » (API actions/oidc/customization/sub :
+# use_immutable_subject = true) : le sub porte les identifiants numeriques du
+# proprietaire et du repo, qu'un repo recree sous le meme nom n'aurait pas.
+# L'ancienne forme reste acceptee au cas ou le reglage serait retire.
+variable "github_subject_prefixes" {
+  description = "Prefixes du sub OIDC de GitHub pour ce repo (sans :ref:...)."
+  type        = list(string)
+  default = [
+    "repo:sf-bit24@231555058/alphaforge-polyfinances-2026@1458006494",
+    "repo:sf-bit24/alphaforge-polyfinances-2026",
+  ]
+}
+
 variable "github_branch" {
   description = "Seule branche dont les runs peuvent pousser (branche par defaut du repo)."
   type        = string
@@ -70,7 +84,7 @@ resource "aws_ecr_lifecycle_policy" "web" {
 }
 
 # Les workflows appeles (app.yml) heritent du sub de l'appelant (pipeline.yml) :
-# repo:<owner>/<repo>:ref:refs/heads/<branche>.
+# <prefixe>:ref:refs/heads/<branche>.
 data "aws_iam_policy_document" "github_trust" {
   statement {
     effect  = "Allow"
@@ -90,7 +104,7 @@ data "aws_iam_policy_document" "github_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:ref:refs/heads/${var.github_branch}"]
+      values   = [for prefix in var.github_subject_prefixes : "${prefix}:ref:refs/heads/${var.github_branch}"]
     }
   }
 }

@@ -17,6 +17,12 @@ tfc_aws_run_role_arn = "arn:aws:iam::024848478575:role/alphaforge-tfc-run"
 # Workshop, pour lire les bases OKF dans la console et les exporter.
 kms_admin_principal_arns = ["arn:aws:iam::024848478575:role/WSParticipantRole"]
 
+# Scenarios probabilistes (scenarios.tf, app/CONTRACTS.md section 10). Seule
+# source de verite : package.sh lit cette ligne pour construire, ou non, le
+# bundle du job (infra/build/scenarios/) quand ALPHAFORGE_PACKAGE_SCENARIOS
+# n'est pas posee (cas de la CI). Aucun declencheur : l'equipe lance chaque run.
+scenarios_enabled = true
+
 # Veille : collecte toutes les 6 heures.
 collecte_schedule_expression = "rate(6 hours)"
 collecte_schedule_enabled    = true

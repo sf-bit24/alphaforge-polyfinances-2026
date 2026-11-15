@@ -14,8 +14,10 @@
 #   <out_dir>/knowledge/   les fichiers **/*.md de app/knowledge/general/ et leurs éventuels fichiers compagnons
 #                          **/*.md.metadata.json de la Knowledge Base (10 Ko au plus, à côté de leur document;
 #                          app/CONTRACTS.md section 5.1). Terraform les envoie sous general/.
-#   <out_dir>/scenarios/   seulement si ALPHAFORGE_PACKAGE_SCENARIOS=1 (désactivé par défaut, donc jamais dans un
-#                          déploiement où scenarios_enabled = false) : bundle du job SageMaker Processing des
+#   <out_dir>/scenarios/   seulement si ALPHAFORGE_PACKAGE_SCENARIOS=1, ou, si elle est absente, si le tfvars déployé
+#                          (infrastructure/deploy/envs/<DEPLOY_ENV>.tfvars, sandbox par défaut) pose
+#                          scenarios_enabled = true (donc jamais par défaut quand scenarios_enabled = false) :
+#                          bundle du job SageMaker Processing des
 #                          scénarios (image scikit-learn d'AWS, Python 3.12, linux/amd64), que Terraform envoie
 #                          sous scenarios/code/<release_id>/ (infrastructure/infra/scenarios.tf) :
 #                            run.sh          point d'entrée du conteneur (scripts/scenarios-run.sh)
@@ -44,8 +46,62 @@ if [ "$#" -ne 1 ] || [ -z "$1" ]; then
     exit 2
 fi
 
-# Bundle du job des scénarios (section 6) : 0 (défaut) ou 1, vérifié avant tout travail.
-package_scenarios=${ALPHAFORGE_PACKAGE_SCENARIOS:-0}
+# Bundle du job des scénarios (section 6) : 0 ou 1, vérifié avant tout travail. ALPHAFORGE_PACKAGE_SCENARIOS non vide
+# l'emporte; absente ou vide, la valeur suit scenarios_enabled du tfvars déployé, seule source de vérité
+# (infrastructure/deploy/envs/<DEPLOY_ENV>.tfvars, sandbox par défaut, celui que upload-config.sh envoie à Terraform) :
+# true -> 1; false ou clé absente (défaut Terraform false) -> 0; toute autre forme est une erreur.
+scenarios_from_tfvars() {
+    # Lignes « scenarios_enabled = <v> » hors commentaires (#, //, /* */), espaces et guillemets ignorés.
+    # Affiche true, false, none (clé absente), multiple, ou invalid:<v>.
+    awk '
+        in_block { if (index($0, "*/")) { in_block = 0; sub(/^.*\*\//, "") } else next }
+        {
+            line = $0
+            gsub(/\/\*([^*]|\*+[^*\/])*\*+\//, "", line)
+            if (index(line, "/*")) { in_block = 1; sub(/\/\*.*$/, "", line) }
+            if (line !~ /^[[:space:]]*scenarios_enabled[[:space:]]*=/) next
+            sub(/^[[:space:]]*scenarios_enabled[[:space:]]*=[[:space:]]*/, "", line)
+            sub(/[[:space:]]*(#|\/\/).*$/, "", line)
+            sub(/[[:space:]]+$/, "", line)
+            if (line ~ /^"[^"]*"$/) line = substr(line, 2, length(line) - 2)
+            n++
+            v = line
+        }
+        END {
+            if (n == 0) print "none"
+            else if (n > 1) print "multiple"
+            else if (v == "true" || v == "false") print v
+            else print "invalid:" v
+        }
+    ' "$1"
+}
+if [ -n "${ALPHAFORGE_PACKAGE_SCENARIOS:-}" ]; then
+    package_scenarios=$ALPHAFORGE_PACKAGE_SCENARIOS
+    scenarios_source="ALPHAFORGE_PACKAGE_SCENARIOS"
+else
+    scenarios_env=${DEPLOY_ENV:-sandbox}
+    case "$scenarios_env" in
+        *[!A-Za-z0-9_-]*)
+            echo "error: invalid DEPLOY_ENV '$scenarios_env'" >&2
+            exit 1
+            ;;
+    esac
+    scenarios_tfvars="$(CDPATH='' cd -- "$(dirname -- "$0")/../../.." && pwd)/infrastructure/deploy/envs/$scenarios_env.tfvars"
+    if [ ! -f "$scenarios_tfvars" ]; then
+        echo "error: ALPHAFORGE_PACKAGE_SCENARIOS is unset or empty and $scenarios_tfvars was not found (set it to 0 or 1)" >&2
+        exit 1
+    fi
+    case "$(scenarios_from_tfvars "$scenarios_tfvars")" in
+        true) package_scenarios=1 ;;
+        false | none) package_scenarios=0 ;;
+        *)
+            echo "error: cannot read scenarios_enabled from $scenarios_tfvars (expected a single" \
+                "'scenarios_enabled = true|false'); fix it or set ALPHAFORGE_PACKAGE_SCENARIOS to 0 or 1" >&2
+            exit 1
+            ;;
+    esac
+    scenarios_source="scenarios_enabled of infrastructure/deploy/envs/$scenarios_env.tfvars"
+fi
 case "$package_scenarios" in
     0 | 1) ;;
     *)
@@ -241,10 +297,11 @@ done
 set +f
 find "$out_dir/knowledge" -type d -exec chmod 755 {} +
 
-# 6. Job des scénarios (facultatif, ALPHAFORGE_PACKAGE_SCENARIOS=1). Il ne tourne pas dans AgentCore : autre
-#    plateforme (linux/amd64, Python de l'image AWS), et seulement les dépendances du job, jamais celles des
-#    runtimes. Désactivé par défaut : le déploiement (scenarios_enabled = false) ne dépend alors ni de PyPI pour
-#    ces roues, ni de la taille du bundle. Demandé, tout manque est une erreur (pas de bundle incomplet).
+# 6. Job des scénarios (facultatif : ALPHAFORGE_PACKAGE_SCENARIOS=1, ou scenarios_enabled = true dans le tfvars si la
+#    variable est absente). Il ne tourne pas dans AgentCore : autre plateforme (linux/amd64, Python de l'image AWS),
+#    et seulement les dépendances du job, jamais celles des runtimes. Sans scénarios (0), le déploiement ne dépend
+#    ni de PyPI pour ces roues, ni de la taille du bundle. Demandé, tout manque est une erreur (pas de bundle
+#    incomplet) : le job package_agents échoue, et avec lui le déploiement (app.yml, release_tfvars).
 SCEN_PLATFORM=x86_64-manylinux_2_28
 SCEN_PY_VERSION=3.12
 SCEN_MAX_ZIP_BYTES=200000000
@@ -252,7 +309,7 @@ scen_src="$agents_dir/src/alphaforge/scenarios"
 bt_src="$agents_dir/src/alphaforge/finance/backtest"
 scen_out="$out_dir/scenarios"
 rm -rf -- "$scen_out"
-scen_summary="scenarios: skipped (ALPHAFORGE_PACKAGE_SCENARIOS=$package_scenarios)"
+scen_summary="scenarios: skipped (0 from $scenarios_source)"
 if [ "$package_scenarios" = 1 ]; then
     scen_reqs="$scen_src/requirements-job.txt"
     for required in "$scen_src/job.py" "$scen_reqs" "$script_dir/scenarios-run.sh" \
@@ -277,6 +334,7 @@ if [ "$package_scenarios" = 1 ]; then
 
     scen_stage="$work/scenarios"
     mkdir -p -- "$scen_stage" "$scen_out"
+    echo "Scenarios bundle requested (1 from $scenarios_source)."
     echo "Installing scenarios job dependencies for $SCEN_PLATFORM / Python $SCEN_PY_VERSION (wheels only)..."
     if ! (cd -- "$agents_dir" && uv pip install --quiet \
         --python-platform "$SCEN_PLATFORM" \
@@ -292,8 +350,15 @@ if [ "$package_scenarios" = 1 ]; then
     fi
     rm -rf -- "${scen_stage:?}/bin"
     rm -f -- "$scen_stage/.lock"
-    # Tests de pyarrow (fichiers parquet d'exemple) : inutiles au job; aucun parquet ne doit partir dans le bundle.
-    rm -rf -- "${scen_stage:?}/pyarrow/tests"
+    # Suites de tests des dépendances lourdes (celles de pyarrow contiennent des parquet d'exemple) et en-têtes C++ de
+    # pyarrow : jamais importés par le job, environ 11 Mo du zip (143 -> 132 Mo, mesuré le 2026-11-15). Aucun .so
+    # n'est retiré (chargement dynamique non vérifié dans l'image).
+    for pkg in numpy pandas scipy pyarrow; do
+        if [ -d "$scen_stage/$pkg" ]; then
+            find "$scen_stage/$pkg" -type d -name tests -prune -exec rm -rf {} +
+        fi
+    done
+    rm -rf -- "${scen_stage:?}/pyarrow/include" "${scen_stage:?}/pyarrow/src"
     if [ -e "$scen_stage/alphaforge" ]; then
         echo "error: a dependency already provides alphaforge/ in the scenarios bundle" >&2
         exit 1

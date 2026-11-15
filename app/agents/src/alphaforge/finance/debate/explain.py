@@ -391,6 +391,9 @@ MISSING_ALIASES = {
 DIMENSION_FR = {"risk_tolerance": "tolérance au risque", "risk_capacity": "capacité à prendre des risques"}
 # Mots de liaison retirés en fin de libellé quand on coupe ses nombres (« Réaction à une baisse de 20 % »).
 LINK_WORDS_FR = {"de", "des", "du", "dans", "les", "la", "le", "sous", "sur", "en", "à", "au", "aux", "par"}
+# Entrée de missing_info que from_profile_view ajoute quand le profil ne dit rien de l'horizon : il retient alors un
+# horizon prudent d'un an pour l'objectif principal. Ce n'est pas une réponse de l'investisseur.
+DEFAULT_HORIZON_MARK = "horizon"
 
 
 def _without_numbers(label: str) -> str:
@@ -541,6 +544,9 @@ def _protection_explanation(
     change: list[Statement] = []
     must = [MUST_HAVE_FR.get(name, name) for name in cause.must_have_missing]
     missing = missing_fields_fr(list(missing_info) or cause.must_have_missing)
+    if DEFAULT_HORIZON_MARK in missing_info and cause.dollar_rule is not None:  # l'horizon par défaut fixe T : en tête
+        first = missing_fields_fr([DEFAULT_HORIZON_MARK])
+        missing = first + [name for name in missing if name not in first]
     if missing:
         change.append(Statement(text_fr="Compléter : " + ", ".join(missing) + ".", label="HYPOTHESE"))
     limits = [
@@ -577,7 +583,9 @@ def _protection_explanation(
             )
         )
     if cause.dollar_rule is not None:
-        facts = _ProtectionFacts(book, cause.dollar_rule, cause.levers, tid)
+        facts = _ProtectionFacts(
+            book, cause.dollar_rule, cause.levers, tid, horizon_defaulted=DEFAULT_HORIZON_MARK in missing_info
+        )
         data_used.append(facts.rule_statement())
         why += facts.why()
         change += facts.lever_statements(others=len(change))
@@ -648,6 +656,7 @@ class _ProtectionFacts:
     star: str = field(init=False)  # Fact de l*
     floor: str = field(init=False)  # Fact de min_L_plan
     goal_facts: dict[str, str] = field(default_factory=dict)  # objectif -> Fact de son horizon
+    horizon_defaulted: bool = False  # horizon absent du profil : l'adaptateur retient son défaut prudent
 
     def __post_init__(self) -> None:
         self.star = self.add(
@@ -665,7 +674,9 @@ class _ProtectionFacts:
             "minimum sur la grille des parts d'actions de L_plan(e) = ENV(e, mdd) + daily_buffer",
         )
 
-    def add(self, key: str, label: str, value, unit: str, processing: str, dataset: str | None = None) -> str:
+    def add(  # noqa: PLR0913 (libellé, valeur, unité et provenance d'un Fact)
+        self, key: str, label: str, value, unit: str, processing: str, dataset: str | None = None, status: str = "FAIT"
+    ) -> str:
         return self.book.add(
             f"protection.{key}",
             label,
@@ -673,6 +684,7 @@ class _ProtectionFacts:
             unit,
             dataset=dataset or self.rule.yaml_path,
             processing=processing,
+            status=status,
             currency="CAD" if unit == "CAD" else None,
             trace_id=self.trace_id,
         )
@@ -748,19 +760,27 @@ class _ProtectionFacts:
             rule.horizon_loss,
             "1 - (1 + mu_recovery)^-T, terme de l_cap",
         )
+        goal = self.levers.horizon_goal if self.levers else None
+        # Horizon absent du profil : T vient du défaut prudent de l'adaptateur (objectif principal), pas d'une réponse.
+        defaulted = self.horizon_defaulted and (goal is None or goal.label.startswith(MAIN_GOAL_PREFIX))
         value, unit = _duration(rule.horizon_years)
         horizon = self.add(
             "horizon",
             "Horizon de placement retenu (T du seau risque)",
             value,
             unit,
-            "trace horizon.T_risk et dollar_rule.l_cap",
+            "défaut prudent de l'adaptateur, horizon absent du profil ; trace horizon.T_risk"
+            if defaulted
+            else "trace horizon.T_risk et dollar_rule.l_cap",
+            status="HYPOTHESE" if defaulted else "FAIT",
         )
-        goal = self.levers.horizon_goal if self.levers else None
         if goal is not None:
             self.goal_facts[goal.goal_id] = horizon
         name = _goal_words(self.book, goal, [horizon]) if goal is not None else None
-        if name is not None:
+        if defaulted:
+            who = " pour votre objectif principal" if goal is not None else ""
+            text = f"Faute d'horizon connu, le calcul retient {self.v(horizon)}{who}, par prudence."
+        elif name is not None:
             text = f"{name[0].upper()}{name[1:]} fixe l'horizon de placement à {self.v(horizon)}."
         else:
             text = f"L'horizon de placement retenu est de {self.v(horizon)}."
@@ -769,6 +789,7 @@ class _ProtectionFacts:
             f"{_under(self.v(loss), self.v(self.floor))} {PLANNING_LOSS_FR} "
             f"({self.v(self.floor)}) : aucune allocation ne respecte cette limite.",
             fact_ids=[horizon, loss, self.floor],
+            label="HYPOTHESE" if defaulted else "FAIT",
         )
 
     def _withdrawals(self) -> Statement:

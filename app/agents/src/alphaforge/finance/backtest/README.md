@@ -1,9 +1,8 @@
 # `alphaforge.finance.backtest` : données longues (1926-2026) et moteur de backtest mensuel
 
 Ce sous-paquet est la couche de données longues et le moteur de backtest partagés d'AlphaForge AI.
-Le volet finance (`finance/portfolio` : optimiseur F2, analyses F3, Judge F4) l'importe directement, et les études
-par persona de [`app/agents/scripts/backtest/`](../../../../scripts/backtest/README.md) s'en servent pour comparer des
-stratégies d'allocation sur des fenêtres historiques adaptées à l'horizon de chaque profil.
+Le volet finance (`finance/portfolio` : optimiseur F2, analyses F3, Judge F4 ; `finance/debate`) l'importe directement.
+Il compare des stratégies d'allocation sur des fenêtres historiques adaptées à l'horizon de chaque profil.
 
 > **Simulation uniquement.** Rien ici n'est un conseil financier. Les backtests décrivent le passé
 > et ne prédisent rien. Les lignes `ORACLE` (`hindsight=True`) utilisent le futur : elles sont
@@ -12,10 +11,29 @@ stratégies d'allocation sur des fenêtres historiques adaptées à l'horizon de
 Principe : *le code calcule, le modèle explique, chaque chiffre cite sa source.* Chaque exécution
 écrit une trace JSON (paramètres, actifs, période, hash des données et du moteur, graine, résultats).
 
-Ancien emplacement : `research/backtest/` (PR #4). Correspondance : `engine/` → ce dossier,
-`data/build_data.py` → `build_data.py`, `data/processed/` et `data/SOURCES.md` → `alphaforge/data/long/`,
-`profiles/example.yaml` → `profiles/example.yaml`, `tests/` → `app/agents/tests/finance/backtest/`,
-`profiles/` (personas), `analysis/`, `results/` → `app/agents/scripts/backtest/`.
+## Études et rapports
+Les rapports par persona (Amira, Mateo, Robert, Julien, Tyler, Denise, croisement, décisions A et B) sont dans le
+Brain : [`sf-bit24/brain`, `references/backtest/`](https://github.com/sf-bit24/brain/tree/master/references/backtest).
+Les scripts d'étude, les profils YAML des personas et les synthèses qu'ils citent ne sont pas dans l'app : ils sont
+archivés au commit `597d00b` de ce dépôt (branche `feat/backtest-engine`, PR #4), sous
+`research/backtest/{profiles,analysis,results}` (`git show 597d00b:research/backtest/<chemin>`). Les seuils qu'ils
+contiennent sont des propositions de recherche, pas une configuration du produit.
+
+Les rapports citent les anciens chemins. Correspondance (`app/agents/…`) :
+
+| cité dans les rapports | emplacement actuel |
+|---|---|
+| `research/backtest/engine/<module>.py`, `engine.<module>` | `src/alphaforge/finance/backtest/<module>.py`, `alphaforge.finance.backtest.<module>` |
+| `research/backtest/data/build_data.py` | `src/alphaforge/finance/backtest/build_data.py` (`python -m alphaforge.finance.backtest.build_data`) |
+| `research/backtest/data/processed/…`, `data/SOURCES.md` | `src/alphaforge/data/long/…`, `src/alphaforge/data/long/SOURCES.md` |
+| `research/backtest/data/raw/…` | `src/alphaforge/data/long/raw/…` (non versionné) |
+| `research/backtest/profiles/example.yaml` | `src/alphaforge/finance/backtest/profiles/example.yaml` |
+| `research/backtest/tests/…` | `tests/finance/backtest/…` |
+| `research/backtest/{profiles,analysis,results}/…` (autres) | non migrés : `597d00b` ; un profil archivé se relance avec `--profile <fichier.yaml>` |
+| `.venv/bin/python -I -m engine.run …` | `uv run --group finance python -I -m alphaforge.finance.backtest.run …` |
+
+Une trace produite après la migration a le même `data_sha256` et un autre `engine_sha256` (les imports ont changé,
+pas les calculs : mêmes sorties sur le profil `example`).
 
 ## Installation (uv, Python 3.13)
 Depuis `app/agents/` :
@@ -33,12 +51,10 @@ Avec `-I` (mode isolé), Python n'ajoute ni le répertoire courant ni celui du s
 | données traitées | `alphaforge/data/long/` | `ALPHAFORGE_BT_DATA` |
 | bruts téléchargés (non fiables) | `<données>/raw/` | suit `ALPHAFORGE_BT_DATA` |
 | starter officiel | `alphaforge/data/starter/` (lu en place, jamais copié) | `ALPHAFORGE_STARTER_DIR` |
-| profils YAML (par id) | `profiles/` (ce dossier, `example.yaml`), puis, dans un checkout, `app/agents/scripts/backtest/profiles/` | `ALPHAFORGE_BT_PROFILES` (liste séparée par `os.pathsep`), `--profiles-dir`, `load_profile(..., profiles_dir=)` |
-| traces des exécutions | `app/agents/scripts/backtest/results/<id>/` dans un checkout, sinon `./backtest-results/<id>/` | `ALPHAFORGE_BT_RESULTS`, `--out`, `run_profile(..., out_dir=)` |
+| profils YAML (par id) | `profiles/` (ce dossier, `example.yaml`) | `ALPHAFORGE_BT_PROFILES` (liste séparée par `os.pathsep`), `--profiles-dir`, `load_profile(..., profiles_dir=)` |
+| traces des exécutions | `./backtest-results/<id>/` (relatif au répertoire courant, ignoré par git) | `ALPHAFORGE_BT_RESULTS`, `--out`, `run_profile(..., out_dir=)` |
 
-Un « checkout » est détecté quand `app/agents/pyproject.toml` et `app/agents/scripts/backtest/` sont à leur place
-(installation éditable par `uv sync`). Dans le zip AgentCore, ce n'est pas le cas : le moteur n'écrit jamais dans
-le paquet. Le code se trouve dans [`paths.py`](paths.py).
+Le moteur n'écrit jamais dans le paquet. Le code se trouve dans [`paths.py`](paths.py).
 
 ## Reconstruire les données
 ```bash
@@ -69,20 +85,20 @@ Sources, traitements, hypothèses, limites et conditions d'utilisation : **[alph
 |---|---|
 | ce dossier (moteur, `build_data.py`, `profiles/example.yaml`), `tests/finance/backtest/`, `data/long/SOURCES.md` | `data/long/raw/` (bruts téléchargés) |
 | `data/long/assets.csv`, `coverage.csv`, `qa_overlap.csv`, `data_version.json` (catalogue et métadonnées) | `data/long/*.parquet` : une partie dérive de Yahoo/yfinance (redistribution interdite) et de séries Moody's / OCDE (copyright) → `build_data` ci-dessus |
-| `scripts/backtest/` : profils des personas, études (`analysis/`), synthèses `results/*_analysis/` et `results/decisions/` | `scripts/backtest/results/<run>/` (traces brutes, ~650 Mo, reproductibles avec `run`) ; `scripts/backtest/analysis/*/data_ext/` (copies locales dérivées) |
+| — | `backtest-results/` (traces des exécutions, reproductibles avec `run`) |
 
 Les parquets n'entrent pas non plus dans le zip AgentCore (`scripts/package.sh` les retire s'ils sont présents
 localement). Sans les parquets, `pytest` saute les tests qui lisent les données (avec la raison) et exécute les autres ;
 sans le groupe `finance`, les tests du moteur sautent entièrement (`pytest.importorskip`).
-Les rapports (repo `brain`, `references/backtest/`) citent des traces `results/<run>/…` : pour les vérifier,
-reconstruire les données puis relancer la commande indiquée dans le rapport (les hash `data_sha256` / `engine_sha256`
-de la trace permettent la comparaison ; `engine_sha256` change avec la migration, puisque les imports ont changé).
+Les rapports du Brain citent des traces `results/<run>/…` : pour les vérifier, reconstruire les données puis relancer
+la commande indiquée dans le rapport avec le profil archivé (voir « Études et rapports » ; `data_sha256` permet la
+comparaison).
 
 ## Lancer un profil
 ```bash
 uv run --group finance python -I -m alphaforge.finance.backtest.run --profile example       # non chevauchant, horizon du profil
 uv run --group finance python -I -m alphaforge.finance.backtest.run --profile example --mode rolling --horizon 3 --step 12
-uv run --group finance python -I -m alphaforge.finance.backtest.run --profile amira_etf --start 1975-01 --no-oracle   # profil des études
+uv run --group finance python -I -m alphaforge.finance.backtest.run --profile example --start 1975-01 --no-oracle
 uv run --group finance python -I -m alphaforge.finance.backtest.run --profile path/to/profil.yaml --out /tmp/bt
 ```
 La commande affiche les résultats par fenêtre (stratégies ex-ante + ORACLE), un tableau score × fenêtre,
@@ -124,8 +140,7 @@ res["rows"], res["robust"], res["walk_forward"], res["trace_path"]
 
 ### Schéma de profil (`profiles/<id>.yaml`)
 Un exemple complet et commenté se trouve dans [`profiles/example.yaml`](profiles/example.yaml). C'est un profil
-générique : les profils des personas (Amira, Mateo, Robert, …) sont ceux des études, dans
-`app/agents/scripts/backtest/profiles/` (les seuils qu'ils contiennent sont des propositions de recherche). Les clés :
+générique ; les profils des personas des études sont archivés au commit `597d00b` (voir « Études et rapports »). Les clés :
 - `id`, `description`, `currency` (CAD|USD), `fx_fill` (none|flat), `horizon_years`, `mode`, `step_months`, `period.start/end`
 - `universe` (liste d'`asset_id`), `cash_asset` (actif refuge des filtres et taux sans risque du Sharpe)
 - `objective.type` ∈ `max_real_return | max_sharpe | max_return_over_cvar | min_shortfall`,

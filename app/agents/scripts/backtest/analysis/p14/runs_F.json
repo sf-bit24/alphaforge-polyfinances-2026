@@ -1,7 +1,0 @@
-{
- "p14_retraite_cad:rolling:16:1": "results/p14_retraite_cad/20261114T235543Z_rolling_h16.json",
- "p14_retraite_cad:non_overlapping:16:1": "results/p14_retraite_cad/20261114T235556Z_non_overlapping_h16.json",
- "p14_retraite_cad:rolling:20:0": "results/p14_retraite_cad/20261114T235609Z_rolling_h20.json",
- "p14_etudes_cad_volonte:rolling:10:0": "results/p14_etudes_cad_volonte/20261114T235626Z_rolling_h10.json",
- "p14_etudes_cad_volonte:non_overlapping:10:1": "results/p14_etudes_cad_volonte/20261114T235656Z_non_overlapping_h10.json"
-}

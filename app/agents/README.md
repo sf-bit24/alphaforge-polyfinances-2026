@@ -22,7 +22,6 @@ app/agents/
   main.py                        point d'entrée : python main.py (BedrockAgentCoreApp, aiguillage sur AGENT_ROLE)
   pyproject.toml, uv.lock        projet uv, Python 3.13
   scripts/package.sh             zip de déploiement direct AgentCore (linux/arm64)
-  scripts/backtest/              études par persona sur le moteur de backtest (profils, analyses, synthèses)
   src/alphaforge/
     config.py                    variables d'environnement (CONTRACTS.md §1)
     server.py                    application, /invocations (JSON ou SSE), /ping
@@ -176,7 +175,6 @@ Construction et contrôle du portefeuille à partir d'un `PolicySpec` (sortie de
 | `finance/rules/canada_2026.yaml` | Paramètres canadiens 2026, chacun avec sa source officielle et son statut. |
 | `finance/backtest/` | Moteur de backtest mensuel 1926-2026 (fenêtres, stratégies ex-ante, ORACLE, sélection robuste, walk-forward, traces) ; données longues dans `data/long/`. Voir ci-dessous. |
 | `scripts/finance/` | `demo_trace.py` (démo de bout en bout sous une trace), `feasibility_levels.py` (faisabilité de la table de risque de F1), `bedrock_smoke.py`. |
-| `scripts/backtest/` | Études par persona sur le moteur (profils YAML, analyses, synthèses versionnées). |
 | `tests/finance/` | Tests F2-F4 sur un mandat générique ; `fixtures/llm_records/` contient les réponses LLM rejouées. |
 
 ```sh
@@ -206,8 +204,8 @@ et écrit une trace JSON par exécution (hash des données et du moteur, graine,
 seulement. Il dépend du groupe `finance` (numpy, pandas, scipy, pyarrow), pas des dépendances de base. Les parquets de
 `src/alphaforge/data/long/` ne sont pas versionnés (licences yfinance, Moody's, OCDE) : on les reconstruit avec le
 groupe `backtest-data`. Détails : [`src/alphaforge/finance/backtest/README.md`](src/alphaforge/finance/backtest/README.md),
-sources : [`src/alphaforge/data/long/SOURCES.md`](src/alphaforge/data/long/SOURCES.md), études :
-[`scripts/backtest/README.md`](scripts/backtest/README.md).
+sources : [`src/alphaforge/data/long/SOURCES.md`](src/alphaforge/data/long/SOURCES.md). Les études par persona et leurs
+rapports ne sont pas dans l'app (Brain `references/backtest/`, scripts archivés au commit `597d00b`).
 
 ```sh
 uv run --group finance --group backtest-data python -I -m alphaforge.finance.backtest.build_data  # parquets dans data/long/
@@ -222,5 +220,5 @@ lisent les données sautent aussi, avec la commande de reconstruction en raison.
 | --- | --- | --- |
 | `ALPHAFORGE_BT_DATA` | `src/alphaforge/data/long` | Données traitées du moteur (et `raw/` des téléchargements). |
 | `ALPHAFORGE_STARTER_DIR` | `src/alphaforge/data/starter` | Jeu de départ lu par `build_data`. |
-| `ALPHAFORGE_BT_PROFILES` | `finance/backtest/profiles`, puis `scripts/backtest/profiles` | Dossiers des profils YAML (séparés par `os.pathsep`). |
-| `ALPHAFORGE_BT_RESULTS` | `scripts/backtest/results` (checkout), sinon `./backtest-results` | Traces des exécutions. |
+| `ALPHAFORGE_BT_PROFILES` | `finance/backtest/profiles` | Dossiers des profils YAML (séparés par `os.pathsep`). |
+| `ALPHAFORGE_BT_RESULTS` | `./backtest-results` (répertoire courant, ignoré par git) | Traces des exécutions. |

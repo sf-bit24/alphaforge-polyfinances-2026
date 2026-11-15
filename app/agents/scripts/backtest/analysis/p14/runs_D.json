@@ -1,6 +1,0 @@
-{
- "p14_retraite_usd_libre:rolling:16:0": "results/p14_retraite_usd_libre/20261114T235313Z_rolling_h16.json",
- "p14_retraite_usd_libre:non_overlapping:16:1": "results/p14_retraite_usd_libre/20261114T235357Z_non_overlapping_h16.json",
- "p14_retraite_cad_libre:rolling:16:0": "results/p14_retraite_cad_libre/20261114T235420Z_rolling_h16.json",
- "p14_retraite_cad_libre:non_overlapping:16:1": "results/p14_retraite_cad_libre/20261114T235437Z_non_overlapping_h16.json"
-}

@@ -92,3 +92,11 @@ def test_seed_knowledge_documents_are_valid_public_okf():
             assert doc.type == "Methodology"
             titles = " ".join(source["title"] for source in doc.frontmatter["sources"])
             assert "BNCD" in titles or "énoncé" in titles.lower() or "jeu de départ" in titles.lower(), path
+        if "societes" in path.parts:
+            assert doc.type == "Company Fundamentals", path
+            data = doc.data
+            assert data["ticker"].endswith(".TO") and data["reporting_currency"] and data["unit"] == "millions", path
+            source_ids = {source["id"] for source in doc.frontmatter["sources"]}
+            for entry in [*data["periods"], *data["balance_sheets"]]:
+                assert entry["observed_at"] <= entry["published_at"], path
+                assert entry["source"] in source_ids, path

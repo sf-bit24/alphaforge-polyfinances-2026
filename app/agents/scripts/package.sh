@@ -7,8 +7,8 @@
 #   <out_dir>/agents.zip   main.py et le paquet alphaforge (données de départ et YAML compris, sans les parquets
 #                          ni raw/ de alphaforge/data/long) à la racine,
 #                          à côté des dépendances verrouillées (uv.lock), installées en roues aarch64-manylinux2014.
-#   <out_dir>/agents-portfolio.zip   seulement si ALPHAFORGE_PACKAGE_PORTFOLIO=1 (désactivé par défaut, donc jamais
-#                          dans un déploiement où portfolio_enabled = false) : le même code que agents.zip, avec en
+#   <out_dir>/agents-portfolio.zip   sauf si ALPHAFORGE_PACKAGE_PORTFOLIO=0 (construit par défaut : le sandbox
+#                          active portfolio_enabled; sans lui, Terraform ignore ce zip) : le même code que agents.zip, avec en
 #                          plus le groupe uv finance, en roues aarch64-manylinux_2_28 (section 4 bis). Terraform
 #                          l'envoie sous runtime/agents-portfolio-<release>.zip pour le seul runtime portfolio.
 #   <out_dir>/knowledge/   les fichiers **/*.md de app/knowledge/general/ et leurs éventuels fichiers compagnons
@@ -54,8 +54,8 @@ case "$package_scenarios" in
         ;;
 esac
 
-# Zip du runtime portfolio (section 4 bis) : 0 (défaut) ou 1, vérifié avant tout travail.
-package_portfolio=${ALPHAFORGE_PACKAGE_PORTFOLIO:-0}
+# Zip du runtime portfolio (section 4 bis) : 1 (défaut, portfolio_enabled = true en sandbox) ou 0, vérifié avant tout travail.
+package_portfolio=${ALPHAFORGE_PACKAGE_PORTFOLIO:-1}
 case "$package_portfolio" in
     0 | 1) ;;
     *)
@@ -182,9 +182,9 @@ agents_zip_bytes=$zip_bytes
 agents_unzipped_bytes=$unzipped_bytes
 agents_file_count=$file_count
 
-# 4 bis. Zip du runtime portfolio (facultatif, ALPHAFORGE_PACKAGE_PORTFOLIO=1) : le même code, plus le groupe uv
-#    finance (numpy, pandas, scipy, pyarrow, cvxpy, clarabel, OpenTelemetry). Désactivé par défaut : la CI et le
-#    déploiement (portfolio_enabled = false) ne changent pas, et un zip d'une construction précédente est retiré.
+# 4 bis. Zip du runtime portfolio (par défaut; ALPHAFORGE_PACKAGE_PORTFOLIO=0 pour s'en passer) : le même code, plus
+#    le groupe uv finance (numpy, pandas, scipy, pyarrow, cvxpy, clarabel, OpenTelemetry). Construit par défaut car
+#    app.yml ne pose pas la variable et le sandbox active portfolio_enabled; un zip précédent est toujours retiré.
 #    Plateforme : aarch64-manylinux_2_28, et non manylinux2014 comme agents.zip, car cvxpy 1.9.3 (uv.lock) n'a de
 #    roue linux/arm64 qu'en manylinux_2_24/2_28 (PyPI, lu le 2026-11-14). Cela suppose un glibc >= 2.28 dans
 #    AgentCore Runtime (Amazon Linux 2023 : 2.34; les .so du zip demandent au plus GLIBC_2.28), à vérifier par un

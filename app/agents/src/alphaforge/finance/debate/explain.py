@@ -298,6 +298,8 @@ def grounding_check(
     """Filet final : ancrage contextuel Bedrock Guardrails (si un guardrail est configuré)."""
     if not guardrail_id:
         return None
+    if not guardrail_version or str(guardrail_version).upper() == "DRAFT":
+        raise ValueError("guardrail : version numérotée requise (jamais DRAFT)")
     import boto3
 
     src = json.dumps(
@@ -307,7 +309,7 @@ def grounding_check(
     text = " ".join(s.text_fr for sec in (expl.data_used, expl.why, expl.limits, expl.what_would_change) for s in sec)
     r = boto3.client("bedrock-runtime", region_name=region).apply_guardrail(
         guardrailIdentifier=guardrail_id,
-        guardrailVersion=guardrail_version or "DRAFT",
+        guardrailVersion=guardrail_version,
         source="OUTPUT",
         content=[
             {"text": {"text": src, "qualifiers": ["grounding_source"]}},

@@ -21,6 +21,11 @@ kms_admin_principal_arns = ["arn:aws:iam::024848478575:role/WSParticipantRole"]
 collecte_schedule_expression = "rate(6 hours)"
 collecte_schedule_enabled    = true
 
+# Runtime portfolio (A3, lentilles, Judge du volet finance) : zip
+# agents-portfolio.zip construit par defaut par package.sh, donnees longues lues
+# sous runtime/data/long/ (scripts/finance/upload_long_data.py).
+portfolio_enabled = true
+
 additional_tags = {
   Owner = "larpathon"
   Event = "datathon-polyfinances-2026"

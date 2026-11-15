@@ -6,7 +6,7 @@ from typing import Any
 
 from ..trace import Trace
 from . import rules
-from .questionnaire import Questionnaire, band_brief, fact_band, format_fact, labeled
+from .questionnaire import Questionnaire, band_brief, fact_band, fact_label, format_fact, labeled
 from .state import ClientSession
 
 VIEW_DIMENSIONS = (
@@ -60,20 +60,24 @@ def _dimension_status(questionnaire: Questionnaire, dimension: str, values: dict
     return "missing"
 
 
-def _fact_view(field_id: str, fact: dict[str, Any], locale: str) -> dict[str, Any]:
-    """Un fait de ``ProfileView`` : ``band`` (facultatif) est la tranche choisie, avec son libellé dans la langue de
-    la vue; ``value`` n'est alors que le chiffre du calcul, que lit le volet finance."""
+def _fact_view(questionnaire: Questionnaire, field_id: str, fact: dict[str, Any], locale: str) -> dict[str, Any]:
+    """Un fait de ``ProfileView``. Champs facultatifs, dans la langue de la vue : ``label``, la valeur telle que
+    l'investisseur la lit (« Plutôt stables », « CELI, REER », « Oui »), et ``band``, la tranche choisie pour une
+    réponse numérique. ``value`` reste le code ou le nombre que lit le volet finance."""
     view = {"field": field_id, "value": fact.get("value"), "provenance": fact.get("provenance"), "at": fact.get("at")}
+    spec = questionnaire.fields.get(field_id)
+    if spec is not None:
+        view["label"] = fact_label(spec, fact, locale)
     band = fact_band(fact)
     if band is not None:
         view["band"] = band_brief(band, locale)
     return view
 
 
-def _confirmed_facts_by_date(session: ClientSession, locale: str) -> list[dict[str, Any]]:
+def _confirmed_facts_by_date(questionnaire: Questionnaire, session: ClientSession, locale: str) -> list[dict[str, Any]]:
     # Une valeur à confirmer n'est pas encore un fait du profil (la valeur confirmée qu'elle remplace l'est).
     confirmed = sorted(session.confirmed_facts().items(), key=lambda item: (item[1].get("at") or "", item[0]))
-    return [_fact_view(field_id, fact, locale) for field_id, fact in confirmed]
+    return [_fact_view(questionnaire, field_id, fact, locale) for field_id, fact in confirmed]
 
 
 def profile_view(
@@ -95,7 +99,7 @@ def profile_view(
             "summary": dimension_summary(questionnaire, dimension, confirmed, risk, locale),
             "fields": fields,
         }
-    facts = _confirmed_facts_by_date(session, locale)
+    facts = _confirmed_facts_by_date(questionnaire, session, locale)
     return {
         "knowledge_level": rules.knowledge_level(questionnaire, values),
         "effective_risk": risk["effective"],

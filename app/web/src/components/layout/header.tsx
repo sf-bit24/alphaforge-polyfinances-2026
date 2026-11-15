@@ -15,7 +15,6 @@ export function Header() {
     { href: "/", label: t.nav.home },
     { href: "/profile", label: t.nav.profile },
     { href: "/knowledge", label: t.nav.knowledge },
-    { href: "/tldoole", label: t.nav.tldoole },
     { href: "/settings", label: t.nav.settings },
   ];
   return (

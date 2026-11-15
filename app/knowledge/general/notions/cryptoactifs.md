@@ -22,7 +22,6 @@ sources:
     title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, sections satellites.crypto, knowledge, status et loss_bounds"
 data:
-  catalog_id: cryptoactifs
   aliases: [cryptoactif, crypto, bitcoin, btc, ether, eth, jeton, blockchain]
   related: [volatilite, baisse-maximale, concentration, var-cvar, fnb]
 ---
@@ -67,7 +66,6 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 - **Borne de perte** : Bitcoin et Ether n'ont pas d'historique long; ils sont exclus de la série raccordée et le code
   ajoute une perte supposée de 90 % de leur poids à la CVaR sur 12 mois et à la baisse maximale vérifiées par le Judge
   (`loss_bounds`). C'est une hypothèse prudente, affichée comme telle.
-- Une vidéo tldoole peut être proposée quand un débutant dit s'intéresser aux cryptoactifs.
 
 ## Limites
 

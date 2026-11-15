@@ -19,7 +19,6 @@ sources:
     title: "Constats calculés sur un portefeuille existant"
     resource: "app/agents/src/alphaforge/profile/portfolio.py (THRESHOLDS, seuils à relire par le volet finance)"
 data:
-  catalog_id: concentration
   aliases: [concentration, concentré, une seule action, un seul titre, tous mes oeufs]
   related: [diversification, expositions-consolidees, biais-domestique, types-de-risque, baisse-maximale]
 ---

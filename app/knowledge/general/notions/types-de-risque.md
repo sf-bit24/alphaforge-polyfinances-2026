@@ -16,7 +16,6 @@ sources:
     title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), sections measurement, composition et limits_template"
 data:
-  catalog_id: types_risque
   aliases: [risque, risque de marché, risque de crédit, risque de liquidité, risque de taux, risque de défaut]
   related: [volatilite, concentration, risque-de-change, obligations-et-taux, inflation, tolerance-et-capacite]
 ---

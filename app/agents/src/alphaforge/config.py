@@ -10,9 +10,8 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-# "tldoole" : rôle réservé à la fonctionnalité vidéo (branche tldoole), branché dans server.build_service.
 # "router", "expert", "researcher" : recherche par experts de sujet (alphaforge.research, CONTRACTS.md section 11).
-ROLES = ("profile", "press", "data", "supervisor", "tldoole", "router", "expert", "researcher")
+ROLES = ("profile", "press", "data", "supervisor", "router", "expert", "researcher")
 DEFAULT_MODEL_ID = "us.anthropic.claude-opus-5-5"
 DEFAULT_REGION = "us-east-1"
 

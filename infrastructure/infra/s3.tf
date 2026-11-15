@@ -21,7 +21,6 @@ locals {
   s3_kms_user_role_arns = concat(
     [for role in aws_iam_role.agentcore : role.arn],
     [aws_iam_role.knowledge_base.arn, aws_iam_role.collecte.arn],
-    local.tldoole_kms_user_role_arns,
     # Scenarios (scenarios.tf) : job SageMaker et machine Step Functions.
     aws_iam_role.scenarios_job[*].arn,
     aws_iam_role.scenarios[*].arn,

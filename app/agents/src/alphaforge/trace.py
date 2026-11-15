@@ -14,7 +14,6 @@ from typing import Any
 from . import clock
 
 KINDS = ("deterministic", "agent", "model", "tool", "storage", "guardrail")
-# A7 (détecteur de lacunes), A8 (scénariste vidéo), polly et mediaconvert : fonctionnalité vidéo tldoole.
 ACTORS = (
     "questionnaire",
     "completeness",
@@ -23,8 +22,6 @@ ACTORS = (
     "A4",
     "A5",
     "A6",
-    "A7",
-    "A8",
     # Recherche par experts : A0 (routeur et rédacteur), E1 à E7 (experts de sujet), researcher (sous-agents).
     "A0",
     "E1",
@@ -37,8 +34,6 @@ ACTORS = (
     "researcher",
     "store",
     "guardrail",
-    "polly",
-    "mediaconvert",
 )
 
 _MAX_STRING = 300

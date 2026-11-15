@@ -50,7 +50,7 @@ app/agents/
       staging.py, service.py     éléments collectés, tâche asynchrone et marqueur _done.json
   tests/                         pytest, sans réseau ni AWS (modèle scripté pour la vraie boucle Strands)
 app/knowledge/general/methodologie/   documents de méthodologie versionnés (poussés sous general/ par Terraform)
-app/knowledge/general/notions/        notions financières (Financial Concept), reliées au catalogue de tldoole
+app/knowledge/general/notions/        notions financières (Financial Concept)
 app/knowledge/general/societes/       chiffres publiés d'ATD et de CSU, relevés à la main (poussés de même)
 ```
 
@@ -145,7 +145,7 @@ Le runtime démarre avec `python main.py` (point d'entrée `["main.py"]`, sans `
 
 | Variable | Défaut | Rôle |
 | --- | --- | --- |
-| `AGENT_ROLE` | `profile` | `profile`, `press`, `data`, `supervisor`, `tldoole`, `router`, `expert` ou `researcher`. |
+| `AGENT_ROLE` | `profile` | `profile`, `press`, `data`, `supervisor`, `router`, `expert` ou `researcher`. |
 | `ALPHAFORGE_ENV` | `local` | Environnement, renvoyé par `health`. |
 | `ALPHAFORGE_RELEASE` | `dev` | SHA court du commit, renvoyé dans chaque réponse. |
 | `ALPHAFORGE_REGION` | `AWS_REGION`, sinon `us-east-1` | Région des appels AWS. |

@@ -27,9 +27,6 @@ DOC_TYPES = (
     "Market Signal",
     "Regulatory Filing",
     "Research Brief",
-    # Fonctionnalité vidéo tldoole.
-    "Concept Gaps",
-    "Learning Video",
 )
 REQUIRED_KEYS = ("type", "title", "description", "tags", "status", "owners", "sensitivity", "generated", "sources")
 KEY_ORDER = (*REQUIRED_KEYS[:8], "stale_after", "sources", "data")

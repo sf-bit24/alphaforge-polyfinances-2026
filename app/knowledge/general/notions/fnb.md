@@ -19,7 +19,6 @@ sources:
     title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, composition (etf_equity_each_max, etf_bond_each_max, forbidden_all)"
 data:
-  catalog_id: fnb
   aliases: [fnb, fonds négocié en bourse, fonds indiciel, etf, exchange-traded fund, fonds coté]
   related: [diversification, frais, expositions-consolidees, obligations-et-taux, concentration]
 ---

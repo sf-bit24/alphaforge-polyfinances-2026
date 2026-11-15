@@ -19,7 +19,6 @@ sources:
     title: "Jeu de départ AlphaForge AI : taux de change USD/CAD quotidien"
     resource: "starter:fx_usdcad_daily.csv (Banque du Canada, série FXUSDCAD)"
 data:
-  catalog_id: devise
   aliases: [risque de change, devise, taux de change, dollar américain, USD, couverture, couvert en CAD]
   related: [biais-domestique, fnb, rendement-total, volatilite, types-de-risque]
 ---
@@ -62,8 +61,6 @@ Le code fait toutes les conversions; le modèle ne les estime jamais.
   (Banque du Canada), avec sa source et sa date; le code en tire l'exposition par devise.
 - **Signal** : si l'investisseur préfère rester en CAD et que plus de 20 % de son portefeuille existant est en USD, le
   code relève la tension pour l'expliquer.
-- **Faits sur le taux** (vidéos tldoole) : premier et dernier taux, plus bas, plus haut et variation du dollar
-  américain face au dollar canadien sur la période du jeu de départ.
 
 ## Limites
 

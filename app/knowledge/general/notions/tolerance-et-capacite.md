@@ -19,7 +19,6 @@ sources:
     title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, sections capacity, tolerance, R, biases et status"
 data:
-  catalog_id: tolerance_capacite
   aliases: [tolérance au risque, capacité de risque, profil de risque, tolérance, capacité]
   related: [horizon, fonds-urgence, baisse-maximale, volatilite]
 ---
@@ -56,7 +55,6 @@ conséquences (atelier BNCD, diapositive 8). Les barèmes du questionnaire sont 
   un coussin très faible ou une dette coûteuse, tolérance resserrée par les biais détectés (par exemple l'aversion aux
   pertes ajoute une limite de CDaR). Les biais ne peuvent que resserrer, jamais relâcher.
 - Un profil incomplet est plafonné au niveau N2; un profil en protection reçoit N0 et un renvoi vers un humain.
-- Un écart entre l'attitude déclarée et la réaction à une baisse peut déclencher une vidéo tldoole.
 
 ## Limites
 

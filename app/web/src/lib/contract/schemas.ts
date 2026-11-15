@@ -111,11 +111,6 @@ export const KNOWN_ACTORS = [
   "A6",
   "store",
   "guardrail",
-  // Reserved for the tldoole video feature; any other actor is rendered with the same neutral style.
-  "A7",
-  "A8",
-  "polly",
-  "mediaconvert",
 ] as const;
 
 export const ERROR_CODES = [

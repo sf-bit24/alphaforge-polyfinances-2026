@@ -16,7 +16,6 @@ sources:
     title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, sections 6 (composition) et 8 (limits_template)"
 data:
-  catalog_id: diversification
   aliases: [diversification, diversifier, correlation, corrélation, tous mes oeufs dans le même panier]
   related: [concentration, expositions-consolidees, biais-domestique, fnb, volatilite, reequilibrage]
 ---

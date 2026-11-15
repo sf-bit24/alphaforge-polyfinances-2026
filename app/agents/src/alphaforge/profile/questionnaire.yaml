@@ -11,7 +11,7 @@
 # ce qu'un portefeuille ne dit pas, diapositive 14) et énoncé officiel (cadre responsable, p. 14 et 17).
 # Les fiches des personas ne fournissent aucun chiffre ni barème à ce fichier.
 
-version: "2026-11-15.1"
+version: "2026-11-15.2"
 review: "À relire par le volet finance de l'équipe larpathon : textes, options, poids et barèmes."
 
 completeness:
@@ -355,6 +355,7 @@ fields:
     min: 0
     max: 100
     weight: 2
+    summary: true   # le résumé cite la tranche choisie (« de 10 % à moins de 25 % »), pas la borne haute retenue
     when: {field: constraints.liquidity_need, in: [some, large]}
     writable_by: [base, a1]
     label: {fr: "Part à retirer sous 12 mois", en: "Share to withdraw within 12 months"}
@@ -688,7 +689,9 @@ questions:
   # Les questions à choix sur un champ numérique (number, money, percent) portent, pour chaque option, un
   # identifiant de tranche (value) et, sous number, la valeur écrite dans le champ : la plus prudente de la tranche
   # (borne basse pour une réserve ou un montant, borne haute pour un besoin de liquidité). min et max documentent
-  # les bornes de la tranche (max nul : sans borne haute).
+  # les bornes de la tranche (max nul : sans borne haute). Le fait garde aussi la tranche choisie (band :
+  # identifiant, bornes et libellé) : le résumé, profil.md, les notes et A1 citent la tranche, jamais la borne
+  # seule comme si l'investisseur l'avait donnée (« moins de 1 mois », pas « 0 mois »).
   - id: q_emergency_fund
     field: risk_capacity.emergency_fund
     kind: single_choice

@@ -26,7 +26,7 @@ def q() -> Questionnaire:
 def test_yaml_is_versioned_and_marked_for_review(q):
     text = open("src/alphaforge/profile/questionnaire.yaml", encoding="utf-8").read()
     assert text.startswith("# À RELIRE PAR LE VOLET FINANCE DE L'ÉQUIPE LARPATHON")
-    assert q.version == "2026-11-15.1"
+    assert q.version == "2026-11-15.2"
     assert q.threshold == 0.70 and q.cap == 0.95
 
 

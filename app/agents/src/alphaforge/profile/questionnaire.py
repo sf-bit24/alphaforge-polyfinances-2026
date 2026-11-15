@@ -10,6 +10,9 @@ Types de champ et genre de question correspondant (CONTRACTS.md 3.3) :
 Exception : un champ ``number``, ``money`` ou ``percent`` peut être demandé par une question ``single_choice``
 à tranches. Chaque option porte un identifiant de tranche (``value``, une chaîne) et la valeur numérique écrite
 dans le champ (``number``); le code convertit l'une en l'autre avant d'écrire le fait (``numeric_choices``).
+Le fait garde aussi la tranche choisie (``band`` : identifiant, bornes et libellé dans les deux langues) : la
+valeur écrite n'est que le chiffre prudent du calcul, et tout ce qui montre le fait cite la tranche
+(``format_fact``).
 """
 
 from __future__ import annotations
@@ -58,6 +61,8 @@ DEFAULT_CAP = 0.95
 DEFAULT_MAX_GENERATED = 8
 DEFAULT_MAX_OPEN_QUESTIONS = 2
 OPTION_VALUE = re.compile(r"^[a-z0-9_]{1,40}$")
+# Langues des libellés : une tranche gardée avec un fait porte son libellé dans chacune.
+LOCALES = ("fr", "en")
 _NUMERIC_COMPARISONS = (("gte", operator.ge), ("gt", operator.gt), ("lte", operator.le), ("lt", operator.lt))
 
 YAML_PATH = Path(__file__).with_name("questionnaire.yaml")
@@ -177,6 +182,19 @@ class QuestionSpec:
         for item in self.options:
             if item["value"] == option:
                 return item["number"]
+        raise KeyError(option)
+
+    def option_band(self, option: str) -> dict[str, Any]:
+        """Tranche d'une option, gardée avec le fait : identifiant, bornes (nulles quand l'option n'en a pas,
+        comme « Je ne sais pas ») et libellé dans les deux langues."""
+        for item in self.options:
+            if item["value"] == option:
+                return {
+                    "option": option,
+                    "min": _plain_number(item.get("min")),
+                    "max": _plain_number(item.get("max")),
+                    "label": {locale: localized(item["label"], locale) or option for locale in LOCALES},
+                }
         raise KeyError(option)
 
 
@@ -474,23 +492,29 @@ def _relative_cuts(spec: FieldSpec, config: dict[str, Any], values: dict[str, An
     return [_Cut(share, amount) for share, amount in zip(shares, amounts, strict=True)]
 
 
-def _tranche_below(cut: _Cut, locale: str) -> dict[str, Any]:
+def _of_base(base: str | None, locale: str) -> str:
+    """Complément d'une part : « de 10 000 $ » quand le montant de référence est le chiffre prudent d'une tranche
+    (il n'est pas le montant de l'investisseur), rien sinon."""
+    if base is None:
+        return ""
+    return f" of {base}" if locale == "en" else f" de {base}"
+
+
+def _tranche_below(cut: _Cut, locale: str, base: str | None = None) -> dict[str, Any]:
     amount, percent = format_money(cut.amount, locale), _share_text(cut.share, locale)
-    label = (
-        f"Less than {amount} ({percent}% of the amount)"
-        if locale == "en"
-        else f"Moins de {amount} ({percent} % du montant)"
-    )
+    of = _of_base(base, locale) or (" of the amount" if locale == "en" else " du montant")
+    label = f"Less than {amount} ({percent}%{of})" if locale == "en" else f"Moins de {amount} ({percent} %{of})"
     return {"value": f"lt{_share_id(cut.share)}pct", "label": label, "number": 0, "min": 0, "max": cut.amount}
 
 
-def _tranche_between(lower: _Cut, upper: _Cut, locale: str) -> dict[str, Any]:
+def _tranche_between(lower: _Cut, upper: _Cut, locale: str, base: str | None = None) -> dict[str, Any]:
     low, high = format_money(lower.amount, locale), format_money(upper.amount, locale)
     low_percent, high_percent = _share_text(lower.share, locale), _share_text(upper.share, locale)
+    of = _of_base(base, locale)
     label = (
-        f"{low} to less than {high} ({low_percent} to {high_percent}%)"
+        f"{low} to less than {high} ({low_percent} to {high_percent}%{of})"
         if locale == "en"
-        else f"De {low} à moins de {high} ({low_percent} à {high_percent} %)"
+        else f"De {low} à moins de {high} ({low_percent} à {high_percent} %{of})"
     )
     return {
         "value": f"{_share_id(lower.share)}to{_share_id(upper.share)}pct",
@@ -501,9 +525,13 @@ def _tranche_between(lower: _Cut, upper: _Cut, locale: str) -> dict[str, Any]:
     }
 
 
-def _tranche_from(cut: _Cut, locale: str) -> dict[str, Any]:
+def _tranche_from(cut: _Cut, locale: str, base: str | None = None) -> dict[str, Any]:
     amount, percent = format_money(cut.amount, locale), _share_text(cut.share, locale)
-    label = f"{amount} or more ({percent}% or more)" if locale == "en" else f"{amount} ou plus ({percent} % ou plus)"
+    of = _of_base(base, locale)
+    if locale == "en":
+        label = f"{amount} or more ({percent}% or more{of})"
+    else:
+        label = f"{amount} ou plus ({percent} % ou plus{of})"
     return {
         "value": f"{_share_id(cut.share)}pct_plus",
         "label": label,
@@ -514,16 +542,22 @@ def _tranche_from(cut: _Cut, locale: str) -> dict[str, Any]:
 
 
 def _relative_tranches(
-    spec: FieldSpec, config: dict[str, Any], values: dict[str, Any], locale: str
+    spec: FieldSpec, config: dict[str, Any], values: dict[str, Any], locale: str, bands: dict[str, Any]
 ) -> list[dict[str, Any]] | None:
-    """Tranches en dollars, parts du montant de référence; ``None`` si ce montant est inconnu ou trop petit."""
+    """Tranches en dollars, parts du montant de référence; ``None`` si ce montant est inconnu ou trop petit.
+
+    Quand ce montant a été répondu par une tranche (``bands``), il n'est que le chiffre prudent du calcul : les
+    libellés disent « 2,5 % de 10 000 $ », pas « 2,5 % du montant », qui serait faux pour 45 000 $.
+    """
     cuts = _relative_cuts(spec, config, values)
     if cuts is None:
         return None
+    reference = config["relative_to"]
+    base = format_money(values[reference], locale) if band_is_range(bands.get(reference)) else None
     return [
-        _tranche_below(cuts[0], locale),
-        *(_tranche_between(lower, upper, locale) for lower, upper in zip(cuts, cuts[1:], strict=False)),
-        _tranche_from(cuts[-1], locale),
+        _tranche_below(cuts[0], locale, base),
+        *(_tranche_between(lower, upper, locale, base) for lower, upper in zip(cuts, cuts[1:], strict=False)),
+        _tranche_from(cuts[-1], locale, base),
     ]
 
 
@@ -544,7 +578,12 @@ def _within_band(
 
 
 def numeric_choices(
-    questionnaire: Questionnaire, field_id: str, values: dict[str, Any], locale: str
+    questionnaire: Questionnaire,
+    field_id: str,
+    values: dict[str, Any],
+    locale: str,
+    *,
+    bands: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Tranches d'un champ ``number``, ``money`` ou ``percent`` : ``value`` (identifiant), ``label``, ``number``
     (la valeur écrite dans le champ, la plus prudente de la tranche), ``min`` et ``max`` (bornes, ``max`` nul
@@ -552,14 +591,15 @@ def numeric_choices(
 
     Sources, dans l'ordre : ``choices`` du champ dans le YAML (parts d'un montant de référence, sinon tranches
     absolues, filtrées par la bande ``within`` déjà connue), puis les options de la question de base du champ.
-    Liste vide pour un champ qui n'est pas numérique ou qui n'a aucune tranche.
+    Liste vide pour un champ qui n'est pas numérique ou qui n'a aucune tranche. ``bands`` : tranches des faits
+    confirmés, par champ (``ClientSession.bands``); elles ne changent que les libellés, jamais les nombres.
     """
     spec = questionnaire.fields.get(field_id)
     if spec is None or spec.type not in CHOICE_NUMBER_TYPES:
         return []
     config = spec.choices
     if config:
-        tranches = _relative_tranches(spec, config, values, locale) if config.get("relative_to") else None
+        tranches = _relative_tranches(spec, config, values, locale, bands or {}) if config.get("relative_to") else None
         if tranches is None:
             tranches = [_tranche(item, locale) for item in config.get("tranches") or []]
         within = config.get("within")
@@ -568,6 +608,99 @@ def numeric_choices(
     if question is not None and question.numeric_choice:
         return [_tranche(item, locale) for item in question.options]
     return []
+
+
+def tranche_bands(
+    questionnaire: Questionnaire,
+    field_id: str,
+    values: dict[str, Any],
+    *,
+    bands: dict[str, Any] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Tranche de chaque option de ``numeric_choices``, à garder avec le fait si elle est choisie : identifiant,
+    bornes et libellé dans les deux langues (le libellé d'une part dépend du montant connu à ce moment)."""
+    by_locale = {locale: numeric_choices(questionnaire, field_id, values, locale, bands=bands) for locale in LOCALES}
+    labels = {locale: {tranche["value"]: tranche["label"] for tranche in by_locale[locale]} for locale in LOCALES}
+    return {
+        tranche["value"]: {
+            "option": tranche["value"],
+            "min": tranche["min"],
+            "max": tranche["max"],
+            "label": {locale: labels[locale].get(tranche["value"], tranche["value"]) for locale in LOCALES},
+        }
+        for tranche in by_locale[LOCALES[0]]
+    }
+
+
+# ---------------------------------------------------------------------- tranche d'un fait
+def band_is_range(band: Any) -> bool:
+    """Vrai pour une tranche qui ne donne pas un nombre exact : deux bornes différentes, une seule borne ou
+    aucune (« Je ne sais pas »). « Aucun fonds d'urgence » (0 à 0) est exact."""
+    if not isinstance(band, dict):
+        return False
+    low, high = band.get("min"), band.get("max")
+    return low is None or low != high
+
+
+def fact_band(fact: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Tranche gardée avec un fait, si elle s'accorde avec sa valeur (un fait réécrit sans tranche la perd)."""
+    fact = fact or {}
+    band = fact.get("band")
+    if not isinstance(band, dict) or not isinstance(band.get("label"), dict):
+        return None
+    value, low, high = fact.get("value"), band.get("min"), band.get("max")
+    if not _is_number(value) or (low is not None and value < low) or (high is not None and value > high):
+        return None
+    return band
+
+
+def band_brief(band: dict[str, Any], locale: str) -> dict[str, Any]:
+    """Ce qu'un agent lit de la tranche d'un fait : identifiant, libellé dans la langue de la session, bornes."""
+    return {
+        "option": band.get("option"),
+        "label": localized(band.get("label"), locale),
+        "min": band.get("min"),
+        "max": band.get("max"),
+    }
+
+
+def _lower_first(text: str) -> str:
+    """« Moins de 1 mois » → « moins de 1 mois », pour suivre un libellé; « I don't know » et un sigle gardent
+    leur majuscule."""
+    word = text.split(" ", 1)[0]
+    if len(word) > 1 and word[1:].islower():
+        return text[:1].lower() + text[1:]
+    return text
+
+
+def _retained_note(spec: FieldSpec, band: dict[str, Any], value: float, locale: str) -> str | None:
+    """Le nombre que le code retient, quand la tranche ne le dit pas déjà : rien pour 0 (« moins de 1 mois »
+    n'est pas « 0 mois »), pour « 12 mois ou plus » ni pour une option sans bornes, qui le nomme dans son libellé."""
+    low, high = band.get("min"), band.get("max")
+    if (low is None and high is None) or value == 0 or (high is None and value == low):
+        return None
+    shown = format_field_value(spec, value, locale)
+    cautious = value in (low, high)
+    if locale == "en":
+        return f"{shown} used as a cautious figure" if cautious else f"{shown} used for the calculations"
+    retained = "retenus" if abs(value) >= 2 else "retenu"
+    return f"{shown} {retained} par prudence" if cautious else f"{shown} {retained} pour les calculs"
+
+
+def format_fact(spec: FieldSpec, fact: dict[str, Any] | None, locale: str) -> str:
+    """Valeur d'un fait telle que le profil la montre. Un fait répondu par une tranche montre la tranche choisie
+    (« moins de 1 mois », « de 10 000 $ à moins de 50 000 $ (10 000 $ retenus par prudence) »), jamais la
+    borne seule comme si l'investisseur l'avait donnée."""
+    value = (fact or {}).get("value")
+    band = fact_band(fact)
+    label = localized(band["label"], locale) if band else None
+    if not label:
+        return format_field_value(spec, value, locale)
+    text = _lower_first(label)
+    note = _retained_note(spec, band, value, locale)
+    if not note:
+        return text
+    return f"{text[:-1]}; {note})" if text.endswith(")") else f"{text} ({note})"
 
 
 # ---------------------------------------------------------------------- fonctions partagées

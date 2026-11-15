@@ -6,7 +6,7 @@ from typing import Any
 
 from ..trace import Trace
 from . import rules
-from .questionnaire import Questionnaire, format_field_value
+from .questionnaire import Questionnaire, format_fact
 from .state import ClientSession
 
 VIEW_DIMENSIONS = (
@@ -21,8 +21,15 @@ VIEW_DIMENSIONS = (
 
 
 def dimension_summary(
-    questionnaire: Questionnaire, dimension: str, values: dict[str, Any], risk: dict[str, Any], locale: str
+    questionnaire: Questionnaire,
+    dimension: str,
+    facts: dict[str, dict[str, Any]],
+    risk: dict[str, Any],
+    locale: str,
 ) -> str | None:
+    """Résumé d'une dimension à partir des faits confirmés. Un fait répondu par une tranche montre la tranche,
+    pas la borne que le code retient (``format_fact``)."""
+    values = {field_id: fact.get("value") for field_id, fact in facts.items()}
     if dimension == "risk_tolerance":
         return rules.level_label(questionnaire, risk["tolerance"], locale)
     if dimension == "risk_capacity":
@@ -33,7 +40,7 @@ def dimension_summary(
             continue
         if not questionnaire.applicable(spec.when, values):
             continue
-        text = format_field_value(spec, values[spec.id], locale)
+        text = format_fact(spec, facts[spec.id], locale)
         parts.append(text if spec.type == "enum" else f"{spec.label_text(locale)} : {text}")
     return " · ".join(parts) or None
 
@@ -66,6 +73,7 @@ def profile_view(
     questionnaire: Questionnaire, session: ClientSession, locale: str, documents: list[dict[str, Any]] | None = None
 ) -> dict[str, Any]:
     values = session.values()
+    confirmed = session.confirmed_facts()
     risk = rules.risk_profile(questionnaire, values)
     dimensions: dict[str, Any] = {}
     for dimension in VIEW_DIMENSIONS:
@@ -77,7 +85,7 @@ def profile_view(
         }
         dimensions[dimension] = {
             "status": status,
-            "summary": dimension_summary(questionnaire, dimension, values, risk, locale),
+            "summary": dimension_summary(questionnaire, dimension, confirmed, risk, locale),
             "fields": fields,
         }
     facts = _confirmed_facts_by_date(session)

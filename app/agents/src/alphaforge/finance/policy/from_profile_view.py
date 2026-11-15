@@ -9,20 +9,26 @@ il les respecte comme bornes :
 - une donnée absente reste ``None`` et va dans ``missing_info`` : F1 applique alors une borne prudente.
 Les bandes d'horizon sont converties vers leur borne BASSE (prudence).
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from alphaforge.finance.contracts.profile import (Debt, Goal, Income, InvestorProfile, Preferences, Score, ValueFilter)
+from alphaforge.finance.contracts.profile import Debt, Goal, Income, InvestorProfile, Preferences, Score, ValueFilter
 
 # Milieu des tranches de R du risk_levels.yaml v0.2 (coupures 15/30/45/60/75) : la catégorie de
 # l'app tombe dans le niveau correspondant, jamais au-dessus.
 RISK_SCORE = {"low": 22.0, "low_medium": 37.0, "medium": 52.0, "medium_high": 67.0, "high": 85.0}
 KNOWLEDGE = {"beginner": "debutant", "intermediate": "intermediaire", "advanced": "avance"}
 HORIZON_BAND_YEARS = {"lt3": 1.0, "3to10": 3.0, "gt10": 10.0}
-INCOME = {"very_stable": "stable", "stable": "stable", "variable": "variable", "irregular": "erratique",
-          "none": "erratique"}
+INCOME = {
+    "very_stable": "stable",
+    "stable": "stable",
+    "variable": "variable",
+    "irregular": "erratique",
+    "none": "erratique",
+}
 GOAL_PRIORITY = {"retirement": "besoin", "project": "besoin", "income": "besoin", "growth": "envie"}
 # Exclusions de l'app → tickers de l'univers (secteur Energy du jeu de départ ; aucune autre
 # exclusion n'a de titre dans l'univers actuel, la règle est conservée pour la trace).
@@ -40,9 +46,14 @@ def _facts(view: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def investor_profile_from_view(view: dict[str, Any], client_id: str, *, version: int = 1,
-                               created_utc: datetime | None = None,
-                               completeness: dict[str, Any] | None = None) -> InvestorProfile:
+def investor_profile_from_view(
+    view: dict[str, Any],
+    client_id: str,
+    *,
+    version: int = 1,
+    created_utc: datetime | None = None,
+    completeness: dict[str, Any] | None = None,
+) -> InvestorProfile:
     f = _facts(view)
     g = lambda key: f.get(key)  # noqa: E731
     missing: list[str] = []
@@ -53,13 +64,26 @@ def investor_profile_from_view(view: dict[str, Any], client_id: str, *, version:
     if years is None:
         years, _ = 1.0, missing.append("horizon")
     goal = g("objective.goal") or "growth"
-    goals = [Goal(goal_id="g-main", label=f"objectif : {goal}", priority=GOAL_PRIORITY.get(goal, "envie"),
-                  horizon_years=float(years))]
+    goals = [
+        Goal(
+            goal_id="g-main",
+            label=f"objectif : {goal}",
+            priority=GOAL_PRIORITY.get(goal, "envie"),
+            horizon_years=float(years),
+        )
+    ]
     wealth = g("context.amount_cad")
     pct12 = g("constraints.withdrawal_pct_12m")
     if pct12 and wealth:
-        goals.append(Goal(goal_id="g-liquidity", label="retraits prévus sous 12 mois", priority="besoin",
-                          horizon_years=1.0, amount=float(pct12) / 100 * float(wealth) if pct12 > 1 else float(pct12) * float(wealth)))
+        goals.append(
+            Goal(
+                goal_id="g-liquidity",
+                label="retraits prévus sous 12 mois",
+                priority="besoin",
+                horizon_years=1.0,
+                amount=float(pct12) / 100 * float(wealth) if pct12 > 1 else float(pct12) * float(wealth),
+            )
+        )
 
     risk = view.get("risk") or {}
     tol, cap = risk.get("tolerance"), risk.get("capacity")
@@ -70,8 +94,13 @@ def investor_profile_from_view(view: dict[str, Any], client_id: str, *, version:
 
     debts = []
     if g("risk_capacity.high_interest_debt"):
-        debts.append(Debt(label="dette à taux élevé (déclarée)", balance=float(g("risk_capacity.high_interest_debt")),
-                          annual_rate=0.20))
+        debts.append(
+            Debt(
+                label="dette à taux élevé (déclarée)",
+                balance=float(g("risk_capacity.high_interest_debt")),
+                annual_rate=0.20,
+            )
+        )
     if wealth is None:
         missing.append("context.amount_cad")
     if g("risk_capacity.emergency_fund") is None:
@@ -79,8 +108,9 @@ def investor_profile_from_view(view: dict[str, Any], client_id: str, *, version:
 
     filters = []
     for ex in g("preferences.exclusions") or []:
-        filters.append(ValueFilter(rule=f"exclure : {ex}",
-                                   per_ticker={t: "exclu" for t in EXCLUSION_TICKERS.get(ex, [])}))
+        filters.append(
+            ValueFilter(rule=f"exclure : {ex}", per_ticker={t: "exclu" for t in EXCLUSION_TICKERS.get(ex, [])})
+        )
     tilts = [INTERESTS[i] for i in (g("preferences.interests") or []) if i in INTERESTS]
     esg = (g("preferences.esg_importance") or 0) >= 3
 
@@ -91,17 +121,27 @@ def investor_profile_from_view(view: dict[str, Any], client_id: str, *, version:
 
     income_stab = g("risk_capacity.income_stability")
     return InvestorProfile(
-        profile_id=client_id, version=version, created_utc=created_utc or datetime.now(timezone.utc),
-        status=status, mode="saisi", knowledge_level=KNOWLEDGE.get(view.get("knowledge_level") or ""),
+        profile_id=client_id,
+        version=version,
+        created_utc=created_utc or datetime.now(UTC),
+        status=status,
+        mode="saisi",
+        knowledge_level=KNOWLEDGE.get(view.get("knowledge_level") or ""),
         goals=goals,
-        tolerance_declared=Score(value=RISK_SCORE[tol], label=tol, method="app/profile rules") if tol in RISK_SCORE else None,
-        capacity_assessed=Score(value=RISK_SCORE[cap], label=cap, method="app/profile rules") if cap in RISK_SCORE else None,
+        tolerance_declared=Score(value=RISK_SCORE[tol], label=tol, method="app/profile rules")
+        if tol in RISK_SCORE
+        else None,
+        capacity_assessed=Score(value=RISK_SCORE[cap], label=cap, method="app/profile rules")
+        if cap in RISK_SCORE
+        else None,
         max_acceptable_loss_cad=float(g("risk_capacity.max_loss_cad")) if g("risk_capacity.max_loss_cad") else None,
         investable_wealth=float(wealth) if wealth else None,
-        emergency_fund_months=float(g("risk_capacity.emergency_fund")) if g("risk_capacity.emergency_fund") is not None else None,
+        emergency_fund_months=float(g("risk_capacity.emergency_fund"))
+        if g("risk_capacity.emergency_fund") is not None
+        else None,
         income=Income(variability=INCOME.get(income_stab)) if income_stab else None,
         debts=debts,
-        preferences=Preferences(tilts=tilts, value_filters=filters, esg_required=esg,
-                                reference_currency="CAD"),
-        missing_info=missing, consistency_flags=[],
+        preferences=Preferences(tilts=tilts, value_filters=filters, esg_required=esg, reference_currency="CAD"),
+        missing_info=missing,
+        consistency_flags=[],
     )

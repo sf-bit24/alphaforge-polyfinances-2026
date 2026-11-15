@@ -3,19 +3,21 @@
 Tout nombre montré à un LLM ou à l'utilisateur passe par ``FactBook.add`` : il reçoit un ``fact_id``,
 une source et le ``trace_id`` de l'étape qui l'a produit. C'est ce qui rend l'explication vérifiable.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date, datetime, timezone
-from typing import Any, Iterator
+from datetime import UTC, date, datetime
+from typing import Any
 
 from alphaforge.finance.contracts.decision import Fact, Source, TraceEvent
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def fmt(value: Any, unit: str) -> str:
@@ -47,13 +49,22 @@ class FactBook:
 
     # --------------------------------------------------------------------- trace
     @contextmanager
-    def step(self, agent: str, tool: str | None = None, inputs: dict | None = None,
-             model_id: str | None = None) -> Iterator[TraceEvent]:
+    def step(
+        self, agent: str, tool: str | None = None, inputs: dict | None = None, model_id: str | None = None
+    ) -> Iterator[TraceEvent]:
         self._n += 1
         tid = f"{self.decision_id}:t{self._n:03d}:{agent}" + (f":{tool}" if tool else "")
-        ev = TraceEvent(trace_id=tid, parent_id=self._stack[-1] if self._stack else None, agent=agent,
-                        tool=tool, inputs=_jsonable(inputs or {}), started_utc=_now(),
-                        data_version=self.data_version, code_version=self.code_version, model_id=model_id)
+        ev = TraceEvent(
+            trace_id=tid,
+            parent_id=self._stack[-1] if self._stack else None,
+            agent=agent,
+            tool=tool,
+            inputs=_jsonable(inputs or {}),
+            started_utc=_now(),
+            data_version=self.data_version,
+            code_version=self.code_version,
+            model_id=model_id,
+        )
         self.trace.append(ev)
         self._stack.append(tid)
         try:
@@ -74,15 +85,37 @@ class FactBook:
         return self._stack[-1]
 
     # --------------------------------------------------------------------- facts
-    def add(self, key: str, label_fr: str, value, unit: str, *, dataset: str, processing: str | None = None,
-            status: str = "FAIT", as_of: date | None = None, published: date | None = None,
-            currency: str | None = None, url: str | None = None, licence: str | None = None,
-            trace_id: str | None = None) -> str:
+    def add(
+        self,
+        key: str,
+        label_fr: str,
+        value,
+        unit: str,
+        *,
+        dataset: str,
+        processing: str | None = None,
+        status: str = "FAIT",
+        as_of: date | None = None,
+        published: date | None = None,
+        currency: str | None = None,
+        url: str | None = None,
+        licence: str | None = None,
+        trace_id: str | None = None,
+    ) -> str:
         fid = key if key not in self.facts else f"{key}#{len(self.facts)}"
         tid = trace_id or self.current
-        f = Fact(fact_id=fid, label_fr=label_fr, value=_scalar(value), unit=unit, currency=currency,
-                 as_of=as_of, published=published, status=status, trace_id=tid,
-                 sources=[Source(dataset=dataset, url=url, licence=licence, processing=processing)])
+        f = Fact(
+            fact_id=fid,
+            label_fr=label_fr,
+            value=_scalar(value),
+            unit=unit,
+            currency=currency,
+            as_of=as_of,
+            published=published,
+            status=status,
+            trace_id=tid,
+            sources=[Source(dataset=dataset, url=url, licence=licence, processing=processing)],
+        )
         self.facts[fid] = f
         for ev in self.trace:
             if ev.trace_id == tid:
@@ -109,8 +142,7 @@ class FactBook:
         for fid in fact_ids:
             f = self.facts.get(fid)
             if f is not None:
-                out.append({"fact_id": fid, "label": f.label_fr, "value": fmt(f.value, f.unit),
-                            "status": f.status})
+                out.append({"fact_id": fid, "label": f.label_fr, "value": fmt(f.value, f.unit), "status": f.status})
         return out
 
 

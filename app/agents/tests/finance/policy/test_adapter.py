@@ -1,4 +1,5 @@
 """Adaptateur questionnaire (brain) -> InvestorProfile : un seul chemin par fait, min par defaut."""
+
 from __future__ import annotations
 
 import pytest
@@ -11,8 +12,13 @@ from ._personas import AS_OF, amira, robert
 
 
 def q(**kw):
-    base = dict(M_cad=150_000, tolerance_subscores={"declared": 0.8, "scenarios": 0.7, "revealed": 0.75, "test": 0.72},
-                capacity_score=0.9, L_cad=60_000, L_confirmed=True)
+    base = dict(
+        M_cad=150_000,
+        tolerance_subscores={"declared": 0.8, "scenarios": 0.7, "revealed": 0.75, "test": 0.72},
+        capacity_score=0.9,
+        L_cad=60_000,
+        L_confirmed=True,
+    )
     base.update(kw)
     return QuestionnaireScores(**base)
 
@@ -36,12 +42,15 @@ def test_mapping_single_path():
 
 
 def test_liquid_pocket_removes_goals_and_wealth():
-    gs = [amira().goals[0], Goal(goal_id="maison", label="mise de fonds", priority="besoin", horizon_years=2, amount=30_000)]
+    gs = [
+        amira().goals[0],
+        Goal(goal_id="maison", label="mise de fonds", priority="besoin", horizon_years=2, amount=30_000),
+    ]
     base = compile_profile(amira(goals=gs), AS_OF)
-    assert base.level == "N4"   # le seau court ne plafonne pas le seau long (deja hors du risque)
+    assert base.level == "N4"  # le seau court ne plafonne pas le seau long (deja hors du risque)
     r = compile_profile(amira(goals=gs), AS_OF, questionnaire=q(poche_liquide_cad=30_000, covered_goal_ids=["maison"]))
     assert r.policy.missing_defaults == [] and r.buckets[0]["kind"] == "poche_liquide"
-    assert [b["goal_id"] for b in r.buckets] == ["poche_liquide"]          # pas de second seau « maison »
+    assert [b["goal_id"] for b in r.buckets] == ["poche_liquide"]  # pas de second seau « maison »
     assert any(t["rule"] == "questionnaire.M_risque" and t["output"] == 120_000 for t in r.trace)
 
 
@@ -49,16 +58,24 @@ def test_sequence_reserve_not_doubled():
     g = Goal(goal_id="retraite", label="retraite", priority="souhait", horizon_years=4, recurring_withdrawal=30_000)
     own = compile_profile(robert(goals=[g]), AS_OF)
     assert any(b.get("kind") == "reserve_retraits" for b in own.buckets) and own.horizon_years == pytest.approx(7)
-    r = compile_profile(robert(goals=[g]), AS_OF, questionnaire=QuestionnaireScores(
-        M_cad=900_000, poche_liquide_cad=90_000, sequence_reserve_years=3, L_cad=120_000))
+    r = compile_profile(
+        robert(goals=[g]),
+        AS_OF,
+        questionnaire=QuestionnaireScores(
+            M_cad=900_000, poche_liquide_cad=90_000, sequence_reserve_years=3, L_cad=120_000
+        ),
+    )
     assert not any(b.get("kind") == "reserve_retraits" for b in r.buckets)
     assert r.horizon_years == pytest.approx(7)
 
 
-@pytest.mark.parametrize("field,vals", [
-    ("capacity_score", [0.9, 0.6, 0.4, 0.1]),
-    ("L_cad", [80_000, 60_000, 40_000, 25_000]),
-])
+@pytest.mark.parametrize(
+    "field,vals",
+    [
+        ("capacity_score", [0.9, 0.6, 0.4, 0.1]),
+        ("L_cad", [80_000, 60_000, 40_000, 25_000]),
+    ],
+)
 def test_adapter_monotone(field, vals):
     lv = [LV.index(compile_profile(amira(), AS_OF, questionnaire=q(**{field: v})).level) for v in vals]
     assert lv == sorted(lv, reverse=True)

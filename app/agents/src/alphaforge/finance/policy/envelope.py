@@ -6,6 +6,7 @@ moment de l'execution : les valeurs sont figees dans ``envelope_v02.yaml`` (fich
 versionne, sha256 des CSV source inclus). ``build_from_calibration`` regenere ce fichier.
 SIMULATION SEULEMENT.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -18,7 +19,7 @@ ENVELOPE_FILE = Path(__file__).with_name("envelope_v02.yaml")
 COLUMNS = ("vol", "cvar95_m", "cvar95_12m", "mdd", "y2022")
 G5_FAMILIES = ("CAD77_main", "CAD71_USeq", "USD46")
 HC_FAMILIES = ("CAD77_hc", "CAD71_hc", "USD46_hc")
-HC_MAX_EQUITY = 10          # e <= 10 -> portefeuille de reference demi-cash (reference_portfolios.N0)
+HC_MAX_EQUITY = 10  # e <= 10 -> portefeuille de reference demi-cash (reference_portfolios.N0)
 
 
 def build_from_calibration(out_dir: str | Path) -> dict:
@@ -30,7 +31,7 @@ def build_from_calibration(out_dir: str | Path) -> dict:
 
     def envof(df, fams):
         x = df[df["mix"].isin(fams)].copy()
-        x["y2022"] = -x["y2022"]                       # perte positive
+        x["y2022"] = -x["y2022"]  # perte positive
         return x.groupby("eq")[list(COLUMNS)].max()
 
     g5 = envof(pd.read_csv(files["G5"]), G5_FAMILIES)
@@ -43,9 +44,11 @@ def build_from_calibration(out_dir: str | Path) -> dict:
     return {
         "version": "0.2.0",
         "definition": "ENV(e,col) = max des familles ; HC (CAD77_hc, CAD71_hc, USD46_hc) si e<=10, "
-                      "sinon G5 (CAD77_main, CAD71_USeq, USD46) ; y2022 en perte positive",
-        "source_files": {k: {"path": f"research/calibration/out/{p.name}",
-                             "sha256": hashlib.sha256(p.read_bytes()).hexdigest()} for k, p in files.items()},
+        "sinon G5 (CAD77_main, CAD71_USeq, USD46) ; y2022 en perte positive",
+        "source_files": {
+            k: {"path": f"research/calibration/out/{p.name}", "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
+            for k, p in files.items()
+        },
         "equity_pct": rows,
     }
 

@@ -7,10 +7,11 @@ Clés écrites (proposition, à ajouter à app/CONTRACTS.md §5) :
     clients/<client_id>/decisions/<decision_id>.json    Decision complète (Facts, contrôles, trace)
     clients/<client_id>/decisions/<decision_id>.policy.json   mandat (PolicySpec) appliqué
 """
+
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from alphaforge import okf
@@ -42,28 +43,48 @@ class OkfClientStore:
 
     def load_profile(self, client_id: str) -> InvestorProfile:
         view, comp, session = self.view(client_id)
-        return investor_profile_from_view(view, client_id, version=max(int(session.turn or 0), 1),
-                                          created_utc=datetime.now(timezone.utc), completeness=comp)
+        return investor_profile_from_view(
+            view, client_id, version=max(int(session.turn or 0), 1), created_utc=datetime.now(UTC), completeness=comp
+        )
 
     def save_decision(self, decision: Decision, policy: PolicySpec | None = None) -> str:
         cid, did = decision.profile_id, decision.decision_id
         self.store.put_json(decision_key(cid, did, "json"), decision.model_dump(mode="json"))
         if policy is not None:
             self.store.put_json(decision_key(cid, did, "policy.json"), policy.model_dump(mode="json"))
-        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        doc = okf.OkfDoc(frontmatter={
-            "type": "Portfolio Decision", "title": f"Décision de portefeuille {did}",
-            "description": "Proposition simulée du volet portefeuille, avec ses contrôles et son explication.",
-            "tags": ["portefeuille", "decision"], "status": "draft", "owners": ["alphaforge-a3"],
-            "sensitivity": "client", "generated": {"by": "agent:A3", "at": now},
-            "sources": [{"id": "decision-json", "title": "Decision complète", "resource": decision_key(cid, did, "json")}],
-            "data": {"kind": decision.kind, "simulation_only": True,
-                     "positions": [{"asset_id": p.asset_id, "weight": round(p.weight, 6)} for p in decision.positions],
-                     "n_facts": len(decision.facts), "n_checks": len(decision.constraints)},
-        })
-        body = "\n".join(f"- {s.text_fr}" for sec in (decision.explanation.data_used, decision.explanation.why,
-                                                     decision.explanation.limits, decision.explanation.what_would_change)
-                         for s in sec)
+        now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        doc = okf.OkfDoc(
+            frontmatter={
+                "type": "Portfolio Decision",
+                "title": f"Décision de portefeuille {did}",
+                "description": "Proposition simulée du volet portefeuille, avec ses contrôles et son explication.",
+                "tags": ["portefeuille", "decision"],
+                "status": "draft",
+                "owners": ["alphaforge-a3"],
+                "sensitivity": "client",
+                "generated": {"by": "agent:A3", "at": now},
+                "sources": [
+                    {"id": "decision-json", "title": "Decision complète", "resource": decision_key(cid, did, "json")}
+                ],
+                "data": {
+                    "kind": decision.kind,
+                    "simulation_only": True,
+                    "positions": [{"asset_id": p.asset_id, "weight": round(p.weight, 6)} for p in decision.positions],
+                    "n_facts": len(decision.facts),
+                    "n_checks": len(decision.constraints),
+                },
+            }
+        )
+        body = "\n".join(
+            f"- {s.text_fr}"
+            for sec in (
+                decision.explanation.data_used,
+                decision.explanation.why,
+                decision.explanation.limits,
+                decision.explanation.what_would_change,
+            )
+            for s in sec
+        )
         doc.body = f"{decision.disclaimer_fr}\n\n{body}\n"
         key = decision_key(cid, did, "md")
         self.store.put_text(key, okf.render(doc))
@@ -85,6 +106,7 @@ def stores_from_env():
     """Construit les deux adaptateurs à partir de la configuration du runtime (S3 en AWS, local en dev)."""
     from alphaforge.config import Settings
     from alphaforge.store import make_store
+
     store = make_store(Settings.from_env())
     return OkfClientStore(store), OkfMarketStore(store)
 

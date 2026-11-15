@@ -1,12 +1,10 @@
 """Bout en bout hors ligne (mode règles) : profil → F1 → 2 tours → Judge → Decision."""
+
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
-
-import pytest
+from datetime import UTC, date, datetime
 
 from alphaforge.finance.contracts.profile import Goal, InvestorProfile, Score
-
 from alphaforge.finance.debate import Request, build_portfolio
 from alphaforge.finance.debate.explain import verify
 
@@ -14,13 +12,17 @@ AS_OF = date(2026, 9, 30)
 
 
 def _profile(pid="p-test", horizon=4.0, wealth=900_000, loss=120_000, tilts=()):
-    return InvestorProfile(profile_id=pid, created_utc=datetime(2026, 11, 14, tzinfo=timezone.utc), status="COMPLETE",
-                           goals=[Goal(goal_id="g1", label="retraite", priority="besoin", horizon_years=horizon)],
-                           tolerance_declared=Score(value=35), investable_wealth=wealth,
-                           max_acceptable_loss_cad=loss, knowledge_level="avance",
-                           preferences={"tilts": list(tilts)})
-
-
+    return InvestorProfile(
+        profile_id=pid,
+        created_utc=datetime(2026, 11, 14, tzinfo=UTC),
+        status="COMPLETE",
+        goals=[Goal(goal_id="g1", label="retraite", priority="besoin", horizon_years=horizon)],
+        tolerance_declared=Score(value=35),
+        investable_wealth=wealth,
+        max_acceptable_loss_cad=loss,
+        knowledge_level="avance",
+        preferences={"tilts": list(tilts)},
+    )
 
 
 def test_decision_is_valid_and_traceable():

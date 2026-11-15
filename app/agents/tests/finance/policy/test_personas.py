@@ -1,4 +1,5 @@
 """Personas de la revue v0.2 (research/calibration/review/persona_v02.py, marge quotidienne 4 pts)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,7 +15,7 @@ from ._personas import AS_OF, amira, mateo, robert
 
 
 def lim(res, rid):
-    return {l.rule_id: l for l in res.limits}[rid]
+    return {x.rule_id: x for x in res.limits}[rid]
 
 
 def test_amira_n4():
@@ -25,7 +26,7 @@ def test_amira_n4():
     assert r.level == "N4" and r.level_from_R == "N4"
     assert r.l_star == pytest.approx(0.451, abs=5e-4) and r.e_cap == 0.80
     assert (lim(r, "alloc.growth").min, lim(r, "alloc.growth").max) == (0.6, 0.8)
-    assert lim(r, "alloc.crypto").max == 0.02          # persona_v02 : crypto 0.0200
+    assert lim(r, "alloc.crypto").max == 0.02  # persona_v02 : crypto 0.0200
     assert lim(r, "conc.single_each").max == 0.05
     assert lim(r, "risk.cvar_m").max == pytest.approx(0.073 - 0.02 * 0.55)
     assert lim(r, "risk.cvar_12m").max == 0.195 and lim(r, "risk.mdd").max == 0.415
@@ -77,7 +78,7 @@ def test_robert_n0_sandbox_zero():
     assert lim(r, "alloc.cash_like").min == 0.5
     # la demande n'est jamais approuvee par F1 : policy_with_request ajoute seulement le plafond
     pw = r.policy_with_request()
-    assert {l.rule_id: l.max for l in pw.limits}["sat.sandbox"] == 0
+    assert {lim.rule_id: lim.max for lim in pw.limits}["sat.sandbox"] == 0
 
 
 def test_example_n3_matches_yaml():
@@ -86,11 +87,11 @@ def test_example_n3_matches_yaml():
     assert r.level == "N3" and r.e_cap == 0.60
     ex = yaml.safe_load(open(DEFAULT_YAML, encoding="utf-8"))["example_N3"]
     for rid, v in ex.items():
-        l = lim(r, rid)
+        lm = lim(r, rid)
         if isinstance(v, list):
-            assert (l.min, l.max) == (v[0], v[1]), rid
+            assert (lm.min, lm.max) == (v[0], v[1]), rid
         else:
-            assert l.max == pytest.approx(v), rid
+            assert lm.max == pytest.approx(v), rid
 
 
 @pytest.mark.parametrize("make", [amira, mateo, robert])
@@ -99,9 +100,9 @@ def test_policy_validates_and_sources(make):
     PolicySpec.model_validate(r.policy.model_dump())
     ver = r.policy.limits[0].source.split("#")[0]
     assert ver == "risk_levels.yaml@0.2.0"
-    for l in r.policy.limits:
-        assert l.source and l.source.startswith("risk_levels.yaml@0.2.0#"), l.rule_id
-        assert l.derived_from
+    for lim in r.policy.limits:
+        assert lim.source and lim.source.startswith("risk_levels.yaml@0.2.0#"), lim.rule_id
+        assert lim.derived_from
     for t in r.trace:
         assert set(t) == {"rule", "inputs", "output", "yaml_path"}
         assert t["yaml_path"].split("@")[0] in ("risk_levels.yaml", "emphasis.yaml", "envelope_v02.yaml", "profile"), t

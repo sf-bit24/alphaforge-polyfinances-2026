@@ -1,4 +1,5 @@
 """Poids des lentilles d'explication (timeline, risk, diversity, constraints) depuis emphasis.yaml."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -22,8 +23,9 @@ def load_rules(path: str | Path | None = None) -> dict:
         return yaml.safe_load(fh)
 
 
-def compute_emphasis(signals: dict[str, Any], path: str | Path | None = None
-                     ) -> tuple[dict[str, float], list[str], list[dict]]:
+def compute_emphasis(
+    signals: dict[str, Any], path: str | Path | None = None
+) -> tuple[dict[str, float], list[str], list[dict]]:
     """Retourne (poids normalises, ids des regles declenchees, trace)."""
     cfg = load_rules(path)
     ver = cfg["version"]
@@ -39,10 +41,17 @@ def compute_emphasis(signals: dict[str, Any], path: str | Path | None = None
         if hit:
             raw[r["lens"]] += float(r["bonus"])
             fired.append(r["id"])
-            trace.append({"rule": f"emphasis.{r['id']}", "inputs": {r["signal"]: s, "op": r["op"], "value": r.get("value")},
-                          "output": {r["lens"]: float(r["bonus"])}, "yaml_path": f"emphasis.yaml@{ver}#rules[{i}]"})
+            trace.append(
+                {
+                    "rule": f"emphasis.{r['id']}",
+                    "inputs": {r["signal"]: s, "op": r["op"], "value": r.get("value")},
+                    "output": {r["lens"]: float(r["bonus"])},
+                    "yaml_path": f"emphasis.yaml@{ver}#rules[{i}]",
+                }
+            )
     total = sum(raw.values())
     weights = {k: raw[k] / total for k in LENSES}
-    trace.append({"rule": "emphasis.normalize", "inputs": raw, "output": weights,
-                  "yaml_path": f"emphasis.yaml@{ver}#base"})
+    trace.append(
+        {"rule": "emphasis.normalize", "inputs": raw, "output": weights, "yaml_path": f"emphasis.yaml@{ver}#base"}
+    )
     return weights, fired, trace

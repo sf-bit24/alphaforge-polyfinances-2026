@@ -1,6 +1,6 @@
 # Revue et réconciliation de la table de risque (v0.2)
 
-Ce dossier contient les scripts qui produisent et vérifient `policy/risk_levels.yaml` v0.2.
+Ce dossier contient les scripts qui produisent et vérifient `app/agents/src/alphaforge/finance/policy/risk_levels.yaml` v0.2.
 
 Cette version réconcilie deux propositions :
 - **la proposition théorique**, qui fournit l'architecture profil → R : capacité calculée à partir
@@ -29,7 +29,7 @@ l'autre n'est encore sur `master`.**
 
 ## Décisions humaines encore ouvertes
 
-Le détail est dans l'en-tête de `policy/risk_levels.yaml` et dans `research/calibration/docs/README.md`.
+Le détail est dans l'en-tête de `app/agents/src/alphaforge/finance/policy/risk_levels.yaml` et dans `research/calibration/docs/README.md`.
 
 1. **Marge de 4 points pour l'écart quotidien sur la perte planifiée.** Elle fait passer Mateo de
    N3 à N2 et Robert de N1 à N0.

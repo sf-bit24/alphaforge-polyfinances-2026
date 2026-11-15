@@ -8,26 +8,32 @@ Règles :
    pas une limite de risque sous ``floor_ratio`` fois sa valeur d'origine (défaut 0,6), pour ne pas
    pousser vers le quasi-encaisse à force de resserrements successifs.
 """
+
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from alphaforge.finance.contracts.policy import Limit, PolicySpec, Selector
 
 from .schemas import PRIORITY, AppliedAmendment, LensReport
 
 FLOOR_RATIO = 0.6
-_MEASURE_ORDER = {"VARIANCE": 0, "CVAR": 1, "CDAR": 2}   # CDaR = plus prudente (drawdown)
+_MEASURE_ORDER = {"VARIANCE": 0, "CVAR": 1, "CDAR": 2}  # CDaR = plus prudente (drawdown)
 
 
 def _limit(policy: PolicySpec, rule_id: str) -> Limit | None:
-    return next((l for l in policy.limits if l.rule_id == rule_id), None)
+    return next((lim for lim in policy.limits if lim.rule_id == rule_id), None)
 
 
-def apply_amendments(policy: PolicySpec, reports: list[LensReport], emphasis: dict[str, float],
-                     known_fact_ids: set[str], original: PolicySpec | None = None,
-                     feasible: Callable[[PolicySpec], bool] | None = None,
-                     floor_ratio: float = FLOOR_RATIO) -> tuple[PolicySpec, list[AppliedAmendment]]:
+def apply_amendments(
+    policy: PolicySpec,
+    reports: list[LensReport],
+    emphasis: dict[str, float],
+    known_fact_ids: set[str],
+    original: PolicySpec | None = None,
+    feasible: Callable[[PolicySpec], bool] | None = None,
+    floor_ratio: float = FLOOR_RATIO,
+) -> tuple[PolicySpec, list[AppliedAmendment]]:
     original = original or policy
     items = [(r.lens, a) for r in reports for a in r.amendments]
     items.sort(key=lambda la: (PRIORITY[la[0]], -emphasis.get(la[0], 0.0)))
@@ -43,7 +49,9 @@ def apply_amendments(policy: PolicySpec, reports: list[LensReport], emphasis: di
             reject(lens, a, f"preuve inconnue : {missing}")
             continue
         if a.kind == "flag_only":
-            log.append(AppliedAmendment(lens=lens, amendment=a, status="applique", why_fr="signalement, sans changement"))
+            log.append(
+                AppliedAmendment(lens=lens, amendment=a, status="applique", why_fr="signalement, sans changement")
+            )
             continue
         new = cur.model_copy(deep=True)
         before = after = None
@@ -59,7 +67,9 @@ def apply_amendments(policy: PolicySpec, reports: list[LensReport], emphasis: di
                 reject(lens, a, "cap_group vise une limite de poids ou d'exposition")
                 continue
             orig = _limit(original, a.target)
-            floor = (orig.max * floor_ratio) if orig is not None and orig.max is not None and lim.kind == "risk" else 0.0
+            floor = (
+                (orig.max * floor_ratio) if orig is not None and orig.max is not None and lim.kind == "risk" else 0.0
+            )
             if a.value < floor or a.value < 0 or (lim.min is not None and a.value < lim.min):
                 reject(lens, a, f"sous le plancher anti-cliquet ({floor:.4f}) ou sous le min")
                 continue
@@ -84,10 +94,18 @@ def apply_amendments(policy: PolicySpec, reports: list[LensReport], emphasis: di
                 reject(lens, a, "déjà exclu")
                 continue
             new.excluded[a.target] = a.evidence_fact_ids[0]
-            new.limits.append(Limit(rule_id=f"amend.exclude.{a.target}", kind="asset_weight",
-                                    selector=Selector(assets=[a.target]), max=0.0, blocking=True,
-                                    derived_from=f"lentille {lens}", source=f"fact:{a.evidence_fact_ids[0]}",
-                                    description_fr=a.reason_fr[:200]))
+            new.limits.append(
+                Limit(
+                    rule_id=f"amend.exclude.{a.target}",
+                    kind="asset_weight",
+                    selector=Selector(assets=[a.target]),
+                    max=0.0,
+                    blocking=True,
+                    derived_from=f"lentille {lens}",
+                    source=f"fact:{a.evidence_fact_ids[0]}",
+                    description_fr=a.reason_fr[:200],
+                )
+            )
             before, after = "admis", "exclu"
         elif a.kind == "switch_risk_measure":
             tgt = a.target.upper()
@@ -105,5 +123,7 @@ def apply_amendments(policy: PolicySpec, reports: list[LensReport], emphasis: di
             reject(lens, a, "rendrait le mandat infaisable")
             continue
         cur = new
-        log.append(AppliedAmendment(lens=lens, amendment=a, status="applique", why_fr="appliqué", before=before, after=after))
+        log.append(
+            AppliedAmendment(lens=lens, amendment=a, status="applique", why_fr="appliqué", before=before, after=after)
+        )
     return cur, log

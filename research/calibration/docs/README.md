@@ -146,7 +146,7 @@ Deux propositions indépendantes ont été produites le 2026-11-14 :
 - **la calibration empirique** (`research/calibration/`) donne les budgets ancrés sur l'enveloppe
   historique.
 
-La réconciliation est livrée dans [`policy/risk_levels.yaml`](../../policy/risk_levels.yaml) v0.2. Elle est produite au format
+La réconciliation est livrée dans [`risk_levels.yaml`](../../app/agents/src/alphaforge/finance/policy/risk_levels.yaml) v0.2. Elle est produite au format
 `PolicySpec` 0.2-draft (`limits: list[Limit]`), avec :
 - la CVaR95 **mensuelle** pour l'optimiseur, et la mesure **`CVAR12M`** contrôlée par le Judge sur
   l'historique long raccordé à des proxys (`history_proxies`, étiquetés HYPOTHESE) ;
@@ -163,7 +163,7 @@ Ordres de grandeur provisoires (enveloppe historique) :
 | # | Étape | État | Vérification |
 |---|---|---|---|
 | 1 | Optimiseur F2 (CVaR, CDaR, variance, prix des contraintes), analyses F3 (contributions au risque, look-through, stress, horizon), contrôle du Judge F4 | **fait par l'équipe, non commité** (31 tests verts) | à mettre sur une branche et à relire |
-| 2 | `policy/risk_levels.yaml` v0.2 réconcilié + chargement dans `PolicySpec` | **v0.2 livrée** (90 `Limit` validées) ; décisions humaines ouvertes (voir `research/calibration/review/README.md`) | un portefeuille réalisable par niveau sur les 55 actifs ; diagnostic d'infaisabilité |
+| 2 | `app/agents/src/alphaforge/finance/policy/risk_levels.yaml` v0.2 réconcilié + chargement dans `PolicySpec` | **v0.2 livrée** (90 `Limit` validées) ; décisions humaines ouvertes (voir `research/calibration/review/README.md`) | un portefeuille réalisable par niveau sur les 55 actifs ; diagnostic d'infaisabilité |
 | 3 | S0 : `InvestorProfile` → `PolicySpec` + `emphasis.yaml` (poids des lentilles) | à faire | Robert : Timeline et Risque en tête ; Amira : Diversité ; Mateo : Préférences. Un champ manquant donne une borne plus prudente |
 | 4 | Interfaces `ClientStore` / `MarketStore` + profils de test (3 personas + 3 contrastés) | à faire | les profils passent la validation du contrat |
 | 5 | Univers large : liste maîtresse (500-700 actifs), prix mensuels, look-through iShares CA, Vanguard et SPDR, métadonnées (frais, duration) | à faire | historique ≥ 36 mois, sinon proxy ou exclusion ; manifeste de source par fichier |

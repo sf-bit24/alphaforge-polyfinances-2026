@@ -4,6 +4,7 @@ Proposition v0.1 (2026-11-14), à intégrer à ``contracts/`` une fois validée 
 Les lentilles ne produisent JAMAIS de poids : seulement des amendements d'une liste fermée qui ne
 peuvent que resserrer le mandat. Le code les valide, les applique et réoptimise.
 """
+
 from __future__ import annotations
 
 from typing import Literal
@@ -31,8 +32,10 @@ class Amendment(_Strict):
     - ``switch_risk_measure`` : "CDAR" (seul passage admis : vers une mesure plus prudente)
     - ``flag_only``     : point d'attention, aucun changement
     """
-    kind: Literal["tighten_limit", "cap_group", "exclude_asset", "require_min_group",
-                  "switch_risk_measure", "flag_only"]
+
+    kind: Literal[
+        "tighten_limit", "cap_group", "exclude_asset", "require_min_group", "switch_risk_measure", "flag_only"
+    ]
     target: str
     value: float | None = None
     reason_fr: str = Field(max_length=400)
@@ -46,6 +49,7 @@ class Point(_Strict):
 
 class LensReport(_Strict):
     """Sortie structurée d'une lentille pour un tour."""
+
     lens: Lens
     support: list[Point] = Field(default_factory=list, max_length=4)
     objections: list[Point] = Field(default_factory=list, max_length=4)
@@ -54,9 +58,10 @@ class LensReport(_Strict):
 
 class AdvocacyBrief(_Strict):
     """Plaidoyer de A3 pour le candidat (il n'est montré aux lentilles qu'au tour 2)."""
+
     thesis_fr: str = Field(max_length=600)
     arguments: list[Point] = Field(default_factory=list, max_length=5)
-    rebuttals: list[Point] = Field(default_factory=list, max_length=5)   # tour 2 seulement
+    rebuttals: list[Point] = Field(default_factory=list, max_length=5)  # tour 2 seulement
 
 
 class AppliedAmendment(_Strict):
@@ -76,5 +81,4 @@ class DebateRound(_Strict):
     emphasis: dict[str, float]
     decisions: list[AppliedAmendment] = Field(default_factory=list)
     # Tour 2 : verdict par lentille calculé par le code, jamais « levé » par persuasion.
-    verdicts: dict[str, Literal["soutien", "objection_maintenue", "objection_satisfaite"]] = Field(
-        default_factory=dict)
+    verdicts: dict[str, Literal["soutien", "objection_maintenue", "objection_satisfaite"]] = Field(default_factory=dict)

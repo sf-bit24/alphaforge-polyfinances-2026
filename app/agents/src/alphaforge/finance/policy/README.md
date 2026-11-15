@@ -1,7 +1,7 @@
 # policy_compiler — F1 : InvestorProfile -> PolicySpec
 
 Compilateur **déterministe** du profil investisseur en mandat `PolicySpec 0.2.0-draft`, selon
-`policy/risk_levels.yaml` v0.2.0, qui reste le moteur de référence. Simulation seulement, jamais un conseil.
+`app/agents/src/alphaforge/finance/policy/risk_levels.yaml` v0.2.0, qui reste le moteur de référence. Simulation seulement, jamais un conseil.
 
 Il porte en code de bibliothèque la logique de `research/calibration/review/expand.py` (`emit`) et de
 `persona_v02.py`. Les scripts de revue ne sont pas importés.
@@ -11,20 +11,28 @@ Il porte en code de bibliothèque la logique de `research/calibration/review/exp
 ```python
 from alphaforge.finance.policy import compile_profile, CompileResult, SpecificRequest, QuestionnaireScores
 
-res = compile_profile(profile, as_of, request=None, yaml_path=None, universe=None,
-                      asset_classes=None, emphasis_path=None, questionnaire=None)
-res.policy            # PolicySpec validé ; None si decision_kind ∈ {"incomplet", "protection"}
-res.limits            # les Limit, toujours présentes, même quand policy est None
+res = compile_profile(
+    profile,
+    as_of,
+    request=None,
+    yaml_path=None,
+    universe=None,
+    asset_classes=None,
+    emphasis_path=None,
+    questionnaire=None,
+)
+res.policy  # PolicySpec validé ; None si decision_kind ∈ {"incomplet", "protection"}
+res.limits  # les Limit, toujours présentes, même quand policy est None
 res.level, res.level_from_R, res.R, res.capacity, res.tolerance, res.l_star, res.e_cap, res.horizon_years
-res.decision_kind     # None | "position_attente" (INCOMPLETE, mandat plafonné) | "incomplet" | "protection"
-res.emphasis          # {"timeline","risk","diversity","constraints"} -> poids, somme 1 (emphasis.yaml)
-res.emphasis_rules    # ids des règles d'emphase déclenchées
-res.trace             # [{rule, inputs, output, yaml_path}] pour chaque nombre dérivé
+res.decision_kind  # None | "position_attente" (INCOMPLETE, mandat plafonné) | "incomplet" | "protection"
+res.emphasis  # {"timeline","risk","diversity","constraints"} -> poids, somme 1 (emphasis.yaml)
+res.emphasis_rules  # ids des règles d'emphase déclenchées
+res.trace  # [{rule, inputs, output, yaml_path}] pour chaque nombre dérivé
 res.missing_defaults  # valeurs prudentes appliquées (aussi dans PolicySpec.missing_defaults)
-res.buckets           # seaux prudents par objectif, réserve de retraits, poche liquide
-res.request           # RequestView : sandbox_max, single_name_max, crypto_max, applicable_max, outside_policy
-res.policy_with_request()   # PolicySpec + sat.sandbox, pour optimiser « avec la demande »
-res.near_cutoff       # R à moins de levels.hysteresis d'une coupure (information pour le re-profilage)
+res.buckets  # seaux prudents par objectif, réserve de retraits, poche liquide
+res.request  # RequestView : sandbox_max, single_name_max, crypto_max, applicable_max, outside_policy
+res.policy_with_request()  # PolicySpec + sat.sandbox, pour optimiser « avec la demande »
+res.near_cutoff  # R à moins de levels.hysteresis d'une coupure (information pour le re-profilage)
 ```
 
 F1 n'approuve **jamais** une `SpecificRequest(ticker, amount_cad | weight, kind="buy")`. Il expose les

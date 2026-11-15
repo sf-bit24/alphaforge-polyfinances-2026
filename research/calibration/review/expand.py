@@ -1,7 +1,7 @@
 import sys, math, yaml
 sys.path.insert(0, __import__("os").path.join(__import__("os").environ.get("AF_REPO", "."), "app", "agents", "src"))
 from alphaforge.finance.contracts.policy import Limit, Selector
-Y = yaml.safe_load(open(__import__("os").environ.get("RISK_YAML", "policy/risk_levels.yaml")))
+Y = yaml.safe_load(open(__import__("os").environ.get("RISK_YAML", "app/agents/src/alphaforge/finance/policy/risk_levels.yaml")))
 fl = lambda x, s=0.0025: math.floor(round(x / s, 9)) * s
 c5 = lambda x: math.ceil(round(x / 0.05, 9)) * 0.05
 LV = ["N0","N1","N2","N3","N4","N5"]

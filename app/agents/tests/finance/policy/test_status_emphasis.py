@@ -1,4 +1,5 @@
 """Statuts (INCOMPLETE, PROTECTION), emphase, enveloppe."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -17,7 +18,7 @@ Y = yaml.safe_load(open(DEFAULT_YAML, encoding="utf-8"))
 
 
 def by(res):
-    return {l.rule_id: l for l in res.limits}
+    return {lim.rule_id: lim for lim in res.limits}
 
 
 def test_incomplete_position_attente():
@@ -25,7 +26,7 @@ def test_incomplete_position_attente():
     r = compile_profile(p, AS_OF, request=SpecificRequest(ticker="BTC-USD", weight=0.01))
     assert r.decision_kind == "position_attente" and r.status == "INCOMPLETE"
     assert r.policy is not None
-    assert r.level in ("N0", "N1", "N2")                       # status.INCOMPLETE.level_cap = N2
+    assert r.level in ("N0", "N1", "N2")  # status.INCOMPLETE.level_cap = N2
     b = by(r)
     assert b["conc.single_each"].max == 0 and b["conc.single_total"].max == 0 and b["alloc.crypto"].max == 0
     assert r.request.sandbox_max == 0 and r.request.outside_policy
@@ -80,7 +81,9 @@ def test_emphasis_normalized_and_rules():
     r = compile_profile(robert(biases=[bias("FOMO")]), AS_OF, request=SpecificRequest(ticker="NVDA", amount_cad=50_000))
     assert sum(r.emphasis.values()) == pytest.approx(1.0)
     assert set(r.emphasis) == {"timeline", "risk", "diversity", "constraints"}
-    assert {"risk.emotional_bias", "constraints.request_outside", "timeline.recurring_withdrawal"} <= set(r.emphasis_rules)
+    assert {"risk.emotional_bias", "constraints.request_outside", "timeline.recurring_withdrawal"} <= set(
+        r.emphasis_rules
+    )
     assert r.request.sandbox_only and r.request.cooldown_days == 3
     plain = compile_profile(amira(debts=[], preferences={"tilts": []}), AS_OF)
     assert plain.emphasis == {k: 0.25 for k in ("timeline", "risk", "diversity", "constraints")}
@@ -92,8 +95,13 @@ def test_near_cutoff_is_reported_only():
 
 
 def test_legal_and_value_filters_exclude():
-    p = amira(legal_constraints=[{"kind": "employeur", "detail": "periode d'interdiction", "tickers": ["RY.TO"]}],
-              preferences={"tilts": ["crypto"], "value_filters": [{"rule": "fossiles", "per_ticker": {"XOM": "exclu", "ENB.TO": "zone_grise"}}]})
+    p = amira(
+        legal_constraints=[{"kind": "employeur", "detail": "periode d'interdiction", "tickers": ["RY.TO"]}],
+        preferences={
+            "tilts": ["crypto"],
+            "value_filters": [{"rule": "fossiles", "per_ticker": {"XOM": "exclu", "ENB.TO": "zone_grise"}}],
+        },
+    )
     r = compile_profile(p, AS_OF, request=SpecificRequest(ticker="XOM", amount_cad=1_000))
     assert set(r.policy.excluded) == {"RY.TO", "XOM", "ENB.TO"}
     assert r.request.applicable_max == 0 and r.request.outside_policy
@@ -101,6 +109,7 @@ def test_legal_and_value_filters_exclude():
 
 
 # ---------------------------------------------------------------- enveloppe
+
 
 def test_envelope_matches_yaml_levels():
     rnd = Y["measurement"]["rounding"]

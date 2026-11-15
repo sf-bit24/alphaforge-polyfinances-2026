@@ -285,14 +285,35 @@ export type PortfolioBuildRequest = z.infer<typeof PortfolioBuildRequest>;
 export type PortfolioBuildRequestInput = z.input<typeof PortfolioBuildRequest>;
 
 /**
- * Response of `build`. `client_id` and `decision_key` may be absent for a persona build that has no
- * investor base (question open with the coordinator); `persona` is echoed when the runtime sends it.
+ * Response of `build`. A persona build carries `client_id = demo-<persona>` and `fiction = true`. `audit`
+ * exists only when Terraform set the decisions table and the trace bucket; `xray_trace_id` only with a tracer.
  */
+/** Link of the audit chain (finance/observability/audit.py): DynamoDB head + decision object in the trace bucket. */
+export const AuditEntry = z.object({
+  seq: z.number().int().nonnegative(),
+  record_hash: z.string(),
+  prev_hash: z.string(),
+  s3_key: z.string(),
+  otel_trace_id: z.string().nullish(),
+  xray_trace_id: z.string().nullish(),
+});
+export type AuditEntry = z.infer<typeof AuditEntry>;
+/** The audit failed: reported without cancelling the simulation. */
+export const AuditFailure = z.object({ error: z.string() });
+
+/** X-Ray trace id `1-<8 hex>-<24 hex>` of the `portfolio.build` root span. */
+export const XRAY_TRACE_ID = /^1-[0-9a-f]{8}-[0-9a-f]{24}$/;
+
 export const PortfolioBuildResponse = z.object({
   ok: z.literal(true),
   release: z.string(),
-  client_id: z.uuid().nullish(),
+  /** The investor's UUID v4, or `demo-<persona>` for a FICTION demo profile (finance/personas). */
+  client_id: z.union([z.uuid(), z.string().regex(/^demo-[a-z]+$/)]).nullish(),
   persona: DemoPersona.nullish(),
+  persona_label: z.string().nullish(),
+  fiction: z.boolean().optional(),
+  audit: z.union([AuditEntry, AuditFailure]).nullish(),
+  xray_trace_id: z.string().regex(XRAY_TRACE_ID).nullish(),
   as_of: isoDate,
   mode: BuildMode,
   simulation_only: z.literal(true),

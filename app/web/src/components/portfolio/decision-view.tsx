@@ -76,6 +76,26 @@ function Summary({ response, fixture }: { response: PortfolioBuildResponse; fixt
             <span className={p.mono}>{response.release}</span>
             {fixture ? <span className={p.sub} style={{ display: "block" }}>{v.meta.fixture}</span> : null}
           </dd>
+          {response.xray_trace_id ? (
+            <>
+              <dt>{v.meta.xray}</dt>
+              <dd className={p.mono} title={v.meta.xrayHelp}>
+                {response.xray_trace_id}
+              </dd>
+            </>
+          ) : null}
+          {response.audit ? (
+            <>
+              <dt>{v.meta.audit}</dt>
+              {"error" in response.audit ? (
+                <dd>{v.meta.auditFailed}</dd>
+              ) : (
+                <dd title={`${v.meta.auditHelp} — ${response.audit.s3_key}`}>
+                  <span className={p.mono}>{v.meta.auditLink(response.audit.seq, response.audit.record_hash.slice(0, 12))}</span>
+                </dd>
+              )}
+            </>
+          ) : null}
         </dl>
       </div>
     </section>

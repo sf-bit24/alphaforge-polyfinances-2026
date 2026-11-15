@@ -74,6 +74,32 @@ describe("portfolio contract (CONTRACTS.md 12)", () => {
     expect(parsed.decision.kind).toBe("refus_encadre");
   });
 
+  it("parses a persona build of the deployed runtime, with its audit link and X-Ray trace", () => {
+    const body = raw("amira");
+    Object.assign(body, {
+      client_id: "demo-amira",
+      persona: "amira",
+      persona_label: "Amira (FICTION)",
+      fiction: true,
+      xray_trace_id: "1-4a83a163-8b8d316f426177014f865e8b",
+      audit: {
+        seq: 0,
+        record_hash: "4ba45eb548e66e8de880511c4e5de1b7ece6aa076ab8d1e1d9d39b825021282b",
+        prev_hash: "0".repeat(64),
+        s3_key: "decisions/demo-amira/000000-dec-demo-amira-v1-4a22bd8d.json",
+        otel_trace_id: "4a83a1638b8d316f426177014f865e8b",
+        xray_trace_id: "1-4a83a163-8b8d316f426177014f865e8b",
+      },
+    });
+    const response = PortfolioBuildResponse.parse(body);
+    expect(response.client_id).toBe("demo-amira");
+    expect(response.fiction).toBe(true);
+    expect(response.audit && "seq" in response.audit ? response.audit.seq : null).toBe(0);
+    expect(PortfolioBuildResponse.parse({ ...body, audit: { error: "ClientError" }, xray_trace_id: null }).audit).toEqual({ error: "ClientError" });
+    expect(PortfolioBuildResponse.safeParse({ ...body, client_id: "demo-Amira" }).success).toBe(false);
+    expect(PortfolioBuildResponse.safeParse({ ...body, xray_trace_id: "4a83a1638b8d316f426177014f865e8b" }).success).toBe(false);
+  });
+
   it("validates the build request: a client or a persona, known styles and modes", () => {
     expect(PortfolioBuildRequest.parse({ persona: "robert", request: { ticker: "TSLA", amount_cad: 50_000 } })).toMatchObject({ action: "build", persona: "robert" });
     expect(PortfolioBuildRequest.parse({ client_id: CLIENT, mode: "rules", admin: true })).toEqual({ action: "build", client_id: CLIENT, mode: "rules" });

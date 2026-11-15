@@ -18,6 +18,8 @@ Constats (seuils à relire par le volet finance de l'équipe larpathon) :
 - ``cash_heavy`` : plus de 30 % en encaisse;
 - ``few_holdings`` : moins de cinq positions évaluées hors encaisse et aucun FNB ni fonds;
 - ``unvalued_positions`` : au moins une ligne n'a pas pu être évaluée.
+
+Les notes et les raisons écrites par le code sont dans la langue de la session (``locale``).
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ from typing import Any
 
 from .. import clock, market
 from ..collect.fetchers import Quote
+from ..errors import pick
 
 ASSET_CLASSES = ("equity", "etf_equity", "etf_bond", "etf_commodity", "bond", "cash", "crypto", "fund", "other")
 ACCOUNT_TYPES = ("tfsa", "rrsp", "resp", "rrif", "non_registered", "unknown")
@@ -70,6 +73,19 @@ _EXPOSURE_GROUPS = (
     ("by_sector", "sector"),
 )
 _TOP_POSITION_COUNT = 5
+# Notes et raisons écrites par le code : (français, anglais).
+_TEXTS = {
+    "currency_assumed_cad": ("devise supposée CAD (non précisée)", "currency assumed to be CAD (not stated)"),
+    "unidentified_declared_value": (
+        "titre non identifié; valeur fournie par l'investisseur",
+        "security not identified; value given by the investor",
+    ),
+    "not_found_no_value": ("titre introuvable et aucune valeur fournie", "security not found and no value given"),
+    "no_price_no_value": ("prix introuvable et aucune valeur fournie", "price not found and no value given"),
+    "quantity_missing": ("quantité manquante", "quantity missing"),
+    "cash_amount_missing": ("montant de l'encaisse manquant", "cash amount missing"),
+    "unsupported_currency": ("devise non prise en charge ({currency})", "unsupported currency ({currency})"),
+}
 
 QuoteFetcher = Callable[[str], Quote]
 
@@ -156,8 +172,18 @@ def _market_from_yahoo(exchange: str | None) -> str | None:
     return exchange
 
 
-def _join_notes(current: str | None, extra: str) -> str:
-    return f"{current}; {extra}" if current else extra
+def _text(key: str, locale: str, **values: str) -> str:
+    return pick(locale, *_TEXTS[key]).format(**values)
+
+
+def _add_note(position: dict[str, Any], key: str, locale: str) -> None:
+    """Ajoute une note du code aux notes de la position, sauf si elle y est déjà, dans l'une ou l'autre langue :
+    ``portfolio.confirm`` relit les notes écrites par ``portfolio.submit``."""
+    current = position["notes"]
+    if current and any(text in current for text in _TEXTS[key]):
+        return
+    extra = _text(key, locale)
+    position["notes"] = f"{current}; {extra}" if current else extra
 
 
 def _unresolved_position(position_id: str, raw: RawPosition) -> dict[str, Any]:
@@ -209,7 +235,7 @@ def _yahoo_chart_source(quote: Quote) -> dict[str, Any]:
     }
 
 
-def _market_value_currency(position: dict[str, Any], raw: RawPosition) -> str:
+def _market_value_currency(position: dict[str, Any], raw: RawPosition, locale: str) -> str:
     """Devise de la valeur fournie : celle indiquée par l'investisseur, sinon celle de cotation, sinon le CAD.
 
     La position reçoit cette devise quand elle n'en a pas, et une note quand le CAD est supposé.
@@ -217,25 +243,26 @@ def _market_value_currency(position: dict[str, Any], raw: RawPosition) -> str:
     currency = raw.currency or position["currency"]
     if not currency:
         currency = position["currency"] = "CAD"
-        position["notes"] = _join_notes(position["notes"], "devise supposée CAD (non précisée)")
+        _add_note(position, "currency_assumed_cad", locale)
     elif not position["currency"]:
         position["currency"] = currency
     return currency
 
 
-def _missing_value_reason(position: dict[str, Any]) -> str:
+def _missing_value_reason(position: dict[str, Any], locale: str) -> str:
     if position["price"] is None and position["ticker"] is None:
-        return "titre introuvable et aucune valeur fournie"
+        return _text("not_found_no_value", locale)
     if position["price"] is None:
-        return "prix introuvable et aucune valeur fournie"
-    return "quantité manquante"
+        return _text("no_price_no_value", locale)
+    return _text("quantity_missing", locale)
 
 
 class Resolver:
-    """Résout des lignes brutes en positions évaluées, avec leurs sources."""
+    """Résout des lignes brutes en positions évaluées, avec leurs sources; notes et raisons dans ``locale``."""
 
-    def __init__(self, quote_fetcher: QuoteFetcher | None = None, *, max_remote_quotes: int = 10):
+    def __init__(self, quote_fetcher: QuoteFetcher | None = None, *, max_remote_quotes: int = 10, locale: str = "fr"):
         self.quote_fetcher = quote_fetcher
+        self.locale = locale
         self.max_remote_quotes = max_remote_quotes
         self.remote_calls = 0
         self.fx_rate = market.last_fx()
@@ -282,7 +309,7 @@ class Resolver:
         """Inscrit la valeur en CAD sur la position; renvoie la raison quand la devise n'est pas prise en charge."""
         rate = self._fx_to_cad(currency or "")
         if rate is None:
-            return f"devise non prise en charge ({currency})"
+            return _text("unsupported_currency", self.locale, currency=str(currency))
         position["value_cad"] = round(local_value * rate, 2)
         position["resolved"] = True
         return None
@@ -290,7 +317,7 @@ class Resolver:
     def _resolve_cash(self, position: dict[str, Any], raw: RawPosition) -> str | None:
         position.update(asset_class="cash", market="Cash", sector="Cash", currency=raw.currency or "CAD")
         if raw.market_value is None:
-            return "montant de l'encaisse manquant"
+            return _text("cash_amount_missing", self.locale)
         return self._convert_to_cad(position, raw.market_value, position["currency"])
 
     def _fill_from_universe(self, position: dict[str, Any], asset: market.Asset) -> None:
@@ -356,12 +383,12 @@ class Resolver:
         if position["price"] is not None and raw.quantity is not None:
             local_value, currency = raw.quantity * position["price"], position["currency"]
         elif raw.market_value is not None:
-            local_value, currency = raw.market_value, _market_value_currency(position, raw)
+            local_value, currency = raw.market_value, _market_value_currency(position, raw, self.locale)
         else:
-            return _missing_value_reason(position)
+            return _missing_value_reason(position, self.locale)
         reason = self._convert_to_cad(position, local_value, currency)
         if reason is None and not is_identified:
-            position["notes"] = _join_notes(position["notes"], "titre non identifié; valeur fournie par l'investisseur")
+            _add_note(position, "unidentified_declared_value", self.locale)
         return reason
 
     def _resolve_one(self, position_id: str, raw: RawPosition) -> tuple[dict[str, Any], str | None]:
@@ -485,8 +512,11 @@ def compute_exposures(positions: list[dict[str, Any]], unresolved: list[dict[str
     return exposures
 
 
-def build_view(raws: list[RawPosition], *, status: str, quote_fetcher: QuoteFetcher | None = None) -> dict[str, Any]:
-    resolver = Resolver(quote_fetcher)
+def build_view(
+    raws: list[RawPosition], *, status: str, quote_fetcher: QuoteFetcher | None = None, locale: str = "fr"
+) -> dict[str, Any]:
+    """Vue du portefeuille; ``locale`` est la langue de la session, celle des notes et des raisons du code."""
+    resolver = Resolver(quote_fetcher, locale=locale)
     positions, unresolved = resolver.resolve(raws)
     exposures = compute_exposures(positions, unresolved)
     fx_rate = resolver.fx_rate

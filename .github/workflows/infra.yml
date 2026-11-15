@@ -1,0 +1,118 @@
+# =============================================================================
+# Workflow infra (infrastructure/), appele par .github/workflows/pipeline.yml,
+# seulement quand ci-context.sh a decide deploy=true.
+#   validate -> upload config -> plan -> apply -> HCP Terraform -> AWS
+#
+# Chaque job tourne avec working-directory: infrastructure (chemins relatifs
+# infra/, deploy/, scripts/).
+#
+#   - PR qui touche infrastructure/** : validate -> upload -> plan (pas d'apply)
+#   - push sur la branche par defaut  : validate -> upload -> plan -> apply
+#
+# Les artefacts d'app.yml arrivent dans le bundle televerse :
+#   release-tfvars -> deploy/release.auto.tfvars (release_id)
+#   agents-package -> infra/build/ (agents.zip, knowledge/)
+#
+# Workspace HCP Terraform pilote par API (aucun VCS), repertoire de travail
+# "infra". Les valeurs passent de job en job par les outputs (upload-config.sh
+# et plan.sh ecrivent dans $GITHUB_OUTPUT).
+#
+# Secret de repo lu ici : TF_API_TOKEN. TFC_PROJECT_ID : variable de repo,
+# utile seulement si init.sh doit creer un workspace.
+# =============================================================================
+
+name: infra
+
+on:
+  workflow_call:
+    inputs:
+      apply:
+        type: string
+        required: true
+      deploy_env:
+        type: string
+        required: true
+      ephemeral_envs_enabled:
+        type: string
+        required: true
+      tf_cloud_hostname:
+        type: string
+        required: true
+      tf_cloud_organization:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TF_CLOUD_HOSTNAME: ${{ inputs.tf_cloud_hostname }}
+  TF_CLOUD_ORGANIZATION: ${{ inputs.tf_cloud_organization }}
+  DEPLOY_ENV: ${{ inputs.deploy_env }}
+  EPHEMERAL_ENVS_ENABLED: ${{ inputs.ephemeral_envs_enabled }}
+  TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+
+defaults:
+  run:
+    working-directory: infrastructure
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.17.2"
+          terraform_wrapper: false
+      - run: sh scripts/validate.sh
+
+  upload_configuration:
+    needs: validate
+    runs-on: ubuntu-latest
+    env:
+      TFC_PROJECT_ID: ${{ vars.TFC_PROJECT_ID || secrets.TFC_PROJECT_ID }}
+    outputs:
+      workspace_id: ${{ steps.upload.outputs.WORKSPACE_ID }}
+      config_version_id: ${{ steps.upload.outputs.CONFIG_VERSION_ID }}
+      deploy_env: ${{ steps.upload.outputs.DEPLOY_ENV }}
+      tf_workspace: ${{ steps.upload.outputs.TF_WORKSPACE }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-tfvars
+          path: infrastructure/deploy
+      - uses: actions/download-artifact@v8
+        with:
+          name: agents-package
+          path: infrastructure/infra/build
+      # ci-upload.sh source init.sh (env + workspace) puis lance upload-config.sh
+      # dans le meme shell : chaque step GitHub est un shell neuf.
+      - id: upload
+        run: sh scripts/ci-upload.sh
+
+  plan:
+    needs: upload_configuration
+    runs-on: ubuntu-latest
+    env:
+      WORKSPACE_ID: ${{ needs.upload_configuration.outputs.workspace_id }}
+      CONFIG_VERSION_ID: ${{ needs.upload_configuration.outputs.config_version_id }}
+      DEPLOY_ENV: ${{ needs.upload_configuration.outputs.deploy_env }}
+      TF_WORKSPACE: ${{ needs.upload_configuration.outputs.tf_workspace }}
+    outputs:
+      run_id: ${{ steps.plan.outputs.RUN_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: plan
+        run: sh scripts/plan.sh
+
+  apply:
+    needs: plan
+    if: inputs.apply == 'true'
+    runs-on: ubuntu-latest
+    env:
+      RUN_ID: ${{ needs.plan.outputs.run_id }}
+    steps:
+      - uses: actions/checkout@v7
+      - run: sh scripts/apply.sh

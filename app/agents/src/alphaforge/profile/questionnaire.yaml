@@ -1,0 +1,575 @@
+# À RELIRE PAR LE VOLET FINANCE DE L'ÉQUIPE LARPATHON.
+#
+# Questionnaire déterministe d'AlphaForge AI (aucun modèle) : questions de base, champs du profil,
+# poids de complétude, règle du niveau de connaissances et correspondance du risque effectif.
+# Le code (alphaforge.profile.questionnaire et alphaforge.profile.rules) lit ce fichier tel quel;
+# changer un texte, une option, un poids ou un barème ne demande aucun changement de code.
+#
+# Repères : atelier BNCD « Comprendre l'investisseur avant de bâtir la solution » (objectifs, diapositive 3;
+# horizon < 3 ans, 3 à 10 ans, 10 ans et plus, qui ne se déduit ni de l'âge ni de la tolérance, diapositive 7;
+# tolérance au risque différente de la capacité, diapositive 8; profil en cinq dimensions, diapositive 10;
+# ce qu'un portefeuille ne dit pas, diapositive 14) et énoncé officiel (cadre responsable, p. 14 et 17).
+# Les fiches des personas ne fournissent aucun chiffre ni barème à ce fichier.
+
+version: "2026-11-14.1"
+review: "À relire par le volet finance de l'équipe larpathon : textes, options, poids et barèmes."
+
+completeness:
+  # score = somme des poids des champs applicables connus / somme des poids des champs applicables.
+  # Un champ dont la condition « when » est fausse n'est pas applicable et sort du calcul.
+  # Les questions de base donnent environ 0,65; les relances d'A1 complètent le profil.
+  threshold: 0.70
+  cap: 0.95
+
+fields:
+  # ---------------------------------------------------------------- niveau de connaissances
+  - id: knowledge.invest_frequency
+    type: enum
+    weight: 0
+    writable_by: [base]
+    label: {fr: "Fréquence des placements (3 dernières années)", en: "Investing frequency (last 3 years)"}
+    values:
+      - {value: never, label: {fr: "Jamais", en: "Never"}}
+      - {value: rarely, label: {fr: "Une ou deux fois", en: "Once or twice"}}
+      - {value: several_per_year, label: {fr: "Plusieurs fois par année", en: "Several times a year"}}
+      - {value: monthly, label: {fr: "Tous les mois ou plus souvent", en: "Every month or more often"}}
+  - id: knowledge.news_frequency
+    type: enum
+    weight: 0
+    writable_by: [base]
+    label: {fr: "Suivi de l'actualité financière", en: "Following financial news"}
+    values:
+      - {value: rarely, label: {fr: "Rarement ou jamais", en: "Rarely or never"}}
+      - {value: monthly, label: {fr: "Quelques fois par mois", en: "A few times a month"}}
+      - {value: weekly, label: {fr: "Chaque semaine", en: "Every week"}}
+      - {value: daily, label: {fr: "Tous les jours", en: "Every day"}}
+  - id: knowledge.products_known
+    type: multi_enum
+    weight: 0
+    writable_by: [base]
+    exclusive: [none]
+    label: {fr: "Produits connus", en: "Products known"}
+    values:
+      - {value: savings_gic, label: {fr: "Compte d'épargne ou CPG", en: "Savings account or GIC"}}
+      - {value: mutual_funds, label: {fr: "Fonds communs de placement", en: "Mutual funds"}}
+      - {value: etf, label: {fr: "FNB (fonds négociés en bourse)", en: "ETFs (exchange-traded funds)"}}
+      - {value: stocks, label: {fr: "Actions", en: "Stocks"}}
+      - {value: bonds, label: {fr: "Obligations", en: "Bonds"}}
+      - {value: options, label: {fr: "Options ou autres dérivés", en: "Options or other derivatives"}}
+      - {value: crypto, label: {fr: "Cryptoactifs", en: "Crypto-assets"}}
+      - {value: none, label: {fr: "Aucun de ces produits", en: "None of these"}}
+  - id: knowledge.self_assessment
+    type: enum
+    weight: 0
+    writable_by: [base, a1]
+    label: {fr: "Auto-évaluation des connaissances", en: "Self-assessed knowledge"}
+    values:
+      - {value: beginner, label: {fr: "Débutant", en: "Beginner"}}
+      - {value: intermediate, label: {fr: "Intermédiaire", en: "Intermediate"}}
+      - {value: advanced, label: {fr: "Avancé", en: "Advanced"}}
+  - id: knowledge.level
+    type: enum
+    weight: 5
+    computed: true   # calculé par rules.knowledge_level, ou fixé dans les réglages (provenance settings)
+    writable_by: [settings]
+    label: {fr: "Niveau de connaissances", en: "Knowledge level"}
+    values:
+      - {value: beginner, label: {fr: "Débutant", en: "Beginner"}}
+      - {value: intermediate, label: {fr: "Intermédiaire", en: "Intermediate"}}
+      - {value: advanced, label: {fr: "Avancé", en: "Advanced"}}
+
+  # ---------------------------------------------------------------- objectif
+  - id: objective.goal
+    type: enum
+    weight: 10
+    summary: true
+    writable_by: [base, a1]
+    label: {fr: "Objectif principal", en: "Main goal"}
+    values:
+      - {value: growth, label: {fr: "Faire croître le capital à long terme", en: "Grow capital over the long term"}}
+      - {value: retirement, label: {fr: "Préparer la retraite", en: "Prepare for retirement"}}
+      - {value: project, label: {fr: "Financer un projet important", en: "Fund a major project"}}
+      - {value: income, label: {fr: "Générer un revenu régulier", en: "Generate a regular income"}}
+      - {value: preservation, label: {fr: "Préserver le capital en gardant un potentiel de croissance", en: "Preserve capital while keeping some growth potential"}}
+      - {value: legacy, label: {fr: "Transmettre un patrimoine", en: "Pass on wealth"}}
+      - {value: safety_cushion, label: {fr: "Constituer un coussin de sécurité", en: "Build a safety cushion"}}
+  - id: objective.project_type
+    type: enum
+    weight: 2
+    summary: true
+    when: {field: objective.goal, in: [project]}
+    writable_by: [base, a1]
+    label: {fr: "Type de projet", en: "Type of project"}
+    values:
+      - {value: home, label: {fr: "Achat d'une propriété", en: "Buying a home"}}
+      - {value: education, label: {fr: "Études", en: "Education"}}
+      - {value: business, label: {fr: "Lancer ou financer une entreprise", en: "Starting or funding a business"}}
+      - {value: travel, label: {fr: "Voyage ou année sabbatique", en: "Travel or sabbatical"}}
+      - {value: other, label: {fr: "Autre projet", en: "Other project"}}
+  - id: objective.goal_detail
+    type: text
+    max_length: 500
+    weight: 6
+    writable_by: [a1]
+    label: {fr: "Précision de l'objectif", en: "Goal details"}
+    fallback:
+      kind: text
+      prompt: {fr: "En une ou deux phrases, que voulez-vous concrètement accomplir avec cet argent ?", en: "In one or two sentences, what do you concretely want this money to achieve?"}
+      help: {fr: "Par exemple : une mise de fonds dans cinq ans, un complément de revenu à la retraite.", en: "For example: a down payment in five years, extra income in retirement."}
+
+  # ---------------------------------------------------------------- horizon
+  - id: horizon.horizon_band
+    type: enum
+    weight: 10
+    summary: true
+    writable_by: [base, a1]
+    label: {fr: "Horizon de placement", en: "Investment horizon"}
+    values:
+      - {value: lt3, label: {fr: "Moins de 3 ans", en: "Less than 3 years"}}
+      - {value: 3to10, label: {fr: "De 3 à 10 ans", en: "3 to 10 years"}}
+      - {value: gt10, label: {fr: "10 ans et plus", en: "10 years or more"}}
+  - id: horizon.horizon_years
+    type: number
+    min: 0
+    max: 60
+    unit: {fr: "ans", en: "years"}
+    weight: 6
+    summary: true
+    writable_by: [a1]
+    label: {fr: "Années avant le premier retrait important", en: "Years before the first major withdrawal"}
+    fallback:
+      kind: number
+      prompt: {fr: "Dans combien d'années environ prévoyez-vous le premier retrait important ?", en: "In about how many years do you expect the first major withdrawal?"}
+      help: {fr: "Un ordre de grandeur suffit.", en: "A rough estimate is enough."}
+  - id: horizon.withdrawal_pattern
+    type: enum
+    weight: 5
+    summary: true
+    writable_by: [a1]
+    label: {fr: "Façon de retirer l'argent", en: "How the money will be withdrawn"}
+    values:
+      - {value: lump_sum, label: {fr: "En une seule fois", en: "All at once"}}
+      - {value: gradual, label: {fr: "Par étapes, sur quelques années", en: "In stages, over a few years"}}
+      - {value: regular_income, label: {fr: "Sous forme de revenu régulier", en: "As a regular income"}}
+      - {value: undecided, label: {fr: "Pas encore décidé", en: "Not decided yet"}}
+    fallback:
+      kind: single_choice
+      prompt: {fr: "Comment prévoyez-vous retirer cet argent le moment venu ?", en: "How do you plan to withdraw this money when the time comes?"}
+
+  # ---------------------------------------------------------------- tolérance au risque
+  - id: risk_tolerance.drop_reaction
+    type: enum
+    weight: 7
+    writable_by: [base, a1]
+    label: {fr: "Réaction à une baisse de 20 %", en: "Reaction to a 20% drop"}
+    values:
+      - {value: sell_all, label: {fr: "Tout vendre pour éviter de perdre davantage", en: "Sell everything to avoid further losses"}}
+      - {value: sell_some, label: {fr: "Vendre une partie", en: "Sell part of it"}}
+      - {value: hold, label: {fr: "Ne rien changer et attendre", en: "Change nothing and wait"}}
+      - {value: buy_more, label: {fr: "En profiter pour investir davantage", en: "Take the opportunity to invest more"}}
+  - id: risk_tolerance.risk_attitude
+    type: enum
+    weight: 5
+    writable_by: [base, a1]
+    label: {fr: "Attitude face aux variations", en: "Attitude towards fluctuations"}
+    values:
+      - {value: stability, label: {fr: "Éviter les baisses, même avec un rendement faible", en: "Avoid drops, even with a low return"}}
+      - {value: small, label: {fr: "Accepter de petites variations", en: "Accept small fluctuations"}}
+      - {value: moderate, label: {fr: "Accepter des variations moyennes", en: "Accept moderate fluctuations"}}
+      - {value: large, label: {fr: "Accepter de fortes variations", en: "Accept large fluctuations"}}
+  - id: risk_tolerance.past_drop_behavior
+    type: enum
+    weight: 5
+    writable_by: [a1]
+    label: {fr: "Comportement lors d'une baisse réelle", en: "Behaviour during a real market drop"}
+    values:
+      - {value: sold, label: {fr: "J'ai vendu", en: "I sold"}}
+      - {value: held, label: {fr: "J'ai conservé mes placements", en: "I held on"}}
+      - {value: bought_more, label: {fr: "J'ai investi davantage", en: "I invested more"}}
+      - {value: never_experienced, label: {fr: "Je n'investissais pas encore", en: "I was not investing yet"}}
+    fallback:
+      kind: single_choice
+      prompt: {fr: "Lors d'une baisse réelle des marchés, par exemple en 2022, qu'avez-vous fait ?", en: "During a real market drop, for example in 2022, what did you do?"}
+
+  # ---------------------------------------------------------------- capacité à prendre du risque
+  - id: risk_capacity.emergency_fund
+    type: number
+    min: 0
+    max: 120
+    unit: {fr: "mois", en: "months"}
+    weight: 6
+    writable_by: [base, a1]
+    label: {fr: "Fonds d'urgence", en: "Emergency fund"}
+  - id: risk_capacity.income_stability
+    type: enum
+    weight: 5
+    writable_by: [base, a1]
+    label: {fr: "Stabilité des revenus", en: "Income stability"}
+    values:
+      - {value: very_stable, label: {fr: "Très stables", en: "Very stable"}}
+      - {value: stable, label: {fr: "Plutôt stables", en: "Fairly stable"}}
+      - {value: variable, label: {fr: "Variables ou incertains", en: "Variable or uncertain"}}
+      - {value: none, label: {fr: "Pas de revenu régulier", en: "No regular income"}}
+  - id: risk_capacity.loss_impact
+    type: enum
+    weight: 6
+    writable_by: [base, a1]
+    label: {fr: "Effet d'une perte du quart de ce placement", en: "Effect of losing a quarter of this investment"}
+    values:
+      - {value: major, label: {fr: "Changer des projets importants", en: "Change major plans"}}
+      - {value: some, label: {fr: "Quelques ajustements", en: "Some adjustments"}}
+      - {value: none, label: {fr: "Aucun effet notable", en: "No noticeable effect"}}
+  - id: risk_capacity.max_loss_cad
+    type: money
+    min: 0
+    max: 100000000
+    weight: 6
+    writable_by: [a1]
+    label: {fr: "Perte admissible", en: "Acceptable loss"}
+    fallback:
+      kind: money
+      prompt: {fr: "Quelle perte, en dollars, pourriez-vous absorber sur ce placement sans changer vos projets ?", en: "What loss, in dollars, could you absorb on this investment without changing your plans?"}
+      help: {fr: "Il s'agit de votre capacité financière, pas de votre confort face aux baisses.", en: "This is about your financial capacity, not your comfort with drops."}
+  - id: risk_capacity.high_interest_debt
+    type: boolean
+    weight: 4
+    writable_by: [a1]
+    label: {fr: "Dettes à taux d'intérêt élevé", en: "High-interest debt"}
+    fallback:
+      kind: boolean
+      prompt: {fr: "Avez-vous des dettes à taux d'intérêt élevé, comme un solde de carte de crédit reporté d'un mois à l'autre ?", en: "Do you have high-interest debt, such as a credit card balance carried from month to month?"}
+
+  # ---------------------------------------------------------------- contraintes
+  - id: constraints.liquidity_need
+    type: enum
+    weight: 4
+    summary: true
+    writable_by: [base, a1]
+    label: {fr: "Retraits prévus dans les 12 prochains mois", en: "Withdrawals planned in the next 12 months"}
+    values:
+      - {value: none, label: {fr: "Aucun retrait prévu sous 12 mois", en: "No withdrawal within 12 months"}}
+      - {value: some, label: {fr: "Une petite partie sous 12 mois", en: "A small part within 12 months"}}
+      - {value: large, label: {fr: "Une part importante sous 12 mois", en: "A large part within 12 months"}}
+  - id: constraints.withdrawal_pct_12m
+    type: percent
+    min: 0
+    max: 100
+    weight: 2
+    when: {field: constraints.liquidity_need, in: [some, large]}
+    writable_by: [base, a1]
+    label: {fr: "Part à retirer sous 12 mois", en: "Share to withdraw within 12 months"}
+  - id: constraints.account_types
+    type: multi_enum
+    weight: 3
+    summary: true
+    exclusive: [unknown]
+    writable_by: [base, a1, a2]
+    label: {fr: "Types de comptes", en: "Account types"}
+    values:
+      - {value: tfsa, label: {fr: "CELI", en: "TFSA"}}
+      - {value: rrsp, label: {fr: "REER", en: "RRSP"}}
+      - {value: resp, label: {fr: "REEE", en: "RESP"}}
+      - {value: rrif, label: {fr: "FERR", en: "RRIF"}}
+      - {value: non_registered, label: {fr: "Compte non enregistré", en: "Non-registered account"}}
+      - {value: unknown, label: {fr: "Pas encore décidé", en: "Not decided yet"}}
+  - id: constraints.currency_preference
+    type: enum
+    weight: 2
+    summary: true
+    writable_by: [base, a1]
+    label: {fr: "Préférence de devise", en: "Currency preference"}
+    values:
+      - {value: cad_only, label: {fr: "Surtout en dollars canadiens", en: "Mostly Canadian dollars"}}
+      - {value: cad_usd, label: {fr: "Dollars canadiens et américains", en: "Canadian and US dollars"}}
+      - {value: no_preference, label: {fr: "Aucune préférence de devise", en: "No currency preference"}}
+  - id: constraints.monthly_contribution_cad
+    type: money
+    min: 0
+    max: 1000000
+    weight: 4
+    writable_by: [a1]
+    label: {fr: "Ajout mensuel prévu", en: "Planned monthly contribution"}
+    fallback:
+      kind: money
+      prompt: {fr: "Prévoyez-vous ajouter de l'argent régulièrement ? Si oui, combien par mois environ ? (0 si non)", en: "Do you plan to add money regularly? If so, about how much per month? (0 if not)"}
+
+  # ---------------------------------------------------------------- préférences
+  - id: preferences.esg_importance
+    type: scale
+    min: 1
+    max: 5
+    weight: 3
+    summary: true
+    writable_by: [base, a1]
+    label: {fr: "Importance des critères ESG", en: "Importance of ESG criteria"}
+  - id: preferences.exclusions
+    type: multi_enum
+    weight: 2
+    summary: true
+    exclusive: [none]
+    when: {field: preferences.esg_importance, gte: 3}
+    writable_by: [base, a1]
+    label: {fr: "Exclusions", en: "Exclusions"}
+    values:
+      - {value: tobacco, label: {fr: "Tabac", en: "Tobacco"}}
+      - {value: weapons, label: {fr: "Armement", en: "Weapons"}}
+      - {value: fossil_fuels, label: {fr: "Combustibles fossiles", en: "Fossil fuels"}}
+      - {value: gambling, label: {fr: "Jeux de hasard", en: "Gambling"}}
+      - {value: alcohol, label: {fr: "Alcool", en: "Alcohol"}}
+      - {value: none, label: {fr: "Aucune exclusion", en: "No exclusion"}}
+  - id: preferences.interests
+    type: multi_enum
+    weight: 2
+    summary: true
+    exclusive: [none]
+    writable_by: [base, a1]
+    label: {fr: "Thèmes d'intérêt", en: "Themes of interest"}
+    values:
+      - {value: technology, label: {fr: "Technologie et intelligence artificielle", en: "Technology and artificial intelligence"}}
+      - {value: crypto, label: {fr: "Cryptoactifs", en: "Crypto-assets"}}
+      - {value: dividends, label: {fr: "Revenus de dividendes", en: "Dividend income"}}
+      - {value: canadian_companies, label: {fr: "Entreprises canadiennes", en: "Canadian companies"}}
+      - {value: healthcare, label: {fr: "Santé", en: "Health care"}}
+      - {value: clean_energy, label: {fr: "Énergie propre", en: "Clean energy"}}
+      - {value: gold, label: {fr: "Or", en: "Gold"}}
+      - {value: none, label: {fr: "Aucun thème en particulier", en: "No particular theme"}}
+  - id: preferences.approach
+    type: enum
+    weight: 4
+    summary: true
+    writable_by: [a1]
+    label: {fr: "Façon d'investir préférée", en: "Preferred way of investing"}
+    values:
+      - {value: passive_funds, label: {fr: "Surtout des fonds indiciels (FNB)", en: "Mostly index funds (ETFs)"}}
+      - {value: mixed, label: {fr: "Un mélange de fonds et de titres individuels", en: "A mix of funds and individual securities"}}
+      - {value: individual_securities, label: {fr: "Surtout des titres individuels", en: "Mostly individual securities"}}
+      - {value: no_preference, label: {fr: "Aucune préférence", en: "No preference"}}
+    fallback:
+      kind: single_choice
+      prompt: {fr: "Comment préférez-vous investir ?", en: "How do you prefer to invest?"}
+
+  # ---------------------------------------------------------------- contexte
+  - id: context.amount_cad
+    type: money
+    min: 0
+    max: 100000000
+    weight: 4
+    summary: true
+    writable_by: [base, a1]
+    label: {fr: "Montant à investir", en: "Amount to invest"}
+  - id: context.has_existing_portfolio
+    type: boolean
+    weight: 1
+    writable_by: [base]
+    label: {fr: "Portefeuille existant", en: "Existing portfolio"}
+  - id: context.existing_portfolio_value_cad
+    type: money
+    min: 0
+    max: 1000000000
+    weight: 0
+    writable_by: [a2]
+    label: {fr: "Valeur du portefeuille existant", en: "Existing portfolio value"}
+  - id: context.portfolio_flags
+    type: multi_enum
+    weight: 0
+    writable_by: [a2]
+    label: {fr: "Constats sur le portefeuille existant", en: "Findings on the existing portfolio"}
+    values:
+      - {value: concentration_single_position, label: {fr: "Une position pèse plus de 20 %", en: "One position weighs more than 20%"}}
+      - {value: concentration_sector, label: {fr: "Un secteur pèse plus de 40 % des actions", en: "One sector weighs more than 40% of equities"}}
+      - {value: home_bias_canada, label: {fr: "Au moins 60 % au Canada", en: "At least 60% in Canada"}}
+      - {value: crypto_exposure_high, label: {fr: "Plus de 10 % en cryptoactifs", en: "More than 10% in crypto-assets"}}
+      - {value: cash_heavy, label: {fr: "Plus de 30 % en encaisse", en: "More than 30% in cash"}}
+      - {value: few_holdings, label: {fr: "Moins de cinq titres et aucun fonds diversifié", en: "Fewer than five securities and no diversified fund"}}
+      - {value: unvalued_positions, label: {fr: "Des positions n'ont pas pu être évaluées", en: "Some positions could not be valued"}}
+
+questions:
+  # 1. Niveau de connaissances d'abord (quelques questions rapides puis une auto-évaluation).
+  - id: q_kn_invest_freq
+    field: knowledge.invest_frequency
+    kind: single_choice
+    prompt: {fr: "Au cours des trois dernières années, à quelle fréquence avez-vous fait des placements (achat ou vente de titres, de fonds ou de CPG) ?", en: "Over the last three years, how often did you invest (buying or selling securities, funds or GICs)?"}
+  - id: q_kn_news
+    field: knowledge.news_frequency
+    kind: single_choice
+    prompt: {fr: "À quelle fréquence suivez-vous l'actualité financière ou économique ?", en: "How often do you follow financial or economic news?"}
+  - id: q_kn_products
+    field: knowledge.products_known
+    kind: multi_choice
+    prompt: {fr: "Quels produits connaissez-vous assez bien pour expliquer leur fonctionnement ?", en: "Which products do you know well enough to explain how they work?"}
+    help: {fr: "Cochez tout ce qui s'applique.", en: "Select all that apply."}
+  - id: q_kn_self
+    field: knowledge.self_assessment
+    kind: single_choice
+    prompt: {fr: "Comment évaluez-vous vos connaissances en placement ?", en: "How would you rate your investment knowledge?"}
+    help: {fr: "Vous pourrez changer ce niveau plus tard dans les réglages.", en: "You can change this level later in the settings."}
+    options:
+      - {value: beginner, label: {fr: "Débutant : je découvre les placements", en: "Beginner: I am new to investing"}}
+      - {value: intermediate, label: {fr: "Intermédiaire : je connais les notions de base (actions, obligations, FNB)", en: "Intermediate: I know the basics (stocks, bonds, ETFs)"}}
+      - {value: advanced, label: {fr: "Avancé : je compare des produits et je comprends le risque, les frais et la fiscalité", en: "Advanced: I compare products and understand risk, fees and taxes"}}
+
+  # 2. Objectif.
+  - id: q_goal
+    field: objective.goal
+    kind: single_choice
+    prompt: {fr: "Qu'est-ce que cet argent doit d'abord vous permettre de faire ?", en: "What should this money allow you to do first and foremost?"}
+    help: {fr: "Un placement est un moyen, pas un objectif. Parfois, le bon choix est de ne pas exposer cet argent aux marchés.", en: "An investment is a means, not a goal. Sometimes the right choice is not to expose this money to the markets."}
+  - id: q_project_type
+    field: objective.project_type
+    kind: single_choice
+    when: {field: objective.goal, in: [project]}
+    prompt: {fr: "De quel type de projet s'agit-il ?", en: "What kind of project is it?"}
+
+  # 3. Horizon (bandes de l'atelier BNCD).
+  - id: q_horizon
+    field: horizon.horizon_band
+    kind: single_choice
+    prompt: {fr: "Dans combien de temps aurez-vous besoin d'une part importante de cet argent ?", en: "When will you need a significant part of this money?"}
+    help: {fr: "L'horizon ne se déduit ni de l'âge ni de la tolérance au risque.", en: "The horizon cannot be inferred from age or from risk tolerance."}
+
+  # 4. Tolérance au risque (volonté de subir des fluctuations).
+  - id: q_drop_reaction
+    field: risk_tolerance.drop_reaction
+    kind: single_choice
+    prompt: {fr: "Imaginez que votre placement perde 20 % de sa valeur en quelques mois. Que feriez-vous le plus probablement ?", en: "Imagine your investment loses 20% of its value within a few months. What would you most likely do?"}
+    help: {fr: "Il n'y a pas de bonne réponse : la question mesure votre réaction, pas vos connaissances.", en: "There is no right answer: the question measures your reaction, not your knowledge."}
+  - id: q_risk_attitude
+    field: risk_tolerance.risk_attitude
+    kind: single_choice
+    prompt: {fr: "Quelle phrase vous décrit le mieux ?", en: "Which statement describes you best?"}
+    options:
+      - {value: stability, label: {fr: "Je veux avant tout éviter les baisses, même si le rendement est faible", en: "Above all I want to avoid drops, even if the return is low"}}
+      - {value: small, label: {fr: "J'accepte de petites variations pour un rendement un peu meilleur", en: "I accept small fluctuations for a slightly better return"}}
+      - {value: moderate, label: {fr: "J'accepte des variations moyennes pour un meilleur potentiel de croissance", en: "I accept moderate fluctuations for better growth potential"}}
+      - {value: large, label: {fr: "J'accepte de fortes variations pour viser la croissance la plus élevée", en: "I accept large fluctuations to aim for the highest growth"}}
+
+  # 5. Capacité à prendre du risque (capacité financière à vivre les conséquences d'une perte).
+  - id: q_emergency_fund
+    field: risk_capacity.emergency_fund
+    kind: number
+    prompt: {fr: "Votre fonds d'urgence couvre combien de mois de dépenses essentielles ?", en: "How many months of essential expenses does your emergency fund cover?"}
+    help: {fr: "Le fonds d'urgence est l'épargne disponible rapidement, hors de ce placement. Inscrivez 0 si vous n'en avez pas.", en: "The emergency fund is savings you can reach quickly, outside this investment. Enter 0 if you have none."}
+  - id: q_income_stability
+    field: risk_capacity.income_stability
+    kind: single_choice
+    prompt: {fr: "Comment décririez-vous la stabilité de vos revenus pour les prochaines années ?", en: "How would you describe the stability of your income over the coming years?"}
+    options:
+      - {value: very_stable, label: {fr: "Très stables (emploi permanent, rente garantie…)", en: "Very stable (permanent job, guaranteed pension…)"}}
+      - {value: stable, label: {fr: "Plutôt stables", en: "Fairly stable"}}
+      - {value: variable, label: {fr: "Variables ou incertains (travail autonome, contrats…)", en: "Variable or uncertain (self-employed, contracts…)"}}
+      - {value: none, label: {fr: "Pas de revenu régulier", en: "No regular income"}}
+  - id: q_loss_impact
+    field: risk_capacity.loss_impact
+    kind: single_choice
+    prompt: {fr: "Si ce placement perdait le quart de sa valeur, quel effet cela aurait-il sur vos projets ?", en: "If this investment lost a quarter of its value, what effect would it have on your plans?"}
+    options:
+      - {value: major, label: {fr: "Je devrais changer des projets importants", en: "I would have to change major plans"}}
+      - {value: some, label: {fr: "Je devrais faire quelques ajustements", en: "I would have to make some adjustments"}}
+      - {value: none, label: {fr: "Aucun effet notable sur mes projets", en: "No noticeable effect on my plans"}}
+
+  # 6. Contraintes.
+  - id: q_liquidity
+    field: constraints.liquidity_need
+    kind: single_choice
+    prompt: {fr: "Prévoyez-vous retirer une partie de cet argent au cours des 12 prochains mois ?", en: "Do you plan to withdraw part of this money in the next 12 months?"}
+    options:
+      - {value: none, label: {fr: "Non", en: "No"}}
+      - {value: some, label: {fr: "Oui, une petite partie", en: "Yes, a small part"}}
+      - {value: large, label: {fr: "Oui, une part importante", en: "Yes, a large part"}}
+  - id: q_withdrawal_pct
+    field: constraints.withdrawal_pct_12m
+    kind: percent
+    when: {field: constraints.liquidity_need, in: [some, large]}
+    prompt: {fr: "Quelle part environ, en pourcentage du montant investi ?", en: "Roughly what share, as a percentage of the amount invested?"}
+  - id: q_accounts
+    field: constraints.account_types
+    kind: multi_choice
+    prompt: {fr: "Dans quels types de comptes cet argent sera-t-il placé ?", en: "In which types of accounts will this money be invested?"}
+    help: {fr: "Les comptes enregistrés (CELI, REER, REEE, FERR) ont des règles fiscales et des plafonds propres.", en: "Registered accounts (TFSA, RRSP, RESP, RRIF) have their own tax rules and limits."}
+  - id: q_currency
+    field: constraints.currency_preference
+    kind: single_choice
+    prompt: {fr: "Quelle est votre préférence de devise pour vos placements ?", en: "What is your currency preference for your investments?"}
+
+  # 7. Préférences (elles orientent les choix à l'intérieur des limites fixées par les contraintes).
+  - id: q_esg
+    field: preferences.esg_importance
+    kind: scale
+    prompt: {fr: "Quelle importance accordez-vous aux critères environnementaux, sociaux et de gouvernance (ESG) ?", en: "How important are environmental, social and governance (ESG) criteria to you?"}
+    help: {fr: "1 = aucune importance, 5 = très grande importance.", en: "1 = not important at all, 5 = very important."}
+  - id: q_exclusions
+    field: preferences.exclusions
+    kind: multi_choice
+    when: {field: preferences.esg_importance, gte: 3}
+    prompt: {fr: "Y a-t-il des secteurs que vous voulez exclure ?", en: "Are there sectors you want to exclude?"}
+  - id: q_interests
+    field: preferences.interests
+    kind: multi_choice
+    prompt: {fr: "Certains thèmes vous intéressent-ils particulièrement ?", en: "Are you particularly interested in some themes?"}
+
+  # 8. Contexte, puis le portefeuille existant en dernier.
+  - id: q_amount
+    field: context.amount_cad
+    kind: money
+    prompt: {fr: "Quel montant pensez-vous investir, en dollars canadiens ?", en: "How much do you plan to invest, in Canadian dollars?"}
+    help: {fr: "Un ordre de grandeur suffit. Le profil reste fictif : n'indiquez aucun renseignement bancaire.", en: "A rough figure is enough. The profile stays fictitious: do not enter any banking details."}
+  - id: q_existing_portfolio
+    field: context.has_existing_portfolio
+    kind: boolean
+    prompt: {fr: "Avez-vous un portefeuille existant que vous aimeriez faire analyser ?", en: "Do you have an existing portfolio you would like analysed?"}
+    help: {fr: "Vous pourrez le fournir sous n'importe quelle forme : texte collé, CSV, tableur, PDF ou capture d'écran.", en: "You can provide it in any form: pasted text, CSV, spreadsheet, PDF or screenshot."}
+
+rules:
+  knowledge_level:
+    # total = points de fréquence des placements + points du suivi de l'actualité + points des produits (0 à 9).
+    # Niveau mesuré : débutant de 0 à 2, intermédiaire de 3 à 5, avancé de 6 à 9.
+    # Niveau retenu = min(auto-évaluation, niveau mesuré + 1 cran) : l'auto-évaluation peut dépasser le niveau
+    # mesuré d'un cran au plus; une auto-évaluation plus modeste que le niveau mesuré est respectée.
+    points:
+      knowledge.invest_frequency: {never: 0, rarely: 1, several_per_year: 2, monthly: 3}
+      knowledge.news_frequency: {rarely: 0, monthly: 1, weekly: 2, daily: 3}
+    products:
+      # 0 produit de base : 0 point; 1 ou 2 : 1 point; 3 ou 4 : 2 points; 3 ou plus et un produit avancé : 3 points.
+      core: [mutual_funds, etf, stocks, bonds]
+      advanced: [options]
+    bands: {beginner: 0, intermediate: 3, advanced: 6}
+    self_assessment_margin: 1
+  risk:
+    levels: [low, low_medium, medium, medium_high, high]
+    # Libellés au féminin pour la tolérance et la capacité, au masculin pour le risque effectif.
+    level_labels:
+      low: {fr: "Faible", en: "Low"}
+      low_medium: {fr: "Faible à moyenne", en: "Low to medium"}
+      medium: {fr: "Moyenne", en: "Medium"}
+      medium_high: {fr: "Moyenne à élevée", en: "Medium to high"}
+      high: {fr: "Élevée", en: "High"}
+    effective_labels:
+      low: {fr: "Faible", en: "Low"}
+      low_medium: {fr: "Faible à moyen", en: "Low to medium"}
+      medium: {fr: "Moyen", en: "Medium"}
+      medium_high: {fr: "Moyen à élevé", en: "Medium to high"}
+      high: {fr: "Élevé", en: "High"}
+    tolerance:
+      # Tolérance = partie entière de la moyenne des points connus (0 à 4); la réaction à une baisse réelle
+      # compte quand A1 l'a apprise et que l'investisseur l'a vécue.
+      required: [risk_tolerance.drop_reaction, risk_tolerance.risk_attitude]
+      points:
+        risk_tolerance.drop_reaction: {sell_all: 0, sell_some: 1, hold: 3, buy_more: 4}
+        risk_tolerance.risk_attitude: {stability: 0, small: 1, moderate: 2, large: 4}
+        risk_tolerance.past_drop_behavior: {sold: 0, held: 3, bought_more: 4}
+    capacity:
+      # Capacité = partie entière de la moyenne des trois composantes (0 à 4), puis plafonnée :
+      # un horizon court, un besoin de liquidité, un impact majeur d'une perte ou une dette coûteuse la limitent.
+      required: [risk_capacity.emergency_fund, risk_capacity.income_stability, risk_capacity.loss_impact, horizon.horizon_band]
+      points:
+        risk_capacity.income_stability: {very_stable: 4, stable: 3, variable: 1, none: 0}
+        risk_capacity.loss_impact: {major: 0, some: 2, none: 4}
+      thresholds:
+        # [mois minimum, points] : 0 mois = 0; moins de 3 mois = 1; de 3 à moins de 6 = 3; 6 mois et plus = 4.
+        risk_capacity.emergency_fund: [[0, 0], [0.5, 1], [3, 3], [6, 4]]
+      caps:
+        horizon.horizon_band: {lt3: 1, 3to10: 3}
+        constraints.liquidity_need: {some: 3, large: 1}
+        risk_capacity.loss_impact: {major: 1}
+        risk_capacity.high_interest_debt: {"true": 2}
+    # Risque effectif = min(tolérance, capacité), sur l'échelle levels (0 = low ... 4 = high).

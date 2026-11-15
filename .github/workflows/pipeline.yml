@@ -1,0 +1,90 @@
+# =============================================================================
+# Pipeline racine du mono repo : appelle la moitie app (app.yml) puis la
+# moitie infrastructure (infra.yml), deux workflows reutilisables.
+#
+# Les valeurs communes (TF_CLOUD_*, DEPLOY_ENV, EPHEMERAL_ENVS_ENABLED) vivent
+# UNIQUEMENT ici, dans l'env du job `context`. Le contexte `env` n'est pas
+# transmis aux workflows appeles : ci-context.sh les republie en outputs, que
+# ce fichier passe en `inputs` a app.yml et infra.yml.
+#
+# Les "rules" GitLab sont remplacees par un seul calcul, dans
+# infrastructure/scripts/ci-context.sh (outputs build/deploy/apply). App et
+# infra lisent les memes outputs : elles ne peuvent pas diverger.
+#
+#   pull_request               -> tests app ; validate/upload/plan infra si la
+#                                 PR touche infrastructure/**
+#   push branche par defaut    -> tests + zip des runtimes AgentCore, puis
+#                                 validate -> upload -> plan -> apply sur DEPLOY_ENV
+#   push feature/* (si EPHEMERAL_ENVS_ENABLED=true)
+#                              -> meme chaine sur un env ephemere feat-<slug>
+#   workflow_dispatch          -> tests seulement
+#   variable de repo DESTROY_ENV=true -> tests seulement
+# =============================================================================
+
+name: pipeline
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un seul deploiement a la fois par branche : deux apply concurrents sur le
+# meme workspace HCP Terraform se marcheraient dessus.
+concurrency:
+  group: pipeline-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  context:
+    runs-on: ubuntu-latest
+    env:
+      TF_CLOUD_HOSTNAME: "app.terraform.io"
+      TF_CLOUD_ORGANIZATION: "larpathon_2026"
+      DEPLOY_ENV: "sandbox"
+      # La variable de repo GitHub (Settings > Variables) a priorite sur le defaut.
+      EPHEMERAL_ENVS_ENABLED: ${{ vars.EPHEMERAL_ENVS_ENABLED || 'false' }}
+      DESTROY_ENV: ${{ vars.DESTROY_ENV || 'false' }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    outputs:
+      build: ${{ steps.ctx.outputs.build }}
+      deploy: ${{ steps.ctx.outputs.deploy }}
+      apply: ${{ steps.ctx.outputs.apply }}
+      image_tag: ${{ steps.ctx.outputs.image_tag }}
+      registry_image: ${{ steps.ctx.outputs.registry_image }}
+      deploy_env: ${{ steps.ctx.outputs.deploy_env }}
+      ephemeral_envs_enabled: ${{ steps.ctx.outputs.ephemeral_envs_enabled }}
+      tf_cloud_hostname: ${{ steps.ctx.outputs.tf_cloud_hostname }}
+      tf_cloud_organization: ${{ steps.ctx.outputs.tf_cloud_organization }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Historique complet : ci-context.sh compare la PR a sa branche cible
+          # pour savoir si infrastructure/** a change.
+          fetch-depth: 0
+      - id: ctx
+        run: sh infrastructure/scripts/ci-context.sh
+
+  app:
+    needs: context
+    uses: ./.github/workflows/app.yml
+    with:
+      build: ${{ needs.context.outputs.build }}
+      deploy: ${{ needs.context.outputs.deploy }}
+      image_tag: ${{ needs.context.outputs.image_tag }}
+      registry_image: ${{ needs.context.outputs.registry_image }}
+    secrets: inherit
+
+  infra:
+    needs: [context, app]
+    if: needs.context.outputs.deploy == 'true'
+    uses: ./.github/workflows/infra.yml
+    with:
+      apply: ${{ needs.context.outputs.apply }}
+      deploy_env: ${{ needs.context.outputs.deploy_env }}
+      ephemeral_envs_enabled: ${{ needs.context.outputs.ephemeral_envs_enabled }}
+      tf_cloud_hostname: ${{ needs.context.outputs.tf_cloud_hostname }}
+      tf_cloud_organization: ${{ needs.context.outputs.tf_cloud_organization }}
+    secrets: inherit

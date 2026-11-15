@@ -1,0 +1,234 @@
+@import "tailwindcss";
+
+/*
+ * AlphaForge AI design tokens. Data colors follow the validated reference palette
+ * (categorical slots in fixed order, a one-hue blue ramp, reserved status colors);
+ * text always uses ink tokens, never a data color.
+ */
+@theme {
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-ink-950: #0a1222;
+  --color-ink-900: #111b2f;
+  --color-ink-800: #1c2840;
+  --color-ink-700: #2f3c56;
+  --color-ink-600: #47536b;
+  --color-ink-500: #5d6880;
+  --color-ink-400: #8a93a6;
+  --color-ink-300: #b9c0cd;
+  --color-ink-200: #dde2ea;
+  --color-ink-150: #e7ebf1;
+  --color-ink-100: #eff2f6;
+  --color-ink-50: #f6f8fb;
+
+  /* One-hue blue ramp (sequential steps 100 to 700). */
+  --color-brand-50: #eef5fe;
+  --color-brand-100: #cde2fb;
+  --color-brand-200: #9ec5f4;
+  --color-brand-300: #86b6ef;
+  --color-brand-400: #5598e7;
+  --color-brand-500: #2a78d6;
+  --color-brand-600: #1c5cab;
+  --color-brand-700: #104281;
+  --color-brand-800: #0d366b;
+
+  /* Trace step kinds: categorical slots 1 to 6, in fixed order. */
+  --color-kind-deterministic: #2a78d6;
+  --color-kind-agent: #eb6834;
+  --color-kind-model: #1baf7a;
+  --color-kind-tool: #eda100;
+  --color-kind-storage: #e87ba4;
+  --color-kind-guardrail: #008300;
+
+  /* Status colors, reserved for state and always paired with an icon and a label. */
+  --color-good: #0ca30c;
+  --color-good-ink: #006300;
+  --color-good-wash: #e8f6e8;
+  --color-warning: #fab219;
+  --color-warning-ink: #7a5100;
+  --color-warning-wash: #fff6e0;
+  --color-serious: #ec835a;
+  --color-serious-ink: #94401c;
+  --color-critical: #d03b3b;
+  --color-critical-ink: #9f2626;
+  --color-critical-wash: #fdeeee;
+
+  --color-surface: #ffffff;
+  --color-page: #f5f7fa;
+
+  --shadow-card: 0 1px 2px rgb(10 18 34 / 0.05), 0 1px 1px rgb(10 18 34 / 0.03);
+  --shadow-lift: 0 10px 30px -12px rgb(10 18 34 / 0.25);
+
+  --animate-fade-in: fade-in 220ms ease-out both;
+  --animate-pulse-dot: pulse-dot 1.4s ease-in-out infinite;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--color-page);
+  color: var(--color-ink-900);
+  font-feature-settings: "kern";
+}
+
+::selection {
+  background: var(--color-brand-100);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Markdown rendered from agents and OKF documents. */
+.prose-af {
+  line-height: 1.65;
+  color: var(--color-ink-800);
+  overflow-wrap: anywhere;
+}
+.prose-af > * + * {
+  margin-top: 0.75em;
+}
+.prose-af h1 {
+  font-size: 1.35rem;
+  font-weight: 650;
+  color: var(--color-ink-950);
+  letter-spacing: -0.01em;
+  margin-top: 0;
+}
+.prose-af h2 {
+  font-size: 1.1rem;
+  font-weight: 650;
+  color: var(--color-ink-950);
+  margin-top: 1.4em;
+}
+.prose-af h3 {
+  font-size: 1rem;
+  font-weight: 650;
+  color: var(--color-ink-900);
+  margin-top: 1.2em;
+}
+.prose-af strong {
+  font-weight: 650;
+  color: var(--color-ink-950);
+}
+.prose-af a {
+  color: var(--color-brand-600);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-af ul,
+.prose-af ol {
+  padding-left: 1.25em;
+}
+.prose-af ul {
+  list-style: disc;
+}
+.prose-af ol {
+  list-style: decimal;
+}
+.prose-af li + li {
+  margin-top: 0.25em;
+}
+.prose-af blockquote {
+  border-left: 3px solid var(--color-brand-200);
+  padding: 0.25em 0 0.25em 0.9em;
+  color: var(--color-ink-600);
+}
+.prose-af code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--color-ink-100);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+.prose-af pre {
+  background: var(--color-ink-50);
+  border: 1px solid var(--color-ink-150);
+  border-radius: 8px;
+  padding: 0.75em 1em;
+  overflow-x: auto;
+}
+.prose-af pre code {
+  background: none;
+  padding: 0;
+}
+.prose-af table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  display: block;
+  overflow-x: auto;
+}
+.prose-af th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-ink-700);
+  background: var(--color-ink-50);
+}
+.prose-af th,
+.prose-af td {
+  border-bottom: 1px solid var(--color-ink-150);
+  padding: 0.45em 0.75em;
+  vertical-align: top;
+}
+.prose-af td {
+  font-variant-numeric: tabular-nums;
+}
+.prose-af hr {
+  border: 0;
+  border-top: 1px solid var(--color-ink-150);
+}
+.prose-af .footnotes {
+  font-size: 0.8rem;
+  color: var(--color-ink-500);
+}
+
+/* Native <details> disclosure arrow. */
+details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
+dialog::backdrop {
+  background: rgb(10 18 34 / 0.45);
+  backdrop-filter: blur(2px);
+}

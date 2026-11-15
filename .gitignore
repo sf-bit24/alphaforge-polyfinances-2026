@@ -1,0 +1,17 @@
+# Secrets locaux : jamais commites.
+.env
+.env.*
+!.env.example
+
+# Documents du Datathon, copies dans le Brain : non versionnes ici.
+/docs/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Traçabilité locale (peut contenir des prompts) et sorties d'infra (identifiant du compte)
+research/finance/traces/
+research/finance/infra/outputs.json

@@ -1,0 +1,121 @@
+# =============================================================================
+# Workflow app (code sous app/), appele par .github/workflows/pipeline.yml.
+# cwd = racine du repo : chaque job cible app/... explicitement.
+#
+#   agents_test    app/agents : ruff + pytest (Python 3.13, uv)
+#   web_test       app/web    : lint, typecheck, tests, build (Node 24)
+#   package_agents zip des runtimes AgentCore (linux/arm64) + base generale
+#                  de depart -> artefact agents-package (infra/build/)
+#   release_tfvars release_id (SHA court du commit) -> artefact release-tfvars
+#
+# Pas d'image de conteneur : AgentCore deploie le zip directement depuis S3,
+# et l'interface tourne en local. Les deux artefacts sont le seul lien vers
+# infra.yml (pas de manifest.yaml, rien n'est commit).
+#
+# Pas de logique shell inline : un step installe ses outils et appelle un
+# script ou une commande du projet.
+#
+# astral-sh/setup-uv ne publie pas d'etiquette majeure mobile (pas de v10) :
+# on fixe une version complete.
+#
+# Contrat d'inputs (ne pas renommer, pipeline.yml les passe) :
+#   build          "true" sur un push qui deploie
+#   deploy         "true" -> construire le zip et publier release-tfvars
+#   image_tag      SHA court du commit (immuable), devient release_id
+#   registry_image prefixe GHCR, inutilise (aucune image)
+# =============================================================================
+
+name: app
+
+on:
+  workflow_call:
+    inputs:
+      build:
+        type: string
+        required: true
+      deploy:
+        type: string
+        required: true
+      image_tag:
+        type: string
+        required: true
+      registry_image:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  agents_test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/agents
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: app/agents/uv.lock
+      - run: uv sync --frozen
+      - run: uv run ruff check
+      - run: uv run pytest
+
+  web_test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: app/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  # Construit sur chaque run qui deploie ou planifie (push de la branche par
+  # defaut, PR qui touche infrastructure/**) : le plan lit le zip. Aucun acces
+  # AWS ici ; seul HCP Terraform, par OIDC, televerse le zip dans S3.
+  package_agents:
+    needs: agents_test
+    if: inputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: app/agents/uv.lock
+      - run: sh app/agents/scripts/package.sh infrastructure/infra/build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: agents-package
+          path: infrastructure/infra/build/
+          retention-days: 1
+          if-no-files-found: error
+
+  # Un test ou un paquet en echec bloque ce job, donc le deploiement.
+  release_tfvars:
+    needs: [package_agents, web_test]
+    if: ${{ !cancelled() && !failure() && inputs.deploy == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_ID: ${{ inputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - run: sh infrastructure/scripts/write-release-tfvars.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-tfvars
+          path: infrastructure/deploy/release.auto.tfvars
+          retention-days: 1
+          if-no-files-found: error

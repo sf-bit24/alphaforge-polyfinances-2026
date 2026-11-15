@@ -1,0 +1,90 @@
+{
+ "attempts": [
+  {
+   "attempt": 1,
+   "latency_s": 1.495,
+   "metrics": {
+    "latencyMs": 1419
+   },
+   "stop_reason": "end_turn",
+   "usage": {
+    "cacheReadInputTokens": 0,
+    "cacheWriteInputTokens": 0,
+    "inputTokens": 467,
+    "outputTokens": 56,
+    "totalTokens": 523
+   }
+  }
+ ],
+ "created_utc": "2026-11-15T00:28:39.473448+00:00",
+ "key": "d8ee2fb91e8ec8f420309fc58797a654c86b13142c91d9ffc7107ffc7e65b56c",
+ "parsed": {
+  "direction": "hausse",
+  "is_fictional": true,
+  "published": "2026-10-29",
+  "quote": "la banque centrale relève son taux directeur d'un quart de point"
+ },
+ "request": {
+  "data_version": null,
+  "effort": "low",
+  "extra": [],
+  "guardrail": null,
+  "key_version": "1",
+  "max_tokens": 2000,
+  "messages": [
+   {
+    "content": [
+     {
+      "text": "[TEXTE FICTIF] Communiqué du 2026-10-29 : la banque centrale relève son taux directeur d'un quart de point."
+     }
+    ],
+    "role": "user"
+   }
+  ],
+  "model_id": "us.anthropic.claude-sonnet-5-5",
+  "node_id": "smoke_extraction",
+  "output_schema": {
+   "additionalProperties": false,
+   "properties": {
+    "direction": {
+     "enum": [
+      "hausse",
+      "baisse",
+      "statu_quo",
+      "inconnu"
+     ],
+     "title": "Direction",
+     "type": "string"
+    },
+    "is_fictional": {
+     "title": "Is Fictional",
+     "type": "boolean"
+    },
+    "published": {
+     "description": "AAAA-MM-JJ",
+     "title": "Published",
+     "type": "string"
+    },
+    "quote": {
+     "title": "Quote",
+     "type": "string"
+    }
+   },
+   "required": [
+    "direction",
+    "is_fictional",
+    "published",
+    "quote"
+   ],
+   "title": "Event",
+   "type": "object"
+  },
+  "policy_version": null,
+  "prompt_ref": null,
+  "round": 0,
+  "system": "Tu extrais des faits. Tu n'inventes rien et ne calcules aucun chiffre."
+ },
+ "response_model": null,
+ "stop_reason": "end_turn",
+ "text": "{\"published\":\"2026-10-29\",\"direction\":\"hausse\",\"quote\":\"la banque centrale relève son taux directeur d'un quart de point\",\"is_fictional\":true}"
+}

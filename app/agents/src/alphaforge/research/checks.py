@@ -13,7 +13,7 @@ S'ajoutent aux contrôles de la version 1 (source, dates, doublons), avec une ra
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from .. import clock, okf
@@ -115,39 +115,204 @@ def _archive_tree(store: Store, key: str, cache: dict[str, Any]) -> Any:
     return tree
 
 
+def _series_problem(tree: Any, spec: dict[str, Any] | None, observations: list[dict[str, Any]]) -> str | None:
+    """Relit les lignes de la série dans l'archive; rend la raison du rejet, ou ``None``."""
+    if not spec:
+        return "série sans spécification de lignes"
+    try:
+        rows = documents.extract_rows(tree, spec["rows"], spec["date_field"], spec["value_field"])
+    except documents.DocumentError as exc:
+        return f"lignes de la série non relues : {exc}"
+    archived = {(str(row["date"])[:10], row["value"]) for row in rows}
+    from .researcher import parse_any_date
+
+    archived |= {((parse_any_date(row["date"]) or "")[:10], row["value"]) for row in rows}
+    for observation in observations:
+        if (observation.get("date"), observation.get("value")) not in archived:
+            return f"observation {observation.get('date')} absente de l'archive"
+    return None
+
+
 def check_grounding(store: Store, item: dict[str, Any], cache: dict[str, Any]) -> str | None:
     data = item.get("data") or {}
-    prov = data.get("provenance") or {}
-    tree = _archive_tree(store, str(prov.get("archive_key") or ""), cache)
+    provenance = data.get("provenance") or {}
+    tree = _archive_tree(store, str(provenance.get("archive_key") or ""), cache)
     if tree is None:
         return "réponse archivée introuvable ou illisible : valeur non vérifiable"
     values = data.get("values") or {}
-    for name, locator in (prov.get("locators") or {}).items():
+    for name, locator in (provenance.get("locators") or {}).items():
         try:
             value = documents.scalar(documents.resolve(tree, locator))
         except documents.DocumentError as exc:
             return f"localisateur {name} non résolu dans l'archive : {exc}"
         if value[:2000] != str(values.get(name)):
             return f"valeur {name} différente de l'archive"
-    spec = prov.get("series_spec")
+    spec = provenance.get("series_spec")
     if item["kind"] == "series":
-        if not spec:
-            return "série sans spécification de lignes"
-        try:
-            rows = documents.extract_rows(tree, spec["rows"], spec["date_field"], spec["value_field"])
-        except documents.DocumentError as exc:
-            return f"lignes de la série non relues : {exc}"
-        archived = {(str(r["date"])[:10], r["value"]) for r in rows}
-        from .researcher import parse_any_date
-
-        archived |= {((parse_any_date(r["date"]) or "")[:10], r["value"]) for r in rows}
-        for observation in data.get("observations") or []:
-            if (observation.get("date"), observation.get("value")) not in archived:
-                return f"observation {observation.get('date')} absente de l'archive"
+        return _series_problem(tree, spec, data.get("observations") or [])
     return None
 
 
 # ----------------------------------------------------------------------------- validation
+class _ItemRejectedError(Exception):
+    """Un contrôle du code écarte l'élément; le message est la raison gardée dans les rejets."""
+
+
+def _check_shape(item: Any) -> None:
+    if not isinstance(item, dict) or not item.get("id") or not item.get("title"):
+        raise _ItemRejectedError("élément mal formé (id ou titre manquant)")
+    if item.get("kind") not in staging.ITEM_KINDS + staging.RESEARCH_KINDS:
+        raise _ItemRejectedError("type d'élément inconnu")
+
+
+def _require_source(item: dict[str, Any]) -> None:
+    url = item.get("url")
+    if not item.get("source") or not isinstance(url, str) or not url.startswith("https://"):
+        raise _ItemRejectedError("source manquante (nom et adresse https requis)")
+
+
+def _publication_date(item: dict[str, Any]) -> datetime:
+    published = clock.parse_datetime(item.get("published_at"))
+    retrieved = clock.parse_datetime(item.get("retrieved_at"))
+    if published is None or retrieved is None:
+        raise _ItemRejectedError("date de publication ou de récupération manquante")
+    if published > retrieved:
+        raise _ItemRejectedError("publié après sa date de récupération")
+    return published
+
+
+def _check_observation(item: dict[str, Any], published: datetime) -> None:
+    if item["kind"] not in ("series", "quote", "fact", "signal"):
+        return
+    observed = clock.parse_datetime(str(item.get("observed_at") or "")[:10])
+    if observed is None:
+        raise _ItemRejectedError("date d'observation manquante")
+    if observed.date() > published.date():
+        raise _ItemRejectedError("date d'observation postérieure à la publication")
+
+
+def _check_licence(provenance: dict[str, Any]) -> None:
+    if not provenance.get("licence") or not provenance.get("attribution_text"):
+        raise _ItemRejectedError("licence ou texte d'attribution manquant")
+
+
+def _check_robots(provenance: dict[str, Any], host: str) -> None:
+    exception = host in HOSTS and HOSTS[host].robots_exception
+    if provenance.get("robots_ok_at_fetch") is not True and not exception:
+        raise _ItemRejectedError("robots.txt non respecté à la collecte")
+
+
+def _check_as_of(provenance: dict[str, Any], published: datetime) -> None:
+    as_of = clock.parse_datetime(provenance.get("as_of")) if provenance.get("as_of") else None
+    if as_of is not None and published > as_of:
+        raise _ItemRejectedError("publié après le point dans le temps demandé (as_of)")
+
+
+def _check_numbers(item: dict[str, Any]) -> None:
+    missing = documents.grounded(
+        f"{item['title']} {item.get('summary') or ''}", items.allowed_numbers(item), items.allowed_dates(item)
+    )
+    if missing:
+        raise _ItemRejectedError("nombres non fondés dans le titre ou le résumé : " + ", ".join(missing[:4]))
+
+
+def _check_market_rules(item: dict[str, Any], host: str) -> None:
+    market = (item.get("data") or {}).get("market") or {}
+    if item["kind"] == "signal" and host in items.MARKET_HOSTS and not market.get("resolution_rules"):
+        raise _ItemRejectedError("cote de marché sans règles de résolution")
+
+
+@dataclass
+class _ResearchReview:
+    """Une passe de contrôles : éléments retenus, quarantaine, synthèses en attente et doublons déjà vus."""
+
+    store: Store
+    existing_keys: set[str]
+    url_hashes: set[str]
+    accepted: list[ResearchCandidate] = field(default_factory=list)
+    quarantined: list[dict[str, Any]] = field(default_factory=list)
+    briefs: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    seen: dict[str, str] = field(default_factory=dict)
+    cache: dict[str, Any] = field(default_factory=dict)
+    # Élément vérifié mais doublon : une synthèse qui le cite renvoie au document déjà écrit (ou retenu).
+    refs: dict[str, ResearchCandidate] = field(default_factory=dict)
+    by_key: dict[str, ResearchCandidate] = field(default_factory=dict)
+
+    def examine(self, key: str, item: Any) -> None:
+        """Contrôles d'un élément, dans l'ordre; une synthèse attend que tous les éléments aient été vus."""
+        _check_shape(item)
+        if item["kind"] == "brief":
+            self.briefs.append((key, item))
+            return
+        _require_source(item)
+        published = _publication_date(item)
+        _check_observation(item, published)
+        provenance = (item.get("data") or {}).get("provenance") or {}
+        _check_licence(provenance)
+        host = str(provenance.get("host") or "")
+        self._hold_if_quarantined(key, item, provenance, host)
+        _check_robots(provenance, host)
+        _check_as_of(provenance, published)
+        problem = check_grounding(self.store, item, self.cache)
+        if problem:
+            raise _ItemRejectedError(problem)
+        _check_numbers(item)
+        _check_market_rules(item, host)
+        self._accept(key, item)
+
+    def _hold_if_quarantined(self, key: str, item: dict[str, Any], provenance: dict[str, Any], host: str) -> None:
+        if provenance.get("host_status") == "quarantined":
+            self.quarantined.append({"key": key, "id": item["id"], "host": host, "title": item["title"]})
+            raise _ItemRejectedError("hôte en quarantaine : en attente d'approbation humaine de sa licence")
+
+    def _dedupe_keys(self, key: str, item: dict[str, Any], path: str) -> list[str]:
+        """Clés de doublon; un doublon est rejeté, et noté dans ``refs`` pour les synthèses qui le citent."""
+        dedupe = [path, f"id:{item['id']}"]
+        if item["kind"] == "news":
+            url_hash = staging.short_hash(staging.normalize_url(item["url"]), 8)
+            dedupe.append(f"url:{url_hash}")
+            if url_hash in self.url_hashes:
+                raise _ItemRejectedError("doublon d'un document existant (même adresse)")
+        if path in self.existing_keys:
+            self.refs[item["id"]] = ResearchCandidate(key=key, item=item, target=path)
+            raise _ItemRejectedError(f"doublon d'un document existant : {path}")
+        duplicate_of = next((self.seen[dedupe_key] for dedupe_key in dedupe if dedupe_key in self.seen), None)
+        if duplicate_of:
+            if duplicate_of in self.by_key:
+                self.refs[item["id"]] = self.by_key[duplicate_of]
+            raise _ItemRejectedError(f"doublon dans la collecte : {duplicate_of}")
+        return dedupe
+
+    def _accept(self, key: str, item: dict[str, Any]) -> None:
+        path = target(item)
+        dedupe = self._dedupe_keys(key, item, path)
+        for dedupe_key in dedupe:
+            self.seen[dedupe_key] = key
+        tags = (item.get("data") or {}).get("tags") or []
+        candidate = ResearchCandidate(key=key, item=item, target=path, dedupe=dedupe, tags=tags)
+        self.accepted.append(candidate)
+        self.by_key[key] = candidate
+
+    def examine_brief(self, key: str, item: dict[str, Any], by_id: dict[str, ResearchCandidate]) -> None:
+        """Chaque citation renvoie à un élément retenu (ou déjà écrit), chaque nombre à un élément cité."""
+        data = item.get("data") or {}
+        citations = [citation for citation in data.get("citations") or [] if isinstance(citation, str)]
+        resolved = {citation: by_id.get(citation) or self.refs.get(citation) for citation in citations}
+        missing_ids = [citation for citation, found in resolved.items() if found is None]
+        if not citations or missing_ids:
+            raise _ItemRejectedError("synthèse : citations absentes ou non retenues " + ", ".join(missing_ids[:4]))
+        values = [number for citation in citations for number in items.allowed_numbers(resolved[citation].item)]
+        dates = [day for citation in citations for day in items.allowed_dates(resolved[citation].item)]
+        missing = documents.grounded(f"{item['title']} {data.get('text') or ''}", values, dates)
+        if missing:
+            raise _ItemRejectedError("synthèse : nombres non fondés " + ", ".join(missing[:4]))
+        path = target(item)
+        if path in self.existing_keys:
+            raise _ItemRejectedError(f"doublon d'un document existant : {path}")
+        brief_refs = {citation: found for citation, found in resolved.items() if citation not in by_id}
+        self.accepted.append(ResearchCandidate(key=key, item=item, target=path, dedupe=[path], refs=brief_refs))
+
+
 def validate_research(
     staged: list[tuple[str, Any]],
     existing_keys: set[str],
@@ -155,128 +320,20 @@ def validate_research(
     *,
     url_hashes: set[str] | None = None,
 ) -> tuple[list[ResearchCandidate], list[dict[str, str]], list[dict[str, Any]]]:
-    accepted: list[ResearchCandidate] = []
+    review = _ResearchReview(store=store, existing_keys=existing_keys, url_hashes=url_hashes or set())
     rejected: list[dict[str, str]] = []
-    quarantined: list[dict[str, Any]] = []
-    seen: dict[str, str] = {}
-    cache: dict[str, Any] = {}
-    briefs: list[tuple[str, dict[str, Any]]] = []
-    # Élément vérifié mais doublon : une synthèse qui le cite renvoie au document déjà écrit (ou retenu).
-    refs: dict[str, ResearchCandidate] = {}
-    by_key: dict[str, ResearchCandidate] = {}
     for key, item in staged:
-
-        def reject(reason: str, key: str = key) -> None:
-            rejected.append({"key": key, "reason": reason})
-
-        if not isinstance(item, dict) or not item.get("id") or not item.get("title"):
-            reject("élément mal formé (id ou titre manquant)")
-            continue
-        kind = item.get("kind")
-        if kind not in staging.ITEM_KINDS + staging.RESEARCH_KINDS:
-            reject("type d'élément inconnu")
-            continue
-        if kind == "brief":
-            briefs.append((key, item))
-            continue
-        url = item.get("url")
-        if not item.get("source") or not isinstance(url, str) or not url.startswith("https://"):
-            reject("source manquante (nom et adresse https requis)")
-            continue
-        published = clock.parse_datetime(item.get("published_at"))
-        retrieved = clock.parse_datetime(item.get("retrieved_at"))
-        if published is None or retrieved is None:
-            reject("date de publication ou de récupération manquante")
-            continue
-        if published > retrieved:
-            reject("publié après sa date de récupération")
-            continue
-        if kind in ("series", "quote", "fact", "signal"):
-            observed = clock.parse_datetime(str(item.get("observed_at") or "")[:10])
-            if observed is None:
-                reject("date d'observation manquante")
-                continue
-            if observed.date() > published.date():
-                reject("date d'observation postérieure à la publication")
-                continue
-        data = item.get("data") or {}
-        prov = data.get("provenance") or {}
-        if not prov.get("licence") or not prov.get("attribution_text"):
-            reject("licence ou texte d'attribution manquant")
-            continue
-        host = str(prov.get("host") or "")
-        if prov.get("host_status") == "quarantined":
-            quarantined.append({"key": key, "id": item["id"], "host": host, "title": item["title"]})
-            reject("hôte en quarantaine : en attente d'approbation humaine de sa licence")
-            continue
-        exception = host in HOSTS and HOSTS[host].robots_exception
-        if prov.get("robots_ok_at_fetch") is not True and not exception:
-            reject("robots.txt non respecté à la collecte")
-            continue
-        as_of = clock.parse_datetime(prov.get("as_of")) if prov.get("as_of") else None
-        if as_of is not None and published > as_of:
-            reject("publié après le point dans le temps demandé (as_of)")
-            continue
-        problem = check_grounding(store, item, cache)
-        if problem:
-            reject(problem)
-            continue
-        missing = documents.grounded(
-            f"{item['title']} {item.get('summary') or ''}", items.allowed_numbers(item), items.allowed_dates(item)
-        )
-        if missing:
-            reject("nombres non fondés dans le titre ou le résumé : " + ", ".join(missing[:4]))
-            continue
-        if kind == "signal" and host in items.MARKET_HOSTS and not (data.get("market") or {}).get("resolution_rules"):
-            reject("cote de marché sans règles de résolution")
-            continue
-        path = target(item)
-        dedupe = [path, f"id:{item['id']}"]
-        if kind == "news":
-            url_hash = staging.short_hash(staging.normalize_url(item["url"]), 8)
-            dedupe.append(f"url:{url_hash}")
-            if url_hash in (url_hashes or set()):
-                reject("doublon d'un document existant (même adresse)")
-                continue
-        if path in existing_keys:
-            reject(f"doublon d'un document existant : {path}")
-            refs[item["id"]] = ResearchCandidate(key=key, item=item, target=path)
-            continue
-        duplicate_of = next((seen[k] for k in dedupe if k in seen), None)
-        if duplicate_of:
-            reject(f"doublon dans la collecte : {duplicate_of}")
-            if duplicate_of in by_key:
-                refs[item["id"]] = by_key[duplicate_of]
-            continue
-        for k in dedupe:
-            seen[k] = key
-        candidate = ResearchCandidate(key=key, item=item, target=path, dedupe=dedupe, tags=data.get("tags") or [])
-        accepted.append(candidate)
-        by_key[key] = candidate
-    by_id = {c.item["id"]: c for c in accepted}
-    for key, item in briefs:
-        data = item.get("data") or {}
-        citations = [c for c in data.get("citations") or [] if isinstance(c, str)]
-        resolved = {c: by_id.get(c) or refs.get(c) for c in citations}
-        missing_ids = [c for c, found in resolved.items() if found is None]
-        if not citations or missing_ids:
-            rejected.append(
-                {"key": key, "reason": "synthèse : citations absentes ou non retenues " + ", ".join(missing_ids[:4])}
-            )
-            continue
-        values = [n for c in citations for n in items.allowed_numbers(resolved[c].item)]
-        dates = [d for c in citations for d in items.allowed_dates(resolved[c].item)]
-        missing = documents.grounded(f"{item['title']} {data.get('text') or ''}", values, dates)
-        if missing:
-            rejected.append({"key": key, "reason": "synthèse : nombres non fondés " + ", ".join(missing[:4])})
-            continue
-        path = target(item)
-        if path in existing_keys:
-            rejected.append({"key": key, "reason": f"doublon d'un document existant : {path}"})
-            continue
-        brief_refs = {c: found for c, found in resolved.items() if c not in by_id}
-        accepted.append(ResearchCandidate(key=key, item=item, target=path, dedupe=[path], refs=brief_refs))
-    return accepted, rejected, quarantined
+        try:
+            review.examine(key, item)
+        except _ItemRejectedError as rejection:
+            rejected.append({"key": key, "reason": str(rejection)})
+    by_id = {candidate.item["id"]: candidate for candidate in review.accepted}
+    for key, item in review.briefs:
+        try:
+            review.examine_brief(key, item, by_id)
+        except _ItemRejectedError as rejection:
+            rejected.append({"key": key, "reason": str(rejection)})
+    return review.accepted, rejected, review.quarantined
 
 
 # ----------------------------------------------------------------------------- documents
@@ -286,7 +343,7 @@ _STALE = {"fact": FACT_STALE_DAYS, "signal": SIGNAL_STALE_DAYS, "filing": FILING
 
 
 def _source_entry(item: dict[str, Any]) -> dict[str, Any]:
-    prov = (item.get("data") or {}).get("provenance") or {}
+    provenance = (item.get("data") or {}).get("provenance") or {}
     return {
         "id": item["id"],
         "title": item["title"],
@@ -294,34 +351,61 @@ def _source_entry(item: dict[str, Any]) -> dict[str, Any]:
         "published_at": item.get("published_at"),
         "observed_at": item.get("observed_at"),
         "retrieved_at": item.get("retrieved_at"),
-        "licence": prov.get("licence"),
-        "attribution": prov.get("attribution_text"),
+        "licence": provenance.get("licence"),
+        "attribution": provenance.get("attribution_text"),
     }
 
 
-def research_doc(candidate: ResearchCandidate, now: str) -> okf.OkfDoc:
-    item = candidate.item
-    kind = item["kind"]
-    data = item.get("data") or {}
-    prov = data.get("provenance") or {}
-    market = data.get("market") or {}
-    values = data.get("values") or {}
-    anchor = clock.parse_datetime(str(item.get("observed_at") or item.get("published_at"))[:10]) or clock.utcnow()
-    body = [
-        f"# {item['title']}",
-        "",
+def _provenance_lines(item: dict[str, Any], data: dict[str, Any], provenance: dict[str, Any]) -> list[str]:
+    """Source, attribution, licence et dates du constat, en tête de son document."""
+    return [
         f"- Source : {item['source']} — <{item['url']}>",
-        f"- {prov.get('attribution_text')}",
-        f"- Licence : {prov.get('licence')}" + (f" — <{prov['licence_url']}>" if prov.get("licence_url") else ""),
+        f"- {provenance.get('attribution_text')}",
+        f"- Licence : {provenance.get('licence')}"
+        + (f" — <{provenance['licence_url']}>" if provenance.get("licence_url") else ""),
         f"- Date d'observation : {item.get('observed_at') or '—'}",
         f"- Date de publication : {item.get('published_at')}"
         + (
             " (borne supérieure : date de récupération)"
-            if prov.get("publication_basis") == "retrieved_at_upper_bound"
+            if provenance.get("publication_basis") == "retrieved_at_upper_bound"
             else ""
         ),
         f"- Récupérée le : {item.get('retrieved_at')}",
         f"- Recherche : {data.get('collected_by')}",
+    ]
+
+
+def _market_lines(market: dict[str, Any]) -> list[str]:
+    if not market:
+        return []
+    return [
+        "## Marché",
+        "",
+        f"- Palier de qualité : {market.get('quality_tier')} "
+        "(élevé : volume d'au moins 1 M et fourchette d'au plus 2 cents)",
+        f"- Règles de résolution, telles quelles : {str(market.get('resolution_rules') or '—')[:1500]}",
+        "",
+    ]
+
+
+def _limit_lines(kind: str, provenance: dict[str, Any]) -> list[str]:
+    return [
+        "## Limites",
+        "",
+        "- Contexte, pas un signal d'achat ou de vente." if kind == "signal" else "- Fait sourcé, à lire avec sa date.",
+        "- Une valeur ne sert dans une simulation qu'à partir de sa date de publication.",
+        *([f"- {provenance['licence_note']}"] if provenance.get("licence_note") else []),
+        "",
+    ]
+
+
+def _research_body(item: dict[str, Any], kind: str, data: dict[str, Any]) -> str:
+    provenance = data.get("provenance") or {}
+    values = data.get("values") or {}
+    lines = [
+        f"# {item['title']}",
+        "",
+        *_provenance_lines(item, data, provenance),
         "",
         "## Constat",
         "",
@@ -331,31 +415,44 @@ def research_doc(candidate: ResearchCandidate, now: str) -> okf.OkfDoc:
         "",
         "| Champ | Valeur |",
         "| --- | --- |",
-        *[f"| {k} | {str(v)[:200].replace('|', '/')} |" for k, v in values.items()],
+        *[f"| {name} | {str(value)[:200].replace('|', '/')} |" for name, value in values.items()],
         "",
+        *_market_lines(data.get("market") or {}),
+        *_limit_lines(kind, provenance),
     ]
-    if market:
-        body += [
-            "## Marché",
-            "",
-            f"- Palier de qualité : {market.get('quality_tier')} "
-            "(élevé : volume d'au moins 1 M et fourchette d'au plus 2 cents)",
-            f"- Règles de résolution, telles quelles : {str(market.get('resolution_rules') or '—')[:1500]}",
-            "",
-        ]
-    body += [
-        "## Limites",
-        "",
-        "- Contexte, pas un signal d'achat ou de vente." if kind == "signal" else "- Fait sourcé, à lire avec sa date.",
-        "- Une valeur ne sert dans une simulation qu'à partir de sa date de publication.",
-        *([f"- {prov['licence_note']}"] if prov.get("licence_note") else []),
-        "",
-    ]
+    return "\n".join(lines)
+
+
+def _research_data(candidate: ResearchCandidate, kind: str, data: dict[str, Any]) -> dict[str, Any]:
+    item = candidate.item
+    return {
+        "kind": kind,
+        "item_id": item["id"],
+        **{name: value for name, value in data.items() if name not in ("run_id",)},
+        "url": item["url"],
+        "published_at": item.get("published_at"),
+        "observed_at": item.get("observed_at"),
+        "retrieved_at": item.get("retrieved_at"),
+        "run_id": data.get("run_id"),
+        "staging_key": candidate.key,
+    }
+
+
+def research_doc(candidate: ResearchCandidate, now: str) -> okf.OkfDoc:
+    item = candidate.item
+    kind = item["kind"]
+    data = item.get("data") or {}
+    anchor = clock.parse_datetime(str(item.get("observed_at") or item.get("published_at"))[:10]) or clock.utcnow()
+    body = _research_body(item, kind, data)
     return okf.new_doc(
         type=_TYPES[kind],
         title=item["title"],
         description=f"{_TYPES[kind]} : {str(item.get('summary') or '')[:180]}",
-        tags=list(dict.fromkeys([_FOLDER_TAG[kind], *candidate.tags, *[t.lower() for t in item.get("tickers") or []]])),
+        tags=list(
+            dict.fromkeys(
+                [_FOLDER_TAG[kind], *candidate.tags, *[ticker.lower() for ticker in item.get("tickers") or []]]
+            )
+        ),
         owners=["alphaforge-a6"],
         sensitivity="public",
         generated_by="agent:A6",
@@ -363,27 +460,20 @@ def research_doc(candidate: ResearchCandidate, now: str) -> okf.OkfDoc:
         status="stable",
         stale_after=clock.iso(anchor + timedelta(days=_STALE[kind])),
         sources=[_source_entry(item)],
-        data={
-            "kind": kind,
-            "item_id": item["id"],
-            **{k: v for k, v in data.items() if k not in ("run_id",)},
-            "url": item["url"],
-            "published_at": item.get("published_at"),
-            "observed_at": item.get("observed_at"),
-            "retrieved_at": item.get("retrieved_at"),
-            "run_id": data.get("run_id"),
-            "staging_key": candidate.key,
-        },
-        body="\n".join(body),
+        data=_research_data(candidate, kind, data),
+        body=body,
     )
 
 
-def brief_doc(candidate: ResearchCandidate, now: str, targets: dict[str, ResearchCandidate]) -> okf.OkfDoc:
-    item = candidate.item
-    data = item.get("data") or {}
-    cited = [targets[c] for c in data.get("citations") or [] if c in targets]
-    published = clock.parse_datetime(item.get("published_at")) or clock.utcnow()
-    body = [
+def _cited_source_line(cited: ResearchCandidate) -> str:
+    return (
+        f"- [{cited.item['title']}]({cited.target.removeprefix('general/')}) — {cited.item.get('source')}, "
+        f"publié le {str(cited.item.get('published_at'))[:10]}"
+    )
+
+
+def _brief_body(item: dict[str, Any], data: dict[str, Any], cited: list[ResearchCandidate]) -> str:
+    lines = [
         f"# {item['title']}",
         "",
         f"- Question : {data.get('question')}",
@@ -395,41 +485,48 @@ def brief_doc(candidate: ResearchCandidate, now: str, targets: dict[str, Researc
         "",
         "## Sources citées",
         "",
-        *[
-            f"- [{c.item['title']}]({c.target.removeprefix('general/')}) — {c.item.get('source')}, "
-            f"publié le {str(c.item.get('published_at'))[:10]}"
-            for c in cited
-        ],
+        *[_cited_source_line(candidate) for candidate in cited],
         "",
         "## Lacunes",
         "",
-        *([f"- {g}" for g in data.get("gaps") or []] or ["- Aucune lacune signalée."]),
+        *([f"- {gap}" for gap in data.get("gaps") or []] or ["- Aucune lacune signalée."]),
         "",
         "Synthèse automatique : contexte et explication, jamais un conseil personnalisé ni une recommandation.",
         "",
     ]
+    return "\n".join(lines)
+
+
+def brief_doc(candidate: ResearchCandidate, now: str, targets: dict[str, ResearchCandidate]) -> okf.OkfDoc:
+    item = candidate.item
+    data = item.get("data") or {}
+    cited = [targets[citation] for citation in data.get("citations") or [] if citation in targets]
+    published = clock.parse_datetime(item.get("published_at")) or clock.utcnow()
+    body = _brief_body(item, data, cited)
     return okf.new_doc(
         type="Research Brief",
         title=item["title"],
         description=f"Synthèse de recherche : {str(data.get('question') or '')[:180]}",
-        tags=list(dict.fromkeys(["recherches", *[s.lower() for s in data.get("subjects") or []]])),
+        tags=list(dict.fromkeys(["recherches", *[subject.lower() for subject in data.get("subjects") or []]])),
         owners=["alphaforge-a6"],
         sensitivity="public",
         generated_by="agent:A0",
         at=now,
         status="stable",
         stale_after=clock.iso(published + timedelta(days=BRIEF_STALE_DAYS)),
-        sources=[_source_entry(c.item) for c in cited],
+        sources=[_source_entry(cited_candidate.item) for cited_candidate in cited],
         data={
             "kind": "brief",
             "item_id": item["id"],
             "question": data.get("question"),
             "subjects": data.get("subjects"),
-            "citations": [{"item_id": c.item["id"], "document": c.target} for c in cited],
+            "citations": [
+                {"item_id": cited_candidate.item["id"], "document": cited_candidate.target} for cited_candidate in cited
+            ],
             "as_of": data.get("as_of"),
             "gaps": data.get("gaps"),
             "run_id": data.get("run_id"),
             "staging_key": candidate.key,
         },
-        body="\n".join(body),
+        body=body,
     )

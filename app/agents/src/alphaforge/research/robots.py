@@ -57,8 +57,17 @@ class Robots:
 def _compile(pattern: str) -> re.Pattern[str]:
     anchored = pattern.endswith("$")
     body = pattern[:-1] if anchored else pattern
-    regex = "".join(".*" if ch == "*" else re.escape(ch) for ch in body)
+    regex = "".join(".*" if char == "*" else re.escape(char) for char in body)
     return re.compile("^" + regex + ("$" if anchored else ""))
+
+
+def _outranks(rule: Rule, best: Rule | None) -> bool:
+    """Vrai si ``rule`` l'emporte sur la meilleure règle trouvée : plus longue, ou Allow à longueur égale."""
+    return (
+        best is None
+        or len(rule.pattern) > len(best.pattern)
+        or (len(rule.pattern) == len(best.pattern) and rule.allow and not best.allow)
+    )
 
 
 def _decide(rules: list[Rule], path: str) -> bool:
@@ -66,13 +75,8 @@ def _decide(rules: list[Rule], path: str) -> bool:
     for rule in rules:
         if rule.pattern == "":
             continue  # « Disallow: » vide ne bloque rien
-        if rule.regex.match(path):
-            if (
-                best is None
-                or len(rule.pattern) > len(best.pattern)
-                or (len(rule.pattern) == len(best.pattern) and rule.allow and not best.allow)
-            ):
-                best = rule
+        if rule.regex.match(path) and _outranks(rule, best):
+            best = rule
     return True if best is None else best.allow
 
 

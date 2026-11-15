@@ -12,6 +12,7 @@ la base générale.
 
 from __future__ import annotations
 
+import json
 import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
@@ -49,6 +50,41 @@ vintages, licences, quality of market odds) and « Lacunes » (what was not foun
 
 Call write_brief once, then stop."""
 
+# Outils d'A0 : textes et schémas lus par le modèle.
+CHOOSE_SUBJECTS_DESCRIPTION = "Choose the subject experts for the question, each with a sub-question."
+CHOOSE_SUBJECTS_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {
+            "selections": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "subject": {"type": "string", "enum": list(SUBJECTS)},
+                        "sub_question": {"type": "string"},
+                    },
+                    "required": ["subject", "sub_question"],
+                },
+            }
+        },
+        "required": ["selections"],
+    }
+}
+WRITE_BRIEF_DESCRIPTION = "Write the final French research brief, citing item ids."
+WRITE_BRIEF_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string"},
+            "text": {"type": "string"},
+            "citations": {"type": "array", "items": {"type": "string"}},
+            "gaps": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["title", "text", "citations"],
+    }
+}
+
 _KEYWORDS = {
     "E1": (
         "inflation",
@@ -77,7 +113,7 @@ def _fold(text: str) -> str:
 
 def keyword_route(question: str, issuers: list[str], themes: list[str]) -> list[dict[str, str]]:
     folded = _fold(" ".join([question, *themes]))
-    chosen = [code for code, words in _KEYWORDS.items() if any(w in folded for w in words)]
+    chosen = [code for code, words in _KEYWORDS.items() if any(word in folded for word in words)]
     if issuers and "E3" not in chosen:
         chosen.insert(0, "E3")
     if not chosen:
@@ -88,50 +124,36 @@ def keyword_route(question: str, issuers: list[str], themes: list[str]) -> list[
 def share_caps(selections: list[dict[str, str]], depth: str) -> list[dict[str, Any]]:
     n = max(1, len(selections))
     share = max(1, min(DEPTH_CAPS[depth], MAX_RESEARCHERS_PER_RUN // n))
-    return [{**s, "max_researchers": share} for s in selections]
+    return [{**selection, "max_researchers": share} for selection in selections]
 
 
 @dataclass
 class RouteState:
     selections: list[dict[str, str]] = field(default_factory=list)
 
+    def _choose(self, selections: list[dict[str, Any]] | None) -> dict[str, Any]:
+        seen = set()
+        for selection in selections or []:
+            code = selection.get("subject") if isinstance(selection, dict) else None
+            if code in SUBJECTS and code not in seen and len(self.selections) < MAX_SUBJECTS:
+                seen.add(code)
+                sub_question = " ".join(str(selection.get("sub_question") or "").split())[:400]
+                self.selections.append({"subject": code, "sub_question": sub_question})
+        return {"status": "ok", "subjects": [chosen["subject"] for chosen in self.selections]}
+
     def tools(self) -> list[Any]:
         state = self
 
         @tool(
             name="choose_subjects",
-            description="Choose the subject experts for the question, each with a sub-question.",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "selections": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "subject": {"type": "string", "enum": list(SUBJECTS)},
-                                    "sub_question": {"type": "string"},
-                                },
-                                "required": ["subject", "sub_question"],
-                            },
-                        }
-                    },
-                    "required": ["selections"],
-                }
-            },
+            description=CHOOSE_SUBJECTS_DESCRIPTION,
+            inputSchema=CHOOSE_SUBJECTS_SCHEMA,
             context=True,
         )
         def choose_subjects(tool_context, selections: list[dict[str, Any]]) -> str:
-            seen = set()
-            for selection in selections or []:
-                code = selection.get("subject") if isinstance(selection, dict) else None
-                if code in SUBJECTS and code not in seen and len(state.selections) < MAX_SUBJECTS:
-                    seen.add(code)
-                    sub = " ".join(str(selection.get("sub_question") or "").split())[:400]
-                    state.selections.append({"subject": code, "sub_question": sub})
+            result = state._choose(selections)
             tool_context.agent.cancel(after_current_tools=True)
-            return tool_result({"status": "ok", "subjects": [s["subject"] for s in state.selections]})
+            return tool_result(result)
 
         return [choose_subjects]
 
@@ -144,7 +166,7 @@ def route(
     model_factory: ModelFactory,
     model_id: str,
 ) -> dict[str, Any]:
-    subjects = "\n".join(f"- {s.code} {s.name}: {s.scope}" for s in SUBJECTS.values())
+    subjects = "\n".join(f"- {subject.code} {subject.name}: {subject.scope}" for subject in SUBJECTS.values())
     state = RouteState()
     warnings = []
     spec = AgentSpec(
@@ -179,9 +201,8 @@ def route(
         "routed_at": clock.iso(),
     }
     store.put_json(f"staging/{job['run_id']}/router/plan.json", plan)
-    trace.add(
-        "deterministic", "A0", "Plan de recherche", None, outputs={"subjects": [s["subject"] for s in plan["subjects"]]}
-    )
+    subject_codes = [selection["subject"] for selection in plan["subjects"]]
+    trace.add("deterministic", "A0", "Plan de recherche", None, outputs={"subjects": subject_codes})
     return {"plan": plan, "warnings": warnings}
 
 
@@ -189,47 +210,120 @@ def route(
 class ComposeState:
     items_by_id: dict[str, dict[str, Any]]
     brief: dict[str, Any] | None = None
-    error: str | None = None
+
+    def _write(self, title: str, text: str, citations: list[str] | None, gaps: list[str] | None) -> dict[str, Any]:
+        cited = [item_id for item_id in dict.fromkeys(citations or []) if item_id in self.items_by_id]
+        if not cited:
+            return {"status": "error", "reason": "citer au moins un élément existant"}
+        values = [number for item_id in cited for number in items.allowed_numbers(self.items_by_id[item_id])]
+        dates = [day for item_id in cited for day in items.allowed_dates(self.items_by_id[item_id])]
+        missing = documents.grounded(f"{title} {text}", values, dates)
+        if missing:
+            return {"status": "error", "reason": "nombres absents des éléments cités : " + ", ".join(missing[:5])}
+        self.brief = {
+            "title": " ".join(str(title).split())[:160],
+            "text": str(text).strip()[:8000],
+            "citations": cited,
+            "gaps": [" ".join(str(gap).split())[:300] for gap in (gaps or [])][:10],
+        }
+        return {"status": "ok", "citations": len(cited)}
 
     def tools(self) -> list[Any]:
         state = self
 
-        @tool(
-            name="write_brief",
-            description="Write the final French research brief, citing item ids.",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string"},
-                        "text": {"type": "string"},
-                        "citations": {"type": "array", "items": {"type": "string"}},
-                        "gaps": {"type": "array", "items": {"type": "string"}},
-                    },
-                    "required": ["title", "text", "citations"],
-                }
-            },
-        )
+        @tool(name="write_brief", description=WRITE_BRIEF_DESCRIPTION, inputSchema=WRITE_BRIEF_SCHEMA)
         def write_brief(title: str, text: str, citations: list[str], gaps: list[str] | None = None) -> str:
-            cited = [c for c in dict.fromkeys(citations or []) if c in state.items_by_id]
-            if not cited:
-                return tool_result({"status": "error", "reason": "citer au moins un élément existant"})
-            values = [n for c in cited for n in items.allowed_numbers(state.items_by_id[c])]
-            dates = [d for c in cited for d in items.allowed_dates(state.items_by_id[c])]
-            missing = documents.grounded(f"{title} {text}", values, dates)
-            if missing:
-                return tool_result(
-                    {"status": "error", "reason": "nombres absents des éléments cités : " + ", ".join(missing[:5])}
-                )
-            state.brief = {
-                "title": " ".join(str(title).split())[:160],
-                "text": str(text).strip()[:8000],
-                "citations": cited,
-                "gaps": [" ".join(str(g).split())[:300] for g in (gaps or [])][:10],
-            }
-            return tool_result({"status": "ok", "citations": len(cited)})
+            return tool_result(state._write(title, text, citations, gaps))
 
         return [write_brief]
+
+
+def _staged_items(store: Store, prefix: str) -> dict[str, dict[str, Any]]:
+    """Éléments mis en attente sous ``prefix`` (sans marqueurs ni synthèse du sujet), par identifiant."""
+    found: dict[str, dict[str, Any]] = {}
+    for info in store.list(prefix, limit=500):
+        name = info.key.rsplit("/", 1)[-1]
+        if name.startswith("_") or name in ("brief.json",) or not name.endswith(".json"):
+            continue
+        item = store.get_json(info.key)
+        if isinstance(item, dict) and item.get("id"):
+            found[item["id"]] = item
+    return found
+
+
+def _expert_output(
+    store: Store, run_id: str, plan: dict[str, Any]
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], list[str]]:
+    """Synthèses de sujet et éléments des experts du plan, avec un avertissement par synthèse absente."""
+    subject_briefs, items_by_id, warnings = [], {}, []
+    for entry in plan.get("subjects") or []:
+        code = entry.get("subject")
+        prefix = f"staging/{run_id}/experts/{code}/"
+        brief = store.get_json(prefix + "brief.json")
+        if brief:
+            subject_briefs.append(brief)
+        else:
+            warnings.append(f"{code} : aucune synthèse de sujet")
+        items_by_id.update(_staged_items(store, prefix))
+    return subject_briefs, items_by_id, warnings
+
+
+def _listed_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Élément tel que montré à A0 : métadonnées, résumé et cinq valeurs au plus."""
+    return {
+        "id": item["id"],
+        "kind": item.get("kind"),
+        "title": item.get("title"),
+        "source": item.get("source"),
+        "observed_at": item.get("observed_at"),
+        "published_at": item.get("published_at"),
+        "summary": item.get("summary"),
+        "values": {
+            name: str(value)[:80] for name, value in list(((item.get("data") or {}).get("values") or {}).items())[:5]
+        },
+        "subject": (item.get("data") or {}).get("subject"),
+    }
+
+
+def _compose_prompt(
+    plan: dict[str, Any], subject_briefs: list[dict[str, Any]], items_by_id: dict[str, dict[str, Any]]
+) -> str:
+    listing = [_listed_item(item) for item in items_by_id.values()]
+    return (
+        f"Question: {plan['question']}\n\n<subject_briefs>\n{json.dumps(subject_briefs, ensure_ascii=False)}\n"
+        f"</subject_briefs>\n\n<items>\n{json.dumps(listing, ensure_ascii=False)}\n</items>"
+    )
+
+
+def _brief_item(
+    run_id: str, plan: dict[str, Any], brief: dict[str, Any], subject_briefs: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Synthèse finale d'A0 en élément de collecte (type ``brief``), à mettre en attente pour A6."""
+    now = clock.iso()
+    subject_gaps = [gap for subject_brief in subject_briefs for gap in subject_brief.get("gaps") or []]
+    return {
+        "id": "brief-" + staging.short_hash(f"{run_id}|{plan['question']}"),
+        "kind": "brief",
+        "title": brief["title"],
+        "url": None,
+        "source": "AlphaForge AI (A0, synthèse de recherche)",
+        "published_at": now,
+        "observed_at": None,
+        "retrieved_at": now,
+        "language": "fr",
+        "tickers": plan.get("issuers") or [],
+        "summary": brief["text"][:600],
+        "data": {
+            "run_id": run_id,
+            "question": plan["question"],
+            "text": brief["text"],
+            "citations": brief["citations"],
+            "subjects": [entry.get("subject") for entry in plan.get("subjects") or []],
+            "gaps": brief["gaps"] + subject_gaps[:10],
+            "as_of": plan.get("as_of"),
+            "collected_by": "A0",
+        },
+    }
 
 
 def compose(
@@ -243,38 +337,9 @@ def compose(
     plan = store.get_json(f"staging/{run_id}/router/plan.json")
     if not plan:
         raise AppError("not_found", "plan de recherche absent : lancer route d'abord")
-    subject_briefs, items_by_id, warnings = [], {}, []
-    for entry in plan.get("subjects") or []:
-        code = entry.get("subject")
-        prefix = f"staging/{run_id}/experts/{code}/"
-        brief = store.get_json(prefix + "brief.json")
-        if brief:
-            subject_briefs.append(brief)
-        else:
-            warnings.append(f"{code} : aucune synthèse de sujet")
-        for info in store.list(prefix, limit=500):
-            name = info.key.rsplit("/", 1)[-1]
-            if name.startswith("_") or name in ("brief.json",) or not name.endswith(".json"):
-                continue
-            item = store.get_json(info.key)
-            if isinstance(item, dict) and item.get("id"):
-                items_by_id[item["id"]] = item
+    subject_briefs, items_by_id, warnings = _expert_output(store, run_id, plan)
     if not items_by_id:
         raise AppError("not_found", "aucun élément mis en attente par les experts : rien à synthétiser")
-    listing = [
-        {
-            "id": i["id"],
-            "kind": i.get("kind"),
-            "title": i.get("title"),
-            "source": i.get("source"),
-            "observed_at": i.get("observed_at"),
-            "published_at": i.get("published_at"),
-            "summary": i.get("summary"),
-            "values": {k: str(v)[:80] for k, v in list(((i.get("data") or {}).get("values") or {}).items())[:5]},
-            "subject": (i.get("data") or {}).get("subject"),
-        }
-        for i in items_by_id.values()
-    ]
     state = ComposeState(items_by_id=items_by_id)
     spec = AgentSpec(
         actor="A0",
@@ -285,40 +350,11 @@ def compose(
         max_turns=4,
         max_tokens=12000,
     )
-    import json
-
-    prompt = (
-        f"Question: {plan['question']}\n\n<subject_briefs>\n{json.dumps(subject_briefs, ensure_ascii=False)}\n"
-        f"</subject_briefs>\n\n<items>\n{json.dumps(listing, ensure_ascii=False)}\n</items>"
-    )
+    prompt = _compose_prompt(plan, subject_briefs, items_by_id)
     run_agent(spec, prompt, model_factory=model_factory, model_id=model_id, trace=trace)
     if state.brief is None:
         raise AppError("model_error", "A0 n'a rédigé aucune synthèse valide")
-    now = clock.iso()
-    brief_id = "brief-" + staging.short_hash(f"{run_id}|{plan['question']}")
-    item = {
-        "id": brief_id,
-        "kind": "brief",
-        "title": state.brief["title"],
-        "url": None,
-        "source": "AlphaForge AI (A0, synthèse de recherche)",
-        "published_at": now,
-        "observed_at": None,
-        "retrieved_at": now,
-        "language": "fr",
-        "tickers": plan.get("issuers") or [],
-        "summary": state.brief["text"][:600],
-        "data": {
-            "run_id": run_id,
-            "question": plan["question"],
-            "text": state.brief["text"],
-            "citations": state.brief["citations"],
-            "subjects": [s.get("subject") for s in plan.get("subjects") or []],
-            "gaps": state.brief["gaps"] + [g for b in subject_briefs for g in b.get("gaps") or []][:10],
-            "as_of": plan.get("as_of"),
-            "collected_by": "A0",
-        },
-    }
-    key = f"staging/{run_id}/router/{brief_id}.json"
+    item = _brief_item(run_id, plan, state.brief, subject_briefs)
+    key = f"staging/{run_id}/router/{item['id']}.json"
     store.put_json(key, item)
     return {"brief_key": key, "citations": len(state.brief["citations"]), "warnings": warnings}

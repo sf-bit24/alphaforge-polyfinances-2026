@@ -61,7 +61,7 @@ class Launcher(ABC):
         with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL, max(1, len(briefs)))) as pool:
             list(pool.map(launch, range(len(briefs))))
         deadline = time.monotonic() + timeout
-        pending = {i for i, r in enumerate(results) if r.get("launched")}
+        pending = {i for i, result in enumerate(results) if result.get("launched")}
         while pending and time.monotonic() < deadline:
             for index in sorted(pending):
                 brief = briefs[index]

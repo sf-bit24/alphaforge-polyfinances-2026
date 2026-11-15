@@ -19,7 +19,8 @@ Constats (seuils à relire par le volet finance de l'équipe larpathon) :
 - ``few_holdings`` : moins de cinq positions évaluées hors encaisse et aucun FNB ni fonds;
 - ``unvalued_positions`` : au moins une ligne n'a pas pu être évaluée.
 
-Les notes et les raisons écrites par le code sont dans la langue de la session (``locale``).
+Les notes et les raisons écrites par le code sont dans la langue de la session (``locale``). Les clés des
+expositions restent les valeurs brutes des données (secteur, marché), traduites par l'interface.
 """
 
 from __future__ import annotations
@@ -73,6 +74,10 @@ _EXPOSURE_GROUPS = (
     ("by_sector", "sector"),
 )
 _TOP_POSITION_COUNT = 5
+# Clé d'une exposition sans valeur (secteur ou marché absent). Clé brute du contrat : l'interface affiche
+# « Non classé » ou « Unclassified », et ``finance/policy/from_profile_view.py`` l'écarte des secteurs.
+UNCLASSIFIED = "Unknown"
+
 # Notes et raisons écrites par le code : (français, anglais).
 _TEXTS = {
     "currency_assumed_cad": ("devise supposée CAD (non précisée)", "currency assumed to be CAD (not stated)"),
@@ -407,7 +412,7 @@ def _shares(totals: dict[str, float], total: float) -> dict[str, float]:
 
 
 def _add_value(totals: dict[str, float], position: dict[str, Any], attribute: str) -> None:
-    label = position.get(attribute) or "Unknown"
+    label = position.get(attribute) or UNCLASSIFIED
     totals[label] = totals.get(label, 0.0) + position["value_cad"]
 
 

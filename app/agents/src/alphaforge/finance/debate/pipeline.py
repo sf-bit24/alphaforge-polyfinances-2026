@@ -160,7 +160,13 @@ def build_portfolio(
             for k, v in comp.emphasis.items()
         ]
         holding_fids = _holding_facts(book, profile)
-    if comp.decision_kind or comp.policy is None:
+    # Statut du profil (protection, incomplet, position d'attente) : il resserre le mandat, il n'empêche plus le
+    # portefeuille. Sa raison réelle devient des faits tirés de la trace du compilateur.
+    status_stmts = None
+    if comp.decision_kind and comp.policy is not None:
+        with book.step("s0.status", tool="compile_profile", inputs={"decision_kind": comp.decision_kind}):
+            status_stmts = _status_statements(book, comp, profile)
+    if comp.policy is None:  # filet : mandat impossible à compiler
         kind = comp.decision_kind or "incomplet"
         expl = Explanation(
             data_used=[
@@ -466,6 +472,8 @@ def build_portfolio(
 
     scenario_context = ScenarioContext(final_w, final_policy, profile, mode, scenario_tool)
     expl = attach_scenarios(book, expl, scenario_context, enabled=scenarios)
+    if status_stmts:
+        expl = _with_status(expl, status_stmts)
     template = expl
     report: list[str] = []
     if rephrase_explanation if rephrase_explanation is not None else mode == "llm":
@@ -508,8 +516,9 @@ def build_portfolio(
         profile_id=profile.profile_id,
         profile_version=profile.version,
         created_utc=datetime.now(UTC),
-        kind=kind,
-        positions=positions if kind in ("proposition", "refus_encadre") else [],
+        # Le statut du profil prime sur l'issue de la demande ; le portefeuille est toujours rendu.
+        kind=comp.decision_kind or kind,
+        positions=positions,
         facts=list(book.facts.values()),
         constraints=list(rep.checks),
         counterfactuals=cfs,
@@ -577,6 +586,154 @@ def _holding_statement(book: FactBook, fids: list[str]) -> Statement:
     if "holdings.top_share" in f:
         text += f", soit {fmt(f['holdings.top_share'].value, '%')} du patrimoine investissable"
     return Statement(text_fr=text + ".", fact_ids=fids)
+
+
+STATUS_DATASET = "alphaforge/finance/policy/risk_levels.yaml@0.2.0#status"
+DOLLAR_DATASET = "alphaforge/finance/policy/risk_levels.yaml@0.2.0#dollar_rule"
+
+
+def _trace_rule(comp, rule: str) -> dict | None:
+    """Dernière règle ``rule`` inscrite par le compilateur (entrées, sortie, chemin YAML), ou None."""
+    for record in reversed(comp.trace or []):
+        if isinstance(record, dict) and record.get("rule") == rule:
+            return record
+    return None
+
+
+def _status_statements(book: FactBook, comp, profile: InvestorProfile) -> dict[str, list[Statement]]:
+    """Pourquoi le profil a un statut, en faits tirés de la trace du compilateur.
+
+    Protection par la règle des dollars : l* et la plus petite perte de planification de la grille. Protection
+    demandée par le profil : son statut. Profil incomplet : les champs obligatoires manquants et le plafond de
+    niveau. Le portefeuille est construit dans ce mandat resserré ; ces énoncés disent pourquoi il est si prudent.
+    """
+    out: dict[str, list[Statement]] = {"data_used": [], "why": [], "limits": [], "what_would_change": []}
+    kind = comp.decision_kind
+    f = book.facts
+
+    def v(fid: str) -> str:
+        return fmt(f[fid].value, f[fid].unit)
+
+    if kind == "protection":
+        by_profile = str(getattr(profile.status, "value", profile.status)) == "PROTECTION"
+        dollar = _trace_rule(comp, "dollar_rule.protection")
+        if dollar is not None:
+            book.add(
+                "status.l_star",
+                "Perte acceptable retenue (l*)",
+                dollar["inputs"]["l_star"],
+                "%",
+                dataset=DOLLAR_DATASET,
+                processing="la plus basse de la perte de planification au plafond d'actions, de la perte déclarée "
+                "et de la perte absorbable",
+            )
+            book.add(
+                "status.min_l_plan",
+                "Plus petite perte de planification de la grille d'actions",
+                dollar["inputs"]["min_L_plan"],
+                "%",
+                dataset=DOLLAR_DATASET,
+            )
+            star = _trace_rule(comp, "dollar_rule.l_star") or {"inputs": {}}
+            parts, ids = [], ["status.l_star"]
+            for key, fid, label, text in (
+                ("l_declared", "status.l_declared", "Perte maximale déclarée (part du patrimoine)", "perte déclarée"),
+                ("l_cap", "status.l_cap", "Perte absorbable (capacité)", "perte absorbable"),
+            ):
+                if star["inputs"].get(key) is not None:
+                    book.add(fid, label, star["inputs"][key], "%", dataset=DOLLAR_DATASET)
+                    parts.append(f"{text} {v(fid)}")
+                    ids.append(fid)
+            detail = f" ({', '.join(parts)})" if parts else ""
+            out["data_used"].append(
+                Statement(
+                    text_fr=f"Perte acceptable retenue : {v('status.l_star')}, la plus basse des pertes admises"
+                    f"{detail}.",
+                    fact_ids=ids,
+                )
+            )
+            out["why"].append(
+                Statement(
+                    text_fr="Statut protection : même sans actions, la plus petite perte de planification "
+                    f"({v('status.min_l_plan')}) dépasse la perte acceptable retenue ({v('status.l_star')}). Le "
+                    "portefeuille construit est le plus prudent du mandat : sans actions, sans titre individuel ni "
+                    "cryptoactif.",
+                    fact_ids=["status.min_l_plan", "status.l_star"],
+                )
+            )
+            if not by_profile:
+                out["what_would_change"].append(
+                    Statement(
+                        text_fr=f"Si la perte acceptable retenue atteignait {v('status.min_l_plan')}, le statut "
+                        "protection serait levé (règle des dollars).",
+                        fact_ids=["status.min_l_plan"],
+                        label="HYPOTHESE",
+                    )
+                )
+        if by_profile:
+            book.add("status.profile", "Statut demandé par le profil", "PROTECTION", "texte", dataset="profil client")
+            out["why"].append(
+                Statement(
+                    text_fr="Le profil signale une situation à protéger (statut PROTECTION) : le portefeuille "
+                    "construit est le plus prudent du mandat, sans titre individuel ni cryptoactif.",
+                    fact_ids=["status.profile"],
+                )
+            )
+        referral = _trace_rule(comp, "status.PROTECTION.human_referral")
+        if referral is not None and referral.get("output"):
+            fid = book.add("status.human_referral", "Revue humaine demandée", "oui", "texte", dataset=STATUS_DATASET)
+            out["limits"].append(
+                Statement(
+                    text_fr="Statut protection : une revue par une personne (conseiller ou personne de confiance) est "
+                    "recommandée avant toute suite.",
+                    fact_ids=[fid],
+                    label="HYPOTHESE",
+                )
+            )
+    cap = _trace_rule(comp, "status.INCOMPLETE.level_cap")
+    if kind in ("incomplet", "position_attente") and cap is not None:
+        book.add(
+            "status.level_cap", "Niveau plafond d'un profil incomplet", cap["output"], "niveau", dataset=STATUS_DATASET
+        )
+        missing = (_trace_rule(comp, "decision_kind") or {"inputs": {}})["inputs"].get("must_have_missing") or []
+        if missing:
+            book.add(
+                "status.missing",
+                "Informations obligatoires manquantes",
+                ", ".join(missing),
+                "texte",
+                dataset=STATUS_DATASET,
+            )
+            out["why"].append(
+                Statement(
+                    text_fr=f"Informations obligatoires manquantes ({v('status.missing')}) : le portefeuille est "
+                    "construit avec des valeurs prudentes par défaut, à revoir dès que le profil est complété.",
+                    fact_ids=["status.missing"],
+                )
+            )
+        out["why"].append(
+            Statement(
+                text_fr=f"Profil à compléter : le niveau est plafonné à {v('status.level_cap')}, sans titre individuel "
+                "ni cryptoactif, tant que le profil n'est pas complété.",
+                fact_ids=["status.level_cap"],
+            )
+        )
+        todo = list(profile.missing_info or []) or list(missing) or ["le profil"]
+        book.add("status.todo", "Informations à compléter", ", ".join(todo), "texte", dataset="profil client")
+        out["what_would_change"].append(
+            Statement(text_fr=f"Compléter : {v('status.todo')}.", fact_ids=["status.todo"], label="HYPOTHESE")
+        )
+    return out
+
+
+def _with_status(expl: Explanation, status: dict[str, list[Statement]]) -> Explanation:
+    """Raison du statut : en tête de « pourquoi », juste après le niveau dans « données », en fin ailleurs."""
+    return Explanation(
+        data_used=expl.data_used[:1] + status["data_used"] + expl.data_used[1:],
+        why=status["why"] + expl.why,
+        limits=expl.limits + status["limits"],
+        what_would_change=expl.what_would_change + status["what_would_change"],
+    )
 
 
 def _grounded(book, expl, template, report, guardrail_id, guardrail_version, checks, verdicts, docs):

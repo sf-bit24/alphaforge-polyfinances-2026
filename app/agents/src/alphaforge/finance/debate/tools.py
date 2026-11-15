@@ -60,6 +60,12 @@ def wealth(profile: InvestorProfile) -> float | None:
     return profile.investable_wealth
 
 
+def years_fr(years: float) -> str:
+    """Durée d'un libellé au format français : 7.0 → « 7 ans », 1.0 → « 1 an », 2.5 → « 2,5 ans »."""
+    value = float(years)
+    return f"{value:g}".replace(".", ",") + (" ans" if value >= 2 else " an")
+
+
 # ------------------------------------------------------------------------- preuves de base
 def timeline_evidence(c: LensContext) -> list[str]:
     b, p, w = c.book, c.label, _held(c.weights)
@@ -260,11 +266,12 @@ def strands_tools(lens: str, c: LensContext) -> list:
         (pire cas, part des fenêtres en perte). Renvoie des fact_id à citer."""
 
         def f(years):
-            hr = analysis.horizon_report(_held(c.weights), max(float(years), 1.0), c.as_of)
+            h = max(float(years), 1.0)  # horizon réellement mesuré, celui que le libellé nomme
+            hr = analysis.horizon_report(_held(c.weights), h, c.as_of)
             return [
                 c.book.add(
                     f"{c.label}.h{years}.worst",
-                    f"Pire rendement sur {years} ans",
+                    f"Pire rendement sur {years_fr(h)}",
                     hr.worst,
                     "%",
                     dataset=ENGINE,
@@ -272,7 +279,7 @@ def strands_tools(lens: str, c: LensContext) -> list:
                 ),
                 c.book.add(
                     f"{c.label}.h{years}.neg",
-                    f"Part des fenêtres de {years} ans en perte",
+                    f"Part des fenêtres de {years_fr(h)} en perte",
                     hr.share_negative,
                     "%",
                     dataset=ENGINE,

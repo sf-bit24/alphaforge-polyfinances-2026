@@ -2,7 +2,8 @@
 
 Le format reste celui de la section 4 de CONTRACTS.md (``id``, ``kind``, ``title``, ``url``, ``source``, dates,
 ``summary``, ``data``); la recherche ajoute les types ``fact``, ``signal``, ``filing`` et ``brief`` et deux blocs
-facultatifs : ``data.provenance`` (champs retenus par l'équipe le 2026-11-15) et ``data.market`` (cotes).
+facultatifs : ``data.provenance`` (champs retenus par l'équipe le 2026-11-15) et ``data.market`` (cotes),
+plus ``data.esg`` pour un fait ESG (catégorie d'une liste fermée, ``okf.ESG_KINDS``).
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..collect import staging
-from .packs import HOSTS
+from .packs import HOSTS, pack_hosts
 
 MARKET_FIELDS = (
     "venue_market_id",
@@ -24,6 +25,8 @@ MARKET_FIELDS = (
     "bar_interval",
 )
 MARKET_HOSTS = frozenset({"external-api.kalshi.com", "gamma-api.polymarket.com", "clob.polymarket.com"})
+# Hôtes dont un fait peut porter ``data.esg`` (CONTRACTS.md, section 11.5).
+ESG_HOSTS = pack_hosts(("funds-sustainability",))
 HIGH_VOLUME = 1_000_000
 MEDIUM_VOLUME = 50_000
 MAX_SPREAD = 0.02
@@ -154,6 +157,9 @@ def build_item(finding: dict[str, Any], *, summary: str | None = None, tags: lis
         data["market"] = _market(finding, values)
     if tags:
         data["tags"] = [staging.slugify(str(tag), 30) for tag in tags][:3]
+    if finding.get("esg"):
+        data["esg"] = dict(finding["esg"])
+        data["tags"] = list(dict.fromkeys(["esg", *(data.get("tags") or [])]))[:3]
     title = _title(kind, finding, values)
     return {
         "id": item_id(finding),

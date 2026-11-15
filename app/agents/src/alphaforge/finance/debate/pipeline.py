@@ -25,6 +25,7 @@ from alphaforge.finance.portfolio.judge import check, framed_alternative
 from alphaforge.finance.portfolio.optimizer import optimize
 
 from . import roles
+from .esg import esg_exclusions, esg_preference
 from .explain import grounding_check, rephrase, skeleton
 from .facts import FactBook, fmt, sha256_json
 from .merge import apply_amendments
@@ -191,6 +192,12 @@ def build_portfolio(
         )
         return BuildResult(decision=d, policy=comp.policy)
 
+    # ---------------------------------------------------------------- S0c preuves ESG de la base générale
+    # Avant l'étape 0, pour qu'elle ne retienne jamais un titre exclu ; la preuve devient la raison de l'exclusion.
+    okf_market = getattr(evidence_fn, "__self__", evidence_fn)
+    comp.policy = esg_exclusions(
+        profile, comp.policy, okf_market, as_of, book, protect=[request.ticker] if request else []
+    )
     base = comp.policy
     feas_cache: dict[str, bool] = {}
 
@@ -242,9 +249,8 @@ def build_portfolio(
             if mv.get("source") == "market" and mv.get("version"):
                 book.data_version = f"{book.data_version}+market:{mv['version']}"
         # Lot E, OKF général : avec le magasin OKF (OkfMarketStore), la version des données couvre aussi les
-        # (clé, ETag) des fondamentaux de general/societes/, lus ici une fois pour toute la décision. Jamais les
-        # actualités : une nouvelle ne change ni le mandat ni la version des données.
-        okf_market = getattr(evidence_fn, "__self__", evidence_fn)
+        # (clé, ETag) des fondamentaux de general/societes/ et des faits ESG de general/faits/, lus une fois pour
+        # toute la décision. Jamais les actualités : une nouvelle ne change ni le mandat ni la version des données.
         if hasattr(okf_market, "inputs"):
             book.data_version = okf_market.data_version(book.data_version)
         r1_ids, r1_active = _opt_facts(book, "r1", r1, base)
@@ -259,7 +265,9 @@ def build_portfolio(
     with ThreadPoolExecutor(max_workers=4) as ex:  # tour 1 : les lentilles ne voient pas le plaidoyer
         reps1 = list(ex.map(lambda lens: run_lens(lens, ctx1, ev1[lens], 1, None), LENSES))
     with book.step("s3.merge", tool="apply_amendments", inputs={"round": 1}):
-        pol2, log1 = apply_amendments(base, reps1, comp.emphasis, set(book.facts), feasible=feasible)
+        pol2, log1 = apply_amendments(
+            base, reps1, comp.emphasis, set(book.facts), feasible=feasible, esg_preference=esg_preference(profile)
+        )
     round1 = DebateRound(
         round=1, candidate_fact_ids=r1_ids, advocate=brief1, lens_reports=reps1, emphasis=comp.emphasis, decisions=log1
     )

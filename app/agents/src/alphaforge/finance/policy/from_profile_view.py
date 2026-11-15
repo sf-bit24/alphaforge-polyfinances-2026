@@ -43,8 +43,11 @@ INCOME = {
 }
 GOAL_PRIORITY = {"retirement": "besoin", "project": "besoin", "income": "besoin", "growth": "envie"}
 # Exclusions de l'app → tickers de l'univers (secteur Energy du jeu de départ ; aucune autre
-# exclusion n'a de titre dans l'univers actuel, la règle est conservée pour la trace).
+# exclusion n'a de titre dans l'univers actuel, la règle est conservée pour la trace). C'est un repli : avec la
+# base générale, le portefeuille exclut aussi les titres qu'un fait ESG « sector_activity » relie à la catégorie,
+# en citant la preuve (finance/debate/esg.py).
 EXCLUSION_TICKERS = {"fossil_fuels": ["XOM", "CNQ.TO", "ENB.TO"]}
+EXCLUSION_RULE_PREFIX = "exclure : "
 # Comptes du portefeuille existant (profile/portfolio.py, ACCOUNT_TYPES) → comptes du contrat finance.
 A2_ACCOUNTS = {
     "tfsa": AccountType.CELI,
@@ -55,6 +58,15 @@ A2_ACCOUNTS = {
     "unknown": AccountType.AUTRE,
 }
 INTERESTS = {"technology": "IA", "crypto": "crypto"}
+
+
+def excluded_categories(profile: InvestorProfile) -> set[str]:
+    """Catégories d'exclusion du questionnaire (``preferences.exclusions``) portées par les filtres de valeurs."""
+    return {
+        vf.rule.removeprefix(EXCLUSION_RULE_PREFIX)
+        for vf in profile.preferences.value_filters
+        if vf.rule.startswith(EXCLUSION_RULE_PREFIX)
+    }
 
 
 def _facts(view: dict[str, Any]) -> dict[str, Any]:
@@ -174,7 +186,9 @@ def investor_profile_from_view(
     filters = []
     for ex in g("preferences.exclusions") or []:
         filters.append(
-            ValueFilter(rule=f"exclure : {ex}", per_ticker={t: "exclu" for t in EXCLUSION_TICKERS.get(ex, [])})
+            ValueFilter(
+                rule=f"{EXCLUSION_RULE_PREFIX}{ex}", per_ticker={t: "exclu" for t in EXCLUSION_TICKERS.get(ex, [])}
+            )
         )
     tilts = [INTERESTS[i] for i in (g("preferences.interests") or []) if i in INTERESTS]
     esg = (g("preferences.esg_importance") or 0) >= 3

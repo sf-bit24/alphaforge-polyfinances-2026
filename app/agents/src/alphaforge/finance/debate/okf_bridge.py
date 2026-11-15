@@ -10,8 +10,8 @@ Clés écrites (proposition, à ajouter à app/CONTRACTS.md §5) :
 Clé lue de la base du client en plus du profil : ``clients/<id>/portefeuille-existant.md`` (« Existing Portfolio »,
 écrit par A2), dont les positions évaluées deviennent ``InvestorProfile.holdings``.
 
-Clés lues de la base générale (``OkfMarketStore``, lot E) : ``general/societes/*.md`` (« Company Fundamentals ») et
-``general/actualites/AAAA/MM/*.md`` (« News »).
+Clés lues de la base générale (``OkfMarketStore``, lot E) : ``general/societes/*.md`` (« Company Fundamentals »),
+``general/actualites/AAAA/MM/*.md`` (« News ») et ``general/faits/<source>/*.md`` (« Fact » portant ``data.esg``).
 """
 
 from __future__ import annotations
@@ -28,17 +28,21 @@ from alphaforge import okf
 from alphaforge.finance.contracts import Decision, Fact, InvestorProfile, PolicySpec
 from alphaforge.finance.policy.from_profile_view import investor_profile_from_view
 from alphaforge.finance.strategy.okf_facts import (
+    FACTS_PREFIX,
     FUNDAMENTALS_PREFIX,
     NEWS_PREFIX,
     CompanyFundamentals,
+    EsgItem,
     NewsItem,
     OkfFactsError,
     WrongDocType,
     as_date,
     canonical_ticker,
+    esg_fact,
     fundamentals_facts,
     news_fact,
     parse_company_fundamentals,
+    parse_esg,
     parse_news,
 )
 from alphaforge.profile.questionnaire import Questionnaire
@@ -150,7 +154,9 @@ class OkfMarketStore:
     - ``news`` : documents « News » de ``general/actualites/`` dont ``data.tickers`` contient le titre (casse et
       forme canoniques : ``shop.to`` → ``SHOP.TO``) → Facts ``okf.news.*``, toujours HYPOTHESE, les plus récents
       d'abord ; ``merge.apply_amendments`` refuse tout amendement qui s'en réclame, sauf ``flag_only``.
-    - ``esg`` : aucune preuve ESG structurée n'est encore publiée par A6 → ``[]`` (crochet : ``_esg``).
+    - ``esg`` : faits ESG de ``general/faits/`` (« Fact » portant ``data.esg``, écrits par A6 après relecture de la
+      valeur dans l'archive) dont ``data.tickers`` contient le titre, publiés au plus tard à ``as_of`` → Facts
+      ``okf.esg.*`` au statut FAIT, les plus récents d'abord. Ils entrent dans la version des données.
 
     Une instance = un lot d'appels (une décision : ``app.py`` en crée une par invocation). Les listes et les
     documents sont lus une fois puis gardés en cache ; ``reset()`` force une relecture. ``inputs`` garde
@@ -159,10 +165,11 @@ class OkfMarketStore:
     dans ``rejected`` (clé → raison) et ignoré ; une lecture impossible du magasin est notée dans ``inputs`` sous le
     préfixe, pour que la version des données le montre."""
 
-    def __init__(self, store: Store, *, bucket: str | None = None, max_news: int = 5):
+    def __init__(self, store: Store, *, bucket: str | None = None, max_news: int = 5, max_esg: int = 10):
         self.store = store
         self.bucket = bucket if bucket is not None else getattr(store, "bucket", None)
         self.max_news = max_news
+        self.max_esg = max_esg
         self._lock = threading.RLock()
         self.client_inputs: dict[str, str] = {}  # pas un cache : reset() ne l'efface pas
         self.reset()
@@ -175,6 +182,7 @@ class OkfMarketStore:
             self._fundamentals: dict[str, CompanyFundamentals] | None = None
             self._news_keys: list[str] | None = None
             self._news: dict[str, NewsItem | None] = {}
+            self._esg_items: list[EsgItem] | None = None
 
     # ------------------------------------------------------------------ lecture
     def evidence(self, ticker: str, topic: str, as_of) -> list[Fact]:
@@ -193,9 +201,40 @@ class OkfMarketStore:
         raise ValueError(f"sujet de preuve inconnu : {topic!r}")
 
     def _esg(self, ticker: str, as_of: date) -> list[Fact]:
-        """Crochet ESG : brancher ici les preuves ESG structurées (exclusions d'indices, incidents, émissions) quand
-        A6 en publiera, avec la même règle point dans le temps. D'ici là : rien, on n'invente aucune controverse."""
-        return []
+        """Preuves ESG datées d'un titre : rien s'il n'y en a pas, on n'invente aucune controverse."""
+        return [esg_fact(item, ticker, n) for n, item in enumerate(self.esg_items(ticker, as_of), start=1)]
+
+    def esg_items(self, ticker: str, as_of) -> list[EsgItem]:
+        """Faits ESG admissibles à ``as_of`` pour ``ticker``, les plus récents d'abord (au plus ``max_esg``)."""
+        try:
+            t = canonical_ticker(ticker)
+        except OkfFactsError:
+            return []
+        d = as_date(as_of)
+        items = [i for i in self.load_esg() if t in i.tickers and i.admissible(d)]
+        items.sort(key=lambda i: (-i.published_at.timestamp(), i.key))
+        return items[: self.max_esg]
+
+    def load_esg(self) -> list[EsgItem]:
+        """Lit une fois tout ``general/faits/`` ; seuls les faits ESG entrent dans ``inputs`` (version des données)."""
+        with self._lock:
+            if self._esg_items is not None:
+                return self._esg_items
+            found: list[EsgItem] = []
+            for key in self._list(FACTS_PREFIX, self.inputs):
+                got = self._read(key, self.inputs)
+                if got is None:
+                    continue
+                tag, text = got
+                try:
+                    found.append(parse_esg(text, key, tag))
+                except WrongDocType:
+                    self.inputs.pop(key, None)  # fait sans data.esg : pas un intrant du portefeuille
+                except OkfFactsError as exc:  # refusé, mais lu : sa correction changera la version des données
+                    self.rejected[key] = str(exc)
+                    log.warning("okf: %s", exc)
+            self._esg_items = found
+            return found
 
     def _unreadable(self, where: str, exc: Exception, sink: dict[str, str]) -> None:
         """Droits ou réseau : on le note (la version des données le montre), sans bloquer la décision."""
@@ -291,11 +330,12 @@ class OkfMarketStore:
             self.client_inputs.update(inputs)
 
     def data_version(self, base: str | None) -> str:
-        """``base`` + empreinte courte des (clé, ETag) des fondamentaux lus et des documents du client notés par
-        ``note_client_inputs``. Charge ``general/societes/`` d'abord : la version ne dépend donc pas des outils qu'un
-        LLM a choisi d'appeler. Les actualités n'y entrent jamais. Sans document du client, la version est la même
-        qu'avant leur prise en compte."""
+        """``base`` + empreinte courte des (clé, ETag) des fondamentaux et des faits ESG lus, et des documents du
+        client notés par ``note_client_inputs``. Charge ``general/societes/`` et ``general/faits/`` d'abord : la version
+        ne dépend donc pas des outils qu'un LLM a choisi d'appeler. Les actualités n'y entrent jamais. Sans document
+        du client, la version est la même qu'avant leur prise en compte."""
         self.load_fundamentals()
+        self.load_esg()
         with self._lock:
             items = sorted({**self.inputs, **self.client_inputs}.items())
             digest = hashlib.sha256(json.dumps(items).encode()).hexdigest()[:12]

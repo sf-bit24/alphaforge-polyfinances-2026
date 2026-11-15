@@ -1,4 +1,4 @@
-"""Faits de la base générale OKF (fondamentaux publiés, actualités), lus de façon déterministe.
+"""Faits de la base générale OKF (fondamentaux publiés, actualités, preuves ESG), lus de façon déterministe.
 
 Lot E de l'étape 0. Ce module ne calcule AUCUN score : les fondamentaux ont un poids nul dans le classement de
 l'étape 0 (2 titres sur 20 seulement sont couverts ; SEC EDGAR viendra avec l'issue #27). Ils servent de contexte
@@ -44,10 +44,13 @@ from alphaforge.finance.contracts.decision import Fact, Source
 
 FUNDAMENTALS_PREFIX = "general/societes/"
 NEWS_PREFIX = "general/actualites/"
+FACTS_PREFIX = "general/faits/"
 FUND_FACT_PREFIX = "okf.fund."
 NEWS_FACT_PREFIX = "okf.news."
+ESG_FACT_PREFIX = "okf.esg."
 FUNDAMENTALS_TYPE = "Company Fundamentals"
 NEWS_TYPE = "News"
+FACT_TYPE = "Fact"
 TRACE_PLACEHOLDER = "okf.general"  # l'appelant ré-estampille chaque Fact avec l'étape tracée qui le lit
 
 Currency = Literal["CAD", "USD", "EUR"]
@@ -626,3 +629,125 @@ def news_facts(
         return []
     wanted = [canonical_ticker(ticker)] if ticker is not None else list(item.tickers)
     return [news_fact(item, t, n, trace_id=trace_id) for t in wanted if t in item.tickers]
+
+
+# ----------------------------------------------------------------------------------------- preuves ESG
+ESG_KIND_FR = {
+    "emissions": "émissions déclarées",
+    "incident": "incident",
+    "index_exclusion": "exclusion d'un indice",
+    "sector_activity": "activité sectorielle",
+}
+
+
+class EsgItem(BaseModel):
+    """Fait ESG de la base générale (``general/faits/<source>/``, CONTRACTS.md section 11.5), écrit par A6 après
+    relecture de la valeur dans la réponse archivée. Une preuve datée, jamais une note ESG."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    key: StrictStr
+    sha256: StrictStr
+    title: StrictStr = Field(min_length=1)
+    kind: StrictStr
+    metric: StrictStr
+    period: StrictStr
+    value: float | StrictStr | None = None
+    unit: StrictStr | None = None
+    published_at: datetime
+    observed_at: date | None = None
+    retrieved_at: datetime | None = None
+    url: StrictStr | None = None
+    licence: StrictStr | None = None
+    tickers: tuple[str, ...]
+
+    def admissible(self, as_of: date | datetime | str) -> bool:
+        return self.published_at.astimezone(UTC).date() <= as_date(as_of)
+
+
+def _esg_value(raw: Any) -> float | str | None:
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, bool):
+        return str(raw)
+    if isinstance(raw, int | float):
+        return float(raw) if math.isfinite(raw) else None
+    text = str(raw).strip()
+    try:
+        number = float(text)
+    except ValueError:
+        return text[:300]
+    return number if math.isfinite(number) else text[:300]
+
+
+def parse_esg(doc_text: str, key: str, etag: str) -> EsgItem:
+    """Lit un fait ESG écrit par A6 (``research.checks.research_doc``). Un fait sans ``data.esg`` lève
+    ``WrongDocType`` (ce n'est pas une preuve ESG); un bloc ESG non conforme lève ``OkfFactsError``."""
+    doc = _frontmatter(doc_text, key, FACT_TYPE)
+    data = doc.frontmatter.get("data")
+    if not isinstance(data, dict):
+        raise OkfFactsError(f"{key} : bloc data absent")
+    if "esg" not in data:
+        raise WrongDocType(f"{key} : fait sans data.esg, pas une preuve ESG")
+    problems = okf.esg_problems(data["esg"])
+    if problems:
+        raise OkfFactsError(f"{key} : bloc ESG refusé ({'; '.join(problems)})")
+    published = clock.parse_datetime(data.get("published_at"))
+    if published is None:
+        raise OkfFactsError(f"{key} : data.published_at absent ou illisible ({data.get('published_at')!r})")
+    raw_tickers = data.get("tickers")
+    if not isinstance(raw_tickers, list):
+        raise OkfFactsError(f"{key} : data.tickers doit être une liste")
+    try:
+        tickers = tuple(dict.fromkeys(canonical_ticker(t) for t in raw_tickers))
+    except OkfFactsError as exc:
+        raise OkfFactsError(f"{key} : {exc}") from exc
+    observed = clock.parse_datetime(str(data.get("observed_at"))[:10]) if data.get("observed_at") else None
+    prov = data.get("provenance") if isinstance(data.get("provenance"), dict) else {}
+    esg = data["esg"]
+    try:
+        return EsgItem(
+            key=key,
+            sha256=etag,
+            title=doc.title,
+            kind=esg["kind"],
+            metric=esg["metric"],
+            period=esg["period"],
+            value=_esg_value(data.get("value")),
+            unit=str(data["unit"])[:40] if data.get("unit") else None,
+            published_at=published,
+            observed_at=observed.date() if observed else None,
+            retrieved_at=clock.parse_datetime(data.get("retrieved_at")),
+            url=data.get("url"),
+            licence=prov.get("licence"),
+            tickers=tickers,
+        )
+    except ValidationError as exc:
+        raise OkfFactsError(f"{key} : fait ESG refusé ({_errors(exc)})") from exc
+
+
+def esg_fact(item: EsgItem, ticker: str, n: int, *, trace_id: str = TRACE_PLACEHOLDER) -> Fact:
+    """Fact ``okf.esg.<TICKER>.<n>`` : une preuve ESG datée, statut FAIT (valeur relue par A6 dans l'archive)."""
+    published = item.published_at.astimezone(UTC).date()
+    return Fact(
+        fact_id=f"{ESG_FACT_PREFIX}{canonical_ticker(ticker)}.{n}",
+        label_fr=(
+            f"Preuve ESG ({ESG_KIND_FR.get(item.kind, item.kind)}, {item.metric}, {item.period}) : {item.title[:160]}"
+        ),
+        value=item.value,
+        unit=item.unit or "texte",
+        as_of=item.observed_at or published,
+        published=published,
+        status="FAIT",
+        trace_id=trace_id,
+        sources=[
+            Source(
+                dataset=f"okf-esg:{item.key}",
+                url=item.url,
+                licence=item.licence,
+                retrieved_utc=item.retrieved_at,
+                sha256=item.sha256,
+                processing="frontmatter : data.esg, data.value (lue au localisateur, relue par A6), "
+                "data.published_at, data.tickers",
+            )
+        ],
+    )

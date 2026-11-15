@@ -7,7 +7,9 @@ S'ajoutent aux contrôles de la version 1 (source, dates, doublons), avec une ra
 4. nombres : le titre et le résumé n'empruntent leurs nombres qu'aux valeurs lues et à leurs dates;
 5. point dans le temps : rien de publié après ``as_of``;
 6. cotes : règles de résolution exigées, palier de qualité gardé;
-7. synthèses : chaque citation renvoie à un élément retenu, chaque nombre à un élément cité.
+7. synthèses : chaque citation renvoie à un élément retenu, chaque nombre à un élément cité;
+8. preuves ESG : ``data.esg`` seulement sur un fait, catégorie de la liste fermée, hôte du paquet
+   ``funds-sustainability``.
 """
 
 from __future__ import annotations
@@ -225,6 +227,26 @@ def _check_market_rules(item: dict[str, Any], host: str) -> None:
         raise _ItemRejectedError("cote de marché sans règles de résolution")
 
 
+def esg_problem(kind: str, data: dict[str, Any], host: str) -> str | None:
+    """Raison de rejeter le bloc ``data.esg`` d'un élément (CONTRACTS.md, section 11.5), ou None."""
+    if "esg" not in data:
+        return None
+    if kind != "fact":
+        return "fait ESG : seul un élément fact peut porter data.esg"
+    problems = okf.esg_problems(data["esg"])
+    if problems:
+        return "fait ESG refusé : " + "; ".join(problems)
+    if host not in items.ESG_HOSTS:
+        return f"fait ESG d'un hôte hors du paquet funds-sustainability : {host}"
+    return None
+
+
+def _check_esg(item: dict[str, Any], host: str) -> None:
+    problem = esg_problem(item["kind"], item.get("data") or {}, host)
+    if problem:
+        raise _ItemRejectedError(problem)
+
+
 @dataclass
 class _ResearchReview:
     """Une passe de contrôles : éléments retenus, quarantaine, synthèses en attente et doublons déjà vus."""
@@ -261,6 +283,7 @@ class _ResearchReview:
             raise _ItemRejectedError(problem)
         _check_numbers(item)
         _check_market_rules(item, host)
+        _check_esg(item, host)
         self._accept(key, item)
 
     def _hold_if_quarantined(self, key: str, item: dict[str, Any], provenance: dict[str, Any], host: str) -> None:
@@ -391,6 +414,18 @@ def _market_lines(market: dict[str, Any]) -> list[str]:
     ]
 
 
+def _esg_lines(esg: dict[str, Any]) -> list[str]:
+    if not esg:
+        return []
+    return [
+        "## Preuve ESG",
+        "",
+        f"- Catégorie : {esg.get('kind')} — mesure : {esg.get('metric')} — période : {esg.get('period')}",
+        "- Fait sourcé et daté : il appuie une préférence de l'investisseur, ce n'est pas une note ESG.",
+        "",
+    ]
+
+
 def _limit_lines(kind: str, provenance: dict[str, Any]) -> list[str]:
     return [
         "## Limites",
@@ -421,6 +456,7 @@ def _research_body(item: dict[str, Any], kind: str, data: dict[str, Any]) -> str
         *[f"| {name} | {str(value)[:200].replace('|', '/')} |" for name, value in values.items()],
         "",
         *_market_lines(data.get("market") or {}),
+        *_esg_lines(data.get("esg") or {}),
         *_limit_lines(kind, provenance),
     ]
     return "\n".join(lines)
@@ -433,6 +469,7 @@ def _research_data(candidate: ResearchCandidate, kind: str, data: dict[str, Any]
         "item_id": item["id"],
         **{name: value for name, value in data.items() if name not in ("run_id",)},
         "url": item["url"],
+        "tickers": list(item.get("tickers") or []),
         "published_at": item.get("published_at"),
         "observed_at": item.get("observed_at"),
         "retrieved_at": item.get("retrieved_at"),

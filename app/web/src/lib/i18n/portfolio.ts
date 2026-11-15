@@ -62,11 +62,9 @@ export const portfolioFr = {
   kindText: {
     proposition: "Le Judge a contrôlé chaque limite du mandat : aucune contrainte bloquante n’est violée.",
     refus_encadre: "La demande ou le portefeuille tel quel dépasse une limite bloquante du profil : le Judge le refuse et propose une version encadrée.",
-    position_attente: "Le profil ne permet pas encore une proposition : une position d’attente prudente s’applique.",
-    incomplet: "Des informations manquent : aucune allocation n’est calculée tant que le profil n’est pas complété.",
-    // Every cause of a protection (dollar rule: acceptable loss, horizon, withdrawals; profile status): the
-    // statement « Pourquoi ce choix ? » below names it.
-    protection: "Aucune allocation ne respecte les limites de votre profil : voyez ci-dessous pourquoi et ce qui changerait la réponse.",
+    position_attente: "Profil à compléter : un portefeuille prudent est construit, à un niveau plafonné et sans titre individuel, en attendant le profil complet.",
+    incomplet: "Des informations obligatoires manquent : un portefeuille prudent est construit avec des valeurs par défaut prudentes, à revoir une fois le profil complété.",
+    protection: "Protection : le portefeuille le plus prudent du mandat est construit, sans titre individuel ni cryptoactif ; une revue par une personne est recommandée.",
   } satisfies Record<DecisionKind, string>,
   /** Header of a protection whose only cause is the vulnerability signals of the profile (`protection.profile_status`). */
   protectionSignals: "Des signaux de vulnérabilité appellent une protection : aucune allocation n’est proposée.",
@@ -306,9 +304,9 @@ export const portfolioEn: PortfolioStrings = {
   kindText: {
     proposition: "The Judge checked every limit of the mandate: no blocking constraint is violated.",
     refus_encadre: "The request or the portfolio as is exceeds a blocking limit of the profile: the Judge refuses it and proposes a framed version.",
-    position_attente: "The profile does not allow a proposal yet: a cautious holding position applies.",
-    incomplet: "Information is missing: no allocation is computed until the profile is complete.",
-    protection: "No allocation fits the limits of your profile: see below why, and what would change the answer.",
+    position_attente: "Profile to complete: a cautious portfolio is built, at a capped level and without single stocks, until the profile is complete.",
+    incomplet: "Required information is missing: a cautious portfolio is built with cautious default values, to be reviewed once the profile is complete.",
+    protection: "Protection: the most prudent portfolio of the mandate is built, without single stocks or crypto-assets; a review by a person is recommended.",
   },
   protectionSignals: "Vulnerability signals call for protection: no allocation is proposed.",
   labels: { FAIT: "FACT", HYPOTHESE: "ASSUMPTION", FICTION: "FICTION" },

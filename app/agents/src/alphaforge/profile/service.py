@@ -901,7 +901,6 @@ class ProfileService:
     ) -> dict[str, Any]:
         """Tour de relance : A1 lit le message et les réponses de ce tour, puis pose ses questions."""
         locale = session.locale
-        stage_before = session.stage
         turn = session.next_turn()
         if session.stage == "complete":
             session.set_stage("followups", f"a1:{turn}", request.trace, reason="nouvelle réponse après complétude")
@@ -920,9 +919,11 @@ class ProfileService:
                 self.questionnaire, session, turn_input, kb_search=self.kb_search, runner=self._agent_runner(request)
             )
         except AppError:
-            # Les réponses validées sont des faits : elles sont gardées même si A1 échoue. Le message libre
-            # n'est pas inscrit au journal (garde-fou d'entrée non franchi ou modèle indisponible).
-            if new_answers or session.stage != stage_before:
+            # Les réponses validées sont des faits : elles sont gardées même si A1 échoue, avec le passage de
+            # complete à followups qu'elles entraînent. Sans réponse validée, rien n'est enregistré, étape comprise :
+            # un message refusé (garde-fou) ou un modèle indisponible ne rouvre pas un profil complet (#77). Le
+            # message libre n'est jamais inscrit au journal dans ces cas.
+            if new_answers:
                 self._commit(request, session)
             raise
         if message:

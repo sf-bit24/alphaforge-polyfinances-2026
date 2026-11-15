@@ -17,7 +17,7 @@ from alphaforge.finance.strategy.rules import (
     shortlist,
     stock_floors,
 )
-from alphaforge.profile.questionnaire import InvalidValue, default_questionnaire
+from alphaforge.profile.questionnaire import InvalidValueError, default_questionnaire
 
 from ._helpers import amira, lim, robert
 from .test_rules import CANDS
@@ -134,9 +134,9 @@ def test_questionnaire_favored_tickers_is_a_closed_list_of_universe_stocks():
     assert values == stocks | {"none"} and spec.weight == 0
     question = next(x for x in q.questions if x.field.id == "preferences.favored_tickers")
     assert set(q.validate_answer(question, ["AAPL", "RY.TO"])) == {"AAPL", "RY.TO"}
-    with pytest.raises(InvalidValue):
+    with pytest.raises(InvalidValueError):
         q.validate_answer(question, ["ZZZ"])  # hors univers
-    with pytest.raises(InvalidValue):
+    with pytest.raises(InvalidValueError):
         q.validate_answer(question, ["AAPL", "none"])
 
 

@@ -101,7 +101,7 @@ def test_walkforward_no_look_ahead(wf_state):
     clean = wf._STATE["pools"]["CAD77"]
     bad = clean._subset(np.arange(clean.n))
     after = np.asarray(bad.dates > pd.Timestamp("1995-12-31"))
-    bad.R[after] = bad.R[after] * -1.5 + 0.01
+    bad.returns[after] = bad.returns[after] * -1.5 + 0.01
     wf._STATE["pools"] = {**wf_state, "CAD77": bad}
     try:
         rows2, _ = wf.run_origin(task)

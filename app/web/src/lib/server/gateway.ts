@@ -14,7 +14,7 @@ import {
   startExecution,
   stateMachineInfo,
 } from "./aws";
-import { ConfigError, getConfig, profileRuntimeName, type GatewayConfig } from "./config";
+import { ConfigError, getConfig, profileRuntimeName, type AgentMode, type GatewayConfig } from "./config";
 import { GatewayError, jsonResponse, localeOf, statusOfEnvelope, toGatewayError } from "./errors";
 import { invokeLocal } from "./local";
 import { sseResponse, sseStreamOf, type Upstream } from "./upstream";
@@ -121,7 +121,7 @@ async function callRuntime(config: GatewayConfig, request: AgentRequest, stream:
       return { kind: "json", status: 200, body };
     }
     case "local":
-      return invokeLocal(config.LOCAL_AGENT_URL, request, stream, signal);
+      return invokeLocal(config.LOCAL_AGENT_URL, request, { stream, signal });
     case "aws":
       return invokeAws(config, request, stream, signal);
   }
@@ -185,7 +185,7 @@ async function callPortfolio(config: GatewayConfig, request: PortfolioBuildReque
     case "mock":
       return { kind: "json", status: 200, body: mockPortfolioBuild(request, request.locale ?? locale) };
     case "local":
-      return invokeLocal(config.LOCAL_PORTFOLIO_URL, request, false, signal, { role: "portfolio", timeoutMs: PORTFOLIO_TIMEOUT_MS });
+      return invokeLocal(config.LOCAL_PORTFOLIO_URL, request, { stream: false, signal, role: "portfolio", timeoutMs: PORTFOLIO_TIMEOUT_MS });
     case "aws":
       return invokePortfolioAws(config, request, signal);
   }
@@ -228,6 +228,28 @@ export async function handlePortfolio(request: Request): Promise<Response> {
   }
 }
 
+/** The runtime's own `health` answer, checked against the contract. */
+async function runtimeHealth(config: GatewayConfig, signal: AbortSignal): Promise<HealthResponse> {
+  const upstream = await callRuntime(config, { action: "health" }, false, signal);
+  if (upstream.kind !== "json") throw new GatewayError("internal", { fr: "Réponse inattendue.", en: "Unexpected response." }, 502);
+  const parsed = HealthResponse.safeParse(upstream.body);
+  if (!parsed.success) {
+    throw new GatewayError(
+      "internal",
+      { fr: "Réponse health hors contrat.", en: "Health response outside the contract." },
+      502,
+      { body: JSON.stringify(upstream.body).slice(0, 300) },
+    );
+  }
+  return parsed.data;
+}
+
+/** The health route always answers 200: a failure is reported in the body. */
+function unhealthy(mode: AgentMode, runtime: GatewayHealth["runtime"], error: unknown, locale: Locale): Response {
+  const gatewayError = toGatewayError(error);
+  return jsonResponse(200, { ok: false, mode, agent: null, runtime, error: gatewayError.envelope(locale).error } satisfies GatewayHealth);
+}
+
 /** `GET /api/health`: gateway mode plus the runtime's own `health` answer. */
 export async function handleHealth(request: Request): Promise<Response> {
   const locale = localeOf(request);
@@ -235,14 +257,7 @@ export async function handleHealth(request: Request): Promise<Response> {
   try {
     config = configOrThrow();
   } catch (error) {
-    const gatewayError = toGatewayError(error);
-    return jsonResponse(200, {
-      ok: false,
-      mode: "mock",
-      agent: null,
-      runtime: null,
-      error: gatewayError.envelope(locale).error,
-    } satisfies GatewayHealth);
+    return unhealthy("mock", null, error, locale);
   }
   let runtime: GatewayHealth["runtime"] =
     config.AGENT_MODE === "aws" ? { name: profileRuntimeName(config), arn: null, status: null } : null;
@@ -251,27 +266,10 @@ export async function handleHealth(request: Request): Promise<Response> {
       const info = await resolveProfileRuntime(config);
       runtime = { name: info.name, arn: info.arn, status: info.status };
     }
-    const upstream = await callRuntime(config, { action: "health" }, false, request.signal);
-    if (upstream.kind !== "json") throw new GatewayError("internal", { fr: "Réponse inattendue.", en: "Unexpected response." }, 502);
-    const parsed = HealthResponse.safeParse(upstream.body);
-    if (!parsed.success) {
-      throw new GatewayError(
-        "internal",
-        { fr: "Réponse health hors contrat.", en: "Health response outside the contract." },
-        502,
-        { body: JSON.stringify(upstream.body).slice(0, 300) },
-      );
-    }
-    return jsonResponse(200, { ok: true, mode: config.AGENT_MODE, agent: parsed.data, runtime, error: null } satisfies GatewayHealth);
+    const agent = await runtimeHealth(config, request.signal);
+    return jsonResponse(200, { ok: true, mode: config.AGENT_MODE, agent, runtime, error: null } satisfies GatewayHealth);
   } catch (error) {
-    const gatewayError = toGatewayError(error);
-    return jsonResponse(200, {
-      ok: false,
-      mode: config.AGENT_MODE,
-      agent: null,
-      runtime,
-      error: gatewayError.envelope(locale).error,
-    } satisfies GatewayHealth);
+    return unhealthy(config.AGENT_MODE, runtime, error, locale);
   }
 }
 
@@ -289,6 +287,24 @@ function collectUnavailable(): GatewayError {
 
 const EXECUTION_ARN = /^arn:aws[a-z-]*:states:[a-z0-9-]+:\d{12}:execution:[A-Za-z0-9_-]{1,80}:[A-Za-z0-9_-]{1,80}$/;
 
+/** The simulator's executions, in mock mode. */
+function mockCollection(executionArn: string | null): Response {
+  const collector = getMockRuntime().collector;
+  if (executionArn) {
+    const execution = collector.describe(executionArn);
+    if (!execution) throw new GatewayError("not_found", { fr: "Exécution introuvable.", en: "Execution not found." }, 404);
+    return jsonResponse(200, { ok: true, execution });
+  }
+  return jsonResponse(200, { ok: true, state_machine: collector.stateMachine, executions: collector.list() });
+}
+
+/** The executions of the Step Functions machine, in aws mode. */
+async function awsCollection(config: GatewayConfig, executionArn: string | null): Promise<Response> {
+  if (executionArn) return jsonResponse(200, { ok: true, execution: await describeExecution(config, executionArn) });
+  const [stateMachine, executions] = await Promise.all([stateMachineInfo(config), listExecutions(config)]);
+  return jsonResponse(200, { ok: true, state_machine: stateMachine, executions });
+}
+
 /** `GET /api/collect`: recent executions, or one execution with `?execution_arn=`. */
 export async function handleCollectGet(request: Request): Promise<Response> {
   const locale = localeOf(request);
@@ -299,21 +315,35 @@ export async function handleCollectGet(request: Request): Promise<Response> {
       throw new GatewayError("bad_request", { fr: "ARN d'exécution invalide.", en: "Invalid execution ARN." }, 400);
     }
     if (config.AGENT_MODE === "local") throw collectUnavailable();
-    if (config.AGENT_MODE === "mock") {
-      const collector = getMockRuntime().collector;
-      if (executionArn) {
-        const execution = collector.describe(executionArn);
-        if (!execution) throw new GatewayError("not_found", { fr: "Exécution introuvable.", en: "Execution not found." }, 404);
-        return jsonResponse(200, { ok: true, execution });
-      }
-      return jsonResponse(200, { ok: true, state_machine: collector.stateMachine, executions: collector.list() });
-    }
-    if (executionArn) return jsonResponse(200, { ok: true, execution: await describeExecution(config, executionArn) });
-    const [stateMachine, executions] = await Promise.all([stateMachineInfo(config), listExecutions(config)]);
-    return jsonResponse(200, { ok: true, state_machine: stateMachine, executions });
+    if (config.AGENT_MODE === "mock") return mockCollection(executionArn);
+    return await awsCollection(config, executionArn);
   } catch (error) {
     return errorResponse(error, locale);
   }
+}
+
+/** Read and validate the body of `POST /api/collect`; an empty body asks for a default run. */
+async function readCollectRequest(request: Request): Promise<CollectRequest> {
+  let raw: unknown = {};
+  const text = await request.text();
+  if (text.trim() !== "") {
+    try {
+      raw = JSON.parse(text);
+    } catch {
+      throw new GatewayError("bad_request", { fr: "Corps JSON invalide.", en: "Invalid JSON body." }, 400);
+    }
+  }
+  const parsed = CollectRequest.safeParse(raw);
+  if (!parsed.success) {
+    throw new GatewayError("bad_request", { fr: "Paramètres de collecte invalides.", en: "Invalid collection parameters." }, 400, {
+      issues: parsed.error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message })),
+    });
+  }
+  const input = parsed.data;
+  if (input.since && input.since > new Date().toISOString().slice(0, 10)) {
+    throw new GatewayError("bad_request", { fr: "La date de début est dans le futur.", en: "The start date is in the future." }, 400);
+  }
+  return input;
 }
 
 /** `POST /api/collect`: start a collection run (no name, no run_id: Step Functions uses a UUID). */
@@ -321,25 +351,7 @@ export async function handleCollectPost(request: Request): Promise<Response> {
   const locale = localeOf(request);
   try {
     const config = configOrThrow();
-    let raw: unknown = {};
-    const text = await request.text();
-    if (text.trim() !== "") {
-      try {
-        raw = JSON.parse(text);
-      } catch {
-        throw new GatewayError("bad_request", { fr: "Corps JSON invalide.", en: "Invalid JSON body." }, 400);
-      }
-    }
-    const parsed = CollectRequest.safeParse(raw);
-    if (!parsed.success) {
-      throw new GatewayError("bad_request", { fr: "Paramètres de collecte invalides.", en: "Invalid collection parameters." }, 400, {
-        issues: parsed.error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message })),
-      });
-    }
-    const input = parsed.data;
-    if (input.since && input.since > new Date().toISOString().slice(0, 10)) {
-      throw new GatewayError("bad_request", { fr: "La date de début est dans le futur.", en: "The start date is in the future." }, 400);
-    }
+    const input = await readCollectRequest(request);
     if (config.AGENT_MODE === "local") throw collectUnavailable();
     const execution =
       config.AGENT_MODE === "mock" ? getMockRuntime().collector.start(input) : await startExecution(config, input);

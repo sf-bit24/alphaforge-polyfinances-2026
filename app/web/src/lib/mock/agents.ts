@@ -8,7 +8,8 @@ import { formatMoney, formatPercent } from "./profile";
 import type { L, QuestionDef } from "./questions";
 import { PRICE_DATE } from "./starter";
 
-const LOCALES: Locale[] = ["fr", "en"];
+/** Model the fake A1 and A2 name in their `model` trace steps. */
+export const MODEL_ID = "us.anthropic.claude-opus-5-5";
 
 function both(build: (locale: Locale) => string): L {
   return { fr: build("fr"), en: build("en") };
@@ -59,71 +60,109 @@ export interface ExtractedFact {
   note: L;
 }
 
+function emergencyFundFact(lower: string): ExtractedFact | null {
+  const months = /(\d{1,2})\s*(mois|months?)/.exec(lower);
+  if (!months || !/(urgence|emergency|coussin|cushion|précaution|precaution|côté|aside|épargne|savings)/.test(lower)) return null;
+  const value = Number(months[1]);
+  return {
+    field: "risk_capacity.emergency_fund",
+    value,
+    note: { fr: `fonds d'urgence de ${value} mois`, en: `${value}-month emergency fund` },
+  };
+}
+
+function debtFact(lower: string): ExtractedFact | null {
+  if (/(pas|aucune?|no|zero|zéro|sans)\s+(de\s+|d')?(dettes?|debts?)/.test(lower)) {
+    return { field: "risk_capacity.high_interest_debt", value: false, note: { fr: "aucune dette à taux élevé", en: "no high-interest debt" } };
+  }
+  if (/(dettes?|debts?|carte de crédit|credit card)/.test(lower)) {
+    return { field: "risk_capacity.high_interest_debt", value: true, note: { fr: "une dette à taux élevé", en: "high-interest debt" } };
+  }
+  return null;
+}
+
+function liquidityFact(lower: string): ExtractedFact | null {
+  if (/(pas besoin|no need|aucun besoin)[^.]{0,40}(retir|withdraw|liquid|disponible|available)/.test(lower)) {
+    return { field: "constraints.liquidity_need", value: false, note: { fr: "pas de besoin de liquidité", en: "no liquidity need" } };
+  }
+  if (/(n'importe quand|à tout moment|anytime|any time|short notice|court terme)/.test(lower)) {
+    return { field: "constraints.liquidity_need", value: true, note: { fr: "un besoin de liquidité", en: "a liquidity need" } };
+  }
+  return null;
+}
+
+function withdrawalFact(lower: string): ExtractedFact | null {
+  if (/(progressivement|petit à petit|peu à peu|gradually|bit by bit|over several years)/.test(lower)) {
+    return { field: "horizon.withdrawal_pattern", value: "gradual", note: { fr: "retraits progressifs", en: "gradual withdrawals" } };
+  }
+  if (/(en une (seule )?fois|d'un coup|all at once|lump sum)/.test(lower)) {
+    return { field: "horizon.withdrawal_pattern", value: "lump_sum", note: { fr: "retrait en une fois", en: "one-time withdrawal" } };
+  }
+  return null;
+}
+
+/** The purpose keeps the investor's own words, shortened; the note names the keyword found. */
+function purposeFact(message: string, lower: string): ExtractedFact | null {
+  const purpose = /(retraite|retirement|maison|house|home|mise de fonds|down payment|études|education|école|school|voyage|travel)/.exec(lower);
+  if (!purpose) return null;
+  const text = message.trim().slice(0, 200);
+  return { field: "objective.purpose", value: text, note: { fr: `finalité : ${purpose[1]}`, en: `purpose: ${purpose[1]}` } };
+}
+
+type ChoicePattern = [pattern: RegExp, choice: string];
+
+const THEME_PATTERNS: ChoicePattern[] = [
+  [/(tech|technolog|\bia\b|\bai\b|intelligence artificielle|artificial intelligence)/, "technology"],
+  [/(énergie propre|energie propre|clean energy|renouvelable|renewable)/, "clean_energy"],
+  [/(dividende|dividend)/, "dividends"],
+  [/(santé|sante|health)/, "health"],
+];
+
+const EXCLUSION_PATTERNS: ChoicePattern[] = [
+  [/(tabac|tobacco)/, "tobacco"],
+  [/(armes?\b|armement|weapons?)/, "weapons"],
+  [/(pétrol|petrol|fossile|fossil|\boil\b)/, "fossil_fuels"],
+  [/(crypto)/, "crypto"],
+];
+
+/** The choices already made plus those the text mentions, or null when it mentions no new one. */
+function withMentionedChoices(current: unknown, lower: string, patterns: ChoicePattern[]): string[] | null {
+  const choices = new Set<string>(Array.isArray(current) ? (current as string[]) : []);
+  const before = choices.size;
+  for (const [pattern, choice] of patterns) {
+    if (pattern.test(lower)) choices.add(choice);
+  }
+  if (choices.size === before) return null;
+  choices.delete("none");
+  return [...choices];
+}
+
+function themesFact(lower: string, current: Map<string, unknown>): ExtractedFact | null {
+  const themes = withMentionedChoices(current.get("preferences.themes"), lower, THEME_PATTERNS);
+  if (!themes) return null;
+  return { field: "preferences.themes", value: themes, note: { fr: "vos thèmes d'intérêt", en: "your themes of interest" } };
+}
+
+function exclusionsFact(lower: string, current: Map<string, unknown>): ExtractedFact | null {
+  if (!/(exclu|évit|evit|exclude|avoid|pas de|no |sans)/.test(lower)) return null;
+  const exclusions = withMentionedChoices(current.get("preferences.exclusions"), lower, EXCLUSION_PATTERNS);
+  if (!exclusions) return null;
+  return { field: "preferences.exclusions", value: exclusions, note: { fr: "vos exclusions", en: "your exclusions" } };
+}
+
 /** Rule-based reading of a free-text message (what A1's update-KB tool would store). */
 export function extractFacts(message: string, current: Map<string, unknown>): ExtractedFact[] {
-  const facts: ExtractedFact[] = [];
   const lower = message.toLowerCase();
-
-  const months = /(\d{1,2})\s*(mois|months?)/.exec(lower);
-  if (months && /(urgence|emergency|coussin|cushion|précaution|precaution|côté|aside|épargne|savings)/.test(lower)) {
-    const value = Number(months[1]);
-    facts.push({
-      field: "risk_capacity.emergency_fund",
-      value,
-      note: { fr: `fonds d'urgence de ${value} mois`, en: `${value}-month emergency fund` },
-    });
-  }
-
-  if (/(pas|aucune?|no|zero|zéro|sans)\s+(de\s+|d')?(dettes?|debts?)/.test(lower)) {
-    facts.push({ field: "risk_capacity.high_interest_debt", value: false, note: { fr: "aucune dette à taux élevé", en: "no high-interest debt" } });
-  } else if (/(dettes?|debts?|carte de crédit|credit card)/.test(lower)) {
-    facts.push({ field: "risk_capacity.high_interest_debt", value: true, note: { fr: "une dette à taux élevé", en: "high-interest debt" } });
-  }
-
-  if (/(pas besoin|no need|aucun besoin)[^.]{0,40}(retir|withdraw|liquid|disponible|available)/.test(lower)) {
-    facts.push({ field: "constraints.liquidity_need", value: false, note: { fr: "pas de besoin de liquidité", en: "no liquidity need" } });
-  } else if (/(n'importe quand|à tout moment|anytime|any time|short notice|court terme)/.test(lower)) {
-    facts.push({ field: "constraints.liquidity_need", value: true, note: { fr: "un besoin de liquidité", en: "a liquidity need" } });
-  }
-
-  if (/(progressivement|petit à petit|peu à peu|gradually|bit by bit|over several years)/.test(lower)) {
-    facts.push({ field: "horizon.withdrawal_pattern", value: "gradual", note: { fr: "retraits progressifs", en: "gradual withdrawals" } });
-  } else if (/(en une (seule )?fois|d'un coup|all at once|lump sum)/.test(lower)) {
-    facts.push({ field: "horizon.withdrawal_pattern", value: "lump_sum", note: { fr: "retrait en une fois", en: "one-time withdrawal" } });
-  }
-
-  const purpose = /(retraite|retirement|maison|house|home|mise de fonds|down payment|études|education|école|school|voyage|travel)/.exec(lower);
-  if (purpose) {
-    const text = message.trim().slice(0, 200);
-    facts.push({ field: "objective.purpose", value: text, note: { fr: `finalité : ${purpose[1]}`, en: `purpose: ${purpose[1]}` } });
-  }
-
-  const themes = new Set<string>(Array.isArray(current.get("preferences.themes")) ? (current.get("preferences.themes") as string[]) : []);
-  const before = themes.size;
-  if (/(tech|technolog|\bia\b|\bai\b|intelligence artificielle|artificial intelligence)/.test(lower)) themes.add("technology");
-  if (/(énergie propre|energie propre|clean energy|renouvelable|renewable)/.test(lower)) themes.add("clean_energy");
-  if (/(dividende|dividend)/.test(lower)) themes.add("dividends");
-  if (/(santé|sante|health)/.test(lower)) themes.add("health");
-  if (themes.size > before) {
-    themes.delete("none");
-    facts.push({ field: "preferences.themes", value: [...themes], note: { fr: "vos thèmes d'intérêt", en: "your themes of interest" } });
-  }
-
-  if (/(exclu|évit|evit|exclude|avoid|pas de|no |sans)/.test(lower)) {
-    const exclusions = new Set<string>(
-      Array.isArray(current.get("preferences.exclusions")) ? (current.get("preferences.exclusions") as string[]) : [],
-    );
-    const size = exclusions.size;
-    if (/(tabac|tobacco)/.test(lower)) exclusions.add("tobacco");
-    if (/(armes?\b|armement|weapons?)/.test(lower)) exclusions.add("weapons");
-    if (/(pétrol|petrol|fossile|fossil|\boil\b)/.test(lower)) exclusions.add("fossil_fuels");
-    if (/(crypto)/.test(lower)) exclusions.add("crypto");
-    if (exclusions.size > size) {
-      exclusions.delete("none");
-      facts.push({ field: "preferences.exclusions", value: [...exclusions], note: { fr: "vos exclusions", en: "your exclusions" } });
-    }
-  }
-  return facts;
+  const facts = [
+    emergencyFundFact(lower),
+    debtFact(lower),
+    liquidityFact(lower),
+    withdrawalFact(lower),
+    purposeFact(message, lower),
+    themesFact(lower, current),
+    exclusionsFact(lower, current),
+  ];
+  return facts.filter((fact) => fact !== null);
 }
 
 const DIMENSION_WORDS: Record<string, L> = {
@@ -164,6 +203,11 @@ function joinList(items: string[], locale: Locale): string {
   return `${items.slice(0, -1).join(", ")} ${locale === "fr" ? "et" : "and"} ${last}`;
 }
 
+/** Paragraphs of a message; a null one is left out. */
+function joinParagraphs(paragraphs: Array<string | null>): string {
+  return paragraphs.filter((paragraph) => paragraph !== null).join("\n\n");
+}
+
 export interface A1MessageInput {
   level: KnowledgeLevel | null;
   notes: L[];
@@ -178,105 +222,111 @@ export interface A1MessageInput {
   firstTurn: boolean;
 }
 
+const NO_ADVICE: L = {
+  fr: "Je ne peux pas vous dire quoi acheter ou vendre : AlphaForge AI est une simulation et ne donne aucun conseil financier personnalisé. Je peux en revanche compléter votre profil, pour que les explications qui suivront tiennent compte de votre situation.",
+  en: "I cannot tell you what to buy or sell: AlphaForge AI is a simulation and gives no personalized financial advice. I can, however, complete your profile so that the explanations that follow reflect your situation.",
+};
+const BACK_TO_PROFILE: L = {
+  fr: "Je reste centré sur votre profil d'investisseur.",
+  en: "Let's stay focused on your investor profile.",
+};
+const FIRST_TURN_THANKS: L = {
+  fr: "Merci pour vos réponses aux questions de base. Je vais préciser ce qui manque encore à votre profil.",
+  en: "Thank you for answering the base questions. I will now clarify what your profile is still missing.",
+};
+const NOTHING_TO_ASK: L = {
+  fr: "Si un élément de votre situation a changé, écrivez-le-moi; sinon, vous pouvez vous arrêter ici.",
+  en: "If anything in your situation has changed, tell me; otherwise you can stop here.",
+};
+const ANSWER_OR_WRITE: L = {
+  fr: "Vous pouvez répondre aux questions, ou simplement m'écrire avec vos mots.",
+  en: "You can answer the questions, or simply write to me in your own words.",
+};
+
+/** A1's answer to a request it must not follow: personalized advice, or a subject outside the profile. */
+function framing(input: A1MessageInput, locale: Locale): string | null {
+  if (input.adviceRequest) return NO_ADVICE[locale];
+  if (input.offTopic) return BACK_TO_PROFILE[locale];
+  return null;
+}
+
+function acknowledgement(input: A1MessageInput, locale: Locale): string | null {
+  if (input.notes.length > 0) {
+    const notes = joinList(input.notes.map((note) => note[locale]), locale);
+    return locale === "fr" ? `C'est noté : ${notes}.` : `Noted: ${notes}.`;
+  }
+  return input.firstTurn ? FIRST_TURN_THANKS[locale] : null;
+}
+
+function stoppedParagraph(percent: string, locale: Locale): string {
+  return locale === "fr"
+    ? `On s'arrête ici. Votre profil est enregistré à **${percent}**, au-dessus du seuil de 70 %. Vous pourrez le compléter à tout moment.`
+    : `We'll stop here. Your profile is saved at **${percent}**, above the 70% threshold. You can complete it at any time.`;
+}
+
+function completeParagraph(input: A1MessageInput, percent: string, locale: Locale): string {
+  const fr = locale === "fr";
+  if (input.level === "advanced") {
+    return fr
+      ? `Profil complet : **${percent}** affichés (plafond de 95 %, score calculé ${formatPercent(input.score, locale)}). Je n'ai plus de relance utile.`
+      : `Profile complete: **${percent}** displayed (95% cap, computed score ${formatPercent(input.score, locale)}). I have no further useful follow-up.`;
+  }
+  return fr
+    ? `Votre profil est complet à **${percent}**. L'affichage plafonne à 95 % : un profil n'est jamais parfaitement connu, et cette marge le rappelle. Vous pourrez le mettre à jour à tout moment.`
+    : `Your profile is **${percent}** complete. The display is capped at 95%: a profile is never perfectly known, and this margin is a reminder. You can update it at any time.`;
+}
+
+/** Where the profile stands, and whether the investor may stop, at the investor's level. */
+function progressParagraph(input: A1MessageInput, percent: string, locale: Locale): string {
+  const fr = locale === "fr";
+  const { ready } = input;
+  const level = input.level ?? "beginner";
+  if (level === "beginner") {
+    return fr
+      ? `Votre profil est rempli à **${percent}**.${ready ? " C'est assez pour continuer : vous pouvez vous arrêter quand vous voulez, ou répondre à quelques questions de plus pour des explications encore plus justes." : " Dès **70 %**, vous pourrez vous arrêter quand vous le voudrez."}`
+      : `Your profile is **${percent}** complete.${ready ? " That is enough to continue: you can stop whenever you like, or answer a few more questions for even better explanations." : " From **70%**, you can stop whenever you like."}`;
+  }
+  if (level === "intermediate") {
+    return fr
+      ? `Complétude du profil : **${percent}**${ready ? " (seuil de 70 % atteint, vous pouvez vous arrêter)." : " (seuil de 70 %)."}`
+      : `Profile completeness: **${percent}**${ready ? " (70% threshold reached, you may stop)." : " (70% threshold)."}`;
+  }
+  return fr
+    ? `Complétude : **${percent}** (seuil 70 %, plafond 95 %)${ready ? "; arrêt possible." : "."}`
+    : `Completeness: **${percent}** (70% threshold, 95% cap)${ready ? "; you may stop." : "."}`;
+}
+
+/** What the next questions are about: in plain words for a beginner, by field name for an advanced investor. */
+function topicParagraphs(input: A1MessageInput, locale: Locale): string[] {
+  const fr = locale === "fr";
+  const level = input.level ?? "beginner";
+  if (level !== "beginner" && level !== "intermediate") {
+    const labels = input.missingLabels.slice(0, input.questions.length).map((label) => label[locale].toLowerCase());
+    return [fr ? `Champs prioritaires : ${labels.join(", ")}.` : `Priority fields: ${labels.join(", ")}.`];
+  }
+  const dimensions = [...new Set(input.questions.map((question) => question.dimension))];
+  const topics = joinList(dimensions.map((dimension) => DIMENSION_WORDS[dimension]?.[locale] ?? dimension), locale);
+  if (level === "intermediate") {
+    return [fr ? `Les questions ci-dessous portent sur ${topics}.` : `The questions below are about ${topics}.`];
+  }
+  const sentence = fr ? `Il me reste à mieux comprendre ${topics}.` : `I still need to better understand ${topics}.`;
+  const explainer = BEGINNER_EXPLAINERS[dimensions[0] ?? ""];
+  return explainer ? [sentence, explainer[locale]] : [sentence];
+}
+
+function a1Paragraphs(input: A1MessageInput, locale: Locale): Array<string | null> {
+  const percent = formatPercent(input.displayed, locale);
+  const opening = [framing(input, locale), acknowledgement(input, locale)];
+  if (input.outcome === "stopped") return [...opening, stoppedParagraph(percent, locale)];
+  if (input.outcome === "complete") return [...opening, completeParagraph(input, percent, locale)];
+  const progress = progressParagraph(input, percent, locale);
+  if (input.outcome === "idle" || input.questions.length === 0) return [...opening, progress, NOTHING_TO_ASK[locale]];
+  return [...opening, progress, ...topicParagraphs(input, locale), ANSWER_OR_WRITE[locale]];
+}
+
 /** A1's reply, in Markdown, at the investor's knowledge level. */
 export function composeA1Message(input: A1MessageInput): L {
-  return both((locale) => {
-    const fr = locale === "fr";
-    const pct = formatPercent(input.displayed, locale);
-    const level = input.level ?? "beginner";
-    const parts: string[] = [];
-
-    if (input.adviceRequest) {
-      parts.push(
-        fr
-          ? "Je ne peux pas vous dire quoi acheter ou vendre : AlphaForge AI est une simulation et ne donne aucun conseil financier personnalisé. Je peux en revanche compléter votre profil, pour que les explications qui suivront tiennent compte de votre situation."
-          : "I cannot tell you what to buy or sell: AlphaForge AI is a simulation and gives no personalized financial advice. I can, however, complete your profile so that the explanations that follow reflect your situation.",
-      );
-    } else if (input.offTopic) {
-      parts.push(fr ? "Je reste centré sur votre profil d'investisseur." : "Let's stay focused on your investor profile.");
-    }
-
-    if (input.notes.length > 0) {
-      const notes = joinList(input.notes.map((note) => note[locale]), locale);
-      parts.push(fr ? `C'est noté : ${notes}.` : `Noted: ${notes}.`);
-    } else if (input.firstTurn) {
-      parts.push(
-        fr
-          ? "Merci pour vos réponses aux questions de base. Je vais préciser ce qui manque encore à votre profil."
-          : "Thank you for answering the base questions. I will now clarify what your profile is still missing.",
-      );
-    }
-
-    if (input.outcome === "stopped") {
-      parts.push(
-        fr
-          ? `On s'arrête ici. Votre profil est enregistré à **${pct}**, au-dessus du seuil de 70 %. Vous pourrez le compléter à tout moment.`
-          : `We'll stop here. Your profile is saved at **${pct}**, above the 70% threshold. You can complete it at any time.`,
-      );
-      return parts.join("\n\n");
-    }
-    if (input.outcome === "complete") {
-      parts.push(
-        level === "advanced"
-          ? fr
-            ? `Profil complet : **${pct}** affichés (plafond de 95 %, score calculé ${formatPercent(input.score, locale)}). Je n'ai plus de relance utile.`
-            : `Profile complete: **${pct}** displayed (95% cap, computed score ${formatPercent(input.score, locale)}). I have no further useful follow-up.`
-          : fr
-            ? `Votre profil est complet à **${pct}**. L'affichage plafonne à 95 % : un profil n'est jamais parfaitement connu, et cette marge le rappelle. Vous pourrez le mettre à jour à tout moment.`
-            : `Your profile is **${pct}** complete. The display is capped at 95%: a profile is never perfectly known, and this margin is a reminder. You can update it at any time.`,
-      );
-      return parts.join("\n\n");
-    }
-
-    if (level === "beginner") {
-      parts.push(
-        fr
-          ? `Votre profil est rempli à **${pct}**.${input.ready ? " C'est assez pour continuer : vous pouvez vous arrêter quand vous voulez, ou répondre à quelques questions de plus pour des explications encore plus justes." : " Dès **70 %**, vous pourrez vous arrêter quand vous le voudrez."}`
-          : `Your profile is **${pct}** complete.${input.ready ? " That is enough to continue: you can stop whenever you like, or answer a few more questions for even better explanations." : " From **70%**, you can stop whenever you like."}`,
-      );
-    } else if (level === "intermediate") {
-      parts.push(
-        fr
-          ? `Complétude du profil : **${pct}**${input.ready ? " (seuil de 70 % atteint, vous pouvez vous arrêter)." : " (seuil de 70 %)."}`
-          : `Profile completeness: **${pct}**${input.ready ? " (70% threshold reached, you may stop)." : " (70% threshold)."}`,
-      );
-    } else {
-      parts.push(
-        fr
-          ? `Complétude : **${pct}** (seuil 70 %, plafond 95 %)${input.ready ? "; arrêt possible." : "."}`
-          : `Completeness: **${pct}** (70% threshold, 95% cap)${input.ready ? "; you may stop." : "."}`,
-      );
-    }
-
-    if (input.outcome === "idle" || input.questions.length === 0) {
-      parts.push(
-        fr
-          ? "Si un élément de votre situation a changé, écrivez-le-moi; sinon, vous pouvez vous arrêter ici."
-          : "If anything in your situation has changed, tell me; otherwise you can stop here.",
-      );
-      return parts.join("\n\n");
-    }
-
-    const dims = [...new Set(input.questions.map((question) => question.dimension))];
-    if (level === "beginner") {
-      const words = dims.map((dim) => DIMENSION_WORDS[dim]?.[locale] ?? dim);
-      parts.push(fr ? `Il me reste à mieux comprendre ${joinList(words, locale)}.` : `I still need to better understand ${joinList(words, locale)}.`);
-      const explainer = BEGINNER_EXPLAINERS[dims[0] ?? ""];
-      if (explainer) parts.push(explainer[locale]);
-    } else if (level === "intermediate") {
-      const words = dims.map((dim) => DIMENSION_WORDS[dim]?.[locale] ?? dim);
-      parts.push(fr ? `Les questions ci-dessous portent sur ${joinList(words, locale)}.` : `The questions below are about ${joinList(words, locale)}.`);
-    } else {
-      const labels = input.missingLabels.slice(0, input.questions.length).map((label) => label[locale].toLowerCase());
-      parts.push(fr ? `Champs prioritaires : ${labels.join(", ")}.` : `Priority fields: ${labels.join(", ")}.`);
-    }
-    parts.push(
-      fr
-        ? "Vous pouvez répondre aux questions, ou simplement m'écrire avec vos mots."
-        : "You can answer the questions, or simply write to me in your own words.",
-    );
-    return parts.join("\n\n");
-  });
+  return both((locale) => joinParagraphs(a1Paragraphs(input, locale)));
 }
 
 /** Flags of app/agents/src/alphaforge/profile/portfolio.py, same names and thresholds. */
@@ -297,62 +347,67 @@ export interface A2MessageInput {
   usesUsd: boolean;
 }
 
-/** A2's summary of the extraction, in Markdown. */
-export function composeA2Message(input: A2MessageInput): L {
-  return both((locale) => {
-    const fr = locale === "fr";
-    const level = input.level ?? "beginner";
-    const parts: string[] = [];
-    if (input.positions === 0) {
-      parts.push(
-        fr
-          ? "Je n'ai reconnu aucun titre du jeu de départ dans ce que vous avez fourni. Ajoutez vos positions à la main dans le tableau, ou passez cette étape."
-          : "I did not recognize any security from the starter universe in what you provided. Add your positions by hand in the table, or skip this step.",
-      );
-      return parts.join("\n\n");
-    }
-    const total = formatMoney(input.exposures.total_value_cad, locale);
-    const fx = input.usesUsd ? (fr ? ", USD convertis à 1,4255 $ CA selon la Banque du Canada" : ", USD converted at 1.4255 CAD per the Bank of Canada") : "";
-    parts.push(
-      fr
-        ? `J'ai repéré **${input.positions} position${input.positions > 1 ? "s" : ""}** pour une valeur estimée de **${total}** (cours de clôture du ${PRICE_DATE}, jeu de départ${fx}).`
-        : `I found **${input.positions} position${input.positions > 1 ? "s" : ""}** worth an estimated **${total}** (closing prices of ${PRICE_DATE}, starter dataset${fx}).`,
-    );
-    if (level === "beginner") {
-      parts.push(
-        fr
-          ? "Une **position**, c'est un titre que vous détenez, par exemple 100 actions d'une banque. Les pourcentages plus bas montrent la part de chaque catégorie dans le total."
-          : "A **position** is a security you hold, for example 100 shares of a bank. The percentages below show each category's share of the total.",
-      );
-    }
-    if (input.unresolved.length > 0) {
-      const quoted = input.unresolved.slice(0, 3).map((raw) => (fr ? `« ${raw} »` : `"${raw}"`)).join(", ");
-      parts.push(
-        fr
-          ? `${input.unresolved.length > 1 ? `${input.unresolved.length} éléments n'ont` : "Un élément n'a"} pas pu être identifié${input.unresolved.length > 1 ? "s" : ""} : ${quoted}.`
-          : `${input.unresolved.length > 1 ? `${input.unresolved.length} items` : "One item"} could not be identified: ${quoted}.`,
-      );
-    }
-    const flags = input.exposures.flags.map((flag) => FLAG_SENTENCES[flag]?.[locale]).filter((text): text is string => Boolean(text));
-    if (flags.length > 0) {
-      parts.push(fr ? `**À noter** : ${joinList(flags, locale)}.` : `**Worth noting**: ${joinList(flags, locale)}.`);
-    }
-    if (level === "advanced") {
-      parts.push(
-        fr
-          ? "Les expositions sont calculées par le code sur la valeur en CAD; aucune n'est estimée par le modèle."
-          : "Exposures are computed by code on the CAD value; none is estimated by the model.",
-      );
-    }
-    parts.push(
-      fr
-        ? "Vérifiez les quantités et les comptes, corrigez au besoin, puis confirmez."
-        : "Check the quantities and accounts, correct them if needed, then confirm.",
-    );
-    return parts.join("\n\n");
-  });
+const NOTHING_RECOGNIZED: L = {
+  fr: "Je n'ai reconnu aucun titre du jeu de départ dans ce que vous avez fourni. Ajoutez vos positions à la main dans le tableau, ou passez cette étape.",
+  en: "I did not recognize any security from the starter universe in what you provided. Add your positions by hand in the table, or skip this step.",
+};
+const POSITION_EXPLAINER: L = {
+  fr: "Une **position**, c'est un titre que vous détenez, par exemple 100 actions d'une banque. Les pourcentages plus bas montrent la part de chaque catégorie dans le total.",
+  en: "A **position** is a security you hold, for example 100 shares of a bank. The percentages below show each category's share of the total.",
+};
+const EXPOSURES_BY_CODE: L = {
+  fr: "Les expositions sont calculées par le code sur la valeur en CAD; aucune n'est estimée par le modèle.",
+  en: "Exposures are computed by code on the CAD value; none is estimated by the model.",
+};
+const CHECK_AND_CONFIRM: L = {
+  fr: "Vérifiez les quantités et les comptes, corrigez au besoin, puis confirmez.",
+  en: "Check the quantities and accounts, correct them if needed, then confirm.",
+};
+const USD_CONVERSION: L = {
+  fr: ", USD convertis à 1,4255 $ CA selon la Banque du Canada",
+  en: ", USD converted at 1.4255 CAD per the Bank of Canada",
+};
+
+function positionsFound(input: A2MessageInput, locale: Locale): string {
+  const total = formatMoney(input.exposures.total_value_cad, locale);
+  const conversion = input.usesUsd ? USD_CONVERSION[locale] : "";
+  const plural = input.positions > 1 ? "s" : "";
+  return locale === "fr"
+    ? `J'ai repéré **${input.positions} position${plural}** pour une valeur estimée de **${total}** (cours de clôture du ${PRICE_DATE}, jeu de départ${conversion}).`
+    : `I found **${input.positions} position${plural}** worth an estimated **${total}** (closing prices of ${PRICE_DATE}, starter dataset${conversion}).`;
 }
 
-export function localized(text: L, locale: Locale): string {
-  return LOCALES.includes(locale) ? text[locale] : text.fr;
+/** The items A2 could not identify: their number, and the first three as the investor wrote them. */
+function unidentifiedItems(unresolved: string[], locale: Locale): string | null {
+  if (unresolved.length === 0) return null;
+  const fr = locale === "fr";
+  const several = unresolved.length > 1;
+  const quoted = unresolved.slice(0, 3).map((raw) => (fr ? `« ${raw} »` : `"${raw}"`)).join(", ");
+  return fr
+    ? `${several ? `${unresolved.length} éléments n'ont` : "Un élément n'a"} pas pu être identifié${several ? "s" : ""} : ${quoted}.`
+    : `${several ? `${unresolved.length} items` : "One item"} could not be identified: ${quoted}.`;
+}
+
+function flagsParagraph(flags: string[], locale: Locale): string | null {
+  const sentences = flags.map((flag) => FLAG_SENTENCES[flag]?.[locale]).filter((text): text is string => Boolean(text));
+  if (sentences.length === 0) return null;
+  return locale === "fr" ? `**À noter** : ${joinList(sentences, locale)}.` : `**Worth noting**: ${joinList(sentences, locale)}.`;
+}
+
+function a2Paragraphs(input: A2MessageInput, locale: Locale): Array<string | null> {
+  if (input.positions === 0) return [NOTHING_RECOGNIZED[locale]];
+  const level = input.level ?? "beginner";
+  return [
+    positionsFound(input, locale),
+    level === "beginner" ? POSITION_EXPLAINER[locale] : null,
+    unidentifiedItems(input.unresolved, locale),
+    flagsParagraph(input.exposures.flags, locale),
+    level === "advanced" ? EXPOSURES_BY_CODE[locale] : null,
+    CHECK_AND_CONFIRM[locale],
+  ];
+}
+
+/** A2's summary of the extraction, in Markdown. */
+export function composeA2Message(input: A2MessageInput): L {
+  return both((locale) => joinParagraphs(a2Paragraphs(input, locale)));
 }

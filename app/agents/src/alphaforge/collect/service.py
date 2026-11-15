@@ -28,6 +28,46 @@ logger = logging.getLogger("alphaforge.collect")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 ROLE_ACTIONS = {"press": "collect", "data": "collect", "supervisor": "curate"}
 MAX_TICKERS = 40
+DEFAULT_WINDOW_DAYS = 7
+MAX_WINDOW_DAYS = 60
+
+
+def _valid_run_id(run_id: Any) -> str:
+    if not isinstance(run_id, str) or not staging.RUN_ID.match(run_id):
+        raise AppError("bad_request", "run_id doit suivre ^[A-Za-z0-9_-]{1,64}$.", {"run_id": run_id})
+    return run_id
+
+
+def _valid_since(since: Any) -> str:
+    """Début de la fenêtre de collecte : sept jours par défaut, soixante au plus, jamais dans le futur."""
+    if since is None:
+        return (clock.today() - timedelta(days=DEFAULT_WINDOW_DAYS)).isoformat()
+    if not isinstance(since, str) or not DATE.match(since):
+        raise AppError("bad_request", "since doit suivre AAAA-MM-JJ.", {"since": since})
+    try:
+        parsed = date.fromisoformat(since)
+    except ValueError as exc:
+        raise AppError("bad_request", "since n'est pas une date valide.", {"since": since}) from exc
+    if parsed > clock.today():
+        raise AppError("bad_request", "since ne peut pas être dans le futur.", {"since": since})
+    if parsed < clock.today() - timedelta(days=MAX_WINDOW_DAYS):
+        raise AppError("bad_request", "since remonte à 60 jours au plus.", {"since": since})
+    return since
+
+
+def _valid_tickers(tickers: Any) -> list[str]:
+    """Symboles demandés, en majuscules et sans doublon; l'univers du jeu de départ par défaut."""
+    if tickers is None:
+        return list(starter.universe())
+    if not isinstance(tickers, list) or not tickers or len(tickers) > MAX_TICKERS:
+        raise AppError("bad_request", f"tickers doit être une liste de 1 à {MAX_TICKERS} symboles.")
+    symbols = []
+    for raw in tickers:
+        symbol = raw.strip().upper() if isinstance(raw, str) else ""
+        if not fetchers.SYMBOL.match(symbol):
+            raise AppError("bad_request", f"Symbole invalide : {raw!r}.", {"ticker": raw})
+        symbols.append(symbol)
+    return list(dict.fromkeys(symbols))
 
 
 class CollectorService:
@@ -78,40 +118,10 @@ class CollectorService:
             return error_response(release, AppError("internal", "Erreur interne."))
 
     def _job(self, payload: dict[str, Any]) -> dict[str, Any]:
-        run_id = payload.get("run_id")
-        if not isinstance(run_id, str) or not staging.RUN_ID.match(run_id):
-            raise AppError("bad_request", "run_id doit suivre ^[A-Za-z0-9_-]{1,64}$.", {"run_id": run_id})
-        job: dict[str, Any] = {"run_id": run_id}
+        job: dict[str, Any] = {"run_id": _valid_run_id(payload.get("run_id"))}
         if self.role == "supervisor":
             return job
-        since = payload.get("since")
-        if since is None:
-            since = (clock.today() - timedelta(days=7)).isoformat()
-        elif not isinstance(since, str) or not DATE.match(since):
-            raise AppError("bad_request", "since doit suivre AAAA-MM-JJ.", {"since": since})
-        else:
-            try:
-                parsed = date.fromisoformat(since)
-            except ValueError as exc:
-                raise AppError("bad_request", "since n'est pas une date valide.", {"since": since}) from exc
-            if parsed > clock.today():
-                raise AppError("bad_request", "since ne peut pas être dans le futur.", {"since": since})
-            if parsed < clock.today() - timedelta(days=60):
-                raise AppError("bad_request", "since remonte à 60 jours au plus.", {"since": since})
-        tickers = payload.get("tickers")
-        if tickers is None:
-            tickers = list(starter.universe())
-        elif not isinstance(tickers, list) or not tickers or len(tickers) > MAX_TICKERS:
-            raise AppError("bad_request", f"tickers doit être une liste de 1 à {MAX_TICKERS} symboles.")
-        else:
-            cleaned = []
-            for raw in tickers:
-                symbol = raw.strip().upper() if isinstance(raw, str) else ""
-                if not fetchers.SYMBOL.match(symbol):
-                    raise AppError("bad_request", f"Symbole invalide : {raw!r}.", {"ticker": raw})
-                cleaned.append(symbol)
-            tickers = list(dict.fromkeys(cleaned))
-        job.update(since=since, tickers=tickers)
+        job.update(since=_valid_since(payload.get("since")), tickers=_valid_tickers(payload.get("tickers")))
         return job
 
     def accept(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -148,24 +158,29 @@ class CollectorService:
             return data_collector.collect(run_id=job["run_id"], since=job["since"], tickers=job["tickers"], **common)
         return supervisor_collector.curate(run_id=job["run_id"], **common)
 
+    def _empty_result(self) -> dict[str, Any]:
+        """Champs que le marqueur garde même quand le passage échoue."""
+        if self.role == "supervisor":
+            return {"written": [], "rejected": []}
+        return {"items": 0, "keys": []}
+
+    def _outcome(self, job: dict[str, Any], trace: Trace) -> dict[str, Any]:
+        """Résultat du passage, ou son erreur : le marqueur est écrit dans les deux cas."""
+        try:
+            return {"status": "ok", "error": None, **self.run_job(job, trace)}
+        except AppError as exc:
+            return {"status": "error", "error": f"{exc.code}: {exc.message}"}
+        except Exception as exc:
+            logger.exception("%s run %s failed", self.role, job["run_id"])
+            return {"status": "error", "error": f"{type(exc).__name__}: {str(exc)[:300]}"}
+
     def _background(self, job: dict[str, Any], task_id: int | None) -> None:
         started_at = clock.iso()
         trace = Trace("fr")
         try:
-            try:
-                result = self.run_job(job, trace)
-                marker = {"status": "ok", "error": None, **result}
-            except AppError as exc:
-                marker = {"status": "error", "error": f"{exc.code}: {exc.message}"}
-            except Exception as exc:
-                logger.exception("%s run %s failed", self.role, job["run_id"])
-                marker = {"status": "error", "error": f"{type(exc).__name__}: {str(exc)[:300]}"}
-            if self.role == "supervisor":
-                marker.setdefault("written", [])
-                marker.setdefault("rejected", [])
-            else:
-                marker.setdefault("items", 0)
-                marker.setdefault("keys", [])
+            marker = self._outcome(job, trace)
+            for field_name, empty_value in self._empty_result().items():
+                marker.setdefault(field_name, empty_value)
             document = {
                 "status": marker["status"],
                 "role": self.role,

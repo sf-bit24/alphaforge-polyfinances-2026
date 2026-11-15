@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ClientState } from "@/lib/contract/schemas";
 import { useHealth } from "@/lib/client/health";
 import { useSession } from "@/lib/client/session";
 import { formatPercent } from "@/lib/i18n/locale";
@@ -10,7 +11,7 @@ import { cn } from "@/components/ui/cn";
 import { Spinner } from "@/components/ui/spinner";
 import { Assistant } from "./assistant";
 import { ProfileBento, SampleBento } from "./bento";
-import s from "./dashboard.module.css";
+import styles from "./dashboard.module.css";
 
 /** Example portfolio data are shown against the simulator only (team decision of 2026-11-14). */
 export function useSampleMode(): boolean | null {
@@ -22,14 +23,20 @@ export function useSampleMode(): boolean | null {
 
 function Gate({ title, text, cta }: { title: string; text: string; cta: string }) {
   return (
-    <div className={s.gate}>
+    <div className={styles.gate}>
       <h1>{title}</h1>
       <p>{text}</p>
-      <Link href="/" className={cn(s.btn, s.btnPrimary)}>
+      <Link href="/" className={cn(styles.btn, styles.btnPrimary)}>
         {cta}
       </Link>
     </div>
   );
+}
+
+/** The key figures: the example's in `mock` mode, the profile's otherwise, and an empty frame until the mode is known. */
+function KeyFigures({ sample, state }: { sample: boolean | null; state: ClientState }) {
+  if (sample === null) return <div className={styles.bento} aria-busy />;
+  return sample ? <SampleBento /> : <ProfileBento state={state} />;
 }
 
 export function DashboardView() {
@@ -50,27 +57,27 @@ export function DashboardView() {
 
   const { completeness } = state;
   return (
-    <div className={s.main}>
-      <section className={s.head}>
+    <div className={styles.main}>
+      <section className={styles.head}>
         <div>
           <h1>{t.dash.hello}</h1>
           <p>{sample ? t.dash.leadSample : t.dash.leadReal}</p>
         </div>
-        <div className={s.headRight}>
-          {sample ? <span className={s.example}>{t.dash.exampleChip}</span> : null}
-          <Link className={s.btn} href="/details">
+        <div className={styles.headRight}>
+          {sample ? <span className={styles.example}>{t.dash.exampleChip}</span> : null}
+          <Link className={styles.btn} href="/details">
             {t.dash.allDetails}
           </Link>
         </div>
       </section>
 
-      {sample === null ? <div className={s.bento} aria-busy /> : sample ? <SampleBento /> : <ProfileBento state={state} />}
+      <KeyFigures sample={sample} state={state} />
 
-      <section className={s.assist} aria-labelledby="assistant-title">
-        <div className={s.assistH}>
-          <div className={s.assistNote}>
+      <section className={styles.assist} aria-labelledby="assistant-title">
+        <div className={styles.assistH}>
+          <div className={styles.assistNote}>
             <h2 id="assistant-title">{t.assistant.title}</h2>
-            <span className={cn(s.pill, completeness.ready && s.pillReady)}>{t.assistant.profilePill(formatPercent(completeness.displayed, locale))}</span>
+            <span className={cn(styles.pill, completeness.ready && styles.pillReady)}>{t.assistant.profilePill(formatPercent(completeness.displayed, locale))}</span>
           </div>
           <p>{sample ? t.assistant.noteSample : t.assistant.noteReal}</p>
         </div>

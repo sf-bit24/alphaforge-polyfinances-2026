@@ -4,156 +4,196 @@ All constraints are linear: lb_i <= w_i <= ub_i, sum w = 1 (long-only by default
 group constraints  min_g <= a_g . w <= max_g  where a_g is a look-through exposure vector
 (e.g. tech share of each asset), a class/tag membership vector, or an explicit asset list.
 """
+
 from __future__ import annotations
 
 import warnings
 
 import numpy as np
+import pandas as pd
 from scipy.optimize import linprog, minimize
 
 from .data import exposure_vector, load_assets
 
-TOL = 1e-6
+
+def _is_member(
+    asset: str, catalogue: pd.DataFrame, listed: list | None, classes: list | None, tags: list | None
+) -> bool:
+    """Membership by explicit asset list, asset class or any shared tag."""
+    return bool(
+        asset in (listed or [])
+        or catalogue.at[asset, "asset_class"] in (classes or [])
+        or set(catalogue.at[asset, "tag_list"]) & set(tags or [])
+    )
+
+
+def _weight_bounds(assets: list[str], config: dict, catalogue: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """Default bounds, capped by the class maxima, then replaced by the explicit asset bounds."""
+    n = len(assets)
+    low, high = config.get("default_bounds", [0.0, 1.0])
+    lower = np.full(n, float(low))
+    upper = np.full(n, float(high))
+    for asset_class, maximum in (config.get("class_max_weight") or {}).items():
+        for i, asset in enumerate(assets):
+            if catalogue.at[asset, "asset_class"] == asset_class:
+                upper[i] = min(upper[i], float(maximum))
+    for asset, (low, high) in (config.get("asset_bounds") or {}).items():
+        if asset in assets:
+            i = assets.index(asset)
+            lower[i], upper[i] = float(low), float(high)
+    return lower, upper
+
+
+def _membership_vector(assets: list[str], group: dict, catalogue: pd.DataFrame) -> np.ndarray:
+    vector = np.zeros(len(assets))
+    for i, asset in enumerate(assets):
+        if _is_member(asset, catalogue, group.get("assets"), group.get("classes"), group.get("tags_any")):
+            vector[i] = 1.0
+    return vector
+
+
+def _without_lookthrough(assets: list[str], overrides: dict, catalogue: pd.DataFrame) -> list[str]:
+    """Broad-market assets whose exposure comes from no override, no US_MKT look-through and no assets.csv value."""
+    return [
+        asset
+        for asset in assets
+        if asset not in overrides
+        and asset != "US_MKT"
+        and catalogue.at[asset, "proxy_for_ticker"] != "US_MKT"
+        and {"broad_market", "tech_heavy"} & set(catalogue.at[asset, "tag_list"])
+        and not catalogue.at[asset, "exposure_map"]
+    ]
+
+
+def _groups(assets: list[str], config: dict, catalogue: pd.DataFrame, date, window) -> tuple[list[tuple], list[str]]:
+    """Group constraints (name, vector, min, max) and the warnings about missing look-through data."""
+    groups, messages = [], []
+    overrides = config.get("exposure_overrides") or {}
+    for group in config.get("groups") or []:
+        if "exposure" in group:
+            vector = exposure_vector(assets, group["exposure"], date=date, overrides=overrides, window=window)
+            unknown = _without_lookthrough(assets, overrides, catalogue)
+            if unknown:
+                messages.append(
+                    f"group {group['name']}: no look-through data for {unknown} (exposure treated as "
+                    f"0 unless tagged); set constraints.exposure_overrides with a documented source"
+                )
+        else:
+            vector = _membership_vector(assets, group, catalogue)
+        groups.append((group["name"], vector, group.get("min"), group.get("max")))
+    return groups, messages
 
 
 class ConstraintSet:
-    def __init__(self, assets: list[str], cfg: dict, date=None, window=None):
+    def __init__(self, assets: list[str], config: dict, date=None, window=None):
         self.assets = list(assets)
-        self.cfg = cfg
-        cat = load_assets()
-        n = len(assets)
-        lo, hi = cfg.get("default_bounds", [0.0, 1.0])
-        self.lb = np.full(n, float(lo))
-        self.ub = np.full(n, float(hi))
-        for cls, mx in (cfg.get("class_max_weight") or {}).items():
-            for i, a in enumerate(assets):
-                if cat.at[a, "asset_class"] == cls:
-                    self.ub[i] = min(self.ub[i], float(mx))
-        for a, (lo, hi) in (cfg.get("asset_bounds") or {}).items():
-            if a in assets:
-                i = assets.index(a)
-                self.lb[i], self.ub[i] = float(lo), float(hi)
-        ex = cfg.get("exclude") or {}
+        self.config = config
+        catalogue = load_assets()
+        self.lb, self.ub = _weight_bounds(assets, config, catalogue)
+        exclude = config.get("exclude") or {}
         self.excluded = []
-        for i, a in enumerate(assets):
-            if (a in (ex.get("assets") or []) or cat.at[a, "asset_class"] in (ex.get("classes") or [])
-                    or set(cat.at[a, "tag_list"]) & set(ex.get("tags") or [])):
+        for i, asset in enumerate(assets):
+            if _is_member(asset, catalogue, exclude.get("assets"), exclude.get("classes"), exclude.get("tags")):
                 self.lb[i] = self.ub[i] = 0.0
-                self.excluded.append(a)
-        self.groups = []  # (name, vector, min, max)
-        self.warnings = []
-        ov = cfg.get("exposure_overrides") or {}
-        for g in cfg.get("groups") or []:
-            if "exposure" in g:
-                vec = exposure_vector(assets, g["exposure"], date=date, overrides=ov, window=window)
-                unknown = [a for a in assets if a not in ov and a != "US_MKT"
-                           and cat.at[a, "proxy_for_ticker"] != "US_MKT"
-                           and {"broad_market", "tech_heavy"} & set(cat.at[a, "tag_list"])
-                           and not cat.at[a, "exposure_map"]]
-                if unknown:
-                    self.warnings.append(
-                        f"group {g['name']}: no look-through data for {unknown} (exposure treated as "
-                        f"0 unless tagged); set constraints.exposure_overrides with a documented source"
-                    )
-            else:
-                vec = np.zeros(n)
-                for i, a in enumerate(assets):
-                    if (
-                        a in (g.get("assets") or [])
-                        or cat.at[a, "asset_class"] in (g.get("classes") or [])
-                        or set(cat.at[a, "tag_list"]) & set(g.get("tags_any") or [])
-                    ):
-                        vec[i] = 1.0
-            self.groups.append((g["name"], vec, g.get("min"), g.get("max")))
-        for w in self.warnings:
-            warnings.warn(w, stacklevel=2)
+                self.excluded.append(asset)
+        self.groups, self.warnings = _groups(assets, config, catalogue, date, window)
+        for message in self.warnings:
+            warnings.warn(message, stacklevel=2)
 
     # ------------------------------------------------------------------ checks
-    def violations(self, w, tol: float = 1e-4) -> list[str]:
-        w = np.asarray(w, float)
-        v = []
-        if abs(w.sum() - 1) > tol:
-            v.append(f"sum={w.sum():.4f}")
-        for i, a in enumerate(self.assets):
-            if w[i] < self.lb[i] - tol or w[i] > self.ub[i] + tol:
-                v.append(f"{a}={w[i]:.4f} not in [{self.lb[i]}, {self.ub[i]}]")
-        for name, vec, mn, mx in self.groups:
-            x = float(vec @ w)
-            if mn is not None and x < mn - tol:
-                v.append(f"{name}={x:.4f} < {mn}")
-            if mx is not None and x > mx + tol:
-                v.append(f"{name}={x:.4f} > {mx}")
-        return v
+    def violations(self, weights, tol: float = 1e-4) -> list[str]:
+        weights = np.asarray(weights, float)
+        messages = []
+        if abs(weights.sum() - 1) > tol:
+            messages.append(f"sum={weights.sum():.4f}")
+        for i, asset in enumerate(self.assets):
+            if weights[i] < self.lb[i] - tol or weights[i] > self.ub[i] + tol:
+                messages.append(f"{asset}={weights[i]:.4f} not in [{self.lb[i]}, {self.ub[i]}]")
+        for name, vector, minimum, maximum in self.groups:
+            exposure = float(vector @ weights)
+            if minimum is not None and exposure < minimum - tol:
+                messages.append(f"{name}={exposure:.4f} < {minimum}")
+            if maximum is not None and exposure > maximum + tol:
+                messages.append(f"{name}={exposure:.4f} > {maximum}")
+        return messages
 
-    def is_feasible(self, w, tol: float = 1e-4) -> bool:
-        return not self.violations(w, tol)
+    def is_feasible(self, weights, tol: float = 1e-4) -> bool:
+        return not self.violations(weights, tol)
 
     # ------------------------------------------------------------------ scipy helpers
     def bounds(self):
         return list(zip(self.lb, self.ub, strict=True))
 
     def scipy_constraints(self):
-        cons = [{"type": "eq", "fun": lambda w: w.sum() - 1.0, "jac": lambda w: np.ones_like(w)}]
-        for _, vec, mn, mx in self.groups:
-            if mn is not None:
-                cons.append({"type": "ineq", "fun": (lambda w, v=vec, m=mn: v @ w - m), "jac": (lambda w, v=vec: v)})
-            if mx is not None:
-                cons.append({"type": "ineq", "fun": (lambda w, v=vec, m=mx: m - v @ w), "jac": (lambda w, v=vec: -v)})
-        return cons
+        constraints = [
+            {"type": "eq", "fun": lambda weights: weights.sum() - 1.0, "jac": lambda weights: np.ones_like(weights)}
+        ]
+        for _, vector, minimum, maximum in self.groups:
+            if minimum is not None:
+                constraints.append(
+                    {
+                        "type": "ineq",
+                        "fun": (lambda weights, row=vector, bound=minimum: row @ weights - bound),
+                        "jac": (lambda weights, row=vector: row),
+                    }
+                )
+            if maximum is not None:
+                constraints.append(
+                    {
+                        "type": "ineq",
+                        "fun": (lambda weights, row=vector, bound=maximum: bound - row @ weights),
+                        "jac": (lambda weights, row=vector: -row),
+                    }
+                )
+        return constraints
 
     def feasible_point(self) -> np.ndarray:
         """Any admissible point (LP); raises if the constraint set is empty."""
         n = len(self.assets)
-        A_ub, b_ub = [], []
-        for _, vec, mn, mx in self.groups:
-            if mx is not None:
-                A_ub.append(vec)
-                b_ub.append(mx)
-            if mn is not None:
-                A_ub.append(-vec)
-                b_ub.append(-mn)
-        res = linprog(
+        inequality_rows, inequality_bounds = [], []
+        for _, vector, minimum, maximum in self.groups:
+            if maximum is not None:
+                inequality_rows.append(vector)
+                inequality_bounds.append(maximum)
+            if minimum is not None:
+                inequality_rows.append(-vector)
+                inequality_bounds.append(-minimum)
+        result = linprog(
             np.zeros(n),
-            A_ub=np.array(A_ub) if A_ub else None,
-            b_ub=b_ub or None,
+            A_ub=np.array(inequality_rows) if inequality_rows else None,
+            b_ub=inequality_bounds or None,
             A_eq=np.ones((1, n)),
             b_eq=[1.0],
             bounds=self.bounds(),
             method="highs",
         )
-        if not res.success:
-            raise ValueError("constraint set is infeasible: " + res.message)
-        return res.x
+        if not result.success:
+            raise ValueError("constraint set is infeasible: " + result.message)
+        return result.x
 
-    def project(self, w0) -> np.ndarray:
-        """Closest admissible weights (least squares) to w0."""
-        w0 = np.nan_to_num(np.asarray(w0, float))
-        if self.is_feasible(w0, tol=1e-9):
-            return w0
-        start = np.clip(w0, self.lb, self.ub)
-        if start.sum() > 0:
-            start = start / start.sum()
-        res = minimize(
-            lambda w: 0.5 * np.sum((w - w0) ** 2),
+    def _least_squares(self, target: np.ndarray, start: np.ndarray, max_iterations: int) -> np.ndarray:
+        return minimize(
+            lambda weights: 0.5 * np.sum((weights - target) ** 2),
             start,
-            jac=lambda w: w - w0,
+            jac=lambda weights: weights - target,
             bounds=self.bounds(),
             constraints=self.scipy_constraints(),
             method="SLSQP",
-            options={"ftol": 1e-12, "maxiter": 500},
-        )
-        w = res.x
-        if not self.is_feasible(w, tol=1e-5):
-            fp = self.feasible_point()
-            res = minimize(
-                lambda w: 0.5 * np.sum((w - w0) ** 2),
-                fp,
-                jac=lambda w: w - w0,
-                bounds=self.bounds(),
-                constraints=self.scipy_constraints(),
-                method="SLSQP",
-                options={"ftol": 1e-12, "maxiter": 1000},
-            )
-            w = res.x if self.is_feasible(res.x, tol=1e-5) else fp
-        w = np.clip(w, self.lb, self.ub)
-        return w / w.sum()
+            options={"ftol": 1e-12, "maxiter": max_iterations},
+        ).x
+
+    def project(self, weights) -> np.ndarray:
+        """Closest admissible weights (least squares) to `weights`."""
+        target = np.nan_to_num(np.asarray(weights, float))
+        if self.is_feasible(target, tol=1e-9):
+            return target
+        start = np.clip(target, self.lb, self.ub)
+        if start.sum() > 0:
+            start = start / start.sum()
+        projected = self._least_squares(target, start, 500)
+        if not self.is_feasible(projected, tol=1e-5):
+            feasible = self.feasible_point()
+            projected = self._least_squares(target, feasible, 1000)
+            projected = projected if self.is_feasible(projected, tol=1e-5) else feasible
+        projected = np.clip(projected, self.lb, self.ub)
+        return projected / projected.sum()

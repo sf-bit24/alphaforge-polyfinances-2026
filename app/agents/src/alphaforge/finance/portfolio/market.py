@@ -1,4 +1,5 @@
 """Fenêtre de rendements point-in-time pour un mandat (aucune donnée après ``as_of``)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -9,13 +10,13 @@ from ..backtest import data as bt_data
 from ..contracts import PolicySpec
 
 
-class InsufficientHistory(ValueError):
+class InsufficientHistoryError(ValueError):
     """Moins de ``min_history_months`` mois communs à tous les actifs investissables."""
 
 
 @dataclass(frozen=True)
 class ReturnWindow:
-    returns: pd.DataFrame            # mois × actifs, rendements totaux mensuels dans la devise du mandat
+    returns: pd.DataFrame  # mois × actifs, rendements totaux mensuels dans la devise du mandat
     as_of: pd.Timestamp
     currency: str
     data_version: str
@@ -42,14 +43,13 @@ def returns_window(policy: PolicySpec, as_of, assets: list[str] | None = None) -
     """
     as_of = bt_data.to_month_end(as_of)
     assets = list(assets or policy.investable)
-    df = bt_data.load_returns(assets, end=as_of, currency=policy.currency)
-    info = dict(df.attrs.get("info") or {})
-    df = df.loc[:as_of].tail(policy.lookback_months)
-    if len(df) < policy.min_history_months:
-        raise InsufficientHistory(
-            f"{len(df)} mois communs avant {as_of.date()} (< {policy.min_history_months}) ; "
-            f"limitant : {info}")
-    if df.isna().any().any():
+    returns = bt_data.load_returns(assets, end=as_of, currency=policy.currency)
+    info = dict(returns.attrs.get("info") or {})
+    returns = returns.loc[:as_of].tail(policy.lookback_months)
+    if len(returns) < policy.min_history_months:
+        raise InsufficientHistoryError(
+            f"{len(returns)} mois communs avant {as_of.date()} (< {policy.min_history_months}) ; limitant : {info}"
+        )
+    if returns.isna().any().any():
         raise ValueError("rendements manquants dans la fenêtre")
-    return ReturnWindow(df[assets], as_of, policy.currency,
-                        str(bt_data.data_version().get("data_sha256")), info)
+    return ReturnWindow(returns[assets], as_of, policy.currency, str(bt_data.data_version().get("data_sha256")), info)

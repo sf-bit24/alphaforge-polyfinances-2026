@@ -14,7 +14,7 @@ pd = pytest.importorskip("pandas")
 from alphaforge.scenarios import schema  # noqa: E402
 from alphaforge.scenarios.bootstrap import politis_white, stationary_indices  # noqa: E402
 from alphaforge.scenarios.data import build_pool  # noqa: E402
-from alphaforge.scenarios.engine import historical_reference, run_pool, simulate_metrics  # noqa: E402
+from alphaforge.scenarios.engine import SimulationConfig, historical_reference, run_pool, simulate_metrics  # noqa: E402
 from alphaforge.scenarios.grid import enumerate_mixes  # noqa: E402
 from alphaforge.scenarios.models import fit, make_model, rng_for  # noqa: E402
 
@@ -69,7 +69,7 @@ def test_pools_windows_and_flags(inputs):
     assert pc.window_start == "2014-10" and pc.hypothese and "CRYPTO" in pc.blocks
     pu = build_pool(inputs, "USD1926")
     assert pu.blocks == ("US_MKT", "BONDS", "CASH") and pu.currency == "USD"
-    assert not np.isnan(p77.R).any() and len(p77.infl) == p77.n
+    assert not np.isnan(p77.returns).any() and len(p77.inflation) == p77.n
 
 
 def test_interior_gap_is_an_error(inputs):
@@ -98,12 +98,12 @@ def test_stationary_indices_block_structure():
 def test_bootstrap_preserves_marginal_mean_and_correlation(pool77):
     rng = np.random.default_rng(1)
     idx = stationary_indices(pool77.n, 4000, 240, 6.0, rng)
-    sim = pool77.R[idx]  # (N, T, A)
-    hist_mean = pool77.R.mean(axis=0)
-    sim_mean = sim.reshape(-1, pool77.R.shape[1]).mean(axis=0)
-    assert np.allclose(sim_mean, hist_mean, atol=3 * pool77.R.std(axis=0) / np.sqrt(4000 * 240 / 6))
-    c_hist = np.corrcoef(pool77.R[:, 0], pool77.R[:, 1])[0, 1]
-    flat = sim.reshape(-1, pool77.R.shape[1])
+    sim = pool77.returns[idx]  # (N, T, A)
+    hist_mean = pool77.returns.mean(axis=0)
+    sim_mean = sim.reshape(-1, pool77.returns.shape[1]).mean(axis=0)
+    assert np.allclose(sim_mean, hist_mean, atol=3 * pool77.returns.std(axis=0) / np.sqrt(4000 * 240 / 6))
+    c_hist = np.corrcoef(pool77.returns[:, 0], pool77.returns[:, 1])[0, 1]
+    flat = sim.reshape(-1, pool77.returns.shape[1])
     assert np.corrcoef(flat[:, 0], flat[:, 1])[0, 1] == pytest.approx(c_hist, abs=0.03)
 
 
@@ -125,12 +125,13 @@ def test_politis_white_detects_dependence():
 def test_determinism_with_seed(pool77, model_id):
     model = make_model(model_id, {"n_init": 2} if model_id.startswith("hmm") else None)
     kw = dict(seed=7, n_paths=300, n_boot=3, n_paths_boot=100)
-    a = run_pool(model, pool77, MIXES, H, **kw)
-    b = run_pool(make_model(model_id, {"n_init": 2} if model_id.startswith("hmm") else None), pool77, MIXES, H, **kw)
+    a = run_pool(model, pool77, MIXES, H, SimulationConfig(**kw))
+    twin = make_model(model_id, {"n_init": 2} if model_id.startswith("hmm") else None)
+    b = run_pool(twin, pool77, MIXES, H, SimulationConfig(**kw))
     for basis in ("nominal", "real"):
         assert np.array_equal(a.point[basis], b.point[basis])
         assert np.array_equal(a.ci_lo[basis], b.ci_lo[basis])
-    c = run_pool(model, pool77, MIXES, H, **{**kw, "seed": 8})
+    c = run_pool(model, pool77, MIXES, H, SimulationConfig(**{**kw, "seed": 8}))
     assert not np.array_equal(a.point["nominal"], c.point["nominal"])
 
 
@@ -146,8 +147,8 @@ def test_no_look_ahead(pool77, model_id):
     f1 = fit(pool77, model_id, fitted_through=cut, seed=3, params=params)
     corrupted = pool77._subset(np.arange(pool77.n))
     after = np.asarray(corrupted.dates > pd.Timestamp("2000-12-31"))
-    corrupted.R[after] = np.random.default_rng(9).normal(0.0, 0.5, size=corrupted.R[after].shape)
-    corrupted.infl[after] = 0.5
+    corrupted.returns[after] = np.random.default_rng(9).normal(0.0, 0.5, size=corrupted.returns[after].shape)
+    corrupted.inflation[after] = 0.5
     f2 = fit(corrupted, model_id, fitted_through=cut, seed=3, params=params)
     assert f1.fitted_through == f2.fitted_through == cut
     assert f1.pool.n == int((~after).sum())
@@ -165,7 +166,8 @@ def test_no_look_ahead(pool77, model_id):
 
 @pytest.fixture(scope="module")
 def sbb_result(pool77):
-    return run_pool(make_model("sbb"), pool77, MIXES, H, seed=11, n_paths=3000, n_boot=8, n_paths_boot=300)
+    config = SimulationConfig(seed=11, n_paths=3000, n_boot=8, n_paths_boot=300)
+    return run_pool(make_model("sbb"), pool77, MIXES, H, config)
 
 
 def test_cash_has_no_nominal_loss(sbb_result):
@@ -210,7 +212,7 @@ def test_historical_reference_2022(pool77):
     r22 = {r["mix_id"]: r["value"] for r in rows if r["metric"] == "ret_2022" and r["basis"] == "nominal"}
     j = pool77.blocks.index("CASH")
     in22 = np.asarray(pool77.dates.year == 2022)
-    assert r22[CASH] == pytest.approx(np.prod(1 + pool77.R[in22, j]) - 1)
+    assert r22[CASH] == pytest.approx(np.prod(1 + pool77.returns[in22, j]) - 1)
 
 
 @pytest.mark.parametrize("name", ["small", "full"])
@@ -343,13 +345,13 @@ def test_anchor_cash_deflation_keeps_inflation_sign(pool77):
     """Inflation récente négative : l'ancrage devient additif, sans inverser le signe des mois (M2)."""
     from dataclasses import replace
 
-    infl = pool77.infl.copy()
+    infl = pool77.inflation.copy()
     infl[-12:] = -0.002  # déflation sur les 12 derniers mois
-    pool = replace(pool77, infl=infl)
+    pool = replace(pool77, inflation=infl)
     anchored, info = pool.anchor_cash(12)
     assert info["infl_anchor"] == "additive" and info["infl_scale"] is None
-    assert anchored.infl.mean() == pytest.approx(infl[-12:].mean())
-    assert np.corrcoef(anchored.infl, infl)[0, 1] == pytest.approx(1.0)
+    assert anchored.inflation.mean() == pytest.approx(infl[-12:].mean())
+    assert np.corrcoef(anchored.inflation, infl)[0, 1] == pytest.approx(1.0)
     _, normal = pool77.anchor_cash(12)
     assert normal["infl_anchor"] == "scale" and normal["infl_scale"] > 0
 
@@ -371,4 +373,4 @@ def test_real_data_pools():
     inp = load_inputs(_real_data_dir())
     for fam in schema.FAMILIES:
         p = build_pool(inp, fam)
-        assert p.n > 500 and not np.isnan(p.R).any()
+        assert p.n > 500 and not np.isnan(p.returns).any()

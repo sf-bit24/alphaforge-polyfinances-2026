@@ -28,10 +28,11 @@ import yaml
 from strands import tool
 
 from .. import clock, okf
-from ..agentkit import AgentSpec, ModelFactory, guarded, run_agent, tool_result
+from ..agentkit import AgentSpec, guarded, tool_result
 from ..store import Store
 from ..trace import Trace
 from . import rules
+from .agent_runner import AgentRunner
 from .questionnaire import Questionnaire
 from .state import ClientSession
 
@@ -46,6 +47,10 @@ NOTE_PATH = re.compile(r"^[a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9-]*){0,2}\.md$")
 TAG = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 MAX_NOTES = 40
 MAX_BODY = 20000
+# Ce que le contexte du skill montre : le début de chaque note déjà écrite, les derniers messages de l'investisseur.
+NOTE_EXCERPT_CHARS = 4000
+RECENT_INVESTOR_MESSAGES = 6
+MAX_INVESTOR_MESSAGE_CHARS = 500
 
 
 @dataclass(frozen=True)
@@ -90,7 +95,7 @@ def check_path(path: Any) -> str | None:
     """Motif du refus d'un chemin de note, ou ``None`` s'il est permis."""
     if not isinstance(path, str) or not NOTE_PATH.match(path):
         return "path must be a relative lowercase .md path such as dimensions/horizon.md (3 levels at most)"
-    if path in RESERVED or any(path.startswith(d) for d in RESERVED_DIRS):
+    if path in RESERVED or any(path.startswith(directory) for directory in RESERVED_DIRS):
         return f"{path} is written by the code; choose another path"
     return None
 
@@ -107,49 +112,48 @@ def pending_skill(session: ClientSession, *, version: str) -> tuple[str | None, 
     if not state.get("documents"):
         return INIT_SKILL, sorted(values)
     before = state.get("values") or {}
-    changed = sorted(f for f in set(before) | set(values) if before.get(f) != values.get(f))
+    changed = sorted(field_id for field_id in set(before) | set(values) if before.get(field_id) != values.get(field_id))
     if changed or state.get("skills_version") != version:
         return UPDATE_SKILL, changed
     return None, []
 
 
-def build_context(
-    q: Questionnaire,
-    session: ClientSession,
-    store: Store,
-    *,
-    skill: str,
-    changed: list[str],
-    version: str,
-    journal: list[dict[str, Any]],
-) -> dict[str, Any]:
+def _fact_entries(questionnaire: Questionnaire, session: ClientSession) -> list[dict[str, Any]]:
+    """Faits confirmés, triés par champ, tels que les notes les citent."""
     locale = session.locale
-    values = session.values()
-    facts = []
+    entries = []
     for field_id, fact in sorted(session.confirmed_facts().items()):
-        spec = q.fields.get(field_id)
+        spec = questionnaire.fields.get(field_id)
         if spec is None:
             continue
-        facts.append(
+        entries.append(
             {
                 "field": field_id,
                 "dimension": spec.dimension,
                 "label": spec.label_text(locale),
                 "value": fact.get("value"),
-                "shown_as": q.format_value(field_id, fact.get("value"), locale),
+                "shown_as": questionnaire.format_value(field_id, fact.get("value"), locale),
                 "provenance": fact.get("provenance"),
             }
         )
-    risk = rules.risk_profile(q, values)
-    score = rules.completeness(q, values, locale)
+    return entries
+
+
+def build_context(questionnaire: Questionnaire, session: ClientSession, *, skill: str) -> dict[str, Any]:
+    """Contexte JSON du skill : faits confirmés, scores calculés par le code (``derived``) et champs manquants."""
+    locale = session.locale
+    values = session.values()
+    facts = _fact_entries(questionnaire, session)
+    risk = rules.risk_profile(questionnaire, values)
+    score = rules.completeness(questionnaire, values, locale)
     derived = {
-        "knowledge_level": rules.knowledge_level(q, values),
-        "risk_tolerance": rules.level_label(q, risk["tolerance"], locale),
-        "risk_capacity": rules.level_label(q, risk["capacity"], locale),
-        "effective_risk": rules.level_label(q, risk["effective"], locale, effective=True),
+        "knowledge_level": rules.knowledge_level(questionnaire, values),
+        "risk_tolerance": rules.level_label(questionnaire, risk["tolerance"], locale),
+        "risk_capacity": rules.level_label(questionnaire, risk["capacity"], locale),
+        "effective_risk": rules.level_label(questionnaire, risk["effective"], locale, effective=True),
         "completeness_percent": round(score["score"] * 100),
     }
-    context: dict[str, Any] = {
+    return {
         "skill": skill,
         "locale": locale,
         "knowledge_level": derived["knowledge_level"] or "intermediate",
@@ -157,17 +161,22 @@ def build_context(
         "derived": derived,
         "missing_fields": score["missing"],
     }
-    if skill == UPDATE_SKILL:
-        state = brain_state(session)
-        documents = []
-        for item in state.get("documents") or []:
-            obj = store.get(note_key(session.client_id, item["path"]))
-            body = okf.parse(obj.text).body if obj else ""
-            documents.append({**item, "content": body[:4000]})
-        context["documents"] = documents
-        context["changed_fields"] = changed
-        context["skill_changed"] = state.get("skills_version") != version
-    return context
+
+
+def _notes_context(session: ClientSession, store: Store, *, changed: list[str], version: str) -> dict[str, Any]:
+    """Ce qu'une mise à jour ajoute au contexte : les notes déjà écrites (le début de leur texte), les champs
+    changés depuis la dernière écriture et si les skills ont changé."""
+    state = brain_state(session)
+    documents = []
+    for item in state.get("documents") or []:
+        stored = store.get(note_key(session.client_id, item["path"]))
+        body = okf.parse(stored.text).body if stored else ""
+        documents.append({**item, "content": body[:NOTE_EXCERPT_CHARS]})
+    return {
+        "documents": documents,
+        "changed_fields": changed,
+        "skill_changed": state.get("skills_version") != version,
+    }
 
 
 @dataclass
@@ -178,11 +187,84 @@ class BrainOutcome:
     summary: str | None = None
 
 
+WRITE_DOCUMENT_DESCRIPTION = (
+    "Write or rewrite one note of the client base. path is relative to the client folder "
+    "(for example dimensions/horizon.md); cites lists the profile field ids the note relies on. "
+    "The code builds the OKF frontmatter and checks the note."
+)
+WRITE_DOCUMENT_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string"},
+            "title": {"type": "string"},
+            "description": {"type": "string"},
+            "tags": {"type": "array", "items": {"type": "string"}},
+            "cites": {"type": "array", "items": {"type": "string"}},
+            "body": {"type": "string"},
+        },
+        "required": ["path", "title", "description", "tags", "cites", "body"],
+    }
+}
+DELETE_DOCUMENT_DESCRIPTION = (
+    "Retire a note that the structure no longer plans (only notes written with this skill): it leaves "
+    "the index and the document list."
+)
+# read_document et delete_document prennent le même argument : le chemin d'une note.
+NOTE_PATH_SCHEMA = {"json": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}
+FINISH_SCHEMA = {"json": {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}}
+
+
+@dataclass(frozen=True)
+class NoteDraft:
+    """Note que A1 envoie à ``write_document``, telle quelle : rien n'y est encore contrôlé."""
+
+    path: Any
+    title: Any
+    description: Any
+    tags: Any
+    cites: Any
+    body: Any
+
+
+def _content_error(draft: NoteDraft) -> str | None:
+    """Motif de refus du titre, de la description, du texte ou des étiquettes d'une note, ou ``None``."""
+    title, description, body, tags = draft.title, draft.description, draft.body, draft.tags
+    if not isinstance(title, str) or not 3 <= len(title.strip()) <= 120:
+        return "title must be 3 to 120 characters"
+    if not isinstance(description, str) or not 3 <= len(description.strip()) <= 300:
+        return "description must be 3 to 300 characters"
+    if not isinstance(body, str) or not body.strip() or len(body) > MAX_BODY:
+        return f"body must be 1 to {MAX_BODY} characters of Markdown"
+    if not isinstance(tags, list) or not all(isinstance(tag, str) and TAG.match(tag) for tag in tags) or len(tags) > 8:
+        return "tags must be at most 8 lowercase slugs"
+    return None
+
+
+def _cites_error(cites: Any, facts: dict[str, dict[str, Any]]) -> str | None:
+    """Une note cite au moins un champ du profil, et seulement des faits confirmés."""
+    if not isinstance(cites, list) or not cites or not all(isinstance(cited, str) for cited in cites):
+        return "cites must list the profile field ids the note relies on"
+    unknown = [cited for cited in cites if cited not in facts]
+    if unknown:
+        return f"cites only known, confirmed fields; unknown: {unknown}"
+    return None
+
+
+def _fact_source(field_id: str, fact: dict[str, Any]) -> dict[str, Any]:
+    """Source OKF d'un fait cité par une note : sa provenance et sa date."""
+    return {
+        "id": f"{fact.get('provenance', '').replace(':', '-')}-{field_id}",
+        "title": f"{field_id} ({fact.get('provenance')})",
+        "resource": fact.get("provenance"),
+        "retrieved_at": fact.get("at"),
+    }
+
+
 class BrainTurn:
     """Outils d'A1 pour écrire la base : les notes sont gardées en mémoire, puis écrites après ``finish``."""
 
-    def __init__(self, q: Questionnaire, session: ClientSession, store: Store, *, skill: str, version: str):
-        self.q = q
+    def __init__(self, session: ClientSession, store: Store, *, skill: str, version: str):
         self.session = session
         self.store = store
         self.skill = skill
@@ -198,58 +280,28 @@ class BrainTurn:
     def tools(self) -> list[Any]:
         turn = self
 
-        @tool(
-            name="write_document",
-            description=(
-                "Write or rewrite one note of the client base. path is relative to the client folder "
-                "(for example dimensions/horizon.md); cites lists the profile field ids the note relies on. "
-                "The code builds the OKF frontmatter and checks the note."
-            ),
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "path": {"type": "string"},
-                        "title": {"type": "string"},
-                        "description": {"type": "string"},
-                        "tags": {"type": "array", "items": {"type": "string"}},
-                        "cites": {"type": "array", "items": {"type": "string"}},
-                        "body": {"type": "string"},
-                    },
-                    "required": ["path", "title", "description", "tags", "cites", "body"],
-                }
-            },
-        )
-        def write_document(
+        @tool(name="write_document", description=WRITE_DOCUMENT_DESCRIPTION, inputSchema=WRITE_DOCUMENT_SCHEMA)
+        def write_document(  # noqa: PLR0913 - les paramètres d'un outil sont les clés de son entrée, lues par le modèle
             path: str, title: str, description: str, tags: list[str], cites: list[str], body: str
         ) -> str:
-            return tool_result(turn._write(path, title, description, tags, cites, body))
+            return tool_result(turn._write(NoteDraft(path, title, description, tags, cites, body)))
 
         @tool(
             name="read_document",
             description="Read the current Markdown body of a note already in the client base.",
-            inputSchema={"json": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}},
+            inputSchema=NOTE_PATH_SCHEMA,
         )
         def read_document(path: str) -> str:
             return tool_result(turn._read(path))
 
-        @tool(
-            name="delete_document",
-            description=(
-                "Retire a note that the structure no longer plans (only notes written with this skill): it leaves "
-                "the index and the document list."
-            ),
-            inputSchema={"json": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}},
-        )
+        @tool(name="delete_document", description=DELETE_DOCUMENT_DESCRIPTION, inputSchema=NOTE_PATH_SCHEMA)
         def delete_document(path: str) -> str:
             return tool_result(turn._delete(path))
 
         @tool(
             name="finish",
             description="End the turn with a one-sentence summary of the notes written, moved or deleted.",
-            inputSchema={
-                "json": {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
-            },
+            inputSchema=FINISH_SCHEMA,
             context=True,
         )
         def finish(summary: str, tool_context) -> str:
@@ -260,65 +312,59 @@ class BrainTurn:
 
         return [write_document, read_document, delete_document, finish]
 
-    def _write(self, path: Any, title: Any, description: Any, tags: Any, cites: Any, body: Any) -> dict[str, Any]:
+    def _write(self, draft: NoteDraft) -> dict[str, Any]:
         if self.finished is not None:
             return {"status": "error", "reason": "the turn is finished"}
-        problem = check_path(path)
+        problem = self._path_error(draft.path) or _content_error(draft)
         if problem:
             return {"status": "error", "reason": problem}
-        if path not in self.known_paths() and len(self.known_paths()) >= MAX_NOTES:
-            return {"status": "error", "reason": f"at most {MAX_NOTES} notes per client"}
-        if not isinstance(title, str) or not 3 <= len(title.strip()) <= 120:
-            return {"status": "error", "reason": "title must be 3 to 120 characters"}
-        if not isinstance(description, str) or not 3 <= len(description.strip()) <= 300:
-            return {"status": "error", "reason": "description must be 3 to 300 characters"}
-        if not isinstance(body, str) or not body.strip() or len(body) > MAX_BODY:
-            return {"status": "error", "reason": f"body must be 1 to {MAX_BODY} characters of Markdown"}
-        if not isinstance(tags, list) or not all(isinstance(t, str) and TAG.match(t) for t in tags) or len(tags) > 8:
-            return {"status": "error", "reason": "tags must be at most 8 lowercase slugs"}
         facts = self.session.confirmed_facts()
-        if not isinstance(cites, list) or not cites or not all(isinstance(c, str) for c in cites):
-            return {"status": "error", "reason": "cites must list the profile field ids the note relies on"}
-        unknown = [c for c in cites if c not in facts]
-        if unknown:
-            return {"status": "error", "reason": f"cites only known, confirmed fields; unknown: {unknown}"}
+        problem = _cites_error(draft.cites, facts)
+        if problem:
+            return {"status": "error", "reason": problem}
+        doc = self._note(draft, facts)
+        problems = okf.validate(doc)
+        if problems:
+            return {"status": "error", "reason": "invalid OKF document: " + "; ".join(problems)}
+        self.notes[draft.path] = doc
+        self.deleted.discard(draft.path)
+        return {"status": "ok", "path": draft.path}
+
+    def _path_error(self, path: Any) -> str | None:
+        """Motif de refus du chemin : mal formé, réservé au code, ou une note de trop."""
+        problem = check_path(path)
+        if problem:
+            return problem
+        if path not in self.known_paths() and len(self.known_paths()) >= MAX_NOTES:
+            return f"at most {MAX_NOTES} notes per client"
+        return None
+
+    def _note(self, draft: NoteDraft, facts: dict[str, dict[str, Any]]) -> okf.OkfDoc:
+        """Note OKF construite par le code : frontmatter, sources tirées des faits cités, texte écrit par A1."""
         now = clock.iso()
-        doc = okf.new_doc(
+        cites = list(dict.fromkeys(draft.cites))
+        return okf.new_doc(
             type=DOC_TYPE,
-            title=title.strip(),
-            description=description.strip(),
-            tags=list(dict.fromkeys(["profil-investisseur", *tags])),
+            title=draft.title.strip(),
+            description=draft.description.strip(),
+            tags=list(dict.fromkeys(["profil-investisseur", *draft.tags])),
             owners=["alphaforge-a1"],
             sensitivity="client",
             generated_by="agent:A1",
             at=now,
             status="stable",
-            sources=[
-                {
-                    "id": f"{facts[c].get('provenance', '').replace(':', '-')}-{c}",
-                    "title": f"{c} ({facts[c].get('provenance')})",
-                    "resource": facts[c].get("provenance"),
-                    "retrieved_at": facts[c].get("at"),
-                }
-                for c in dict.fromkeys(cites)
-            ],
-            data={"skill": self.skill, "skills_version": self.version, "cites": list(dict.fromkeys(cites))},
-            body=body.strip() + "\n",
+            sources=[_fact_source(field_id, facts[field_id]) for field_id in cites],
+            data={"skill": self.skill, "skills_version": self.version, "cites": cites},
+            body=draft.body.strip() + "\n",
         )
-        problems = okf.validate(doc)
-        if problems:
-            return {"status": "error", "reason": "invalid OKF document: " + "; ".join(problems)}
-        self.notes[path] = doc
-        self.deleted.discard(path)
-        return {"status": "ok", "path": path}
 
     def _read(self, path: Any) -> dict[str, Any]:
         if path in self.notes:
             return {"status": "ok", "path": path, "body": self.notes[path].body}
         if path not in self.existing or path in self.deleted:
             return {"status": "error", "reason": f"no note at {path}"}
-        obj = self.store.get(note_key(self.session.client_id, path))
-        return {"status": "ok", "path": path, "body": okf.parse(obj.text).body if obj else ""}
+        stored = self.store.get(note_key(self.session.client_id, path))
+        return {"status": "ok", "path": path, "body": okf.parse(stored.text).body if stored else ""}
 
     def _delete(self, path: Any) -> dict[str, Any]:
         if self.finished is not None:
@@ -331,9 +377,8 @@ class BrainTurn:
         return {"status": "ok", "path": path}
 
     def _finish(self, summary: Any) -> dict[str, Any]:
-        if not self.notes and not self.deleted:
-            if self.skill == INIT_SKILL:
-                return {"status": "error", "reason": "write the notes of the structure before finish"}
+        if not self.notes and not self.deleted and self.skill == INIT_SKILL:
+            return {"status": "error", "reason": "write the notes of the structure before finish"}
         if "synthese.md" not in self.known_paths() and self.skill == INIT_SKILL:
             return {"status": "error", "reason": "synthese.md is always written"}
         self.finished = str(summary or "").strip()[:300]
@@ -346,7 +391,7 @@ class BrainTurn:
             self.store.put_text(note_key(client_id, path), okf.render(doc))
         for path in sorted(self.deleted):
             self.store.put_text(note_key(client_id, path), okf.render(retired_doc(self.skill, self.version)))
-        documents = {p: item for p, item in self.existing.items() if p not in self.deleted}
+        documents = {path: item for path, item in self.existing.items() if path not in self.deleted}
         for path, doc in self.notes.items():
             documents[path] = {
                 "path": path,
@@ -359,7 +404,7 @@ class BrainTurn:
             "skills_version": self.version,
             "values": self.session.values(),
             "facts_digest": facts_digest(self.session.values()),
-            "documents": [documents[p] for p in sorted(documents)],
+            "documents": [documents[path] for path in sorted(documents)],
             "at": clock.iso(),
         }
         self.session.index_dirty = True
@@ -398,27 +443,96 @@ frontmatter, checks every note and writes them after `finish`.
 """
 
 
-def system_prompt(skill: Skill, extra: Skill | None = None) -> str:
+def system_prompt(skill: Skill, structure: Skill | None = None) -> str:
+    """Prompt système du skill; une mise à jour reçoit aussi le skill qui décrit la structure des notes."""
     prompt = SYSTEM_PROMPT.replace("{name}", skill.name).replace("{body}", skill.body)
-    if extra is not None:
-        prompt += f'\n<skill name="{extra.name}" role="structure">\n{extra.body}\n</skill>\n'
+    if structure is not None:
+        prompt += f'\n<skill name="{structure.name}" role="structure">\n{structure.body}\n</skill>\n'
     return prompt
 
 
+def _prompt(context: dict[str, Any], journal: list[dict[str, Any]], skill_name: str) -> list[dict[str, Any]]:
+    """Prompt du skill. Contexte et consignes du code dans un bloc; les messages de l'investisseur, seuls évalués
+    par le garde-fou, dans un bloc guardContent."""
+    messages = [
+        str(entry.get("text") or "")[:MAX_INVESTOR_MESSAGE_CHARS] for entry in journal if entry.get("kind") == "message"
+    ][-RECENT_INVESTOR_MESSAGES:]
+    return [
+        {
+            "text": "<context>\n"
+            + json.dumps(context, ensure_ascii=False, indent=1, default=str).replace("<", "‹").replace(">", "›")
+            + "\n</context>\n"
+            + f"Follow the skill {skill_name} now, then call finish. The investor's own messages follow, inside "
+            "<investor_messages> tags."
+        },
+        guarded(
+            "<investor_messages>\n"
+            + ("\n---\n".join(message.replace("<", "‹").replace(">", "›") for message in messages) or "(none)")
+            + "\n</investor_messages>"
+        ),
+    ]
+
+
+def _write_document_summary(tool_input: dict[str, Any]) -> dict[str, Any]:
+    """Ce que la trace garde d'un appel de ``write_document`` : le texte de la note n'y figure que par sa longueur."""
+    return {
+        "path": tool_input.get("path"),
+        "cites": tool_input.get("cites"),
+        "chars": len(tool_input.get("body") or ""),
+    }
+
+
+def _agent_spec(skill: Skill, structure: Skill | None, tools: list[Any], *, guardrail: bool) -> AgentSpec:
+    return AgentSpec(
+        actor="A1",
+        name="clientBrain-Agent",
+        effort="low",
+        system_prompt=system_prompt(skill, structure),
+        tools=tools,
+        max_turns=12,
+        max_tokens=16000,
+        guardrail=guardrail,
+        guard_tagged=True,
+        tool_summaries={"write_document": _write_document_summary},
+    )
+
+
+def _finish_skill(state: BrainTurn, trace: Trace) -> BrainOutcome | None:
+    """Fin du skill : les notes ne sont écrites que si A1 a appelé ``finish``."""
+    if state.finished is None:
+        trace.add(
+            "deterministic",
+            "A1",
+            trace.t("Base du client non écrite", "Client base not written"),
+            trace.t(
+                "A1 n'a pas terminé son skill; aucune note n'est écrite.",
+                "A1 did not finish its skill; no note is written.",
+            ),
+            outputs={"skill": state.skill},
+        )
+        return None
+    outcome = state.commit()
+    trace.add(
+        "storage",
+        "store",
+        trace.t("Base du client écrite par A1", "Client base written by A1"),
+        state.skill,
+        outputs={"written": outcome.written, "deleted": outcome.deleted, "skills_version": state.version},
+    )
+    return outcome
+
+
 def run_brain(
-    q: Questionnaire,
+    questionnaire: Questionnaire,
     session: ClientSession,
     store: Store,
     *,
-    trace: Trace,
-    model_factory: ModelFactory,
-    model_id: str,
     journal: list[dict[str, Any]],
-    guardrail: bool,
-    directory: Path = SKILLS_DIR,
+    runner: AgentRunner,
 ) -> BrainOutcome | None:
     """Invoque A1 avec son skill de base du client; ``None`` si la base est déjà à jour."""
-    version = skills_version(directory)
+    trace = runner.trace
+    version = skills_version()
     skill_name, changed = pending_skill(session, version=version)
     if skill_name is None:
         trace.add(
@@ -429,66 +543,15 @@ def run_brain(
             outputs={"skills_version": version},
         )
         return None
-    skill = load_skill(skill_name, directory)
-    structure = load_skill(INIT_SKILL, directory) if skill_name == UPDATE_SKILL else None
-    state = BrainTurn(q, session, store, skill=skill_name, version=version)
-    context = build_context(q, session, store, skill=skill_name, changed=changed, version=version, journal=journal)
-    messages = [str(e.get("text") or "")[:500] for e in journal if e.get("kind") == "message"][-6:]
-    # Contexte et consignes du code dans un bloc; les messages de l'investisseur, seuls évalués par le garde-fou,
-    # dans un bloc guardContent.
-    prompt = [
-        {
-            "text": "<context>\n"
-            + json.dumps(context, ensure_ascii=False, indent=1, default=str).replace("<", "‹").replace(">", "›")
-            + "\n</context>\n"
-            + f"Follow the skill {skill_name} now, then call finish. The investor's own messages follow, inside "
-            "<investor_messages> tags."
-        },
-        guarded(
-            "<investor_messages>\n"
-            + ("\n---\n".join(m.replace("<", "‹").replace(">", "›") for m in messages) or "(none)")
-            + "\n</investor_messages>"
-        ),
-    ]
-    spec = AgentSpec(
-        actor="A1",
-        name="clientBrain-Agent",
-        effort="low",
-        system_prompt=system_prompt(skill, structure),
-        tools=state.tools(),
-        max_turns=12,
-        max_tokens=16000,
-        guardrail=guardrail,
-        guard_tagged=True,
-        tool_summaries={
-            "write_document": lambda i: {
-                "path": i.get("path"),
-                "cites": i.get("cites"),
-                "chars": len(i.get("body") or ""),
-            },
-        },
-    )
-    run = run_agent(spec, prompt, model_factory=model_factory, model_id=model_id, trace=trace)
+    skill = load_skill(skill_name)
+    structure = load_skill(INIT_SKILL) if skill_name == UPDATE_SKILL else None
+    state = BrainTurn(session, store, skill=skill_name, version=version)
+    context = build_context(questionnaire, session, skill=skill_name)
+    if skill_name == UPDATE_SKILL:
+        context |= _notes_context(session, store, changed=changed, version=version)
+    prompt = _prompt(context, journal, skill_name)
+    spec = _agent_spec(skill, structure, state.tools(), guardrail=runner.guardrail)
+    run = runner.run(spec, prompt)
     if state.finished is None:
         run.follow_up("You did not call finish. Write the remaining notes, then call finish.", trace)
-    if state.finished is None:
-        trace.add(
-            "deterministic",
-            "A1",
-            trace.t("Base du client non écrite", "Client base not written"),
-            trace.t(
-                "A1 n'a pas terminé son skill; aucune note n'est écrite.",
-                "A1 did not finish its skill; no note is written.",
-            ),
-            outputs={"skill": skill_name},
-        )
-        return None
-    outcome = state.commit()
-    trace.add(
-        "storage",
-        "store",
-        trace.t("Base du client écrite par A1", "Client base written by A1"),
-        skill_name,
-        outputs={"written": outcome.written, "deleted": outcome.deleted, "skills_version": version},
-    )
-    return outcome
+    return _finish_skill(state, trace)

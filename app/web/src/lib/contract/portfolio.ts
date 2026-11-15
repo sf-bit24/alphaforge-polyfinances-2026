@@ -142,58 +142,81 @@ export type DecisionKind = z.infer<typeof DecisionKind>;
 /** Same tolerance as `WEIGHT_TOLERANCE` in decision.py. */
 const WEIGHT_TOLERANCE = 1e-6;
 
-export const Decision = z
-  .object({
-    schema_version: z.literal("0.1.0"),
-    decision_id: z.string().min(1),
-    profile_id: z.string().min(1),
-    profile_version: z.number().int().min(1),
-    created_utc: timestamp,
-    kind: DecisionKind,
-    simulation_only: z.literal(true),
-    positions: z.array(DecisionPosition).default([]),
-    facts: z.array(DecisionFact).default([]),
-    constraints: z.array(ConstraintCheck).default([]),
-    counterfactuals: z.array(Counterfactual).default([]),
-    explanation: Explanation,
-    reprofile_triggers_fired: z.array(z.string()).default([]),
-    trace: z.array(DecisionTraceEvent).min(1),
-    disclaimer_fr: z.string(),
-  })
-  .superRefine((decision, ctx) => {
-    // Integrity rules of Decision._integrity (decision.py): the screen relies on them for its fact chips.
-    const factIds = new Set<string>();
-    for (const fact of decision.facts) {
-      if (factIds.has(fact.fact_id)) ctx.addIssue({ code: "custom", path: ["facts"], message: `Duplicate fact_id ${fact.fact_id}` });
-      factIds.add(fact.fact_id);
-    }
-    const traceIds = new Set(decision.trace.map((event) => event.trace_id));
-    for (const fact of decision.facts) {
-      if (!traceIds.has(fact.trace_id)) {
-        ctx.addIssue({ code: "custom", path: ["facts"], message: `Fact ${fact.fact_id}: trace_id ${fact.trace_id} is not in the trace` });
-      }
-    }
-    const cited = new Set<string>();
-    for (const section of EXPLANATION_SECTIONS) for (const statement of decision.explanation[section]) statement.fact_ids.forEach((id) => cited.add(id));
-    for (const position of decision.positions) position.rationale_fact_ids.forEach((id) => cited.add(id));
-    for (const counterfactual of decision.counterfactuals) counterfactual.result_fact_ids.forEach((id) => cited.add(id));
-    for (const check of decision.constraints) if (check.value_fact_id) cited.add(check.value_fact_id);
-    const unknown = [...cited].filter((id) => !factIds.has(id)).sort();
-    if (unknown.length > 0) {
-      ctx.addIssue({ code: "custom", path: ["facts"], message: `Cited without a Fact: ${unknown.slice(0, 5).join(", ")}` });
-    }
-    if (decision.kind === "proposition") {
-      if (decision.positions.length === 0) ctx.addIssue({ code: "custom", path: ["positions"], message: "A proposition must have positions" });
-      // A validation of the backend's own invariant, never shown on screen.
-      const total = decision.positions.reduce((sum, position) => sum + position.weight, 0);
-      if (decision.positions.length > 0 && Math.abs(total - 1) > WEIGHT_TOLERANCE) {
-        ctx.addIssue({ code: "custom", path: ["positions"], message: `Weights sum to ${total}, not 1` });
-      }
-      if (decision.constraints.some((check) => check.violated && check.blocking)) {
-        ctx.addIssue({ code: "custom", path: ["constraints"], message: "A proposition cannot violate a blocking constraint" });
-      }
-    }
-  });
+const DecisionFields = z.object({
+  schema_version: z.literal("0.1.0"),
+  decision_id: z.string().min(1),
+  profile_id: z.string().min(1),
+  profile_version: z.number().int().min(1),
+  created_utc: timestamp,
+  kind: DecisionKind,
+  simulation_only: z.literal(true),
+  positions: z.array(DecisionPosition).default([]),
+  facts: z.array(DecisionFact).default([]),
+  constraints: z.array(ConstraintCheck).default([]),
+  counterfactuals: z.array(Counterfactual).default([]),
+  explanation: Explanation,
+  reprofile_triggers_fired: z.array(z.string()).default([]),
+  trace: z.array(DecisionTraceEvent).min(1),
+  disclaimer_fr: z.string(),
+});
+type DecisionFields = z.infer<typeof DecisionFields>;
+type IntegrityContext = z.RefinementCtx<DecisionFields>;
+
+function addIssue(ctx: IntegrityContext, path: string, message: string): void {
+  ctx.addIssue({ code: "custom", path: [path], message });
+}
+
+/** Every fact_id is unique; returns the known ids. */
+function checkFactIds(decision: DecisionFields, ctx: IntegrityContext): Set<string> {
+  const factIds = new Set<string>();
+  for (const fact of decision.facts) {
+    if (factIds.has(fact.fact_id)) addIssue(ctx, "facts", `Duplicate fact_id ${fact.fact_id}`);
+    factIds.add(fact.fact_id);
+  }
+  return factIds;
+}
+
+/** Every fact points at an event of the trace. */
+function checkFactTraces(decision: DecisionFields, ctx: IntegrityContext): void {
+  const traceIds = new Set(decision.trace.map((event) => event.trace_id));
+  for (const fact of decision.facts) {
+    if (!traceIds.has(fact.trace_id)) addIssue(ctx, "facts", `Fact ${fact.fact_id}: trace_id ${fact.trace_id} is not in the trace`);
+  }
+}
+
+/** The fact_ids cited by the explanation, the positions, the counterfactuals and the constraints. */
+function citedFactIds(decision: DecisionFields): Set<string> {
+  const cited = new Set<string>();
+  for (const section of EXPLANATION_SECTIONS) for (const statement of decision.explanation[section]) statement.fact_ids.forEach((id) => cited.add(id));
+  for (const position of decision.positions) position.rationale_fact_ids.forEach((id) => cited.add(id));
+  for (const counterfactual of decision.counterfactuals) counterfactual.result_fact_ids.forEach((id) => cited.add(id));
+  for (const check of decision.constraints) if (check.value_fact_id) cited.add(check.value_fact_id);
+  return cited;
+}
+
+/** A proposition has positions whose weights sum to 1 and violates no blocking constraint. */
+function checkProposition(decision: DecisionFields, ctx: IntegrityContext): void {
+  if (decision.positions.length === 0) addIssue(ctx, "positions", "A proposition must have positions");
+  // A validation of the backend's own invariant, never shown on screen.
+  const total = decision.positions.reduce((sum, position) => sum + position.weight, 0);
+  if (decision.positions.length > 0 && Math.abs(total - 1) > WEIGHT_TOLERANCE) {
+    addIssue(ctx, "positions", `Weights sum to ${total}, not 1`);
+  }
+  if (decision.constraints.some((check) => check.violated && check.blocking)) {
+    addIssue(ctx, "constraints", "A proposition cannot violate a blocking constraint");
+  }
+}
+
+/** Integrity rules of Decision._integrity (decision.py): the screen relies on them for its fact chips. */
+function checkIntegrity(decision: DecisionFields, ctx: IntegrityContext): void {
+  const factIds = checkFactIds(decision, ctx);
+  checkFactTraces(decision, ctx);
+  const unknown = [...citedFactIds(decision)].filter((id) => !factIds.has(id)).sort();
+  if (unknown.length > 0) addIssue(ctx, "facts", `Cited without a Fact: ${unknown.slice(0, 5).join(", ")}`);
+  if (decision.kind === "proposition") checkProposition(decision, ctx);
+}
+
+export const Decision = DecisionFields.superRefine(checkIntegrity);
 export type Decision = z.infer<typeof Decision>;
 
 /* ------------------------------------------------------------------ */

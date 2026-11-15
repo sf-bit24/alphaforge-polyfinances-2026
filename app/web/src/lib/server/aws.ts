@@ -147,20 +147,27 @@ export function portfolioSessionId(request: PortfolioBuildRequest): string {
 
 /** `aws` mode: InvokeAgentRuntime on the `profile` runtime, qualifier DEFAULT. */
 export async function invokeAws(config: GatewayConfig, request: AgentRequest, stream: boolean, signal: AbortSignal): Promise<Upstream> {
-  return invokeRuntime(config, await resolveProfileRuntime(config), sessionIdFor(request), request, stream, signal);
+  const runtime = await resolveProfileRuntime(config);
+  return invokeRuntime(config, { runtime, runtimeSessionId: sessionIdFor(request), payload: request, stream }, signal);
 }
 
 /** `aws` mode: `build` on the `portfolio` runtime (JSON only, no streaming in version 1). */
 export async function invokePortfolioAws(config: GatewayConfig, request: PortfolioBuildRequest, signal: AbortSignal): Promise<Upstream> {
-  return invokeRuntime(config, await resolvePortfolioRuntime(config), portfolioSessionId(request), request, false, signal);
+  const runtime = await resolvePortfolioRuntime(config);
+  return invokeRuntime(config, { runtime, runtimeSessionId: portfolioSessionId(request), payload: request, stream: false }, signal);
+}
+
+/** One AgentCore invocation: the runtime and session, the JSON payload, and whether a stream is wanted. */
+interface RuntimeCall {
+  runtime: RuntimeInfo;
+  runtimeSessionId: string;
+  payload: unknown;
+  stream: boolean;
 }
 
 async function invokeRuntime(
   config: GatewayConfig,
-  runtime: RuntimeInfo,
-  runtimeSessionId: string,
-  payload: unknown,
-  stream: boolean,
+  { runtime, runtimeSessionId, payload, stream }: RuntimeCall,
   signal: AbortSignal,
 ): Promise<Upstream> {
   let output;

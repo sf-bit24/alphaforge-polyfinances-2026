@@ -9,6 +9,7 @@ BROUILLON v0.2 (2026-11-14), aligné sur le plan local « construire le portefeu
   ou règle YAML@version). Le Judge recopie ces champs dans ses ``ConstraintCheck``.
 - Aucune valeur par défaut chiffrée n'est fixée ici : les seuils viennent de F1.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -32,11 +33,12 @@ class _Strict(BaseModel):
 
 class Selector(_Strict):
     """Ce que vise une limite. Un seul des champs est utilisé selon ``Limit.kind``."""
+
     assets: list[str] = Field(default_factory=list)
-    classes: list[str] = Field(default_factory=list)      # asset_class de l'engine (equity_us…)
-    tags_any: list[str] = Field(default_factory=list)     # tags de l'engine (crypto, tech_heavy…)
-    exposure_tag: str | None = None                        # look-through (tech, energy…)
-    measure: RiskMeasure | None = None                     # pour kind = "risk"
+    classes: list[str] = Field(default_factory=list)  # asset_class de l'engine (equity_us…)
+    tags_any: list[str] = Field(default_factory=list)  # tags de l'engine (crypto, tech_heavy…)
+    exposure_tag: str | None = None  # look-through (tech, energy…)
+    measure: RiskMeasure | None = None  # pour kind = "risk"
 
 
 class Limit(_Strict):
@@ -46,8 +48,8 @@ class Limit(_Strict):
     min: float | None = None
     max: float | None = None
     blocking: bool = True
-    derived_from: str                                      # ex. « profile.biases[FOMO] »
-    source: str | None = None                              # ex. « risk_levels.yaml@0.1 »
+    derived_from: str  # ex. « profile.biases[FOMO] »
+    source: str | None = None  # ex. « risk_levels.yaml@0.1 »
     description_fr: str | None = None
 
     @model_validator(mode="after")
@@ -70,15 +72,17 @@ class Limit(_Strict):
 
 class ExposureOverride(_Strict):
     """Part d'un actif exposée à un thème quand l'engine n'a pas de look-through (QQQ, XIU…)."""
+
     value: float = Field(ge=0, le=1)
-    source: str                                            # fiche émetteur datée, sinon HYPOTHESE
+    source: str  # fiche émetteur datée, sinon HYPOTHESE
     status: Literal["FAIT", "HYPOTHESE"] = "HYPOTHESE"
 
 
 class HistoryProxy(_Strict):
     """Actif de l'engine dont l'historique remplace celui d'un actif avant son lancement."""
-    proxy: str                                             # asset_id de l'engine (ex. US_MKT)
-    source: str                                            # justification du rapprochement
+
+    proxy: str  # asset_id de l'engine (ex. US_MKT)
+    source: str  # justification du rapprochement
     status: Literal["HYPOTHESE"] = "HYPOTHESE"
 
 
@@ -97,7 +101,7 @@ class PolicySpec(_Strict):
     risk_measure: Literal["CVAR", "CDAR", "VARIANCE"] = "CVAR"
     cvar_beta: float = Field(default=0.95, gt=0.5, lt=1)
     risk_aversion: float | None = Field(default=None, gt=0)  # requis si objective = max_utility
-    expected_returns: dict[str, float] | None = None        # μ annuel par actif (prior sourcé), sinon rétréci
+    expected_returns: dict[str, float] | None = None  # μ annuel par actif (prior sourcé), sinon rétréci
     expected_returns_source: str | None = None
 
     limits: list[Limit] = Field(default_factory=list)
@@ -120,7 +124,7 @@ class PolicySpec(_Strict):
     def _coherence(self) -> PolicySpec:
         if len(set(self.universe)) != len(self.universe):
             raise ValueError("univers avec doublons")
-        ids = [lim.rule_id for lim in self.limits]
+        ids = [limit.rule_id for limit in self.limits]
         if len(ids) != len(set(ids)):
             raise ValueError("rule_id en double")
         if self.objective == "max_utility" and self.risk_aversion is None:
@@ -128,7 +132,7 @@ class PolicySpec(_Strict):
         unknown = set(self.excluded) - set(self.universe)
         if unknown:
             raise ValueError(f"exclusions hors univers : {sorted(unknown)}")
-        if any(not 0 < d <= 1 for d in self.loss_bounds.values()):
+        if any(not 0 < bound <= 1 for bound in self.loss_bounds.values()):
             raise ValueError("loss_bounds : chaque δ est dans ]0, 1]")
         if self.loss_bounds and not self.loss_bounds_source:
             raise ValueError("loss_bounds exige loss_bounds_source")
@@ -138,4 +142,4 @@ class PolicySpec(_Strict):
 
     @property
     def investable(self) -> list[str]:
-        return [a for a in self.universe if a not in self.excluded]
+        return [asset for asset in self.universe if asset not in self.excluded]

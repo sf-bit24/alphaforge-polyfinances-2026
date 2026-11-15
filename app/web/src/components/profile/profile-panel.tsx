@@ -32,6 +32,12 @@ const STATUS_ICON: Record<DimensionStatus, ReactNode> = {
   missing: <Circle aria-hidden className="size-4 text-ink-300" />,
 };
 
+const STATUS_TEXT: Record<DimensionStatus, string> = {
+  known: "text-good-ink",
+  partial: "text-serious-ink",
+  missing: "text-ink-500",
+};
+
 function DimensionRow({ label, view }: { label: string; view: DimensionView }) {
   const { t } = useI18n();
   return (
@@ -40,14 +46,7 @@ function DimensionRow({ label, view }: { label: string; view: DimensionView }) {
       <div className="min-w-0 flex-1">
         <p className="flex items-baseline justify-between gap-2 text-sm">
           <span className="font-medium text-ink-900">{label}</span>
-          <span
-            className={cn(
-              "text-[0.7rem] font-medium",
-              view.status === "known" ? "text-good-ink" : view.status === "partial" ? "text-serious-ink" : "text-ink-500",
-            )}
-          >
-            {t.dimensionStatus[view.status]}
-          </span>
+          <span className={cn("text-[0.7rem] font-medium", STATUS_TEXT[view.status])}>{t.dimensionStatus[view.status]}</span>
         </p>
         <p className="mt-0.5 text-[0.8rem] leading-snug text-ink-600">{view.summary ?? "—"}</p>
       </div>
@@ -129,25 +128,21 @@ function Section({
   );
 }
 
-function DocumentsSection({ clientId, revision }: { clientId: string; revision: number }) {
-  const { t, locale } = useI18n();
-  const [open, setOpen] = useState<KbItem | null>(null);
-  const prefix = `clients/${clientId}/`;
-  const { data, error, previous } = useAsync(`${prefix}|${revision}|${locale}`, (signal) =>
-    listKb(prefix, clientId, {
-      locale,
-      signal,
-      messages: { network: t.errors.network, invalidResponse: t.errors.invalidResponse, noResult: t.errors.noResult },
-    }),
-  );
-  const items = (data ?? previous)?.items ?? [];
-  const docs = items.filter((item) => !item.key.includes("/traces/"));
-  const traces = items.filter((item) => item.key.includes("/traces/")).reverse();
-  const row = (item: KbItem, json = false) => (
-    <li key={item.key}>
+interface DocumentRowProps {
+  item: KbItem;
+  /** The client's folder, left out of the key shown under the title. */
+  prefix: string;
+  json?: boolean;
+  onOpen: (item: KbItem) => void;
+}
+
+function DocumentRow({ item, prefix, json = false, onOpen }: DocumentRowProps) {
+  const { t } = useI18n();
+  return (
+    <li>
       <button
         type="button"
-        onClick={() => setOpen(item)}
+        onClick={() => onOpen(item)}
         aria-label={t.panel.open(item.title ?? item.key)}
         className="flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-focus"
       >
@@ -168,18 +163,59 @@ function DocumentsSection({ clientId, revision }: { clientId: string; revision: 
       </button>
     </li>
   );
+}
+
+function TracesList({ traces, prefix, onOpen }: { traces: KbItem[]; prefix: string; onOpen: (item: KbItem) => void }) {
+  const { t } = useI18n();
+  return (
+    <details className="mt-2">
+      <summary className="text-xs font-medium text-ink-600 hover:text-ink-900">{t.panel.traces(traces.length)}</summary>
+      <ul className="-mx-2 mt-1 max-h-56 space-y-0.5 overflow-y-auto">
+        {traces.map((item) => (
+          <DocumentRow key={item.key} item={item} prefix={prefix} json onOpen={onOpen} />
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/** The client's documents and traces, reloaded after every request (`revision`) and on a change of language. */
+function useClientDocuments(clientId: string, revision: number) {
+  const { t, locale } = useI18n();
+  const prefix = `clients/${clientId}/`;
+  const { data, error, previous } = useAsync(`${prefix}|${revision}|${locale}`, (signal) =>
+    listKb(prefix, clientId, {
+      locale,
+      signal,
+      messages: { network: t.errors.network, invalidResponse: t.errors.invalidResponse, noResult: t.errors.noResult },
+    }),
+  );
+  const items = (data ?? previous)?.items ?? [];
+  return {
+    prefix,
+    error,
+    loading: !data && !previous && !error,
+    empty: items.length === 0 && Boolean(data || previous),
+    docs: items.filter((item) => !item.key.includes("/traces/")),
+    traces: items.filter((item) => item.key.includes("/traces/")).reverse(),
+  };
+}
+
+function DocumentsSection({ clientId, revision }: { clientId: string; revision: number }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState<KbItem | null>(null);
+  const { prefix, error, loading, empty, docs, traces } = useClientDocuments(clientId, revision);
   return (
     <>
       {error ? <ErrorNotice error={error} compact /> : null}
-      {!data && !previous && !error ? <Spinner label={t.common.loading} /> : null}
-      {items.length === 0 && (data || previous) ? <p className="text-sm text-ink-500">{t.panel.noDocuments}</p> : null}
-      <ul className="-mx-2 space-y-0.5">{docs.map((item) => row(item))}</ul>
-      {traces.length > 0 ? (
-        <details className="mt-2">
-          <summary className="text-xs font-medium text-ink-600 hover:text-ink-900">{t.panel.traces(traces.length)}</summary>
-          <ul className="-mx-2 mt-1 max-h-56 space-y-0.5 overflow-y-auto">{traces.map((item) => row(item, true))}</ul>
-        </details>
-      ) : null}
+      {loading ? <Spinner label={t.common.loading} /> : null}
+      {empty ? <p className="text-sm text-ink-500">{t.panel.noDocuments}</p> : null}
+      <ul className="-mx-2 space-y-0.5">
+        {docs.map((item) => (
+          <DocumentRow key={item.key} item={item} prefix={prefix} onOpen={setOpen} />
+        ))}
+      </ul>
+      {traces.length > 0 ? <TracesList traces={traces} prefix={prefix} onOpen={setOpen} /> : null}
       <DocumentDialog
         documentKey={open?.key ?? null}
         title={open?.title ?? open?.key ?? ""}

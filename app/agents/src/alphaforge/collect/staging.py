@@ -58,7 +58,7 @@ def series_slug(series_id: str) -> str:
     return slugify(series_id.replace(".", "-"), 40)
 
 
-def new_item(
+def new_item(  # noqa: PLR0913 - un champ nommé par clé de l'élément collecté (CONTRACTS.md, section 4)
     *,
     item_id: str,
     kind: str,

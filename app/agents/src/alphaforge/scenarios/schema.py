@@ -74,18 +74,18 @@ def mix_id(weights: Mapping[str, float]) -> str:
     unknown = set(weights) - set(BLOCKS)
     if unknown:
         raise ValueError(f"blocs inconnus : {sorted(unknown)}")
-    pct = {}
+    percents = {}
     for block in BLOCKS:
         raw = float(weights.get(block, 0.0)) * 100.0
         value = round(raw)
         if abs(raw - value) > 1e-6 or value % 5 or value < 0:
             raise ValueError(f"poids de {block} non multiple de 5 % : {raw}")
-        pct[block] = value
-    if sum(pct.values()) != 100:
-        raise ValueError(f"la somme des poids vaut {sum(pct.values())} %, pas 100 %")
-    parts = [f"{BLOCK_CODES[b]}{pct[b]:02d}" for b in CORE_BLOCKS]
-    if pct["CRYPTO"]:
-        parts.append(f"cr{pct['CRYPTO']:02d}")
+        percents[block] = value
+    if sum(percents.values()) != 100:
+        raise ValueError(f"la somme des poids vaut {sum(percents.values())} %, pas 100 %")
+    parts = [f"{BLOCK_CODES[block]}{percents[block]:02d}" for block in CORE_BLOCKS]
+    if percents["CRYPTO"]:
+        parts.append(f"cr{percents['CRYPTO']:02d}")
     return "-".join(parts)
 
 
@@ -94,7 +94,7 @@ def parse_mix_id(value: str) -> dict[str, float]:
     match = _MIX_RE.match(value)
     if not match:
         raise ValueError(f"mix_id invalide : {value!r}")
-    numbers = [int(g) if g is not None else 0 for g in match.groups()]
+    numbers = [int(group) if group is not None else 0 for group in match.groups()]
     if sum(numbers) != 100:
         raise ValueError(f"mix_id {value!r} : somme {sum(numbers)} %")
     return {block: n / 100.0 for block, n in zip(BLOCKS, numbers, strict=True)}
@@ -110,9 +110,9 @@ def nearest_mix(weights: Mapping[str, float], candidates: Iterable[str]) -> tupl
     En cas d'égalité, l'identifiant le plus petit dans l'ordre lexicographique gagne (résultat déterministe).
     """
     best: tuple[float, str] | None = None
-    for cand in candidates:
-        dist = l1_distance(weights, parse_mix_id(cand))
-        key = (round(dist, 12), cand)
+    for candidate in candidates:
+        distance = l1_distance(weights, parse_mix_id(candidate))
+        key = (round(distance, 12), candidate)
         if best is None or key < best:
             best = key
     if best is None:
@@ -120,39 +120,60 @@ def nearest_mix(weights: Mapping[str, float], candidates: Iterable[str]) -> tupl
     return best[1], best[0]
 
 
+def _label_errors(i: int, row: Mapping[str, object]) -> list[str]:
+    """Métrique, famille, base et ``mix_id`` connus."""
+    errors = []
+    if row["metric"] not in METRICS:
+        errors.append(f"ligne {i} : métrique inconnue {row['metric']!r}")
+    if row["family"] not in FAMILIES:
+        errors.append(f"ligne {i} : famille inconnue {row['family']!r}")
+    if row["basis"] not in BASES:
+        errors.append(f"ligne {i} : base inconnue {row['basis']!r}")
+    try:
+        parse_mix_id(str(row["mix_id"]))
+    except ValueError as exc:
+        errors.append(f"ligne {i} : {exc}")
+    return errors
+
+
+def _range_errors(i: int, metric: str, value: object) -> list[str]:
+    """Probabilités et pertes maximales dans [0, 1]."""
+    errors = []
+    if metric.startswith("p_") and not (0.0 <= float(value) <= 1.0):
+        errors.append(f"ligne {i} : probabilité hors [0, 1] pour {metric} : {value}")
+    if metric.startswith("mdd_") and not (0.0 <= float(value) <= 1.0):
+        errors.append(f"ligne {i} : perte maximale hors [0, 1] : {value}")
+    return errors
+
+
+def _ci_inverted(low: object, high: object) -> bool:
+    """``ci_lo > ci_hi`` au-delà de 1e-12 ; faux si une borne manque (NaN ou valeur non flottante)."""
+    return isinstance(low, float) and isinstance(high, float) and low == low and high == high and low > high + 1e-12
+
+
+def _row_errors(i: int, row: Mapping[str, object], seen: set[tuple]) -> list[str]:
+    """Erreurs de la ligne ``i`` ; sa clé est ajoutée à ``seen``."""
+    missing = [column for column in COLUMN_NAMES if column not in row]
+    if missing:
+        return [f"ligne {i} : colonnes manquantes {missing}"]
+    key = (row["model_id"], row["family"], row["mix_id"], row["horizon_years"], row["basis"], row["metric"])
+    errors = [f"ligne {i} : clé en double {key}"] if key in seen else []
+    seen.add(key)
+    errors += _label_errors(i, row)
+    metric = str(row["metric"])
+    value = row["value"]
+    if isinstance(value, float) and value != value:  # NaN
+        return [*errors, f"ligne {i} : valeur NaN pour {metric}"]
+    errors += _range_errors(i, metric, value)
+    if _ci_inverted(row["ci_lo"], row["ci_hi"]):
+        errors.append(f"ligne {i} : ci_lo > ci_hi pour {metric}")
+    return errors
+
+
 def validate_rows(rows: Iterable[Mapping[str, object]]) -> list[str]:
     """Contrôle léger d'une table (liste de dictionnaires). Renvoie la liste des erreurs (vide si tout va bien)."""
     errors: list[str] = []
     seen: set[tuple] = set()
     for i, row in enumerate(rows):
-        missing = [c for c in COLUMN_NAMES if c not in row]
-        if missing:
-            errors.append(f"ligne {i} : colonnes manquantes {missing}")
-            continue
-        key = (row["model_id"], row["family"], row["mix_id"], row["horizon_years"], row["basis"], row["metric"])
-        if key in seen:
-            errors.append(f"ligne {i} : clé en double {key}")
-        seen.add(key)
-        if row["metric"] not in METRICS:
-            errors.append(f"ligne {i} : métrique inconnue {row['metric']!r}")
-        if row["family"] not in FAMILIES:
-            errors.append(f"ligne {i} : famille inconnue {row['family']!r}")
-        if row["basis"] not in BASES:
-            errors.append(f"ligne {i} : base inconnue {row['basis']!r}")
-        try:
-            parse_mix_id(str(row["mix_id"]))
-        except ValueError as exc:
-            errors.append(f"ligne {i} : {exc}")
-        metric = str(row["metric"])
-        value = row["value"]
-        if isinstance(value, float) and value != value:  # NaN
-            errors.append(f"ligne {i} : valeur NaN pour {metric}")
-            continue
-        if metric.startswith("p_") and not (0.0 <= float(value) <= 1.0):
-            errors.append(f"ligne {i} : probabilité hors [0, 1] pour {metric} : {value}")
-        if metric.startswith("mdd_") and not (0.0 <= float(value) <= 1.0):
-            errors.append(f"ligne {i} : perte maximale hors [0, 1] : {value}")
-        lo, hi = row["ci_lo"], row["ci_hi"]
-        if isinstance(lo, float) and isinstance(hi, float) and lo == lo and hi == hi and lo > hi + 1e-12:
-            errors.append(f"ligne {i} : ci_lo > ci_hi pour {metric}")
+        errors += _row_errors(i, row, seen)
     return errors

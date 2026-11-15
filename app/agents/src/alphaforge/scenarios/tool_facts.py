@@ -108,7 +108,7 @@ def as_of_date(fitted_through: str) -> str | None:
 
 def fact_id(row: Row, suffix: str = "") -> str:
     parts = [row.model_id, row.family, row.mix_id, f"{row.horizon_years}y", row.basis, row.metric]
-    base = "scn." + ".".join(_SAFE.sub("_", p) for p in parts)
+    base = "scn." + ".".join(_SAFE.sub("_", part) for part in parts)
     return base + (f".{suffix}" if suffix else "")
 
 
@@ -165,7 +165,7 @@ def row_facts(table: ScenarioTable, row: Row, trace_id: str) -> list[dict[str, A
     ]
 
 
-def simple_fact(
+def simple_fact(  # noqa: PLR0913 - un paramètre par champ du Fact (contrat decision.py), statut et devise par mot-clé
     fid: str,
     label_fr: str,
     value: Any,
@@ -204,7 +204,7 @@ def simple_fact(
     }
 
 
-def trace_event(
+def trace_event(  # noqa: PLR0913 - un paramètre par champ du TraceEvent (contrat decision.py), tous par mot-clé
     *,
     trace_id: str,
     inputs: dict[str, Any],

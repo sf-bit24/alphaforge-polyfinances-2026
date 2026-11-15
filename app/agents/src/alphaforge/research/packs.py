@@ -815,23 +815,28 @@ def describe_packs(names: list[str] | tuple[str, ...]) -> str:
     return "\n".join(lines)
 
 
+def _pack_problems(pack: Pack) -> list[str]:
+    problems = [f"{pack.name}: host without licence entry {host}" for host in pack.hosts if host not in HOSTS]
+    for _, url in pack.feeds:
+        host = url.split("/")[2]
+        if host not in pack.hosts:
+            problems.append(f"{pack.name}: feed host not in pack {host}")
+    return problems
+
+
+def _subject_problems(subject: Subject) -> list[str]:
+    problems = [f"{subject.code}: unknown pack {name}" for name in subject.packs if name not in PACKS]
+    for brief in subject.sweep:
+        problems += [
+            f"{subject.code}: sweep pack {name} not in subject packs"
+            for name in brief["packs"]
+            if name not in subject.packs
+        ]
+    return problems
+
+
 def check_registry() -> list[str]:
     """Incohérences du registre (testées) : hôte de paquet sans licence, paquet de sujet inconnu."""
-    problems = []
-    for pack in PACKS.values():
-        for host in pack.hosts:
-            if host not in HOSTS:
-                problems.append(f"{pack.name}: host without licence entry {host}")
-        for _, url in pack.feeds:
-            host = url.split("/")[2]
-            if host not in pack.hosts:
-                problems.append(f"{pack.name}: feed host not in pack {host}")
-    for subject in SUBJECTS.values():
-        for name in subject.packs:
-            if name not in PACKS:
-                problems.append(f"{subject.code}: unknown pack {name}")
-        for brief in subject.sweep:
-            for name in brief["packs"]:
-                if name not in subject.packs:
-                    problems.append(f"{subject.code}: sweep pack {name} not in subject packs")
+    problems = [problem for pack in PACKS.values() for problem in _pack_problems(pack)]
+    problems += [problem for subject in SUBJECTS.values() for problem in _subject_problems(subject)]
     return problems

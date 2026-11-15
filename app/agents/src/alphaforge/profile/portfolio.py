@@ -60,6 +60,14 @@ _ACCOUNT_ALIASES = {
     "margin": "non_registered",
     "unknown": "unknown",
 }
+_CASH_NAME = re.compile(r"\b(cash|encaisse|liquidit|comptant)", re.I)
+_EXPOSURE_GROUPS = (
+    ("by_asset_class", "asset_class"),
+    ("by_currency", "currency"),
+    ("by_market", "market"),
+    ("by_sector", "sector"),
+)
+_TOP_POSITION_COUNT = 5
 
 QuoteFetcher = Callable[[str], Quote]
 
@@ -83,11 +91,10 @@ def _number(value: Any) -> float | None:
     if isinstance(value, int | float):
         return float(value)
     if isinstance(value, str):
-        text = value.replace(" ", "").replace(" ", "").replace(" ", "").replace("$", "")
-        if text.count(",") == 1 and "." not in text:
-            text = text.replace(",", ".")
-        else:
-            text = text.replace(",", "")
+        # Nombre écrit à la française (« 1 000,50 $ ») : espaces insécables U+00A0 et U+202F, espaces ordinaires.
+        text = value.replace("\u00a0", "").replace("\u202f", "").replace(" ", "").replace("$", "")
+        # Une seule virgule sans point est une virgule décimale; sinon les virgules séparent les milliers.
+        text = text.replace(",", ".") if text.count(",") == 1 and "." not in text else text.replace(",", "")
         try:
             return float(text)
         except ValueError:
@@ -132,7 +139,7 @@ def _class_from_yahoo(instrument_type: str | None) -> str:
     return mapping.get((instrument_type or "").upper(), "other")
 
 
-def _market_from_yahoo(exchange: str | None, currency: str | None) -> str | None:
+def _market_from_yahoo(exchange: str | None) -> str | None:
     if not exchange:
         return None
     upper = exchange.upper()
@@ -147,6 +154,81 @@ def _market_from_yahoo(exchange: str | None, currency: str | None) -> str | None
     return exchange
 
 
+def _join_notes(current: str | None, extra: str) -> str:
+    return f"{current}; {extra}" if current else extra
+
+
+def _unresolved_position(position_id: str, raw: RawPosition) -> dict[str, Any]:
+    return {
+        "id": position_id,
+        "raw": raw.raw,
+        "ticker": None,
+        "name": raw.name,
+        "asset_class": raw.asset_class or "other",
+        "sector": None,
+        "market": None,
+        "currency": raw.currency,
+        "quantity": raw.quantity,
+        "market_value": raw.market_value,
+        "account_type": raw.account_type,
+        "price": None,
+        "price_date": None,
+        "price_source": None,
+        "value_cad": None,
+        "resolved": False,
+        "notes": raw.notes,
+    }
+
+
+def _is_cash(raw: RawPosition) -> bool:
+    return raw.asset_class == "cash" or bool(not raw.ticker and raw.name and _CASH_NAME.search(raw.name))
+
+
+def _listing_candidates(symbol: str | None, hint: str | None, currency: str | None) -> list[str]:
+    """Symboles à demander à Yahoo Finance, dans l'ordre, pour un titre absent de l'univers."""
+    if not symbol:
+        return []
+    is_bare = "." not in symbol and "-" not in symbol
+    if hint == "CA" or (currency == "CAD" and is_bare):
+        return [f"{symbol}.TO", symbol]
+    if is_bare and currency != "USD":
+        # Devise inconnue : la cotation américaine d'abord, puis celle de Toronto (ex. XEQT -> XEQT.TO).
+        return [symbol, f"{symbol}.TO"]
+    return [symbol]
+
+
+def _yahoo_chart_source(quote: Quote) -> dict[str, Any]:
+    return {
+        "id": f"yahoo-chart-{quote.symbol.lower()}",
+        "title": f"Yahoo Finance, graphique quotidien de {quote.symbol}",
+        "resource": quote.url,
+        "observed_at": quote.last_date,
+        "retrieved_at": clock.iso(),
+    }
+
+
+def _market_value_currency(position: dict[str, Any], raw: RawPosition) -> str:
+    """Devise de la valeur fournie : celle indiquée par l'investisseur, sinon celle de cotation, sinon le CAD.
+
+    La position reçoit cette devise quand elle n'en a pas, et une note quand le CAD est supposé.
+    """
+    currency = raw.currency or position["currency"]
+    if not currency:
+        currency = position["currency"] = "CAD"
+        position["notes"] = _join_notes(position["notes"], "devise supposée CAD (non précisée)")
+    elif not position["currency"]:
+        position["currency"] = currency
+    return currency
+
+
+def _missing_value_reason(position: dict[str, Any]) -> str:
+    if position["price"] is None and position["ticker"] is None:
+        return "titre introuvable et aucune valeur fournie"
+    if position["price"] is None:
+        return "prix introuvable et aucune valeur fournie"
+    return "quantité manquante"
+
+
 class Resolver:
     """Résout des lignes brutes en positions évaluées, avec leurs sources."""
 
@@ -154,7 +236,7 @@ class Resolver:
         self.quote_fetcher = quote_fetcher
         self.max_remote_quotes = max_remote_quotes
         self.remote_calls = 0
-        self.fx = starter.last_fx()
+        self.fx_rate = starter.last_fx()
         self.sources: dict[str, dict[str, Any]] = {}
 
     def _source(self, entry: dict[str, Any]) -> str:
@@ -169,10 +251,10 @@ class Resolver:
                 starter.source_entry(
                     "fx_usdcad_daily.csv",
                     "Jeu de départ, fx_usdcad_daily.csv (Banque du Canada, série FXUSDCAD)",
-                    observed_at=self.fx.date,
+                    observed_at=self.fx_rate.date,
                 )
             )
-            return self.fx.usdcad
+            return self.fx_rate.usdcad
         return None
 
     def _remote_quote(self, symbol: str) -> Quote | None:
@@ -194,134 +276,100 @@ class Resolver:
                 unresolved.append({"raw": raw.raw, "reason": reason, "position_id": position["id"]})
         return positions, unresolved
 
-    def _resolve_one(self, position_id: str, raw: RawPosition) -> tuple[dict[str, Any], str | None]:
-        asset_class = raw.asset_class
-        position: dict[str, Any] = {
-            "id": position_id,
-            "raw": raw.raw,
-            "ticker": None,
-            "name": raw.name,
-            "asset_class": asset_class or "other",
-            "sector": None,
-            "market": None,
-            "currency": raw.currency,
-            "quantity": raw.quantity,
-            "market_value": raw.market_value,
-            "account_type": raw.account_type,
-            "price": None,
-            "price_date": None,
-            "price_source": None,
-            "value_cad": None,
-            "resolved": False,
-            "notes": raw.notes,
-        }
-        is_cash = asset_class == "cash" or (
-            not raw.ticker and raw.name and re.search(r"\b(cash|encaisse|liquidit|comptant)", raw.name, re.I)
-        )
-        if is_cash:
-            position.update(asset_class="cash", market="Cash", sector="Cash", currency=raw.currency or "CAD")
-            if raw.market_value is None:
-                return position, "montant de l'encaisse manquant"
-            rate = self._fx_to_cad(position["currency"])
-            if rate is None:
-                return position, f"devise non prise en charge ({position['currency']})"
-            position["value_cad"] = round(raw.market_value * rate, 2)
-            position["resolved"] = True
-            return position, None
-
-        asset = starter.find_asset(raw.ticker, raw.name, raw.currency)
-        quote: Quote | None = None
-        if asset is not None:
-            position.update(
-                ticker=asset.ticker,
-                name=asset.name,
-                asset_class=asset.asset_class,
-                sector=asset.sector,
-                market=asset.market,
-                currency=asset.currency,
-            )
-            self._source(starter.source_entry("assets_universe.csv", "Jeu de départ, assets_universe.csv"))
-            last = starter.last_prices().get(asset.ticker)
-            if last is not None:
-                position.update(price=round(last.close, 4), price_date=last.date)
-                position["price_source"] = self._source(
-                    starter.source_entry(
-                        "prices_daily.csv", "Jeu de départ, prices_daily.csv (Yahoo Finance)", observed_at=last.date
-                    )
-                )
-        else:
-            symbol, hint = starter.normalize_symbol(raw.ticker)
-            candidates = []
-            if symbol:
-                bare = "." not in symbol and "-" not in symbol
-                if hint == "CA" or (raw.currency == "CAD" and bare):
-                    candidates = [f"{symbol}.TO", symbol]
-                elif bare and raw.currency != "USD":
-                    # Devise inconnue : la cotation américaine d'abord, puis celle de Toronto (ex. XEQT -> XEQT.TO).
-                    candidates = [symbol, f"{symbol}.TO"]
-                else:
-                    candidates = [symbol]
-            for candidate in candidates:
-                quote = self._remote_quote(candidate)
-                if quote is not None and quote.last_close is not None:
-                    break
-                quote = None
-            if quote is not None:
-                currency = (quote.currency or "").upper() or raw.currency
-                position.update(
-                    ticker=quote.symbol,
-                    name=raw.name or quote.name,
-                    asset_class=asset_class or _class_from_yahoo(quote.instrument_type),
-                    market=_market_from_yahoo(quote.exchange, currency),
-                    currency=currency,
-                    price=round(float(quote.last_close), 4),
-                    price_date=quote.last_date,
-                )
-                position["price_source"] = self._source(
-                    {
-                        "id": f"yahoo-chart-{quote.symbol.lower()}",
-                        "title": f"Yahoo Finance, graphique quotidien de {quote.symbol}",
-                        "resource": quote.url,
-                        "observed_at": quote.last_date,
-                        "retrieved_at": clock.iso(),
-                    }
-                )
-            elif symbol:
-                position["ticker"] = symbol
-
-        if position["price"] is not None and raw.quantity is not None:
-            local_value = raw.quantity * position["price"]
-            currency = position["currency"]
-        elif raw.market_value is not None:
-            # La valeur fournie est dans la devise indiquée par l'investisseur, sinon dans celle de cotation.
-            local_value = raw.market_value
-            currency = raw.currency or position["currency"]
-            if not currency:
-                currency = position["currency"] = "CAD"
-                position["notes"] = _join_notes(position["notes"], "devise supposée CAD (non précisée)")
-            elif not position["currency"]:
-                position["currency"] = currency
-        else:
-            if position["price"] is None and position["ticker"] is None:
-                return position, "titre introuvable et aucune valeur fournie"
-            if position["price"] is None:
-                return position, "prix introuvable et aucune valeur fournie"
-            return position, "quantité manquante"
+    def _convert_to_cad(self, position: dict[str, Any], local_value: float, currency: str | None) -> str | None:
+        """Inscrit la valeur en CAD sur la position; renvoie la raison quand la devise n'est pas prise en charge."""
         rate = self._fx_to_cad(currency or "")
         if rate is None:
-            return position, f"devise non prise en charge ({currency})"
+            return f"devise non prise en charge ({currency})"
         position["value_cad"] = round(local_value * rate, 2)
         position["resolved"] = True
-        if asset is None and quote is None:
+        return None
+
+    def _resolve_cash(self, position: dict[str, Any], raw: RawPosition) -> str | None:
+        position.update(asset_class="cash", market="Cash", sector="Cash", currency=raw.currency or "CAD")
+        if raw.market_value is None:
+            return "montant de l'encaisse manquant"
+        return self._convert_to_cad(position, raw.market_value, position["currency"])
+
+    def _fill_from_universe(self, position: dict[str, Any], asset: starter.Asset) -> None:
+        position.update(
+            ticker=asset.ticker,
+            name=asset.name,
+            asset_class=asset.asset_class,
+            sector=asset.sector,
+            market=asset.market,
+            currency=asset.currency,
+        )
+        self._source(starter.source_entry("assets_universe.csv", "Jeu de départ, assets_universe.csv"))
+        last_price = starter.last_prices().get(asset.ticker)
+        if last_price is not None:
+            position.update(price=round(last_price.close, 4), price_date=last_price.date)
+            position["price_source"] = self._source(
+                starter.source_entry(
+                    "prices_daily.csv", "Jeu de départ, prices_daily.csv (Yahoo Finance)", observed_at=last_price.date
+                )
+            )
+
+    def _first_priced_quote(self, symbols: list[str]) -> Quote | None:
+        for symbol in symbols:
+            quote = self._remote_quote(symbol)
+            if quote is not None and quote.last_close is not None:
+                return quote
+        return None
+
+    def _fill_from_quote(self, position: dict[str, Any], raw: RawPosition, quote: Quote) -> None:
+        currency = (quote.currency or "").upper() or raw.currency
+        position.update(
+            ticker=quote.symbol,
+            name=raw.name or quote.name,
+            asset_class=raw.asset_class or _class_from_yahoo(quote.instrument_type),
+            market=_market_from_yahoo(quote.exchange),
+            currency=currency,
+            price=round(float(quote.last_close), 4),
+            price_date=quote.last_date,
+        )
+        position["price_source"] = self._source(_yahoo_chart_source(quote))
+
+    def _identify_security(self, position: dict[str, Any], raw: RawPosition) -> bool:
+        """Complète la position d'après l'univers du jeu de départ, sinon d'après une cotation Yahoo Finance.
+
+        Faux quand le titre n'est trouvé ni dans l'un ni dans l'autre.
+        """
+        asset = starter.find_asset(raw.ticker, raw.name, raw.currency)
+        if asset is not None:
+            self._fill_from_universe(position, asset)
+            return True
+        symbol, hint = starter.normalize_symbol(raw.ticker)
+        quote = self._first_priced_quote(_listing_candidates(symbol, hint, raw.currency))
+        if quote is not None:
+            self._fill_from_quote(position, raw, quote)
+            return True
+        if symbol:
+            position["ticker"] = symbol
+        return False
+
+    def _resolve_security(self, position: dict[str, Any], raw: RawPosition) -> str | None:
+        """Identifie le titre, puis l'évalue : quantité × prix, sinon la valeur fournie par l'investisseur."""
+        is_identified = self._identify_security(position, raw)
+        if position["price"] is not None and raw.quantity is not None:
+            local_value, currency = raw.quantity * position["price"], position["currency"]
+        elif raw.market_value is not None:
+            local_value, currency = raw.market_value, _market_value_currency(position, raw)
+        else:
+            return _missing_value_reason(position)
+        reason = self._convert_to_cad(position, local_value, currency)
+        if reason is None and not is_identified:
             position["notes"] = _join_notes(position["notes"], "titre non identifié; valeur fournie par l'investisseur")
-        return position, None
+        return reason
+
+    def _resolve_one(self, position_id: str, raw: RawPosition) -> tuple[dict[str, Any], str | None]:
+        """Position complétée autant que possible, et la raison quand elle reste sans valeur en CAD."""
+        position = _unresolved_position(position_id, raw)
+        reason = self._resolve_cash(position, raw) if _is_cash(raw) else self._resolve_security(position, raw)
+        return position, reason
 
     def source_list(self) -> list[dict[str, Any]]:
         return list(self.sources.values())
-
-
-def _join_notes(current: str | None, extra: str) -> str:
-    return f"{current}; {extra}" if current else extra
 
 
 def _shares(totals: dict[str, float], total: float) -> dict[str, float]:
@@ -329,9 +377,92 @@ def _shares(totals: dict[str, float], total: float) -> dict[str, float]:
     return {key: round(value / total, 4) for key, value in ordered}
 
 
+def _add_value(totals: dict[str, float], position: dict[str, Any], attribute: str) -> None:
+    label = position.get(attribute) or "Unknown"
+    totals[label] = totals.get(label, 0.0) + position["value_cad"]
+
+
+def _value_by_group(valued: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
+    groups: dict[str, dict[str, float]] = {key: {} for key, _ in _EXPOSURE_GROUPS}
+    for position in valued:
+        for key, attribute in _EXPOSURE_GROUPS:
+            _add_value(groups[key], position, attribute)
+    return groups
+
+
+def _top_positions(valued: list[dict[str, Any]], total: float) -> list[dict[str, Any]]:
+    ranked = sorted(valued, key=lambda position: (-position["value_cad"], position["id"]))
+    return [
+        {"id": position["id"], "weight": round(position["value_cad"] / total, 4)}
+        for position in ranked[:_TOP_POSITION_COUNT]
+    ]
+
+
+def _has_concentrated_position(valued: list[dict[str, Any]], total: float) -> bool:
+    return any(
+        position["asset_class"] in SINGLE_LINE
+        and position["value_cad"] / total > THRESHOLDS["concentration_single_position"]
+        for position in valued
+    )
+
+
+def _has_concentrated_sector(valued: list[dict[str, Any]]) -> bool:
+    equities = [position for position in valued if position["asset_class"] == "equity"]
+    equity_total = sum(position["value_cad"] for position in equities)
+    if equity_total > 0:
+        sectors: dict[str, float] = {}
+        for position in equities:
+            _add_value(sectors, position, "sector")
+        return max(sectors.values()) / equity_total > THRESHOLDS["concentration_sector"] and len(equities) > 1
+    return False
+
+
+def _has_home_bias(non_cash: list[dict[str, Any]]) -> bool:
+    non_cash_total = sum(position["value_cad"] for position in non_cash)
+    if non_cash_total > 0:
+        canadian_value = sum(
+            position["value_cad"]
+            for position in non_cash
+            if position.get("market") == "TSX" or position.get("currency") == "CAD"
+        )
+        return canadian_value / non_cash_total >= THRESHOLDS["home_bias_canada"]
+    return False
+
+
+def _class_value(valued: list[dict[str, Any]], asset_class: str) -> float:
+    return sum(position["value_cad"] for position in valued if position["asset_class"] == asset_class)
+
+
+def _has_few_holdings(non_cash: list[dict[str, Any]]) -> bool:
+    return len(non_cash) < THRESHOLDS["few_holdings"] and not any(
+        position["asset_class"] in DIVERSIFIED for position in non_cash
+    )
+
+
+def _exposure_flags(valued: list[dict[str, Any]], total: float, unresolved: list[dict[str, Any]]) -> list[str]:
+    """Constats du portefeuille, dans l'ordre de la liste en tête de module."""
+    flags = []
+    if _has_concentrated_position(valued, total):
+        flags.append("concentration_single_position")
+    if _has_concentrated_sector(valued):
+        flags.append("concentration_sector")
+    non_cash = [position for position in valued if position["asset_class"] != "cash"]
+    if _has_home_bias(non_cash):
+        flags.append("home_bias_canada")
+    if _class_value(valued, "crypto") / total > THRESHOLDS["crypto_exposure_high"]:
+        flags.append("crypto_exposure_high")
+    if _class_value(valued, "cash") / total > THRESHOLDS["cash_heavy"]:
+        flags.append("cash_heavy")
+    if _has_few_holdings(non_cash):
+        flags.append("few_holdings")
+    if unresolved:
+        flags.append("unvalued_positions")
+    return flags
+
+
 def compute_exposures(positions: list[dict[str, Any]], unresolved: list[dict[str, Any]]) -> dict[str, Any]:
-    valued = [p for p in positions if p.get("resolved") and p.get("value_cad") is not None]
-    total = round(sum(p["value_cad"] for p in valued), 2)
+    valued = [position for position in positions if position.get("resolved") and position.get("value_cad") is not None]
+    total = round(sum(position["value_cad"] for position in valued), 2)
     exposures: dict[str, Any] = {
         "total_value_cad": total,
         "by_asset_class": {},
@@ -345,52 +476,10 @@ def compute_exposures(positions: list[dict[str, Any]], unresolved: list[dict[str
         if unresolved:
             exposures["flags"] = ["unvalued_positions"]
         return exposures
-    groups: dict[str, dict[str, float]] = {"by_asset_class": {}, "by_currency": {}, "by_market": {}, "by_sector": {}}
-    for p in valued:
-        for key, attr in (
-            ("by_asset_class", "asset_class"),
-            ("by_currency", "currency"),
-            ("by_market", "market"),
-            ("by_sector", "sector"),
-        ):
-            label = p.get(attr) or "Unknown"
-            groups[key][label] = groups[key].get(label, 0.0) + p["value_cad"]
-    for key, totals in groups.items():
+    for key, totals in _value_by_group(valued).items():
         exposures[key] = _shares(totals, total)
-    ranked = sorted(valued, key=lambda p: (-p["value_cad"], p["id"]))
-    exposures["top_positions"] = [{"id": p["id"], "weight": round(p["value_cad"] / total, 4)} for p in ranked[:5]]
-
-    flags = []
-    if any(
-        p["asset_class"] in SINGLE_LINE and p["value_cad"] / total > THRESHOLDS["concentration_single_position"]
-        for p in valued
-    ):
-        flags.append("concentration_single_position")
-    equities = [p for p in valued if p["asset_class"] == "equity"]
-    equity_total = sum(p["value_cad"] for p in equities)
-    if equity_total > 0:
-        sectors: dict[str, float] = {}
-        for p in equities:
-            sectors[p.get("sector") or "Unknown"] = sectors.get(p.get("sector") or "Unknown", 0.0) + p["value_cad"]
-        if max(sectors.values()) / equity_total > THRESHOLDS["concentration_sector"] and len(equities) > 1:
-            flags.append("concentration_sector")
-    non_cash = [p for p in valued if p["asset_class"] != "cash"]
-    non_cash_total = sum(p["value_cad"] for p in non_cash)
-    if non_cash_total > 0:
-        canada = sum(p["value_cad"] for p in non_cash if p.get("market") == "TSX" or p.get("currency") == "CAD")
-        if canada / non_cash_total >= THRESHOLDS["home_bias_canada"]:
-            flags.append("home_bias_canada")
-    crypto = sum(p["value_cad"] for p in valued if p["asset_class"] == "crypto")
-    if crypto / total > THRESHOLDS["crypto_exposure_high"]:
-        flags.append("crypto_exposure_high")
-    cash = sum(p["value_cad"] for p in valued if p["asset_class"] == "cash")
-    if cash / total > THRESHOLDS["cash_heavy"]:
-        flags.append("cash_heavy")
-    if len(non_cash) < THRESHOLDS["few_holdings"] and not any(p["asset_class"] in DIVERSIFIED for p in non_cash):
-        flags.append("few_holdings")
-    if unresolved:
-        flags.append("unvalued_positions")
-    exposures["flags"] = flags
+    exposures["top_positions"] = _top_positions(valued, total)
+    exposures["flags"] = _exposure_flags(valued, total, unresolved)
     return exposures
 
 
@@ -398,14 +487,14 @@ def build_view(raws: list[RawPosition], *, status: str, quote_fetcher: QuoteFetc
     resolver = Resolver(quote_fetcher)
     positions, unresolved = resolver.resolve(raws)
     exposures = compute_exposures(positions, unresolved)
-    fx = resolver.fx
+    fx_rate = resolver.fx_rate
     return {
         "positions": positions,
         "unresolved": unresolved,
         "exposures": exposures,
         "status": status,
         "sources": resolver.source_list(),
-        "fx": {"pair": "USDCAD", "rate": fx.usdcad, "date": fx.date, "source": "starter:fx_usdcad_daily.csv"},
+        "fx": {"pair": "USDCAD", "rate": fx_rate.usdcad, "date": fx_rate.date, "source": "starter:fx_usdcad_daily.csv"},
     }
 
 

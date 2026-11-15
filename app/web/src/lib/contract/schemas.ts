@@ -323,16 +323,16 @@ const ClientStateObject = z.object({
 });
 
 /** Cardinality of `questions` per stage (section 3.2). */
-export const ClientState = ClientStateObject.superRefine((state, ctx) => {
+function questionCountFits(stage: Stage, count: number): boolean {
+  if (stage === "base_questions") return count === 1;
+  if (stage === "followups") return count <= 3;
+  return count === 0;
+}
+
+export const ClientState = ClientStateObject.superRefine((state, context) => {
   const count = state.questions.length;
-  const expected =
-    state.stage === "base_questions"
-      ? count === 1
-      : state.stage === "followups"
-        ? count <= 3
-        : count === 0;
-  if (!expected) {
-    ctx.addIssue({
+  if (!questionCountFits(state.stage, count)) {
+    context.addIssue({
       code: "custom",
       path: ["questions"],
       message: `Stage ${state.stage} cannot carry ${count} question(s)`,

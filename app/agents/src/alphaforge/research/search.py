@@ -30,18 +30,18 @@ def _fold(text: Any) -> str:
 
 
 def _score(query: str, *fields: Any) -> int:
-    terms = [t for t in _fold(query).split() if len(t) > 1]
-    haystack = " ".join(_fold(f) for f in fields)
+    terms = [term for term in _fold(query).split() if len(term) > 1]
+    haystack = " ".join(_fold(field) for field in fields)
     if not terms:
         return 0
-    hits = sum(1 for t in terms if t in haystack)
+    hits = sum(1 for term in terms if term in haystack)
     return hits if hits == len(terms) else (hits if hits >= max(1, len(terms) - 1) else 0)
 
 
 def _top(rows: list[tuple[int, dict[str, Any]]], limit: int) -> list[dict[str, Any]]:
-    rows = [r for r in rows if r[0] > 0]
-    rows.sort(key=lambda r: -r[0])
-    return [r[1] for r in rows[: max(1, min(limit, MAX_MATCHES))]]
+    rows = [row for row in rows if row[0] > 0]
+    rows.sort(key=lambda row: -row[0])
+    return [row[1] for row in rows[: max(1, min(limit, MAX_MATCHES))]]
 
 
 # ----------------------------------------------------------------------------- Banque du Canada
@@ -116,10 +116,15 @@ def ckan(web: ResearchWeb, query: str, limit: int) -> dict[str, Any]:
     for package in results:
         resources = []
         for resource in package.get("resources") or []:
-            fmt = str(resource.get("format") or "").upper()
-            if fmt in ("HTML", ""):
+            resource_format = str(resource.get("format") or "").upper()
+            if resource_format in ("HTML", ""):
                 continue
-            entry = {"id": resource.get("id"), "name": resource.get("name"), "format": fmt, "url": resource.get("url")}
+            entry = {
+                "id": resource.get("id"),
+                "name": resource.get("name"),
+                "format": resource_format,
+                "url": resource.get("url"),
+            }
             if resource.get("datastore_active"):
                 entry["next"] = "https://open.canada.ca/data/api/3/action/datastore_search?" + urllib.parse.urlencode(
                     {"resource_id": resource.get("id"), "limit": 50}
@@ -185,18 +190,20 @@ def kalshi_series(web: ResearchWeb, query: str, limit: int) -> dict[str, Any]:
     series = (archived.tree or {}).get("series") or []
     rows = [
         (
-            _score(query, s.get("ticker"), s.get("title"), " ".join(s.get("tags") or [])),
+            _score(query, entry.get("ticker"), entry.get("title"), " ".join(entry.get("tags") or [])),
             {
-                "series": s.get("ticker"),
-                "title": s.get("title"),
-                "settlement_sources": [x.get("name") for x in s.get("settlement_sources") or [] if isinstance(x, dict)],
-                "contract_terms_url": s.get("contract_terms_url"),
+                "series": entry.get("ticker"),
+                "title": entry.get("title"),
+                "settlement_sources": [
+                    source.get("name") for source in entry.get("settlement_sources") or [] if isinstance(source, dict)
+                ],
+                "contract_terms_url": entry.get("contract_terms_url"),
                 "next": "https://external-api.kalshi.com/trade-api/v2/markets?"
-                + urllib.parse.urlencode({"series_ticker": s.get("ticker"), "status": "open"}),
+                + urllib.parse.urlencode({"series_ticker": entry.get("ticker"), "status": "open"}),
             },
         )
-        for s in series
-        if isinstance(s, dict)
+        for entry in series
+        if isinstance(entry, dict)
     ]
     return {
         "response_id": archived.response_id,
@@ -252,16 +259,16 @@ def oecd_dataflows(web: ResearchWeb, query: str, limit: int) -> dict[str, Any]:
         if not isinstance(flow, dict):
             continue
         name = _text(flow.get("Name"))
-        agency, fid, version = flow.get("@agencyID"), flow.get("@id"), flow.get("@version")
+        agency, flow_id, version = flow.get("@agencyID"), flow.get("@id"), flow.get("@version")
         rows.append(
             (
-                _score(query, fid, name),
+                _score(query, flow_id, name),
                 {
                     "agency": agency,
-                    "id": fid,
+                    "id": flow_id,
                     "version": version,
                     "name": name,
-                    "next": f"https://sdmx.oecd.org/public/rest/data/{agency},{fid},{version}/all?"
+                    "next": f"https://sdmx.oecd.org/public/rest/data/{agency},{flow_id},{version}/all?"
                     "lastNObservations=1&format=csvfilewithlabels (narrow the key first)",
                 },
             )
@@ -274,18 +281,18 @@ def imf_dataflows(web: ResearchWeb, query: str, limit: int) -> dict[str, Any]:
     flows = ((archived.tree or {}).get("data") or {}).get("dataflows") or []
     rows = [
         (
-            _score(query, f.get("id"), f.get("name")),
+            _score(query, flow.get("id"), flow.get("name")),
             {
-                "agency": f.get("agencyID"),
-                "id": f.get("id"),
-                "version": f.get("version"),
-                "name": f.get("name"),
-                "vintage": "VINTAGE" in str(f.get("id")),
-                "next": f"https://api.imf.org/external/sdmx/2.1/data/{f.get('agencyID')},{f.get('id')}/{{KEY}}?startPeriod=YYYY-MM",
+                "agency": flow.get("agencyID"),
+                "id": flow.get("id"),
+                "version": flow.get("version"),
+                "name": flow.get("name"),
+                "vintage": "VINTAGE" in str(flow.get("id")),
+                "next": f"https://api.imf.org/external/sdmx/2.1/data/{flow.get('agencyID')},{flow.get('id')}/{{KEY}}?startPeriod=YYYY-MM",
             },
         )
-        for f in flows
-        if isinstance(f, dict)
+        for flow in flows
+        if isinstance(flow, dict)
     ]
     return {"response_id": archived.response_id, "matches": _top(rows, limit)}
 
@@ -310,13 +317,13 @@ def gdelt(web: ResearchWeb, query: str, limit: int) -> dict[str, Any]:
     matches = [
         {
             "locator": f"articles[{i}]",
-            "title": a.get("title"),
-            "domain": a.get("domain"),
-            "language": a.get("language"),
-            "seendate": a.get("seendate"),
+            "title": article.get("title"),
+            "domain": article.get("domain"),
+            "language": article.get("language"),
+            "seendate": article.get("seendate"),
         }
-        for i, a in enumerate(articles[: max(1, min(limit * 2, 50))])
-        if isinstance(a, dict)
+        for i, article in enumerate(articles[: max(1, min(limit * 2, 50))])
+        if isinstance(article, dict)
     ]
     return {
         "response_id": archived.response_id,
@@ -396,7 +403,7 @@ def feeds(web: ResearchWeb, query: str, limit: int, packs: tuple[str, ...] = ())
     for name in packs:
         for title, url in PACKS[name].feeds:
             rows.append({"pack": name, "feed": title, "next": url})
-    matched = [r for r in rows if not query.strip() or _score(query, r["feed"], r["pack"]) > 0]
+    matched = [row for row in rows if not query.strip() or _score(query, row["feed"], row["pack"]) > 0]
     return {"matches": matched or rows}
 
 

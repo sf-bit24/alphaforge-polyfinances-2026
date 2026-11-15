@@ -7,7 +7,7 @@ from typing import Literal
 import pytest
 from pydantic import BaseModel
 
-from alphaforge.finance.llm import FileStore, LLMOutputError, LLMRequest, ReplayMiss, converse_kwargs, llm_call
+from alphaforge.finance.llm import FileStore, LLMOutputError, LLMRequest, ReplayMissError, converse_kwargs, llm_call
 
 
 class Verdict(BaseModel):
@@ -46,7 +46,7 @@ def test_record_then_replay_is_identical_without_calling_model(tmp_path):
 
 def test_replay_miss_never_calls_model(tmp_path):
     tr = fake(["{}"])
-    with pytest.raises(ReplayMiss):
+    with pytest.raises(ReplayMissError):
         llm_call(req(), FileStore(tmp_path), mode="replay", transport=tr)
     assert tr.calls == []
 
@@ -118,7 +118,7 @@ def test_strands_replay_model_records_and_replays(tmp_path, monkeypatch):
     rec, _ = asyncio.run(collect("record"))
     rep, m = asyncio.run(collect("replay"))
     assert rec == rep and m.last_replayed and len(calls) == 1
-    with pytest.raises(ReplayMiss):
+    with pytest.raises(ReplayMissError):
         asyncio.run(collect("replay", rnd=2))          # autre tour = autre clé
     with pytest.raises(ValueError, match="temperature"):
         ReplayModel(node_id="x", store=store, model_id="m", temperature=0.0)

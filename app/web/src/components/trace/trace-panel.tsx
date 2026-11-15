@@ -47,6 +47,45 @@ export function SourceLine({ source }: { source: Source }) {
   );
 }
 
+function StepSources({ sources }: { sources: Source[] }) {
+  const { t } = useI18n();
+  return (
+    <div className="mt-2 rounded-md bg-soft px-2.5 py-1.5 ring-1 ring-line">
+      <p className="text-[0.65rem] font-semibold tracking-wide text-navy uppercase">{t.trace.sources}</p>
+      <ul className="mt-0.5 space-y-1">
+        {sources.map((source) => (
+          <SourceLine key={source.id} source={source} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function StepJson({ label, value }: { label: string; value: unknown }) {
+  return (
+    <div>
+      <p className="mb-1 text-[0.65rem] font-semibold tracking-wide text-ink-500 uppercase">{label}</p>
+      <JsonView value={value} maxHeight="max-h-48" />
+    </div>
+  );
+}
+
+function StepIo({ inputs, outputs }: { inputs: unknown; outputs: unknown }) {
+  const { t } = useI18n();
+  return (
+    <details className="group/io mt-1.5">
+      <summary className="inline-flex items-center gap-1 rounded text-[0.75rem] font-medium text-navy hover:underline focus-visible:outline-2 focus-visible:outline-focus">
+        <ChevronDown aria-hidden className="size-3.5 transition-transform group-open/io:rotate-180" />
+        {t.trace.io}
+      </summary>
+      <div className="mt-1.5 space-y-2">
+        {!isEmpty(inputs) ? <StepJson label={t.trace.inputs} value={inputs} /> : null}
+        {!isEmpty(outputs) ? <StepJson label={t.trace.outputs} value={outputs} /> : null}
+      </div>
+    </details>
+  );
+}
+
 function StepItem({ step, last }: { step: TraceStep; last: boolean }) {
   const { t, locale } = useI18n();
   const style = KIND_STYLE[step.kind];
@@ -71,91 +110,74 @@ function StepItem({ step, last }: { step: TraceStep; last: boolean }) {
       </div>
       <p className="mt-1 text-sm leading-snug font-medium text-ink-950">{step.title}</p>
       {step.detail ? <p className="mt-0.5 text-[0.8rem] leading-snug break-words text-ink-600">{step.detail}</p> : null}
-      {step.sources.length > 0 ? (
-        <div className="mt-2 rounded-md bg-soft px-2.5 py-1.5 ring-1 ring-line">
-          <p className="text-[0.65rem] font-semibold tracking-wide text-navy uppercase">{t.trace.sources}</p>
-          <ul className="mt-0.5 space-y-1">
-            {step.sources.map((source) => (
-              <SourceLine key={source.id} source={source} />
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {hasIo ? (
-        <details className="group/io mt-1.5">
-          <summary className="inline-flex items-center gap-1 rounded text-[0.75rem] font-medium text-navy hover:underline focus-visible:outline-2 focus-visible:outline-focus">
-            <ChevronDown aria-hidden className="size-3.5 transition-transform group-open/io:rotate-180" />
-            {t.trace.io}
-          </summary>
-          <div className="mt-1.5 space-y-2">
-            {!isEmpty(step.inputs) ? (
-              <div>
-                <p className="mb-1 text-[0.65rem] font-semibold tracking-wide text-ink-500 uppercase">{t.trace.inputs}</p>
-                <JsonView value={step.inputs} maxHeight="max-h-48" />
-              </div>
-            ) : null}
-            {!isEmpty(step.outputs) ? (
-              <div>
-                <p className="mb-1 text-[0.65rem] font-semibold tracking-wide text-ink-500 uppercase">{t.trace.outputs}</p>
-                <JsonView value={step.outputs} maxHeight="max-h-48" />
-              </div>
-            ) : null}
-          </div>
-        </details>
-      ) : null}
+      {step.sources.length > 0 ? <StepSources sources={step.sources} /> : null}
+      {hasIo ? <StepIo inputs={step.inputs} outputs={step.outputs} /> : null}
     </li>
   );
 }
 
-function RunCard({ run, hidden, defaultOpen, live }: { run: TraceRun; hidden: Set<TraceKind>; defaultOpen: boolean; live: boolean }) {
-  const { t, locale } = useI18n();
-  const steps = run.steps.filter((step) => !hidden.has(step.kind));
-  const hiddenCount = run.steps.length - steps.length;
-  const counts = TRACE_KINDS.map((kind) => ({ kind, count: run.steps.filter((step) => step.kind === kind).length })).filter(
+/** Share of each kind among the steps of a run, as a thin bar of colors. */
+function KindBar({ steps }: { steps: TraceStep[] }) {
+  const counts = TRACE_KINDS.map((kind) => ({ kind, count: steps.filter((step) => step.kind === kind).length })).filter(
     (entry) => entry.count > 0,
   );
+  if (counts.length === 0) return null;
+  return (
+    <p aria-hidden className="mt-1.5 flex h-1.5 gap-0.5 overflow-hidden rounded-full">
+      {counts.map((entry) => (
+        <span key={entry.kind} style={{ flexGrow: entry.count, backgroundColor: KIND_STYLE[entry.kind].color }} />
+      ))}
+    </p>
+  );
+}
+
+function RunSummary({ run, live }: { run: TraceRun; live: boolean }) {
+  const { t, locale } = useI18n();
+  return (
+    <summary className="flex items-start gap-2 rounded-lg px-3 py-2.5 focus-visible:outline-2 focus-visible:outline-focus">
+      <div className="min-w-0 flex-1">
+        <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink-950">
+          {t.trace.actions[run.action] ?? run.action}
+          {live ? (
+            <Badge tone="brand" icon={<span className="size-1.5 animate-pulse-dot rounded-full bg-navy" />}>
+              {t.common.live}
+            </Badge>
+          ) : null}
+          {run.status === "error" && run.error ? (
+            <Badge tone="critical" className="font-mono">
+              {run.error.code}
+            </Badge>
+          ) : null}
+        </p>
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[0.7rem] text-ink-500">
+          <span className="font-mono">{run.action}</span>
+          <span>·</span>
+          <time dateTime={run.startedAt}>{formatTime(run.startedAt, locale)}</time>
+          {run.durationMs !== null ? (
+            <>
+              <span>·</span>
+              <span className="tabular-nums">{formatDuration(run.durationMs, locale)}</span>
+            </>
+          ) : null}
+          <span>·</span>
+          <span>{t.trace.steps(run.steps.length)}</span>
+          {run.streamed ? <span className="text-navy">· {t.trace.streamed}</span> : null}
+        </p>
+        <KindBar steps={run.steps} />
+      </div>
+      <ChevronDown aria-hidden className="mt-0.5 size-4 shrink-0 text-ink-400 transition-transform group-open/run:rotate-180" />
+    </summary>
+  );
+}
+
+function RunCard({ run, hidden, defaultOpen, live }: { run: TraceRun; hidden: Set<TraceKind>; defaultOpen: boolean; live: boolean }) {
+  const { t } = useI18n();
+  const steps = run.steps.filter((step) => !hidden.has(step.kind));
+  const hiddenCount = run.steps.length - steps.length;
   return (
     <li>
       <details open={defaultOpen} className={cn("group/run rounded-lg ring-1", live ? "bg-soft/60 ring-line-2" : "bg-white ring-ink-150")}>
-        <summary className="flex items-start gap-2 rounded-lg px-3 py-2.5 focus-visible:outline-2 focus-visible:outline-focus">
-          <div className="min-w-0 flex-1">
-            <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink-950">
-              {t.trace.actions[run.action] ?? run.action}
-              {live ? (
-                <Badge tone="brand" icon={<span className="size-1.5 animate-pulse-dot rounded-full bg-navy" />}>
-                  {t.common.live}
-                </Badge>
-              ) : null}
-              {run.status === "error" && run.error ? (
-                <Badge tone="critical" className="font-mono">
-                  {run.error.code}
-                </Badge>
-              ) : null}
-            </p>
-            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[0.7rem] text-ink-500">
-              <span className="font-mono">{run.action}</span>
-              <span>·</span>
-              <time dateTime={run.startedAt}>{formatTime(run.startedAt, locale)}</time>
-              {run.durationMs !== null ? (
-                <>
-                  <span>·</span>
-                  <span className="tabular-nums">{formatDuration(run.durationMs, locale)}</span>
-                </>
-              ) : null}
-              <span>·</span>
-              <span>{t.trace.steps(run.steps.length)}</span>
-              {run.streamed ? <span className="text-navy">· {t.trace.streamed}</span> : null}
-            </p>
-            {counts.length > 0 ? (
-              <p aria-hidden className="mt-1.5 flex h-1.5 gap-0.5 overflow-hidden rounded-full">
-                {counts.map((entry) => (
-                  <span key={entry.kind} style={{ flexGrow: entry.count, backgroundColor: KIND_STYLE[entry.kind].color }} />
-                ))}
-              </p>
-            ) : null}
-          </div>
-          <ChevronDown aria-hidden className="mt-0.5 size-4 shrink-0 text-ink-400 transition-transform group-open/run:rotate-180" />
-        </summary>
+        <RunSummary run={run} live={live} />
         <div className="border-t border-ink-150 px-3 pt-3 pb-2">
           {run.status === "running" && run.steps.length === 0 ? <Spinner label={t.trace.running} className="mb-2" /> : null}
           {run.status === "error" && run.error ? <p className="mb-3 text-[0.8rem] text-critical-ink">{run.error.message}</p> : null}
@@ -168,6 +190,90 @@ function RunCard({ run, hidden, defaultOpen, live }: { run: TraceRun; hidden: Se
         </div>
       </details>
     </li>
+  );
+}
+
+function TraceHeader({ canClear, onClear }: { canClear: boolean; onClear: () => void }) {
+  const { t } = useI18n();
+  return (
+    <header className="flex items-start gap-2 border-b border-ink-150 px-4 py-3.5">
+      <Activity aria-hidden className="mt-0.5 size-4 text-navy" />
+      <div className="min-w-0 flex-1">
+        <h2 id="trace-title" className="text-[0.95rem] font-semibold tracking-tight text-ink-950">
+          {t.trace.title}
+        </h2>
+        <p className="mt-0.5 text-xs leading-snug text-ink-500">{t.trace.subtitle}</p>
+      </div>
+      {canClear ? (
+        <Button size="sm" variant="ghost" onClick={onClear} aria-label={t.trace.clear} title={t.trace.clear}>
+          <Trash2 aria-hidden className="size-4" />
+        </Button>
+      ) : null}
+    </header>
+  );
+}
+
+/** One toggle per kind: a struck-through kind is hidden from every run. */
+function KindFilter({ hidden, onToggle }: { hidden: Set<TraceKind>; onToggle: (kind: TraceKind) => void }) {
+  const { t } = useI18n();
+  return (
+    <div role="group" aria-label={t.trace.filter} className="flex flex-wrap gap-1.5">
+      {TRACE_KINDS.map((kind) => {
+        const on = !hidden.has(kind);
+        return (
+          <button
+            key={kind}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onToggle(kind)}
+            title={t.trace.kindHelp[kind]}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.7rem] font-medium ring-1 transition focus-visible:outline-2 focus-visible:outline-focus",
+              on ? "bg-white text-ink-800 ring-ink-200" : "bg-ink-50 text-ink-400 line-through ring-ink-150",
+            )}
+          >
+            <span aria-hidden className="size-2 rounded-full" style={{ backgroundColor: on ? KIND_STYLE[kind].color : "var(--color-ink-300)" }} />
+            {t.trace.kinds[kind]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function KindLegend() {
+  const { t } = useI18n();
+  return (
+    <details className="mt-2">
+      <summary className="text-[0.7rem] font-medium text-ink-500 hover:text-ink-800">{t.trace.legend}</summary>
+      <dl className="mt-2 space-y-1.5">
+        {TRACE_KINDS.map((kind) => (
+          <div key={kind} className="flex items-start gap-2 text-xs">
+            <span
+              aria-hidden
+              className={cn("mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full [&>svg]:size-2.5", KIND_STYLE[kind].ink)}
+              style={{ backgroundColor: KIND_STYLE[kind].color }}
+            >
+              {KIND_STYLE[kind].icon}
+            </span>
+            <dt className="font-semibold text-ink-800">{t.trace.kinds[kind]}</dt>
+            <dd className="text-ink-600">{t.trace.kindHelp[kind]}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
+  );
+}
+
+/** The live run first, then the stored runs, newest first; the newest is open. */
+function RunList({ live, runs, hidden }: { live: TraceRun | null; runs: TraceRun[]; hidden: Set<TraceKind> }) {
+  return (
+    <ol className="space-y-2">
+      {live ? <RunCard key={live.id} run={live} hidden={hidden} defaultOpen live /> : null}
+      {runs.map((run, index) => (
+        <RunCard key={run.id} run={run} hidden={hidden} defaultOpen={!live && index === 0} live={false} />
+      ))}
+    </ol>
   );
 }
 
@@ -188,60 +294,10 @@ export function TracePanel({ className }: { className?: string }) {
 
   return (
     <section aria-labelledby="trace-title" className={cn("rounded-xl bg-surface shadow-card ring-1 ring-ink-200/80", className)}>
-      <header className="flex items-start gap-2 border-b border-ink-150 px-4 py-3.5">
-        <Activity aria-hidden className="mt-0.5 size-4 text-navy" />
-        <div className="min-w-0 flex-1">
-          <h2 id="trace-title" className="text-[0.95rem] font-semibold tracking-tight text-ink-950">
-            {t.trace.title}
-          </h2>
-          <p className="mt-0.5 text-xs leading-snug text-ink-500">{t.trace.subtitle}</p>
-        </div>
-        {session.runs.length > 0 ? (
-          <Button size="sm" variant="ghost" onClick={session.clearRuns} aria-label={t.trace.clear} title={t.trace.clear}>
-            <Trash2 aria-hidden className="size-4" />
-          </Button>
-        ) : null}
-      </header>
+      <TraceHeader canClear={session.runs.length > 0} onClear={session.clearRuns} />
       <div className="border-b border-ink-150 px-4 py-2.5">
-        <div role="group" aria-label={t.trace.filter} className="flex flex-wrap gap-1.5">
-          {TRACE_KINDS.map((kind) => {
-            const on = !hidden.has(kind);
-            return (
-              <button
-                key={kind}
-                type="button"
-                aria-pressed={on}
-                onClick={() => toggle(kind)}
-                title={t.trace.kindHelp[kind]}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.7rem] font-medium ring-1 transition focus-visible:outline-2 focus-visible:outline-focus",
-                  on ? "bg-white text-ink-800 ring-ink-200" : "bg-ink-50 text-ink-400 line-through ring-ink-150",
-                )}
-              >
-                <span aria-hidden className="size-2 rounded-full" style={{ backgroundColor: on ? KIND_STYLE[kind].color : "var(--color-ink-300)" }} />
-                {t.trace.kinds[kind]}
-              </button>
-            );
-          })}
-        </div>
-        <details className="mt-2">
-          <summary className="text-[0.7rem] font-medium text-ink-500 hover:text-ink-800">{t.trace.legend}</summary>
-          <dl className="mt-2 space-y-1.5">
-            {TRACE_KINDS.map((kind) => (
-              <div key={kind} className="flex items-start gap-2 text-xs">
-                <span
-                  aria-hidden
-                  className={cn("mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full [&>svg]:size-2.5", KIND_STYLE[kind].ink)}
-                  style={{ backgroundColor: KIND_STYLE[kind].color }}
-                >
-                  {KIND_STYLE[kind].icon}
-                </span>
-                <dt className="font-semibold text-ink-800">{t.trace.kinds[kind]}</dt>
-                <dd className="text-ink-600">{t.trace.kindHelp[kind]}</dd>
-              </div>
-            ))}
-          </dl>
-        </details>
+        <KindFilter hidden={hidden} onToggle={toggle} />
+        <KindLegend />
       </div>
       <div className="px-3 py-3">
         <p className="sr-only" aria-live="polite">
@@ -250,12 +306,7 @@ export function TracePanel({ className }: { className?: string }) {
         {!live && session.runs.length === 0 ? (
           <p className="px-1 py-6 text-center text-sm text-ink-500">{t.trace.empty}</p>
         ) : (
-          <ol className="space-y-2">
-            {live ? <RunCard key={live.id} run={live} hidden={hidden} defaultOpen live /> : null}
-            {session.runs.map((run, index) => (
-              <RunCard key={run.id} run={run} hidden={hidden} defaultOpen={!live && index === 0} live={false} />
-            ))}
-          </ol>
+          <RunList live={live} runs={session.runs} hidden={hidden} />
         )}
       </div>
       <p className="border-t border-ink-150 px-4 py-3 text-[0.7rem] leading-snug text-ink-500">{t.trace.footnote}</p>

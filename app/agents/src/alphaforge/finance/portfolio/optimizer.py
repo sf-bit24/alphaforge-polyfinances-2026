@@ -11,9 +11,11 @@ Le LLM ne fixe jamais un poids : il lit ce résultat. Chaque contrainte rend son
 dual (« prix » de la contrainte), réutilisé par l'explication.
 SIMULATION SEULEMENT — aucun conseil, aucun ordre.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
 import cvxpy as cp
 import numpy as np
@@ -22,21 +24,22 @@ from ..backtest.strategies import ledoit_wolf
 from ..contracts import PolicySpec
 from ..contracts.policy import CONTROL_ONLY_MEASURES
 from ..observability.telemetry import traced_tool
-from .compile import CompiledPolicy, compile_policy
+from .compile import CompiledPolicy, LinearRow, compile_policy
 from .market import ReturnWindow, returns_window
 
-P = 12
+MONTHS_PER_YEAR = 12
 ACTIVE_TOL = 1e-6
+SOLVED = ("optimal", "optimal_inaccurate")
 
 
 @dataclass
 class OptimizationResult:
-    status: str                                  # optimal | infeasible | error
+    status: str  # optimal | infeasible | error
     weights: dict[str, float]
     objective: str
     risk_measure: str
-    risk_value: float | None                     # mesure de l'objectif (mensuelle sauf VOL annualisée)
-    expected_return_ann: float | None            # μ utilisé (HYPOTHESE), pas une prévision
+    risk_value: float | None  # mesure de l'objectif (mensuelle sauf VOL annualisée)
+    expected_return_ann: float | None  # μ utilisé (HYPOTHESE), pas une prévision
     mu_source: str
     duals: dict[str, float] = field(default_factory=dict)
     active: dict[str, bool] = field(default_factory=dict)
@@ -52,197 +55,302 @@ class OptimizationResult:
 
 # --------------------------------------------------------------------------- briques convexes
 
-def _cvar_expr(port_ret, beta: float, t: int):
-    z = cp.Variable()
-    u = cp.Variable(t, nonneg=True)
-    return z + cp.sum(u) / ((1 - beta) * t), [u >= -port_ret - z]
+
+def _cvar_expr(portfolio_returns, beta: float, months: int):
+    threshold = cp.Variable()  # z : seuil de perte (VaR au niveau β à l'optimum)
+    excess = cp.Variable(months, nonneg=True)  # u_t : perte au-delà du seuil
+    return threshold + cp.sum(excess) / ((1 - beta) * months), [excess >= -portfolio_returns - threshold]
 
 
-def _drawdown_vars(port_ret, t: int):
+def _drawdown_vars(portfolio_returns, months: int):
     """Drawdown arithmétique : dd_t = max_{s≤t} C_s − C_t, avec C_0 = 0."""
-    cum = cp.cumsum(port_ret)
-    peak = cp.Variable(t)
-    cons = [peak >= cum, peak >= 0, peak[1:] >= peak[:-1]]
-    return peak - cum, cons
+    cumulative = cp.cumsum(portfolio_returns)
+    peak = cp.Variable(months)
+    constraints = [peak >= cumulative, peak >= 0, peak[1:] >= peak[:-1]]
+    return peak - cumulative, constraints
 
 
-def _cdar_expr(dd, beta: float, t: int):
-    z = cp.Variable()
-    v = cp.Variable(t, nonneg=True)
-    return z + cp.sum(v) / ((1 - beta) * t), [v >= dd - z]
+def _cdar_expr(drawdown, beta: float, months: int):
+    threshold = cp.Variable()
+    excess = cp.Variable(months, nonneg=True)
+    return threshold + cp.sum(excess) / ((1 - beta) * months), [excess >= drawdown - threshold]
 
 
-def _mu(policy: PolicySpec, win: ReturnWindow) -> tuple[np.ndarray | None, str]:
+def _cdar_of_returns(portfolio_returns, beta: float, months: int):
+    drawdown, constraints = _drawdown_vars(portfolio_returns, months)
+    cdar, cdar_constraints = _cdar_expr(drawdown, beta, months)
+    return cdar, constraints + cdar_constraints
+
+
+def _expected_returns(policy: PolicySpec, window: ReturnWindow) -> tuple[np.ndarray | None, str]:
     """μ mensuel tiré d'un prior sourcé (CMA, FP Canada…). Jamais de moyenne historique brute :
     sur 5 à 10 ans elle est dominée par quelques gagnants (biais du survivant, erreur d'estimation)."""
     if not policy.expected_returns:
         return None, "aucun : objectif min_risk, aucun rendement attendu n'est calculé"
-    missing = [a for a in win.returns.columns if a not in policy.expected_returns]
+    missing = [asset for asset in window.returns.columns if asset not in policy.expected_returns]
     if missing:
         raise ValueError(f"expected_returns incomplet : {missing}")
-    ann = np.array([policy.expected_returns[a] for a in win.returns.columns])
-    return (1 + ann) ** (1 / P) - 1, f"prior : {policy.expected_returns_source}"
+    annual = np.array([policy.expected_returns[asset] for asset in window.returns.columns])
+    return (1 + annual) ** (1 / MONTHS_PER_YEAR) - 1, f"prior : {policy.expected_returns_source}"
 
 
 # --------------------------------------------------------------------------- problème
 
-def _build(policy: PolicySpec, comp: CompiledPolicy, R: np.ndarray, mu: np.ndarray,
-           prev: np.ndarray | None, skip: set[str], prev_outside: float = 0.0):
-    t, n = R.shape
-    w = cp.Variable(n, name="w")
-    named: dict[str, cp.Constraint] = {}
-    cons = [cp.sum(w) == 1, w >= 0]
-    port = R @ w
 
-    for row in comp.rows:
+@dataclass(frozen=True)
+class _Holdings:
+    """Portefeuille détenu avant l'optimisation."""
+
+    weights: np.ndarray  # sur les actifs investissables
+    # Poids détenus hors de l'univers investissable (exclus ou retirés), forcément vendus :
+    # ils comptent dans la rotation et dans les frais.
+    outside: float
+
+    def turnover(self, weights: cp.Variable) -> cp.Expression:
+        return cp.norm1(weights - self.weights) + self.outside
+
+
+def _holdings(prev_weights: dict[str, float] | None, assets: list[str]) -> _Holdings | None:
+    if prev_weights is None:
+        return None
+    return _Holdings(
+        np.array([float(prev_weights.get(asset, 0.0)) for asset in assets]),
+        float(sum(abs(float(x)) for asset, x in prev_weights.items() if asset not in assets)),
+    )
+
+
+@dataclass
+class _RiskExpressions:
+    """Mesures de risque convexes des rendements du portefeuille sur la fenêtre."""
+
+    returns: np.ndarray  # R : mois × actifs investissables
+    weights: cp.Variable
+    beta: float
+    months: int = field(init=False)
+    portfolio: cp.Expression = field(init=False)
+    sample_cov: np.ndarray = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.months = self.returns.shape[0]
+        self.portfolio = self.returns @ self.weights
+        self.sample_cov = np.atleast_2d(np.cov(self.returns, rowvar=False, ddof=1))
+
+    def limit(self, measure: str) -> tuple[cp.Expression, list[cp.Constraint]]:
+        """Mesure d'une limite de risque : CVAR, CDAR, MDD, sinon VOL."""
+        if measure == "CVAR":
+            return _cvar_expr(self.portfolio, self.beta, self.months)
+        if measure == "CDAR":
+            return _cdar_of_returns(self.portfolio, self.beta, self.months)
+        if measure == "MDD":
+            drawdown, constraints = _drawdown_vars(self.portfolio, self.months)
+            return cp.max(drawdown), constraints
+        # VOL annualisée, covariance empirique (comme le Judge)
+        cholesky = np.linalg.cholesky(self.sample_cov + 1e-12 * np.eye(self.returns.shape[1]))
+        return np.sqrt(MONTHS_PER_YEAR) * cp.norm(cholesky.T @ self.weights), []
+
+    def objective(self, risk_measure: str) -> tuple[cp.Expression, list[cp.Constraint]]:
+        """Mesure de l'objectif : CVAR, CDAR, sinon variance Ledoit-Wolf."""
+        if risk_measure == "CVAR":
+            return _cvar_expr(self.portfolio, self.beta, self.months)
+        if risk_measure == "CDAR":
+            return _cdar_of_returns(self.portfolio, self.beta, self.months)
+        return cp.quad_form(self.weights, cp.psd_wrap(ledoit_wolf(self.returns))), []
+
+
+def _linear_constraints(rows: list[LinearRow], weights: cp.Variable, skip: frozenset[str]) -> dict[str, cp.Constraint]:
+    named: dict[str, cp.Constraint] = {}
+    for row in rows:
         if row.parent_rule_id in skip:
             continue
-        x = row.vector @ w
+        share = row.vector @ weights
         if row.hi is not None:
-            named[f"{row.rule_id}:max"] = x <= row.hi
+            named[f"{row.rule_id}:max"] = share <= row.hi
         if row.lo is not None:
-            named[f"{row.rule_id}:min"] = x >= row.lo
-
-    sample_cov = np.atleast_2d(np.cov(R, rowvar=False, ddof=1))
-    for rr in comp.risk_rows:
-        if rr.rule_id in skip or rr.measure in CONTROL_ONLY_MEASURES:
-            continue          # CVAR12M : contrôlée par le Judge, resserrer la CVaR mensuelle si besoin
-        if rr.measure == "CVAR":
-            expr, aux = _cvar_expr(port, policy.cvar_beta, t)
-        elif rr.measure == "CDAR":
-            dd, aux = _drawdown_vars(port, t)
-            expr, aux2 = _cdar_expr(dd, policy.cvar_beta, t)
-            aux += aux2
-        elif rr.measure == "MDD":
-            dd, aux = _drawdown_vars(port, t)
-            expr = cp.max(dd)
-        else:  # VOL annualisée, covariance empirique (comme le Judge)
-            expr = np.sqrt(P) * cp.norm(np.linalg.cholesky(sample_cov + 1e-12 * np.eye(n)).T @ w)
-            aux = []
-        cons += aux
-        named[f"{rr.rule_id}:max"] = expr <= rr.hi
-
-    turnover = None
-    if prev is not None:
-        # prev_outside : poids détenus hors de l'univers investissable (exclus ou retirés),
-        # forcément vendus : ils comptent dans la rotation et dans les frais.
-        turnover = cp.norm1(w - prev) + prev_outside
-        if policy.max_turnover is not None:
-            named["max_turnover:max"] = turnover <= policy.max_turnover
-    cost = (policy.transaction_cost_bps / 1e4) * turnover if turnover is not None else 0
-
-    if policy.risk_measure == "CVAR":
-        risk, aux = _cvar_expr(port, policy.cvar_beta, t)
-    elif policy.risk_measure == "CDAR":
-        dd, aux = _drawdown_vars(port, t)
-        risk, aux2 = _cdar_expr(dd, policy.cvar_beta, t)
-        aux += aux2
-    else:
-        lw = ledoit_wolf(R)
-        risk, aux = cp.quad_form(w, cp.psd_wrap(lw)), []
-    cons += aux
-
-    if policy.objective == "min_risk":
-        obj = cp.Minimize(risk + cost)
-    else:
-        lam = policy.risk_aversion
-        penalty = 0.5 * lam * risk if policy.risk_measure == "VARIANCE" else lam * risk
-        obj = cp.Maximize(mu @ w - penalty - cost)
-
-    prob = cp.Problem(obj, cons + list(named.values()))
-    return prob, w, risk, named
+            named[f"{row.rule_id}:min"] = share >= row.lo
+    return named
 
 
-def _solve(prob: cp.Problem) -> str:
+class _Problem(NamedTuple):
+    problem: cp.Problem
+    weights: cp.Variable
+    risk: cp.Expression
+    named: dict[str, cp.Constraint]  # contraintes des limites, par « rule_id:côté » (prix duaux)
+
+
+@dataclass(frozen=True)
+class _Formulation:
+    """Données fixes du problème ; chaque ``build`` en tire un problème cvxpy neuf."""
+
+    policy: PolicySpec
+    compiled: CompiledPolicy
+    returns: np.ndarray  # R : mois × actifs investissables
+    expected_returns: np.ndarray | None  # μ mensuel (prior) ; None pour min_risk
+    holdings: _Holdings | None
+
+    def build(self, skip: frozenset[str] = frozenset()) -> _Problem:
+        """Problème sans les règles de ``skip``."""
+        weights = cp.Variable(self.returns.shape[1], name="w")
+        constraints = [cp.sum(weights) == 1, weights >= 0]
+        risks = _RiskExpressions(self.returns, weights, self.policy.cvar_beta)
+        named = _linear_constraints(self.compiled.rows, weights, skip)
+        for row in self.compiled.risk_rows:
+            if row.rule_id in skip or row.measure in CONTROL_ONLY_MEASURES:
+                continue  # CVAR12M : contrôlée par le Judge, resserrer la CVaR mensuelle si besoin
+            expr, aux = risks.limit(row.measure)
+            constraints += aux
+            named[f"{row.rule_id}:max"] = expr <= row.hi
+        turnover = self.holdings.turnover(weights) if self.holdings is not None else None
+        if turnover is not None and self.policy.max_turnover is not None:
+            named["max_turnover:max"] = turnover <= self.policy.max_turnover
+        cost = (self.policy.transaction_cost_bps / 1e4) * turnover if turnover is not None else 0
+        risk, aux = risks.objective(self.policy.risk_measure)
+        constraints += aux
+        problem = cp.Problem(self._objective(weights, risk, cost), constraints + list(named.values()))
+        return _Problem(problem, weights, risk, named)
+
+    def _objective(self, weights: cp.Variable, risk: cp.Expression, cost) -> cp.Minimize | cp.Maximize:
+        if self.policy.objective == "min_risk":
+            return cp.Minimize(risk + cost)
+        aversion = self.policy.risk_aversion
+        penalty = 0.5 * aversion * risk if self.policy.risk_measure == "VARIANCE" else aversion * risk
+        return cp.Maximize(self.expected_returns @ weights - penalty - cost)
+
+    def diagnose(self) -> list[str]:
+        """Règles dont le retrait (une à une) rend le problème réalisable."""
+        rules = sorted(
+            {row.parent_rule_id for row in self.compiled.rows}
+            | {row.rule_id for row in self.compiled.risk_rows if row.measure not in CONTROL_ONLY_MEASURES}
+        )
+        culprits = []
+        for rule_id in rules:
+            problem = self.build(skip=frozenset({rule_id})).problem
+            _solve(problem)
+            if problem.status in SOLVED:
+                culprits.append(rule_id)
+        return culprits
+
+
+def _solve(problem: cp.Problem) -> str:
     for solver in ("CLARABEL", "HIGHS", "SCS"):
         if solver not in cp.installed_solvers():
             continue
         try:
-            prob.solve(solver=solver)
+            problem.solve(solver=solver)
         except (cp.error.SolverError, cp.error.DCPError, ValueError):
             continue
-        if prob.status in ("optimal", "optimal_inaccurate", "infeasible", "unbounded"):
+        if problem.status in ("optimal", "optimal_inaccurate", "infeasible", "unbounded"):
             return solver
     return "none"
 
 
-@traced_tool("portfolio.optimize", lambda r: {"status": r.status, "solver": r.solver or "",
-                                              "n_active": sum(r.active.values()), "n_obs": r.n_obs or 0})
-def optimize(policy: PolicySpec, as_of, prev_weights: dict[str, float] | None = None,
-             window: ReturnWindow | None = None) -> OptimizationResult:
+def _normalized(weights: np.ndarray) -> np.ndarray:
+    """Poids du solveur sans le bruit numérique négatif, ramenés à une somme de 1."""
+    clipped = np.clip(weights, 0, None)
+    return clipped / clipped.sum()
+
+
+def _prices(named: dict[str, cp.Constraint]) -> tuple[dict[str, float], dict[str, bool]]:
+    """Prix dual de chaque contrainte nommée (plus grand multiplicateur en valeur absolue) et contraintes actives."""
+    duals, active = {}, {}
+    for key, constraint in named.items():
+        dual = constraint.dual_value
+        price = float(np.max(np.abs(dual))) if dual is not None else 0.0
+        duals[key] = price
+        active[key] = price > ACTIVE_TOL
+    return duals, active
+
+
+def _reported_risk(policy: PolicySpec, risk: cp.Expression) -> float | None:
+    if risk.value is None:
+        return None
+    value = float(risk.value)
+    if policy.risk_measure == "VARIANCE":
+        return float(np.sqrt(max(value, 0) * MONTHS_PER_YEAR))  # volatilité annualisée (LW)
+    return value
+
+
+def _run_details(policy: PolicySpec, compiled: CompiledPolicy, window: ReturnWindow, mu_source: str) -> dict:
+    """Champs du résultat communs à l'optimum et à l'échec."""
+    return {
+        "objective": policy.objective,
+        "risk_measure": policy.risk_measure,
+        "mu_source": mu_source,
+        "warnings": list(compiled.warnings),
+        "as_of": str(window.as_of.date()),
+        "window": (str(window.start.date()), str(window.end.date())),
+        "n_obs": window.n_obs,
+        "data_version": window.data_version,
+    }
+
+
+@traced_tool(
+    "portfolio.optimize",
+    lambda result: {
+        "status": result.status,
+        "solver": result.solver or "",
+        "n_active": sum(result.active.values()),
+        "n_obs": result.n_obs or 0,
+    },
+)
+def optimize(
+    policy: PolicySpec,
+    as_of,
+    prev_weights: dict[str, float] | None = None,
+    window: ReturnWindow | None = None,
+) -> OptimizationResult:
     """Allocation qui minimise le risque (ou maximise l'utilité) sous les limites du mandat."""
     if policy.objective == "max_utility" and not policy.expected_returns:
         raise ValueError("max_utility exige expected_returns (prior sourcé, ex. CMA ou FP Canada)")
-    comp = compile_policy(policy, as_of)
-    win = window or returns_window(policy, as_of, comp.assets)
-    R = win.returns[comp.assets].to_numpy()
-    mu, mu_src = _mu(policy, win)
-    prev, prev_outside = None, 0.0
-    if prev_weights is not None:
-        prev = np.array([float(prev_weights.get(a, 0.0)) for a in comp.assets])
-        prev_outside = float(sum(abs(float(x)) for a, x in prev_weights.items() if a not in comp.assets))
-
-    base = dict(objective=policy.objective, risk_measure=policy.risk_measure, mu_source=mu_src,
-                warnings=list(comp.warnings), as_of=str(win.as_of.date()),
-                window=(str(win.start.date()), str(win.end.date())), n_obs=win.n_obs,
-                data_version=win.data_version)
-
-    prob, w, risk, named = _build(policy, comp, R, mu, prev, skip=set(), prev_outside=prev_outside)
-    solver = _solve(prob)
-    if prob.status not in ("optimal", "optimal_inaccurate") or w.value is None:
-        culprits = _diagnose(policy, comp, R, mu, prev, prev_outside)
-        return OptimizationResult(status="infeasible" if prob.status == "infeasible" else "error",
-                                  weights={}, risk_value=None, expected_return_ann=None,
-                                  infeasible_rules=culprits, solver=solver,
-                                  message=f"statut solveur : {prob.status}", **base)
-
-    wv = np.clip(w.value, 0, None)
-    wv = wv / wv.sum()
-    duals, active = {}, {}
-    for key, c in named.items():
-        d = c.dual_value
-        d = float(np.max(np.abs(d))) if d is not None else 0.0
-        duals[key] = d
-        active[key] = d > ACTIVE_TOL
-    risk_value = float(risk.value) if risk.value is not None else None
-    if policy.risk_measure == "VARIANCE" and risk_value is not None:
-        risk_value = float(np.sqrt(max(risk_value, 0) * P))   # volatilité annualisée (LW)
-    exp_ret = float((1 + mu @ wv) ** P - 1) if mu is not None else None
-    return OptimizationResult(status="optimal", weights={a: float(x) for a, x in zip(comp.assets, wv, strict=True)},
-                              risk_value=risk_value, expected_return_ann=exp_ret, duals=duals,
-                              active=active, solver=solver,
-                              message=None if prob.status == "optimal" else prob.status, **base)
-
-
-def _diagnose(policy, comp, R, mu, prev, prev_outside: float = 0.0) -> list[str]:
-    """Règles dont le retrait (une à une) rend le problème réalisable."""
-    rules = sorted({r.parent_rule_id for r in comp.rows}
-                   | {r.rule_id for r in comp.risk_rows if r.measure not in CONTROL_ONLY_MEASURES})
-    culprits = []
-    for rid in rules:
-        prob, w, _, _ = _build(policy, comp, R, mu, prev, skip={rid}, prev_outside=prev_outside)
-        _solve(prob)
-        if prob.status in ("optimal", "optimal_inaccurate"):
-            culprits.append(rid)
-    return culprits
+    compiled = compile_policy(policy, as_of)
+    window = window or returns_window(policy, as_of, compiled.assets)
+    returns = window.returns[compiled.assets].to_numpy()
+    expected, mu_source = _expected_returns(policy, window)
+    formulation = _Formulation(policy, compiled, returns, expected, _holdings(prev_weights, compiled.assets))
+    common = _run_details(policy, compiled, window, mu_source)
+    built = formulation.build()
+    solver = _solve(built.problem)
+    status = built.problem.status
+    if status not in SOLVED or built.weights.value is None:
+        culprits = formulation.diagnose()
+        return OptimizationResult(
+            status="infeasible" if status == "infeasible" else "error",
+            weights={},
+            risk_value=None,
+            expected_return_ann=None,
+            infeasible_rules=culprits,
+            solver=solver,
+            message=f"statut solveur : {status}",
+            **common,
+        )
+    weights = _normalized(built.weights.value)
+    duals, active = _prices(built.named)
+    return OptimizationResult(
+        status="optimal",
+        weights={asset: float(x) for asset, x in zip(compiled.assets, weights, strict=True)},
+        risk_value=_reported_risk(policy, built.risk),
+        expected_return_ann=float((1 + expected @ weights) ** MONTHS_PER_YEAR - 1) if expected is not None else None,
+        duals=duals,
+        active=active,
+        solver=solver,
+        message=None if status == "optimal" else status,
+        **common,
+    )
 
 
 @traced_tool("portfolio.project")
 def project(policy: PolicySpec, target: dict[str, float], as_of=None) -> dict[str, float]:
     """Poids admissibles (limites linéaires) les plus proches d'une cible, ex. 1/N ou une demande."""
-    comp = compile_policy(policy, as_of)
-    n = len(comp.assets)
-    w0 = np.array([float(target.get(a, 0.0)) for a in comp.assets])
-    w = cp.Variable(n)
-    cons = [cp.sum(w) == 1, w >= 0]
-    for row in comp.rows:
+    compiled = compile_policy(policy, as_of)
+    target_weights = np.array([float(target.get(asset, 0.0)) for asset in compiled.assets])
+    weights = cp.Variable(len(compiled.assets))
+    constraints = [cp.sum(weights) == 1, weights >= 0]
+    for row in compiled.rows:
         if row.hi is not None:
-            cons.append(row.vector @ w <= row.hi)
+            constraints.append(row.vector @ weights <= row.hi)
         if row.lo is not None:
-            cons.append(row.vector @ w >= row.lo)
-    prob = cp.Problem(cp.Minimize(cp.sum_squares(w - w0)), cons)
-    _solve(prob)
-    if w.value is None:
-        raise ValueError(f"projection impossible : {prob.status}")
-    wv = np.clip(w.value, 0, None)
-    return {a: float(x) for a, x in zip(comp.assets, wv / wv.sum(), strict=True)}
+            constraints.append(row.vector @ weights >= row.lo)
+    problem = cp.Problem(cp.Minimize(cp.sum_squares(weights - target_weights)), constraints)
+    _solve(problem)
+    if weights.value is None:
+        raise ValueError(f"projection impossible : {problem.status}")
+    return {asset: float(x) for asset, x in zip(compiled.assets, _normalized(weights.value), strict=True)}

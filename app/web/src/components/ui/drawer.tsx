@@ -5,6 +5,23 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { useI18n } from "@/lib/i18n/provider";
 import { cn } from "./cn";
 
+function DrawerBar({ label, closeLabel, onClose }: { label: string; closeLabel: string; onClose: () => void }) {
+  return (
+    <div className="flex items-center justify-end gap-3 border-b border-line px-5 py-2">
+      {/* The panel inside has its own visible title; the dialog is named by aria-label. */}
+      <p className="sr-only">{label}</p>
+      <button
+        type="button"
+        onClick={onClose}
+        className="rounded-md p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-950"
+        aria-label={closeLabel}
+      >
+        <X aria-hidden className="size-5" />
+      </button>
+    </div>
+  );
+}
+
 /**
  * A panel sliding in from the right, on the native modal <dialog> (focus trap, Escape,
  * backdrop). The trace and the full profile open in it, so no sidebar is permanent.
@@ -47,18 +64,7 @@ export function Drawer({
     >
       {open ? (
         <div className="flex h-full flex-col">
-          <div className="flex items-center justify-end gap-3 border-b border-line px-5 py-2">
-            {/* The panel inside has its own visible title; the dialog is named by aria-label. */}
-            <p className="sr-only">{label}</p>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-950"
-              aria-label={t.common.close}
-            >
-              <X aria-hidden className="size-5" />
-            </button>
-          </div>
+          <DrawerBar label={label} closeLabel={t.common.close} onClose={onClose} />
           <div className="min-h-0 flex-1 overflow-y-auto bg-page p-4">{children}</div>
         </div>
       ) : null}

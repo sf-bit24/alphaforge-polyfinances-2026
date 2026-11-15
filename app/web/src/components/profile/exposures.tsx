@@ -3,6 +3,7 @@
 import { ChartBar, Table2, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import type { Exposures, FxRate, Position, Source } from "@/lib/contract/schemas";
+import type { Dictionary } from "@/lib/i18n/dictionary";
 import { formatDate, formatMoney, formatNumber, formatPercent } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
 import { SourceLine } from "@/components/trace/trace-panel";
@@ -16,11 +17,16 @@ interface Row {
   share: number;
 }
 
+interface Group {
+  title: string;
+  rows: Row[];
+}
+
 /** Ranked rows, largest first; a long tail folds into "Other" so no row needs a new colour. */
 function rowsOf(shares: Record<string, number>, label: (name: string) => string, other: string): Row[] {
   const sorted = Object.entries(shares)
     .map(([name, share]) => ({ name: label(name), share }))
-    .sort((a, b) => b.share - a.share);
+    .sort((first, second) => second.share - first.share);
   if (sorted.length <= MAX_ROWS) return sorted;
   const head = sorted.slice(0, MAX_ROWS - 1);
   const tail = sorted.slice(MAX_ROWS - 1).reduce((sum, row) => sum + row.share, 0);
@@ -55,7 +61,7 @@ function BarList({ title, rows, total }: { title: string; rows: Row[]; total: nu
   );
 }
 
-function TableView({ groups, total }: { groups: Array<{ title: string; rows: Row[] }>; total: number }) {
+function TableView({ groups, total }: { groups: Group[]; total: number }) {
   const { t, locale } = useI18n();
   return (
     <div className="overflow-x-auto">
@@ -145,6 +151,81 @@ export function FxNote({ fx, className }: { fx: FxRate | null | undefined; class
   );
 }
 
+function exposureGroups(exposures: Exposures, t: Dictionary): Group[] {
+  const assetLabel = (name: string) => (t.assetClasses as Record<string, string>)[name] ?? name;
+  return [
+    { title: t.exposures.byAssetClass, rows: rowsOf(exposures.by_asset_class, assetLabel, t.assetClasses.other) },
+    { title: t.exposures.byCurrency, rows: rowsOf(exposures.by_currency, (name) => name, t.assetClasses.other) },
+    { title: t.exposures.byMarket, rows: rowsOf(exposures.by_market, (name) => name, t.assetClasses.other) },
+    { title: t.exposures.bySector, rows: rowsOf(exposures.by_sector, (name) => name, t.assetClasses.other) },
+  ];
+}
+
+interface ExposuresHeaderProps {
+  total: number;
+  fx: FxRate | null | undefined;
+  table: boolean;
+  onToggle: () => void;
+}
+
+function ExposuresHeader({ total, fx, table, onToggle }: ExposuresHeaderProps) {
+  const { t, locale } = useI18n();
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <p className="text-xs font-medium text-ink-500">{t.exposures.total}</p>
+        <p className="text-[2rem] leading-tight font-semibold tracking-tight text-ink-950">{formatMoney(total, locale)}</p>
+        <p className="text-xs text-ink-500">{t.exposures.computedByCode}</p>
+        <FxNote fx={fx} className="mt-0.5" />
+      </div>
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={onToggle}
+        aria-pressed={table}
+        icon={table ? <ChartBar aria-hidden className="size-4" /> : <Table2 aria-hidden className="size-4" />}
+      >
+        {table ? t.exposures.showBars : t.exposures.showTable}
+      </Button>
+    </div>
+  );
+}
+
+/** The groups as a table or as bars; nothing to show without a total. */
+function ExposuresBody({ groups, total, table }: { groups: Group[]; total: number; table: boolean }) {
+  const { t } = useI18n();
+  if (total <= 0) return <p className="text-sm text-ink-500">{t.exposures.empty}</p>;
+  if (table) return <TableView groups={groups} total={total} />;
+  return (
+    <div className="grid gap-x-10 gap-y-6 md:grid-cols-2">
+      {groups.map((group) => (
+        <BarList key={group.title} title={group.title} rows={group.rows} total={total} />
+      ))}
+    </div>
+  );
+}
+
+function TopPositions({ topPositions, positions }: { topPositions: Exposures["top_positions"]; positions: Position[] }) {
+  const { t, locale } = useI18n();
+  const byId = new Map(positions.map((position) => [position.id, position]));
+  return (
+    <div>
+      <p className="mb-2 text-xs font-semibold tracking-wide text-ink-600 uppercase">{t.exposures.topPositions}</p>
+      <ul className="flex flex-wrap gap-2">
+        {topPositions.map((top) => {
+          const position = byId.get(top.id);
+          return (
+            <li key={top.id} className="rounded-lg bg-ink-50 px-3 py-1.5 text-sm ring-1 ring-ink-150">
+              <span className="font-mono font-medium text-ink-900">{position?.ticker ?? position?.name ?? top.id}</span>
+              <span className="ml-2 text-ink-600 tabular-nums">{formatPercent(top.weight, locale, 1)}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 /** Exposures computed by code (shares of total_value_cad), with flags and sources. */
 export function ExposuresView({
   exposures,
@@ -159,63 +240,15 @@ export function ExposuresView({
   fx?: FxRate | null;
   stale?: boolean;
 }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const [table, setTable] = useState(false);
   const total = exposures.total_value_cad;
-  const assetLabel = (name: string) => (t.assetClasses as Record<string, string>)[name] ?? name;
-  const groups = [
-    { title: t.exposures.byAssetClass, rows: rowsOf(exposures.by_asset_class, assetLabel, t.assetClasses.other) },
-    { title: t.exposures.byCurrency, rows: rowsOf(exposures.by_currency, (name) => name, t.assetClasses.other) },
-    { title: t.exposures.byMarket, rows: rowsOf(exposures.by_market, (name) => name, t.assetClasses.other) },
-    { title: t.exposures.bySector, rows: rowsOf(exposures.by_sector, (name) => name, t.assetClasses.other) },
-  ];
-  const byId = new Map(positions.map((position) => [position.id, position]));
+  const groups = exposureGroups(exposures, t);
   return (
     <div className={cn("space-y-6 transition-opacity", stale && "opacity-60")}>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium text-ink-500">{t.exposures.total}</p>
-          <p className="text-[2rem] leading-tight font-semibold tracking-tight text-ink-950">{formatMoney(total, locale)}</p>
-          <p className="text-xs text-ink-500">{t.exposures.computedByCode}</p>
-          <FxNote fx={fx} className="mt-0.5" />
-        </div>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => setTable((value) => !value)}
-          aria-pressed={table}
-          icon={table ? <ChartBar aria-hidden className="size-4" /> : <Table2 aria-hidden className="size-4" />}
-        >
-          {table ? t.exposures.showBars : t.exposures.showTable}
-        </Button>
-      </div>
-      {total <= 0 ? (
-        <p className="text-sm text-ink-500">{t.exposures.empty}</p>
-      ) : table ? (
-        <TableView groups={groups} total={total} />
-      ) : (
-        <div className="grid gap-x-10 gap-y-6 md:grid-cols-2">
-          {groups.map((group) => (
-            <BarList key={group.title} title={group.title} rows={group.rows} total={total} />
-          ))}
-        </div>
-      )}
-      {exposures.top_positions.length > 0 ? (
-        <div>
-          <p className="mb-2 text-xs font-semibold tracking-wide text-ink-600 uppercase">{t.exposures.topPositions}</p>
-          <ul className="flex flex-wrap gap-2">
-            {exposures.top_positions.map((top) => {
-              const position = byId.get(top.id);
-              return (
-                <li key={top.id} className="rounded-lg bg-ink-50 px-3 py-1.5 text-sm ring-1 ring-ink-150">
-                  <span className="font-mono font-medium text-ink-900">{position?.ticker ?? position?.name ?? top.id}</span>
-                  <span className="ml-2 text-ink-600 tabular-nums">{formatPercent(top.weight, locale, 1)}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ) : null}
+      <ExposuresHeader total={total} fx={fx} table={table} onToggle={() => setTable((value) => !value)} />
+      <ExposuresBody groups={groups} total={total} table={table} />
+      {exposures.top_positions.length > 0 ? <TopPositions topPositions={exposures.top_positions} positions={positions} /> : null}
       <div>
         <p className="mb-2 text-xs font-semibold tracking-wide text-ink-600 uppercase">{t.exposures.flags}</p>
         <FlagList flags={exposures.flags} />

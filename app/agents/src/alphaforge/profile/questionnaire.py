@@ -15,11 +15,13 @@ dans le champ (``number``); le code convertit l'une en l'autre avant d'écrire l
 from __future__ import annotations
 
 import math
+import operator
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import yaml
 
@@ -50,12 +52,18 @@ NUMERIC_KINDS = ("number", "money", "percent", "scale")
 # Types de champ numériques demandés par des tranches (single_choice) plutôt qu'en saisie libre.
 CHOICE_NUMBER_TYPES = ("number", "money", "percent")
 DEFAULT_TEXT_MAX = 2000
+# Valeurs retenues quand ``questionnaire.yaml`` ne les précise pas.
+DEFAULT_THRESHOLD = 0.7
+DEFAULT_CAP = 0.95
+DEFAULT_MAX_GENERATED = 8
+DEFAULT_MAX_OPEN_QUESTIONS = 2
 OPTION_VALUE = re.compile(r"^[a-z0-9_]{1,40}$")
+_NUMERIC_COMPARISONS = (("gte", operator.ge), ("gt", operator.gt), ("lte", operator.le), ("lt", operator.lt))
 
 YAML_PATH = Path(__file__).with_name("questionnaire.yaml")
 
 
-class InvalidValue(ValueError):
+class InvalidValueError(ValueError):
     """Valeur refusée; ``reason`` est un code stable, ``params`` précise l'écart."""
 
     def __init__(self, reason: str, **params: Any):
@@ -140,9 +148,9 @@ class FieldSpec:
 
     @property
     def bounds(self) -> tuple[float | None, float | None]:
-        lo = self.min if self.min is not None else default_min(self.kind)
-        hi = self.max if self.max is not None else default_max(self.kind)
-        return lo, hi
+        low = self.min if self.min is not None else default_min(self.kind)
+        high = self.max if self.max is not None else default_max(self.kind)
+        return low, high
 
 
 @dataclass(frozen=True)
@@ -172,6 +180,85 @@ class QuestionSpec:
         raise KeyError(option)
 
 
+def _field_spec(item: dict[str, Any]) -> FieldSpec:
+    return FieldSpec(
+        id=item["id"],
+        type=item["type"],
+        weight=float(item.get("weight", 0)),
+        label=item["label"],
+        values=tuple(item.get("values") or ()),
+        min=item.get("min"),
+        max=item.get("max"),
+        unit=item.get("unit"),
+        max_length=item.get("max_length"),
+        exclusive=tuple(item.get("exclusive") or ()),
+        when=item.get("when"),
+        writable_by=tuple(item.get("writable_by") or ()),
+        computed=bool(item.get("computed", False)),
+        summary=bool(item.get("summary", False)),
+        fallback=item.get("fallback"),
+        choices=item.get("choices"),
+    )
+
+
+def _load_fields(items: list[dict[str, Any]]) -> dict[str, FieldSpec]:
+    fields: dict[str, FieldSpec] = {}
+    for item in items:
+        spec = _field_spec(item)
+        if spec.dimension not in DIMENSIONS:
+            raise ValueError(f"field {spec.id}: unknown dimension")
+        if spec.type not in TYPE_TO_KIND:
+            raise ValueError(f"field {spec.id}: unknown type {spec.type}")
+        if spec.id in fields:
+            raise ValueError(f"duplicate field {spec.id}")
+        if spec.choices is not None:
+            _check_field_choices(spec)
+        fields[spec.id] = spec
+    return fields
+
+
+def _check_question_options(question_id: str, kind: str, spec: FieldSpec, options: tuple[dict[str, Any], ...]) -> None:
+    """Le genre de la question convient au type du champ, et ses options aux valeurs du champ."""
+    if kind == "single_choice" and spec.type in CHOICE_NUMBER_TYPES:
+        _check_number_options(question_id, spec, options)
+    elif kind != spec.kind:
+        raise ValueError(f"question {question_id}: kind {kind} does not match field type {spec.type}")
+    elif kind in CHOICE_KINDS and {option["value"] for option in options} != set(spec.value_ids):
+        raise ValueError(f"question {question_id}: options must match the field values")
+
+
+def _load_questions(items: list[dict[str, Any]], fields: dict[str, FieldSpec]) -> list[QuestionSpec]:
+    questions: list[QuestionSpec] = []
+    seen: set[str] = set()
+    for item in items:
+        spec = fields[item["field"]]
+        kind = item["kind"]
+        options = tuple(item.get("options") or spec.values)
+        _check_question_options(item["id"], kind, spec, options)
+        if item["id"] in seen:
+            raise ValueError(f"duplicate question {item['id']}")
+        seen.add(item["id"])
+        questions.append(
+            QuestionSpec(
+                id=item["id"],
+                field=spec,
+                kind=kind,
+                prompt=item["prompt"],
+                help=item.get("help"),
+                options=options if kind in CHOICE_KINDS else (),
+                when=item.get("when"),
+                required=bool(item.get("required", True)),
+            )
+        )
+    return questions
+
+
+def _check_open_fields(followups: dict[str, Any], fields: dict[str, FieldSpec]) -> None:
+    for field_id in followups.get("open_fields") or ():
+        if field_id not in fields or fields[field_id].type != "text":
+            raise ValueError(f"followups.open_fields: {field_id} is not a text field")
+
+
 @dataclass
 class Questionnaire:
     version: str
@@ -185,11 +272,11 @@ class Questionnaire:
 
     @property
     def max_generated(self) -> int:
-        return int(self.followups.get("max_generated", 8))
+        return int(self.followups.get("max_generated", DEFAULT_MAX_GENERATED))
 
     @property
     def max_open_questions(self) -> int:
-        return int(self.followups.get("max_open_questions", 2))
+        return int(self.followups.get("max_open_questions", DEFAULT_MAX_OPEN_QUESTIONS))
 
     @property
     def open_fields(self) -> tuple[str, ...]:
@@ -198,72 +285,15 @@ class Questionnaire:
     # ------------------------------------------------------------------ chargement
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> Questionnaire:
-        fields: dict[str, FieldSpec] = {}
-        for item in raw["fields"]:
-            spec = FieldSpec(
-                id=item["id"],
-                type=item["type"],
-                weight=float(item.get("weight", 0)),
-                label=item["label"],
-                values=tuple(item.get("values") or ()),
-                min=item.get("min"),
-                max=item.get("max"),
-                unit=item.get("unit"),
-                max_length=item.get("max_length"),
-                exclusive=tuple(item.get("exclusive") or ()),
-                when=item.get("when"),
-                writable_by=tuple(item.get("writable_by") or ()),
-                computed=bool(item.get("computed", False)),
-                summary=bool(item.get("summary", False)),
-                fallback=item.get("fallback"),
-                choices=item.get("choices"),
-            )
-            if spec.dimension not in DIMENSIONS:
-                raise ValueError(f"field {spec.id}: unknown dimension")
-            if spec.type not in TYPE_TO_KIND:
-                raise ValueError(f"field {spec.id}: unknown type {spec.type}")
-            if spec.id in fields:
-                raise ValueError(f"duplicate field {spec.id}")
-            if spec.choices is not None:
-                _check_field_choices(spec)
-            fields[spec.id] = spec
-        questions: list[QuestionSpec] = []
-        seen: set[str] = set()
-        for item in raw["questions"]:
-            spec_field = fields[item["field"]]
-            kind = item["kind"]
-            options = tuple(item.get("options") or spec_field.values)
-            if kind == "single_choice" and spec_field.type in CHOICE_NUMBER_TYPES:
-                _check_number_options(item["id"], spec_field, options)
-            elif kind != spec_field.kind:
-                raise ValueError(f"question {item['id']}: kind {kind} does not match field type {spec_field.type}")
-            elif kind in CHOICE_KINDS:
-                if {o["value"] for o in options} != set(spec_field.value_ids):
-                    raise ValueError(f"question {item['id']}: options must match the field values")
-            if item["id"] in seen:
-                raise ValueError(f"duplicate question {item['id']}")
-            seen.add(item["id"])
-            questions.append(
-                QuestionSpec(
-                    id=item["id"],
-                    field=spec_field,
-                    kind=kind,
-                    prompt=item["prompt"],
-                    help=item.get("help"),
-                    options=options if kind in CHOICE_KINDS else (),
-                    when=item.get("when"),
-                    required=bool(item.get("required", True)),
-                )
-            )
+        fields = _load_fields(raw["fields"])
+        questions = _load_questions(raw["questions"], fields)
         completeness = raw.get("completeness") or {}
         followups = raw.get("followups") or {}
-        for field_id in followups.get("open_fields") or ():
-            if field_id not in fields or fields[field_id].type != "text":
-                raise ValueError(f"followups.open_fields: {field_id} is not a text field")
+        _check_open_fields(followups, fields)
         return cls(
             version=str(raw["version"]),
-            threshold=float(completeness.get("threshold", 0.7)),
-            cap=float(completeness.get("cap", 0.95)),
+            threshold=float(completeness.get("threshold", DEFAULT_THRESHOLD)),
+            cap=float(completeness.get("cap", DEFAULT_CAP)),
             fields=fields,
             questions=questions,
             rules=raw.get("rules") or {},
@@ -304,7 +334,7 @@ class Questionnaire:
         return None
 
     def applicable_questions(self, values: dict[str, Any]) -> list[QuestionSpec]:
-        return [q for q in self.questions if self.is_question_applicable(q, values)]
+        return [question for question in self.questions if self.is_question_applicable(question, values)]
 
     # ------------------------------------------------------------------ rendu
     def render(self, question: QuestionSpec, locale: str) -> dict[str, Any]:
@@ -315,7 +345,9 @@ class Questionnaire:
             kind=question.kind,
             prompt=localized(question.prompt, locale) or "",
             help_text=localized(question.help, locale),
-            options=[{"value": o["value"], "label": localized(o["label"], locale)} for o in question.options],
+            options=[
+                {"value": option["value"], "label": localized(option["label"], locale)} for option in question.options
+            ],
             required=question.required,
             locale=locale,
         )
@@ -358,8 +390,8 @@ def _is_number(value: Any) -> bool:
 
 
 def _within(spec: FieldSpec, number: float) -> bool:
-    lo, hi = spec.bounds
-    return (lo is None or number >= lo) and (hi is None or number <= hi)
+    low, high = spec.bounds
+    return (low is None or number >= low) and (high is None or number <= high)
 
 
 def _check_options_ids(where: str, options: tuple[dict[str, Any], ...] | list[dict[str, Any]]) -> None:
@@ -393,16 +425,16 @@ def _check_field_choices(spec: FieldSpec) -> None:
     tranches = config.get("tranches") or []
     _check_options_ids(where, tranches)
     for item in tranches:
-        lo, hi = item.get("min"), item.get("max")
-        if not _is_number(lo) or not _within(spec, lo) or (hi is not None and (not _is_number(hi) or hi < lo)):
+        low, high = item.get("min"), item.get("max")
+        if not _is_number(low) or not _within(spec, low) or (high is not None and (not _is_number(high) or high < low)):
             raise ValueError(f"{where}: tranche {item['value']} needs min <= max within the field bounds")
     if config.get("relative_to"):
         shares = config.get("shares") or []
-        if not shares or any(not _is_number(s) or s <= 0 for s in shares) or sorted(shares) != list(shares):
+        if not shares or any(not _is_number(share) or share <= 0 for share in shares) or sorted(shares) != list(shares):
             raise ValueError(f"{where}: shares must be increasing positive numbers")
 
 
-def _tranche(spec: FieldSpec, item: dict[str, Any], locale: str) -> dict[str, Any]:
+def _tranche(item: dict[str, Any], locale: str) -> dict[str, Any]:
     number = item.get("number", item.get("min"))
     return {
         "value": item["value"],
@@ -422,70 +454,98 @@ def _share_id(share: float) -> str:
     return f"{round(share * 100, 4):g}".replace(".", "_")
 
 
+class _Cut(NamedTuple):
+    """Borne entre deux tranches relatives : part du montant de référence, et montant en dollars."""
+
+    share: float
+    amount: int
+
+
+def _relative_cuts(spec: FieldSpec, config: dict[str, Any], values: dict[str, Any]) -> list[_Cut] | None:
+    base = values.get(config["relative_to"])
+    if not _is_number(base) or base <= 0:
+        return None
+    shares = [float(share) for share in config["shares"]]
+    amounts = [int(round(share * base)) for share in shares]
+    if amounts[0] <= 0 or any(upper <= lower for lower, upper in zip(amounts, amounts[1:], strict=False)):
+        return None
+    if not _within(spec, amounts[-1]):
+        return None
+    return [_Cut(share, amount) for share, amount in zip(shares, amounts, strict=True)]
+
+
+def _tranche_below(cut: _Cut, locale: str) -> dict[str, Any]:
+    amount, percent = format_money(cut.amount, locale), _share_text(cut.share, locale)
+    label = (
+        f"Less than {amount} ({percent}% of the amount)"
+        if locale == "en"
+        else f"Moins de {amount} ({percent} % du montant)"
+    )
+    return {"value": f"lt{_share_id(cut.share)}pct", "label": label, "number": 0, "min": 0, "max": cut.amount}
+
+
+def _tranche_between(lower: _Cut, upper: _Cut, locale: str) -> dict[str, Any]:
+    low, high = format_money(lower.amount, locale), format_money(upper.amount, locale)
+    low_percent, high_percent = _share_text(lower.share, locale), _share_text(upper.share, locale)
+    label = (
+        f"{low} to less than {high} ({low_percent} to {high_percent}%)"
+        if locale == "en"
+        else f"De {low} à moins de {high} ({low_percent} à {high_percent} %)"
+    )
+    return {
+        "value": f"{_share_id(lower.share)}to{_share_id(upper.share)}pct",
+        "label": label,
+        "number": lower.amount,
+        "min": lower.amount,
+        "max": upper.amount,
+    }
+
+
+def _tranche_from(cut: _Cut, locale: str) -> dict[str, Any]:
+    amount, percent = format_money(cut.amount, locale), _share_text(cut.share, locale)
+    label = f"{amount} or more ({percent}% or more)" if locale == "en" else f"{amount} ou plus ({percent} % ou plus)"
+    return {
+        "value": f"{_share_id(cut.share)}pct_plus",
+        "label": label,
+        "number": cut.amount,
+        "min": cut.amount,
+        "max": None,
+    }
+
+
 def _relative_tranches(
     spec: FieldSpec, config: dict[str, Any], values: dict[str, Any], locale: str
 ) -> list[dict[str, Any]] | None:
     """Tranches en dollars, parts du montant de référence; ``None`` si ce montant est inconnu ou trop petit."""
-    base = values.get(config["relative_to"])
-    if not _is_number(base) or base <= 0:
+    cuts = _relative_cuts(spec, config, values)
+    if cuts is None:
         return None
-    shares = [float(s) for s in config["shares"]]
-    cuts = [int(round(s * base)) for s in shares]
-    if cuts[0] <= 0 or any(b <= a for a, b in zip(cuts, cuts[1:], strict=False)):
-        return None
-    if not _within(spec, cuts[-1]):
-        return None
-    en = locale == "en"
-    of_amount = " of the amount" if en else " du montant"
-    pct = "%" if en else " %"
-    out = [
-        {
-            "value": f"lt{_share_id(shares[0])}pct",
-            "label": (
-                f"Less than {format_money(cuts[0], locale)} ({_share_text(shares[0], locale)}{pct}{of_amount})"
-                if en
-                else f"Moins de {format_money(cuts[0], locale)} ({_share_text(shares[0], locale)}{pct}{of_amount})"
-            ),
-            "number": 0,
-            "min": 0,
-            "max": cuts[0],
-        }
+    return [
+        _tranche_below(cuts[0], locale),
+        *(_tranche_between(lower, upper, locale) for lower, upper in zip(cuts, cuts[1:], strict=False)),
+        _tranche_from(cuts[-1], locale),
     ]
-    for (s_lo, s_hi), (lo, hi) in zip(
-        zip(shares, shares[1:], strict=False), zip(cuts, cuts[1:], strict=False), strict=False
-    ):
-        a, b = _share_text(s_lo, locale), _share_text(s_hi, locale)
-        out.append(
-            {
-                "value": f"{_share_id(s_lo)}to{_share_id(s_hi)}pct",
-                "label": (
-                    f"{format_money(lo, locale)} to less than {format_money(hi, locale)} ({a} to {b}{pct})"
-                    if en
-                    else f"De {format_money(lo, locale)} à moins de {format_money(hi, locale)} ({a} à {b}{pct})"
-                ),
-                "number": lo,
-                "min": lo,
-                "max": hi,
-            }
-        )
-    last = _share_text(shares[-1], locale)
-    out.append(
-        {
-            "value": f"{_share_id(shares[-1])}pct_plus",
-            "label": (
-                f"{format_money(cuts[-1], locale)} or more ({last}{pct} or more)"
-                if en
-                else f"{format_money(cuts[-1], locale)} ou plus ({last}{pct} ou plus)"
-            ),
-            "number": cuts[-1],
-            "min": cuts[-1],
-            "max": None,
-        }
-    )
-    return out
 
 
-def numeric_choices(q: Questionnaire, field_id: str, values: dict[str, Any], locale: str) -> list[dict[str, Any]]:
+def _within_band(
+    tranches: list[dict[str, Any]], within: dict[str, Any], values: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Tranches comprises dans la bande ``within`` déjà connue; toutes quand elle ne l'est pas."""
+    band = values.get(within["field"])
+    limits = (within.get("ranges") or {}).get(band) if band is not None else None
+    if not limits:
+        return tranches
+    low, high = limits
+    return [
+        tranche
+        for tranche in tranches
+        if tranche["min"] >= low and (high is None or (tranche["max"] is not None and tranche["max"] <= high))
+    ]
+
+
+def numeric_choices(
+    questionnaire: Questionnaire, field_id: str, values: dict[str, Any], locale: str
+) -> list[dict[str, Any]]:
     """Tranches d'un champ ``number``, ``money`` ou ``percent`` : ``value`` (identifiant), ``label``, ``number``
     (la valeur écrite dans le champ, la plus prudente de la tranche), ``min`` et ``max`` (bornes, ``max`` nul
     sans borne haute). Fonction pure : mêmes tranches pour les mêmes valeurs confirmées.
@@ -494,27 +554,19 @@ def numeric_choices(q: Questionnaire, field_id: str, values: dict[str, Any], loc
     absolues, filtrées par la bande ``within`` déjà connue), puis les options de la question de base du champ.
     Liste vide pour un champ qui n'est pas numérique ou qui n'a aucune tranche.
     """
-    spec = q.fields.get(field_id)
+    spec = questionnaire.fields.get(field_id)
     if spec is None or spec.type not in CHOICE_NUMBER_TYPES:
         return []
     config = spec.choices
     if config:
         tranches = _relative_tranches(spec, config, values, locale) if config.get("relative_to") else None
         if tranches is None:
-            tranches = [_tranche(spec, item, locale) for item in config.get("tranches") or []]
+            tranches = [_tranche(item, locale) for item in config.get("tranches") or []]
         within = config.get("within")
-        if within:
-            band = values.get(within["field"])
-            limits = (within.get("ranges") or {}).get(band) if band is not None else None
-            if limits:
-                lo, hi = limits
-                tranches = [
-                    t for t in tranches if t["min"] >= lo and (hi is None or (t["max"] is not None and t["max"] <= hi))
-                ]
-        return tranches
-    question = q.question_for_field(field_id)
+        return _within_band(tranches, within, values) if within else tranches
+    question = questionnaire.question_for_field(field_id)
     if question is not None and question.numeric_choice:
-        return [_tranche(spec, item, locale) for item in question.options]
+        return [_tranche(item, locale) for item in question.options]
     return []
 
 
@@ -537,7 +589,7 @@ def unit_for(kind: str, spec: FieldSpec | None, locale: str) -> str | None:
     return None
 
 
-def render_question(
+def render_question(  # noqa: PLR0913 - un argument par champ de la question; a1.py l'appelle par mots-clés
     *,
     question_id: str,
     source: str,
@@ -554,10 +606,10 @@ def render_question(
     unit: str | None = None,
 ) -> dict[str, Any]:
     if kind in NUMERIC_KINDS:
-        lo = minimum if minimum is not None else (field.min if field and field.min is not None else default_min(kind))
-        hi = maximum if maximum is not None else (field.max if field and field.max is not None else default_max(kind))
+        low = minimum if minimum is not None else (field.min if field and field.min is not None else default_min(kind))
+        high = maximum if maximum is not None else (field.max if field and field.max is not None else default_max(kind))
     else:
-        lo = hi = None
+        low = high = None
     return {
         "id": question_id,
         "source": source,
@@ -566,8 +618,8 @@ def render_question(
         "prompt": prompt,
         "help": help_text,
         "options": options if kind in CHOICE_KINDS else [],
-        "min": _plain_number(lo),
-        "max": _plain_number(hi),
+        "min": _plain_number(low),
+        "max": _plain_number(high),
         "unit": unit if unit is not None else unit_for(kind, field, locale),
         "required": required,
         "field": field.id if field else None,
@@ -582,30 +634,98 @@ def _plain_number(value: float | None) -> float | int | None:
     return float(value)
 
 
+def _parse_number_text(value: str) -> float:
+    """Nombre saisi en texte (« 1 000,50 $ », « 12,5 % ») : espaces, ``$`` et ``%`` ignorés."""
+    # Espaces insécables U+00A0 et U+202F de la typographie française, puis espaces ordinaires.
+    text = value.strip().replace("\u00a0", "").replace("\u202f", "").replace(" ", "")
+    text = text.replace("$", "").replace("%", "")
+    # Une seule virgule sans point est une virgule décimale; sinon les virgules séparent les milliers.
+    text = text.replace(",", ".") if text.count(",") == 1 and "." not in text else text.replace(",", "")
+    try:
+        return float(text)
+    except ValueError as exc:
+        raise InvalidValueError("not_a_number") from exc
+
+
 def _to_number(value: Any) -> float:
     if isinstance(value, bool):
-        raise InvalidValue("not_a_number")
+        raise InvalidValueError("not_a_number")
     if isinstance(value, int | float):
         number = float(value)
     elif isinstance(value, str):
-        text = value.strip().replace(" ", "").replace(" ", "").replace(" ", "")
-        text = text.replace("$", "").replace("%", "")
-        if text.count(",") == 1 and "." not in text:
-            text = text.replace(",", ".")
-        else:
-            text = text.replace(",", "")
-        try:
-            number = float(text)
-        except ValueError as exc:
-            raise InvalidValue("not_a_number") from exc
+        number = _parse_number_text(value)
     else:
-        raise InvalidValue("not_a_number")
+        raise InvalidValueError("not_a_number")
     if not math.isfinite(number):
-        raise InvalidValue("not_a_number")
+        raise InvalidValueError("not_a_number")
     return number
 
 
-def validate_value(
+def _validate_single_choice(value: Any, options: tuple[str, ...] | list[str]) -> str:
+    if not isinstance(value, str):
+        raise InvalidValueError("not_a_string")
+    if value not in options:
+        raise InvalidValueError("not_in_options", allowed=list(options))
+    return value
+
+
+def _validate_multi_choice(
+    value: Any, options: tuple[str, ...] | list[str], exclusive: tuple[str, ...] | list[str], *, required: bool
+) -> list[str]:
+    """Options choisies, remises dans l'ordre des options de la question."""
+    chosen = [value] if isinstance(value, str) else value
+    if not isinstance(chosen, list) or not all(isinstance(option, str) for option in chosen):
+        raise InvalidValueError("not_a_list")
+    if not chosen:
+        if required:
+            raise InvalidValueError("empty")
+        return []
+    if len(set(chosen)) != len(chosen):
+        raise InvalidValueError("duplicate")
+    unknown = [option for option in chosen if option not in options]
+    if unknown:
+        raise InvalidValueError("not_in_options", allowed=list(options), unknown=unknown)
+    if len(chosen) > 1 and any(option in exclusive for option in chosen):
+        raise InvalidValueError("exclusive", exclusive=list(exclusive))
+    rank = {option: index for index, option in enumerate(options)}
+    return sorted(chosen, key=lambda option: rank[option])
+
+
+def _validate_boolean(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lower() in {"true", "false"}:
+        return value.strip().lower() == "true"
+    raise InvalidValueError("not_boolean")
+
+
+def _validate_number(kind: str, value: Any, minimum: float | None, maximum: float | None) -> float | int:
+    number = _to_number(value)
+    if kind == "scale" and not number.is_integer():
+        raise InvalidValueError("not_integer")
+    if minimum is not None and number < minimum:
+        raise InvalidValueError("below_min", min=minimum)
+    if maximum is not None and number > maximum:
+        raise InvalidValueError("above_max", max=maximum)
+    if kind == "scale" or number.is_integer():
+        return int(number)
+    return round(number, 2)
+
+
+def _validate_text(value: Any, max_length: int, *, required: bool) -> str | None:
+    if not isinstance(value, str):
+        raise InvalidValueError("not_a_string")
+    text = value.strip()
+    if not text:
+        if required:
+            raise InvalidValueError("required")
+        return None
+    if len(text) > max_length:
+        raise InvalidValueError("too_long", max=max_length)
+    return text
+
+
+def validate_value(  # noqa: PLR0913 - signature gardée : a1.py et les tests l'appellent par mots-clés
     kind: str,
     value: Any,
     *,
@@ -616,65 +736,46 @@ def validate_value(
     max_length: int = DEFAULT_TEXT_MAX,
     required: bool = True,
 ) -> Any:
-    """Valide et normalise une valeur selon le genre de question; lève ``InvalidValue``."""
+    """Valide et normalise une valeur selon le genre de question; lève ``InvalidValueError``."""
     if value is None or (isinstance(value, str) and not value.strip() and kind != "text"):
         if required:
-            raise InvalidValue("required")
+            raise InvalidValueError("required")
         return None
     if kind == "single_choice":
-        if not isinstance(value, str):
-            raise InvalidValue("not_a_string")
-        if value not in options:
-            raise InvalidValue("not_in_options", allowed=list(options))
-        return value
+        return _validate_single_choice(value, options)
     if kind == "multi_choice":
-        if isinstance(value, str):
-            value = [value]
-        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
-            raise InvalidValue("not_a_list")
-        if not value:
-            if required:
-                raise InvalidValue("empty")
-            return []
-        if len(set(value)) != len(value):
-            raise InvalidValue("duplicate")
-        unknown = [v for v in value if v not in options]
-        if unknown:
-            raise InvalidValue("not_in_options", allowed=list(options), unknown=unknown)
-        if len(value) > 1 and any(v in exclusive for v in value):
-            raise InvalidValue("exclusive", exclusive=list(exclusive))
-        order = {v: i for i, v in enumerate(options)}
-        return sorted(value, key=lambda v: order[v])
+        return _validate_multi_choice(value, options, exclusive, required=required)
     if kind == "boolean":
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str) and value.strip().lower() in {"true", "false"}:
-            return value.strip().lower() == "true"
-        raise InvalidValue("not_boolean")
+        return _validate_boolean(value)
     if kind in NUMERIC_KINDS:
-        number = _to_number(value)
-        if kind == "scale":
-            if not number.is_integer():
-                raise InvalidValue("not_integer")
-        if minimum is not None and number < minimum:
-            raise InvalidValue("below_min", min=minimum)
-        if maximum is not None and number > maximum:
-            raise InvalidValue("above_max", max=maximum)
-        if kind == "scale" or number.is_integer():
-            return int(number)
-        return round(number, 2)
+        return _validate_number(kind, value, minimum, maximum)
     if kind == "text":
-        if not isinstance(value, str):
-            raise InvalidValue("not_a_string")
-        text = value.strip()
-        if not text:
-            if required:
-                raise InvalidValue("required")
-            return None
-        if len(text) > max_length:
-            raise InvalidValue("too_long", max=max_length)
-        return text
-    raise InvalidValue("unknown_kind")
+        return _validate_text(value, max_length, required=required)
+    raise InvalidValueError("unknown_kind")
+
+
+def _compare_as_numbers(compare: Callable[[float, float], bool], value: Any, bound: Any) -> bool:
+    """Comparaison numérique; fausse quand l'une des deux valeurs n'est pas un nombre."""
+    try:
+        return bool(compare(float(value), float(bound)))
+    except (TypeError, ValueError):
+        return False
+
+
+def _field_matches(value: Any, condition: dict[str, Any]) -> bool:
+    """Condition simple (``in``, ``eq``, ``gte``...) sur la valeur connue d'un champ."""
+    if "in" in condition:
+        return value in condition["in"]
+    if "not_in" in condition:
+        return value not in condition["not_in"]
+    if "eq" in condition:
+        return value == condition["eq"]
+    if "contains" in condition:
+        return isinstance(value, list) and condition["contains"] in value
+    for name, compare in _NUMERIC_COMPARISONS:
+        if name in condition:
+            return _compare_as_numbers(compare, value, condition[name])
+    raise ValueError(f"unsupported condition {condition!r}")
 
 
 def evaluate(condition: dict[str, Any] | None, values: dict[str, Any]) -> bool:
@@ -686,34 +787,15 @@ def evaluate(condition: dict[str, Any] | None, values: dict[str, Any]) -> bool:
     if not condition:
         return True
     if "all" in condition:
-        return all(evaluate(c, values) for c in condition["all"])
+        return all(evaluate(part, values) for part in condition["all"])
     if "any" in condition:
-        return any(evaluate(c, values) for c in condition["any"])
+        return any(evaluate(part, values) for part in condition["any"])
     if "not" in condition:
         return not evaluate(condition["not"], values)
     value = values.get(condition["field"])
     if value is None:
         return False
-    if "in" in condition:
-        return value in condition["in"]
-    if "not_in" in condition:
-        return value not in condition["not_in"]
-    if "eq" in condition:
-        return value == condition["eq"]
-    if "contains" in condition:
-        return isinstance(value, list) and condition["contains"] in value
-    for op, test in (
-        ("gte", lambda a, b: a >= b),
-        ("gt", lambda a, b: a > b),
-        ("lte", lambda a, b: a <= b),
-        ("lt", lambda a, b: a < b),
-    ):
-        if op in condition:
-            try:
-                return bool(test(float(value), float(condition[op])))
-            except (TypeError, ValueError):
-                return False
-    raise ValueError(f"unsupported condition {condition!r}")
+    return _field_matches(value, condition)
 
 
 def format_field_value(spec: FieldSpec, value: Any, locale: str) -> str:
@@ -722,7 +804,7 @@ def format_field_value(spec: FieldSpec, value: Any, locale: str) -> str:
     if spec.type == "enum":
         return spec.value_label(value, locale)
     if spec.type == "multi_enum":
-        return ", ".join(spec.value_label(v, locale) for v in value) if value else "—"
+        return ", ".join(spec.value_label(option, locale) for option in value) if value else "—"
     if spec.type == "boolean":
         return ("Yes" if value else "No") if locale == "en" else ("Oui" if value else "Non")
     if spec.type == "money":
@@ -737,12 +819,13 @@ def format_field_value(spec: FieldSpec, value: Any, locale: str) -> str:
     return str(value)
 
 
+# En français, les milliers sont séparés par une espace fine insécable (U+202F) et la virgule est décimale.
 def _number_text(value: Any, locale: str) -> str:
     number = float(value)
     text = f"{int(number):,}" if number.is_integer() else f"{number:,.2f}"
     if locale == "en":
         return text
-    return text.replace(",", " ").replace(".", ",")
+    return text.replace(",", "\u202f").replace(".", ",")
 
 
 def format_money(value: Any, locale: str) -> str:
@@ -750,7 +833,7 @@ def format_money(value: Any, locale: str) -> str:
     if locale == "en":
         return f"${number:,.0f}" if number.is_integer() else f"${number:,.2f}"
     text = f"{number:,.0f}" if number.is_integer() else f"{number:,.2f}"
-    return text.replace(",", " ").replace(".", ",") + " $"
+    return text.replace(",", "\u202f").replace(".", ",") + " $"
 
 
 @lru_cache(maxsize=1)

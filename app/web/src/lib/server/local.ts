@@ -12,18 +12,41 @@ const START = {
   portfolio: "cd app/agents && AGENT_ROLE=portfolio PORT=8081 ALPHAFORGE_STORE=local uv run --group finance python main.py",
 } as const;
 
+type LocalRole = keyof typeof START;
+
 interface LocalOptions {
-  role?: keyof typeof START;
+  stream: boolean;
+  signal: AbortSignal;
+  role?: LocalRole;
   timeoutMs?: number;
+}
+
+/** Why fetch failed: Node's fetch puts the network error (ECONNREFUSED...) in `cause`. */
+function failureReason(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  return error.cause instanceof Error ? error.cause.message : error.message;
+}
+
+/** The runtime did not answer: how to start it, and which URL variable to check. */
+function unreachable(url: string, error: unknown, role: LocalRole): GatewayError {
+  const reason = failureReason(error);
+  const urlVariable = role === "profile" ? "LOCAL_AGENT_URL" : "LOCAL_PORTFOLIO_URL";
+  return new GatewayError(
+    "internal",
+    {
+      fr: `Runtime local injoignable à ${url} (${reason}). Lancez-le : ${START[role]}. Il n'écoute que sur 127.0.0.1 : évitez localhost dans ${urlVariable}.`,
+      en: `Local runtime unreachable at ${url} (${reason}). Start it: ${START[role]}. It listens on 127.0.0.1 only: avoid localhost in ${urlVariable}.`,
+    },
+    502,
+    { mode: "local", url, role },
+  );
 }
 
 /** `local` mode: POST the request to the Python runtime started on this machine. */
 export async function invokeLocal(
   url: string,
   request: AgentRequest | PortfolioBuildRequest,
-  stream: boolean,
-  signal: AbortSignal,
-  { role = "profile", timeoutMs = TIMEOUT_MS }: LocalOptions = {},
+  { stream, signal, role = "profile", timeoutMs = TIMEOUT_MS }: LocalOptions,
 ): Promise<Upstream> {
   let response: Response;
   try {
@@ -39,16 +62,7 @@ export async function invokeLocal(
     });
   } catch (error) {
     if (signal.aborted) throw error;
-    const reason = error instanceof Error ? (error.cause instanceof Error ? error.cause.message : error.message) : String(error);
-    throw new GatewayError(
-      "internal",
-      {
-        fr: `Runtime local injoignable à ${url} (${reason}). Lancez-le : ${START[role]}. Il n'écoute que sur 127.0.0.1 : évitez localhost dans ${role === "profile" ? "LOCAL_AGENT_URL" : "LOCAL_PORTFOLIO_URL"}.`,
-        en: `Local runtime unreachable at ${url} (${reason}). Start it: ${START[role]}. It listens on 127.0.0.1 only: avoid localhost in ${role === "profile" ? "LOCAL_AGENT_URL" : "LOCAL_PORTFOLIO_URL"}.`,
-      },
-      502,
-      { mode: "local", url, role },
-    );
+    throw unreachable(url, error, role);
   }
 
   const type = response.headers.get("content-type") ?? "";

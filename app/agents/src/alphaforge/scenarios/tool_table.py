@@ -45,6 +45,7 @@ import io
 import json
 import re
 import threading
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -88,7 +89,7 @@ VALIDATED_HORIZONS_FALLBACK = (1, 3, 5, 10)
 VALIDATED_BASES = ("nominal",)
 # Horizons validés mais dont la calibration se dégrade (volet C) : mise en garde forte.
 DEGRADED_HORIZONS = (5, 10)
-_REL_PATH = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$")
+_RELATIVE_PATH = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$")
 # Noms lisibles des modèles du job (configs/*.yaml), utilisés si le manifeste n'en donne pas.
 MODEL_NAMES_FR = {
     "sbb": "bootstrap stationnaire par blocs",
@@ -184,8 +185,8 @@ class ScenarioTable:
         config = self.manifest.get("config") if isinstance(self.manifest.get("config"), dict) else {}
         runtime = config.get("runtime") if isinstance(config.get("runtime"), dict) else {}
         listed = self.manifest.get("models") or runtime.get("models") or config.get("models") or []
-        declared = [m.get("model_id") if isinstance(m, dict) else str(m) for m in listed]
-        return [m for m in declared if m in found] + [m for m in found if m not in declared]
+        declared = [entry.get("model_id") if isinstance(entry, dict) else str(entry) for entry in listed]
+        return [model for model in declared if model in found] + [model for model in found if model not in declared]
 
     def _declared_display(self) -> dict[str, str]:
         out = {}
@@ -220,7 +221,7 @@ class ScenarioTable:
         for model in self.models:
             if self.display(model) == "default":
                 return model
-        visible = [m for m in self.models if self.display(m) != "hidden"]
+        visible = [model for model in self.models if self.display(model) != "hidden"]
         return visible[0] if visible else None
 
     def validated_horizons(self, model_id: str) -> tuple[list[int], bool]:
@@ -228,7 +229,7 @@ class ScenarioTable:
         info = self.model_info(model_id)
         for value in (info.get("validated_horizons"), self.manifest.get("validated_horizons")):
             if isinstance(value, list) and value:
-                return sorted(int(h) for h in value), True
+                return sorted(int(horizon) for horizon in value), True
         return list(VALIDATED_HORIZONS_FALLBACK), False
 
     def model_info(self, model_id: str) -> dict[str, Any]:
@@ -250,11 +251,15 @@ class ScenarioTable:
         return sorted({key[1] for key in self.rows})
 
     def mixes(self, model_id: str, family: str, basis: str) -> list[str]:
-        return sorted({k[2] for k in self.rows if k[0] == model_id and k[1] == family and k[4] == basis})
+        return sorted({key[2] for key in self.rows if key[0] == model_id and key[1] == family and key[4] == basis})
 
     def horizons(self, model_id: str, family: str, mix_id: str, basis: str) -> list[int]:
         return sorted(
-            {k[3] for k in self.rows if k[0] == model_id and k[1] == family and k[2] == mix_id and k[4] == basis}
+            {
+                key[3]
+                for key in self.rows
+                if key[0] == model_id and key[1] == family and key[2] == mix_id and key[4] == basis
+            }
         )
 
     def metrics(self, model_id: str, family: str, mix_id: str, horizon: int, basis: str) -> dict[str, Row]:
@@ -299,7 +304,7 @@ def _to_bool(text: Any) -> bool:
     return str(text).strip().lower() in ("true", "1", "yes", "vrai")
 
 
-def _opt(raw: dict[str, Any], name: str) -> str | None:
+def _optional_text(raw: dict[str, Any], name: str) -> str | None:
     value = (raw.get(name) or "").strip()
     return value or None
 
@@ -315,86 +320,21 @@ def _manifest_default(manifest: dict[str, Any], name: str) -> Any:
     return config.get(name)
 
 
-def parse_table(
-    run_id: str, manifest: dict[str, Any], table_key: str, body: bytes, *, expected_sha256: str | None = None
-) -> ScenarioTable:
-    """Vérifie le manifeste et le fichier CSV, puis indexe les lignes. Fonction pure (testable sans magasin)."""
-    missing = [k for k in MANIFEST_KEYS if k not in manifest]
+def _check_manifest_keys(manifest: dict[str, Any]) -> None:
+    missing = [key for key in MANIFEST_KEYS if key not in manifest]
     if missing:
         raise ScenarioTableError(f"manifeste incomplet : {missing}")
-    version = ".".join(str(manifest["schema_version"]).split(".")[:2])
+
+
+def _check_schema_version(declared: Any) -> None:
+    version = ".".join(str(declared).split(".")[:2])
     if version not in SUPPORTED_SCHEMAS:
-        raise ScenarioTableError(f"schéma {manifest['schema_version']!r} non pris en charge ({SUPPORTED_SCHEMAS})")
-    if manifest.get("run_id", run_id) != run_id:
-        raise ScenarioTableError(f"manifeste du run {manifest['run_id']!r}, attendu {run_id!r}")
-    actual_sha = sha256_hex(body)
-    if not expected_sha256:
-        raise ScenarioTableError(f"sha256 de {table_key} non déclaré par le manifeste : table non vérifiable")
+        raise ScenarioTableError(f"schéma {declared!r} non pris en charge ({SUPPORTED_SCHEMAS})")
+
+
+def _check_sha256(table_key: str, actual_sha: str, expected_sha256: str) -> None:
     if expected_sha256 != actual_sha:
         raise ScenarioTableError(f"sha256 de {table_key} ({actual_sha}) différent du manifeste ({expected_sha256})")
-
-    table = ScenarioTable(run_id=run_id, manifest=manifest, table_key=table_key, table_sha256=actual_sha)
-    table.integrity = {"format": "csv", "file_sha256_verified": True, "ci_not_enclosing": 0}
-    text = (gzip.decompress(body) if table_key.endswith(".gz") else body).decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(text))
-    absent = [c for c in REQUIRED_COLUMNS if c not in (reader.fieldnames or [])]
-    if absent:
-        raise ScenarioTableError(f"colonnes absentes : {absent}")
-    no_prov = [c for c in PROVENANCE_COLUMNS if c not in (reader.fieldnames or [])]
-    table.integrity["row_provenance"] = not no_prov
-    if no_prov:
-        table.warnings.append(f"colonnes de provenance absentes du CSV, prises au manifeste : {no_prov}")
-    fallback = {
-        "n_paths": _manifest_default(manifest, "n_paths"),
-        "seed": _manifest_default(manifest, "seed"),
-        "fitted_through": _manifest_default(manifest, "fitted_through"),
-        "data_sha256": None,
-        "code_sha": str(manifest["code_sha"]),
-    }
-    for line, raw in enumerate(reader, start=2):
-        for column in no_prov:
-            value = fallback[column]
-            if column == "data_sha256":
-                value = table.data_sha256(raw["family"].strip())
-            raw[column] = "" if value is None else str(value)
-        where = f"ligne {line}"
-        mix = raw["mix_id"].strip()
-        weights = parse_mix_id(mix)
-        row = Row(
-            model_id=raw["model_id"].strip(),
-            family=raw["family"].strip(),
-            mix_id=mix,
-            horizon_years=_to_int(raw["horizon_years"], f"{where} horizon_years"),
-            basis=_opt(raw, "basis") or "nominal",
-            metric=raw["metric"].strip(),
-            value=_to_float(raw["value"], f"{where} value"),
-            ci_lo=_to_float(raw["ci_lo"], f"{where} ci_lo"),
-            ci_hi=_to_float(raw["ci_hi"], f"{where} ci_hi"),
-            n_paths=_to_int(raw["n_paths"], f"{where} n_paths", optional=True),
-            seed=_to_int(raw["seed"], f"{where} seed", optional=True),
-            fitted_through=raw["fitted_through"].strip(),
-            data_sha256=raw["data_sha256"].strip(),
-            code_sha=raw["code_sha"].strip(),
-            currency=_opt(raw, "currency"),
-            window_start=_opt(raw, "window_start"),
-            n_boot=_to_int(raw.get("n_boot"), f"{where} n_boot", optional=True),
-            # Un mélange avec crypto est toujours HYPOTHESE, même si la colonne manque.
-            hypothese=_to_bool(raw.get("hypothese")) or any(weights[b] > 0 for b in SHORT_HISTORY_BLOCKS),
-        )
-        if row.ci_lo > row.ci_hi + _FLOAT_TOL:
-            raise ScenarioTableError(f"{where} : ci_lo > ci_hi")
-        _count_enclosing(table, row)
-        if row.code_sha != table.code_sha:
-            raise ScenarioTableError(f"{where} : code_sha {row.code_sha} différent du manifeste {table.code_sha}")
-        if row.data_sha256 != table.data_sha256(row.family):
-            raise ScenarioTableError(f"{where} : data_sha256 différent du manifeste pour {row.family}")
-        key = (row.model_id, row.family, row.mix_id, row.horizon_years, row.basis, row.metric)
-        if key in table.rows:
-            raise ScenarioTableError(f"{where} : ligne en double {key}")
-        table.rows[key] = row
-    if not table.rows:
-        raise ScenarioTableError("table vide")
-    return table
 
 
 def _count_enclosing(table: ScenarioTable, row: Row) -> None:
@@ -402,84 +342,205 @@ def _count_enclosing(table: ScenarioTable, row: Row) -> None:
         table.integrity["ci_not_enclosing"] = table.integrity.get("ci_not_enclosing", 0) + 1
 
 
+def _insert_row(table: ScenarioTable, row: Row, where: str) -> None:
+    key = (row.model_id, row.family, row.mix_id, row.horizon_years, row.basis, row.metric)
+    if key in table.rows:
+        raise ScenarioTableError(f"{where} : ligne en double {key}")
+    table.rows[key] = row
+
+
+def _csv_provenance_defaults(manifest: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "n_paths": _manifest_default(manifest, "n_paths"),
+        "seed": _manifest_default(manifest, "seed"),
+        "fitted_through": _manifest_default(manifest, "fitted_through"),
+        "data_sha256": None,
+        "code_sha": str(manifest["code_sha"]),
+    }
+
+
+def _fill_provenance(raw: dict[str, Any], columns: list[str], defaults: dict[str, Any], table: ScenarioTable) -> None:
+    """Complète une ligne CSV sans colonnes de provenance : valeurs du manifeste, data_sha256 de sa famille."""
+    for column in columns:
+        value = defaults[column]
+        if column == "data_sha256":
+            value = table.data_sha256(raw["family"].strip())
+        raw[column] = "" if value is None else str(value)
+
+
+def _csv_row(raw: dict[str, Any], where: str) -> Row:
+    mix = raw["mix_id"].strip()
+    weights = parse_mix_id(mix)
+    return Row(
+        model_id=raw["model_id"].strip(),
+        family=raw["family"].strip(),
+        mix_id=mix,
+        horizon_years=_to_int(raw["horizon_years"], f"{where} horizon_years"),
+        basis=_optional_text(raw, "basis") or "nominal",
+        metric=raw["metric"].strip(),
+        value=_to_float(raw["value"], f"{where} value"),
+        ci_lo=_to_float(raw["ci_lo"], f"{where} ci_lo"),
+        ci_hi=_to_float(raw["ci_hi"], f"{where} ci_hi"),
+        n_paths=_to_int(raw["n_paths"], f"{where} n_paths", optional=True),
+        seed=_to_int(raw["seed"], f"{where} seed", optional=True),
+        fitted_through=raw["fitted_through"].strip(),
+        data_sha256=raw["data_sha256"].strip(),
+        code_sha=raw["code_sha"].strip(),
+        currency=_optional_text(raw, "currency"),
+        window_start=_optional_text(raw, "window_start"),
+        n_boot=_to_int(raw.get("n_boot"), f"{where} n_boot", optional=True),
+        # Un mélange avec crypto est toujours HYPOTHESE, même si la colonne manque.
+        hypothese=_to_bool(raw.get("hypothese")) or any(weights[block] > 0 for block in SHORT_HISTORY_BLOCKS),
+    )
+
+
+def _add_csv_row(table: ScenarioTable, row: Row, where: str) -> None:
+    """Contrôle une ligne CSV (IC, provenance égale au manifeste) puis l'indexe."""
+    if row.ci_lo > row.ci_hi + _FLOAT_TOL:
+        raise ScenarioTableError(f"{where} : ci_lo > ci_hi")
+    _count_enclosing(table, row)
+    if row.code_sha != table.code_sha:
+        raise ScenarioTableError(f"{where} : code_sha {row.code_sha} différent du manifeste {table.code_sha}")
+    if row.data_sha256 != table.data_sha256(row.family):
+        raise ScenarioTableError(f"{where} : data_sha256 différent du manifeste pour {row.family}")
+    _insert_row(table, row, where)
+
+
+def parse_table(
+    run_id: str, manifest: dict[str, Any], table_key: str, body: bytes, *, expected_sha256: str | None = None
+) -> ScenarioTable:
+    """Vérifie le manifeste et le fichier CSV, puis indexe les lignes. Fonction pure (testable sans magasin)."""
+    _check_manifest_keys(manifest)
+    _check_schema_version(manifest["schema_version"])
+    if manifest.get("run_id", run_id) != run_id:
+        raise ScenarioTableError(f"manifeste du run {manifest['run_id']!r}, attendu {run_id!r}")
+    actual_sha = sha256_hex(body)
+    if not expected_sha256:
+        raise ScenarioTableError(f"sha256 de {table_key} non déclaré par le manifeste : table non vérifiable")
+    _check_sha256(table_key, actual_sha, expected_sha256)
+
+    table = ScenarioTable(run_id=run_id, manifest=manifest, table_key=table_key, table_sha256=actual_sha)
+    table.integrity = {"format": "csv", "file_sha256_verified": True, "ci_not_enclosing": 0}
+    text = (gzip.decompress(body) if table_key.endswith(".gz") else body).decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(text))
+    absent = [column for column in REQUIRED_COLUMNS if column not in (reader.fieldnames or [])]
+    if absent:
+        raise ScenarioTableError(f"colonnes absentes : {absent}")
+    no_provenance = [column for column in PROVENANCE_COLUMNS if column not in (reader.fieldnames or [])]
+    table.integrity["row_provenance"] = not no_provenance
+    if no_provenance:
+        table.warnings.append(f"colonnes de provenance absentes du CSV, prises au manifeste : {no_provenance}")
+    defaults = _csv_provenance_defaults(manifest)
+    for line, raw in enumerate(reader, start=2):
+        _fill_provenance(raw, no_provenance, defaults, table)
+        where = f"ligne {line}"
+        _add_csv_row(table, _csv_row(raw, where), where)
+    if not table.rows:
+        raise ScenarioTableError("table vide")
+    return table
+
+
+def _runtime_document(key: str, body: bytes, manifest: dict[str, Any]) -> dict[str, Any]:
+    """Document JSON décodé, de même provenance que le manifeste, au schéma et à l'ordre des valeurs attendus."""
+    try:
+        document = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise ScenarioTableError(f"{key} illisible") from exc
+    if not isinstance(document, dict) or not isinstance(document.get("tables"), dict):
+        raise ScenarioTableError(f"{key} : clé « tables » absente")
+    for name in MANIFEST_KEYS:
+        if str(document.get(name)) != str(manifest[name]):
+            raise ScenarioTableError(f"{key} : {name} {document.get(name)!r} différent du manifeste {manifest[name]!r}")
+    _check_schema_version(document["schema_version"])
+    if list(document.get("value_order") or ["value", "ci_lo", "ci_hi"]) != ["value", "ci_lo", "ci_hi"]:
+        raise ScenarioTableError(f"{key} : value_order inattendu {document.get('value_order')!r}")
+    return document
+
+
+def _runtime_common(document: dict[str, Any], model_table: dict[str, Any], where: str) -> dict[str, Any]:
+    """Champs communs à toutes les lignes d'une table du document (modèle, famille, provenance)."""
+    return {
+        "model_id": str(model_table["model_id"]),
+        "family": str(model_table["family"]),
+        "n_paths": _to_int(model_table.get("n_paths"), f"{where} n_paths", optional=True),
+        "seed": _to_int(model_table.get("seed"), f"{where} seed", optional=True),
+        "fitted_through": str(model_table.get("fitted_through") or ""),
+        "data_sha256": str(document["data_sha256"]),
+        "code_sha": str(document["code_sha"]),
+        "currency": model_table.get("currency"),
+        "window_start": model_table.get("window_start"),
+        "n_boot": _to_int(model_table.get("n_boot"), f"{where} n_boot", optional=True),
+    }
+
+
+def _runtime_cells(by_basis: dict[str, Any]) -> Iterator[tuple[str, str, str, Any]]:
+    """(base, horizon, métrique, valeurs) d'un mélange du document, dans l'ordre du document."""
+    for basis, by_horizon in by_basis.items():
+        for horizon, metrics in by_horizon.items():
+            for metric, triple in metrics.items():
+                yield basis, horizon, metric, triple
+
+
+def _runtime_rows(document: dict[str, Any], model_table: dict[str, Any], where: str) -> Iterator[Row | None]:
+    """Lignes d'une table du document, dans l'ordre du document; None pour une valeur absente (NaN du job)."""
+    common = _runtime_common(document, model_table, where)
+    for mix, by_basis in model_table["mixes"].items():
+        weights = parse_mix_id(mix)
+        hypothese = bool(model_table.get("hypothese")) or any(weights[block] > 0 for block in SHORT_HISTORY_BLOCKS)
+        for basis, horizon, metric, triple in _runtime_cells(by_basis):
+            if not isinstance(triple, list) or len(triple) != 3 or any(value is None for value in triple):
+                yield None
+                continue
+            yield Row(
+                mix_id=mix,
+                horizon_years=_to_int(horizon, f"{where} horizon"),
+                basis=str(basis),
+                metric=str(metric),
+                value=_to_float(triple[0], f"{where} {metric}"),
+                ci_lo=_to_float(triple[1], f"{where} {metric} ci_lo"),
+                ci_hi=_to_float(triple[2], f"{where} {metric} ci_hi"),
+                hypothese=hypothese,
+                **common,
+            )
+
+
+def _read_runtime_tables(table: ScenarioTable, document: dict[str, Any]) -> int:
+    """Indexe les lignes de toutes les tables du document; renvoie le nombre de valeurs absentes ignorées."""
+    skipped = 0
+    for name, model_table in document["tables"].items():
+        if not isinstance(model_table, dict) or not isinstance(model_table.get("mixes"), dict):
+            raise ScenarioTableError(f"{table.table_key} : table {name!r} mal formée")
+        where = f"table {name}"
+        for row in _runtime_rows(document, model_table, where):
+            if row is None:
+                skipped += 1
+                continue
+            if row.ci_lo > row.ci_hi + _FLOAT_TOL:
+                raise ScenarioTableError(f"{where} {row.mix_id} {row.metric} : ci_lo > ci_hi")
+            _count_enclosing(table, row)
+            _insert_row(table, row, where)
+    return skipped
+
+
 def parse_runtime_json(
     run_id: str, manifest: dict[str, Any], key: str, body: bytes, *, expected_sha256: str | None = None
 ) -> ScenarioTable:
     """Lit ``scenarios_runtime.json`` du job (tables par modèle et famille, valeurs [value, ci_lo, ci_hi])."""
-    missing = [k for k in MANIFEST_KEYS if k not in manifest]
-    if missing:
-        raise ScenarioTableError(f"manifeste incomplet : {missing}")
+    _check_manifest_keys(manifest)
     actual_sha = sha256_hex(body)
     if not expected_sha256:
         raise ScenarioTableError(f"sha256 de {key} non déclaré par le manifeste : table non vérifiable, refusée")
-    if expected_sha256 != actual_sha:
-        raise ScenarioTableError(f"sha256 de {key} ({actual_sha}) différent du manifeste ({expected_sha256})")
-    try:
-        doc = json.loads(body.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError) as exc:
-        raise ScenarioTableError(f"{key} illisible") from exc
-    if not isinstance(doc, dict) or not isinstance(doc.get("tables"), dict):
-        raise ScenarioTableError(f"{key} : clé « tables » absente")
-    for name in MANIFEST_KEYS:
-        if str(doc.get(name)) != str(manifest[name]):
-            raise ScenarioTableError(f"{key} : {name} {doc.get(name)!r} différent du manifeste {manifest[name]!r}")
-    version = ".".join(str(doc["schema_version"]).split(".")[:2])
-    if version not in SUPPORTED_SCHEMAS:
-        raise ScenarioTableError(f"schéma {doc['schema_version']!r} non pris en charge ({SUPPORTED_SCHEMAS})")
-    if list(doc.get("value_order") or ["value", "ci_lo", "ci_hi"]) != ["value", "ci_lo", "ci_hi"]:
-        raise ScenarioTableError(f"{key} : value_order inattendu {doc.get('value_order')!r}")
+    _check_sha256(key, actual_sha, expected_sha256)
+    document = _runtime_document(key, body, manifest)
 
     table = ScenarioTable(run_id=run_id, manifest=manifest, table_key=key, table_sha256=actual_sha)
     table.integrity = {
         "format": "runtime_json",
         "file_sha256_verified": True,
         "ci_not_enclosing": 0,
-        "units": doc.get("units"),
+        "units": document.get("units"),
     }
-    skipped = 0
-    for name, sub in doc["tables"].items():
-        if not isinstance(sub, dict) or not isinstance(sub.get("mixes"), dict):
-            raise ScenarioTableError(f"{key} : table {name!r} mal formée")
-        where = f"table {name}"
-        common = {
-            "model_id": str(sub["model_id"]),
-            "family": str(sub["family"]),
-            "n_paths": _to_int(sub.get("n_paths"), f"{where} n_paths", optional=True),
-            "seed": _to_int(sub.get("seed"), f"{where} seed", optional=True),
-            "fitted_through": str(sub.get("fitted_through") or ""),
-            "data_sha256": str(doc["data_sha256"]),
-            "code_sha": str(doc["code_sha"]),
-            "currency": sub.get("currency"),
-            "window_start": sub.get("window_start"),
-            "n_boot": _to_int(sub.get("n_boot"), f"{where} n_boot", optional=True),
-        }
-        for mix, by_basis in sub["mixes"].items():
-            weights = parse_mix_id(mix)
-            hyp = bool(sub.get("hypothese")) or any(weights[b] > 0 for b in SHORT_HISTORY_BLOCKS)
-            for basis, by_h in by_basis.items():
-                for horizon, metrics in by_h.items():
-                    for metric, triple in metrics.items():
-                        if not isinstance(triple, list) or len(triple) != 3 or any(v is None for v in triple):
-                            skipped += 1
-                            continue
-                        row = Row(
-                            mix_id=mix,
-                            horizon_years=_to_int(horizon, f"{where} horizon"),
-                            basis=str(basis),
-                            metric=str(metric),
-                            value=_to_float(triple[0], f"{where} {metric}"),
-                            ci_lo=_to_float(triple[1], f"{where} {metric} ci_lo"),
-                            ci_hi=_to_float(triple[2], f"{where} {metric} ci_hi"),
-                            hypothese=hyp,
-                            **common,
-                        )
-                        if row.ci_lo > row.ci_hi + _FLOAT_TOL:
-                            raise ScenarioTableError(f"{where} {mix} {metric} : ci_lo > ci_hi")
-                        _count_enclosing(table, row)
-                        rkey = (row.model_id, row.family, row.mix_id, row.horizon_years, row.basis, row.metric)
-                        if rkey in table.rows:
-                            raise ScenarioTableError(f"{where} : ligne en double {rkey}")
-                        table.rows[rkey] = row
+    skipped = _read_runtime_tables(table, document)
     if skipped:
         table.warnings.append(f"{skipped} valeur(s) absente(s) (NaN) ignorée(s)")
     if not table.rows:
@@ -487,9 +548,9 @@ def parse_runtime_json(
     return table
 
 
-def _rel_path(value: Any, what: str) -> str:
+def _relative_path(value: Any, what: str) -> str:
     text = str(value or "")
-    if not _REL_PATH.match(text) or ".." in text:
+    if not _RELATIVE_PATH.match(text) or ".." in text:
         raise ScenarioTableError(f"chemin {what} invalide : {text!r}")
     return text
 
@@ -507,24 +568,26 @@ def _table_entry(manifest: dict[str, Any]) -> tuple[str, str, str | None, str | 
     entry = manifest.get("table")
     note = None
     if isinstance(entry, dict) and entry.get("file"):
-        path = _rel_path(entry["file"], "manifest.table.file")
-        fmt = str(entry.get("format") or "").lower()
+        path = _relative_path(entry["file"], "manifest.table.file")
+        table_format = str(entry.get("format") or "").lower()
     elif outputs.get("runtime_csv") or outputs.get("runtime_json"):
         key = "runtime_csv" if outputs.get("runtime_csv") else "runtime_json"
-        path = _rel_path(outputs[key], f"manifest.outputs.{key}")
-        fmt = ""
+        path = _relative_path(outputs[key], f"manifest.outputs.{key}")
+        table_format = ""
         note = f"manifest.table absent : repli sur manifest.outputs.{key} = {path}"
     else:
         raise ScenarioTableError(
             'manifeste sans "table" : attendu {"file": "runtime/scenarios_runtime.csv", "format": "csv"} '
             "(ou une sortie outputs.runtime_csv / outputs.runtime_json); aucune table par défaut n'est supposée"
         )
-    if not fmt:
-        fmt = "json" if path.endswith(".json") else "csv" if path.endswith((".csv", ".csv.gz")) else ""
-    if fmt not in ("csv", "json"):
-        raise ScenarioTableError(f"format de table non lisible sans dépendance lourde : {fmt or path!r} (csv ou json)")
+    if not table_format:
+        table_format = "json" if path.endswith(".json") else "csv" if path.endswith((".csv", ".csv.gz")) else ""
+    if table_format not in ("csv", "json"):
+        raise ScenarioTableError(
+            f"format de table non lisible sans dépendance lourde : {table_format or path!r} (csv ou json)"
+        )
     expected = (entry.get("sha256") if isinstance(entry, dict) else None) or declared.get(path) or None
-    return path, fmt, expected, note
+    return path, table_format, expected, note
 
 
 class ScenarioTableLoader:
@@ -572,12 +635,12 @@ class ScenarioTableLoader:
             manifest = self.store.get_json(prefix + "manifest.json")
             if not isinstance(manifest, dict):
                 raise ScenarioTableError(f"manifeste absent : {prefix}manifest.json")
-            path, fmt, expected, note = _table_entry(manifest)
-            obj = self.store.get(prefix + path)
-            if obj is None:
+            path, table_format, expected_sha256, note = _table_entry(manifest)
+            stored = self.store.get(prefix + path)
+            if stored is None:
                 raise ScenarioTableError(f"table absente : {prefix}{path}")
-            parser = parse_runtime_json if fmt == "json" else parse_table
-            self._cache = parser(run_id, manifest, prefix + path, obj.body, expected_sha256=expected)
+            parser = parse_runtime_json if table_format == "json" else parse_table
+            self._cache = parser(run_id, manifest, prefix + path, stored.body, expected_sha256=expected_sha256)
             if note:
                 self._cache.warnings.insert(0, note)
             return self._cache
@@ -603,5 +666,5 @@ def dumps_table(rows: list[dict[str, Any]]) -> bytes:
     writer = csv.DictWriter(out, fieldnames=list(schema.COLUMN_NAMES), lineterminator="\n", extrasaction="ignore")
     writer.writeheader()
     for row in rows:
-        writer.writerow({c: row.get(c, "") for c in schema.COLUMN_NAMES})
+        writer.writerow({column: row.get(column, "") for column in schema.COLUMN_NAMES})
     return out.getvalue().encode("utf-8")

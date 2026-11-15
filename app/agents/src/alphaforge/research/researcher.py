@@ -13,6 +13,7 @@ from __future__ import annotations
 import email.utils
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -32,10 +33,11 @@ from .packs import (
     RESEARCHER_MAX_BUDGET_S,
     RESEARCHER_MAX_TOOL_CALLS,
     SUBJECTS,
+    describe_packs,
     pack_hosts,
     pack_sources,
 )
-from .web import ResearchWeb, WebError
+from .web import Archived, ResearchWeb, WebError
 
 MAX_FINDINGS = 30
 MAX_SERIES_ROWS = 60
@@ -78,6 +80,118 @@ weak ones.
 
 {packs}
 """
+
+# Outils du chercheur : textes et schémas lus par le modèle (la liste des sources s'ajoute à la description).
+SEARCH_SOURCE_DESCRIPTION = "Search a source catalogue or search API of your packs. Sources: "
+FETCH_DESCRIPTION = "GET a URL on an allowed host; returns a paged preview (path = value lines) and a response_id."
+FETCH_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {"url": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}},
+        "required": ["url"],
+    }
+}
+VIEW_DESCRIPTION = "Show more lines of an already fetched response (no new request)."
+VIEW_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {"response_id": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}},
+        "required": ["response_id", "offset"],
+    }
+}
+STATCAN_TABLE_DESCRIPTION = "Statistics Canada table metadata (dimensions and member ids) by product id, e.g. 18100205."
+STATCAN_TABLE_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {"product_id": {"type": "integer"}},
+        "required": ["product_id"],
+    }
+}
+STATCAN_DATA_DESCRIPTION = (
+    "Latest N data points of a Statistics Canada table coordinate (10 member ids joined by dots, "
+    "e.g. 1.1.0.0.0.0.0.0.0.0). Use record_series with rows `[0].object.vectorDataPoint`, date_field refPer, "
+    "value_field value, publication_field releaseTime."
+)
+STATCAN_DATA_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {
+            "product_id": {"type": "integer"},
+            "coordinate": {"type": "string"},
+            "latest_n": {"type": "integer", "minimum": 1, "maximum": 60},
+        },
+        "required": ["product_id", "coordinate"],
+    }
+}
+RECORD_FINDING_DESCRIPTION = (
+    "Record one finding from a fetched response by locators. kind: news (fields title, link), "
+    "fact or signal or quote (field value; markets also resolution_rules, bid, ask, volume), filing (fields "
+    "form, accession). The code reads every value and date."
+)
+RECORD_FINDING_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {
+            "kind": {"type": "string", "enum": list(FINDING_KINDS)},
+            "label": {"type": "string"},
+            "claim": {"type": "string"},
+            "response_id": {"type": "string"},
+            "fields": {"type": "object", "additionalProperties": {"type": "string"}},
+            "observation_locator": {"type": "string"},
+            "observation_date": {"type": "string"},
+            "publication_locator": {"type": "string"},
+            "unit": {"type": "string"},
+            "issuers": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["kind", "label", "claim", "response_id", "fields"],
+    }
+}
+RECORD_SERIES_DESCRIPTION = (
+    "Record a time series from a fetched response: rows = locator of the list of rows, "
+    "date_field and value_field = paths inside each row (CSV: rows `rows`, fields = column names)."
+)
+RECORD_SERIES_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {
+            "label": {"type": "string"},
+            "claim": {"type": "string"},
+            "response_id": {"type": "string"},
+            "rows": {"type": "string"},
+            "date_field": {"type": "string"},
+            "value_field": {"type": "string"},
+            "publication_field": {"type": "string"},
+            "series_id": {"type": "string"},
+            "unit": {"type": "string"},
+            "frequency": {"type": "string"},
+            "issuers": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["label", "claim", "response_id", "rows", "date_field", "value_field"],
+    }
+}
+PROPOSE_HOST_DESCRIPTION = "Propose a relevant host outside your packs (at most 2). Its findings stay in quarantine."
+PROPOSE_HOST_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {"url": {"type": "string"}, "why": {"type": "string"}},
+        "required": ["url", "why"],
+    }
+}
+FINISH_DESCRIPTION = "End the mission with a one-paragraph French summary and the evidence not found (gaps)."
+FINISH_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {
+            "summary": {"type": "string"},
+            "gaps": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["summary"],
+    }
+}
+TOOL_SUMMARIES = {
+    "record_finding": lambda tool_input: {"kind": tool_input.get("kind"), "label": str(tool_input.get("label"))[:80]},
+    "record_series": lambda tool_input: {"label": str(tool_input.get("label"))[:80], "rows": tool_input.get("rows")},
+}
 
 
 class ResearchError(Exception):
@@ -123,7 +237,7 @@ class Brief:
 def _strings(value: Any, limit: int, size: int = 200) -> list[str]:
     if not isinstance(value, list):
         return []
-    return [" ".join(str(v).split())[:size] for v in value if isinstance(v, str) and v.strip()][:limit]
+    return [" ".join(str(text).split())[:size] for text in value if isinstance(text, str) and text.strip()][:limit]
 
 
 def parse_brief(payload: dict[str, Any]) -> Brief:
@@ -136,8 +250,8 @@ def parse_brief(payload: dict[str, Any]) -> Brief:
     objective = " ".join(str(payload.get("objective") or "").split())[:500]
     if not objective:
         raise ResearchError("objective est requis")
-    packs = [p for p in payload.get("packs") or [] if isinstance(p, str)]
-    if not packs or any(p not in SUBJECTS[subject].packs for p in packs):
+    packs = [pack for pack in payload.get("packs") or [] if isinstance(pack, str)]
+    if not packs or any(pack not in SUBJECTS[subject].packs for pack in packs):
         raise ResearchError(f"packs doit être une liste non vide parmi {list(SUBJECTS[subject].packs)}")
     since = payload.get("since") or (clock.today().replace(day=1)).isoformat()
     if not isinstance(since, str) or clock.parse_datetime(since) is None:
@@ -172,22 +286,22 @@ _MONTH = re.compile(r"^(\d{4})-(\d{2})$")
 _COMPACT = re.compile(r"^(\d{4})(\d{2})(\d{2})(?:T?(\d{2})(\d{2})(\d{2})Z?)?$")
 
 
-def parse_any_date(value: Any) -> str | None:
-    """Date ou horodatage lu dans une source, rendu en ISO (``AAAA-MM-JJ`` ou ``…Z``); ``None`` si illisible."""
-    if value is None:
-        return None
-    if isinstance(value, int | float) or (isinstance(value, str) and value.strip().isdigit() and len(value) >= 10):
-        number = float(value)
-        if number > 1e11:
-            number /= 1000.0  # millisecondes
-        if 6e8 < number < 5e9:
-            return clock.iso(datetime.fromtimestamp(number, UTC))
-    text = str(value).strip()
-    if not text:
-        return None
-    parsed = clock.parse_datetime(text)
-    if parsed is not None:
-        return text[:10] if len(text) == 10 else clock.iso(parsed)
+def _looks_like_timestamp(value: Any) -> bool:
+    return isinstance(value, int | float) or (isinstance(value, str) and value.strip().isdigit() and len(value) >= 10)
+
+
+def _timestamp_date(value: Any) -> str | None:
+    """Horodatage Unix (secondes ou millisecondes) d'une plage plausible, en ISO; ``None`` hors de cette plage."""
+    number = float(value)
+    if number > 1e11:
+        number /= 1000.0  # millisecondes
+    if 6e8 < number < 5e9:
+        return clock.iso(datetime.fromtimestamp(number, UTC))
+    return None
+
+
+def _pattern_date(text: str) -> str | None:
+    """Mois ``AAAA-MM``, trimestre ``AAAA-Qn`` ou date compacte ``AAAAMMJJ[THHMMSSZ]``."""
     match = _MONTH.match(text)
     if match:
         return f"{match.group(1)}-{match.group(2)}-01"
@@ -196,28 +310,174 @@ def parse_any_date(value: Any) -> str | None:
         return f"{match.group(1)}-{(int(match.group(2)) - 1) * 3 + 1:02d}-01"
     match = _COMPACT.match(text)
     if match:
-        y, m, d, hh, mm, ss = match.groups()
-        if hh:
-            return f"{y}-{m}-{d}T{hh}:{mm}:{ss}Z"
-        return f"{y}-{m}-{d}"
-    try:
-        rfc = email.utils.parsedate_to_datetime(text)
-    except (TypeError, ValueError, IndexError):
-        rfc = None
-    if rfc is not None:
-        if rfc.tzinfo is None:
-            rfc = rfc.replace(tzinfo=UTC)
-        return clock.iso(rfc)
+        year, month, day, hour, minute, second = match.groups()
+        if hour:
+            return f"{year}-{month}-{day}T{hour}:{minute}:{second}Z"
+        return f"{year}-{month}-{day}"
     return None
 
 
+def _rfc_date(text: str) -> str | None:
+    """Date RFC 2822 des flux (``Thu, 13 Nov 2026 14:00:00 GMT``); sans fuseau, elle est lue en UTC."""
+    try:
+        parsed = email.utils.parsedate_to_datetime(text)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return clock.iso(parsed)
+
+
+def parse_any_date(value: Any) -> str | None:
+    """Date ou horodatage lu dans une source, rendu en ISO (``AAAA-MM-JJ`` ou ``…Z``); ``None`` si illisible."""
+    if value is None:
+        return None
+    if _looks_like_timestamp(value):
+        timestamp = _timestamp_date(value)
+        if timestamp is not None:
+            return timestamp
+    text = str(value).strip()
+    if not text:
+        return None
+    parsed = clock.parse_datetime(text)
+    if parsed is not None:
+        return text[:10] if len(text) == 10 else clock.iso(parsed)
+    return _pattern_date(text) or _rfc_date(text)
+
+
 def _dates_pool(*values: str | None) -> list[str]:
-    return [str(v)[:10].replace("-", "/") for v in values if v]
+    return [str(value)[:10].replace("-", "/") for value in values if value]
 
 
-def _after(a: str, b: str) -> bool:
-    da, db = clock.parse_datetime(a), clock.parse_datetime(b)
-    return bool(da and db and da > db)
+def _is_after(moment: str, reference: str) -> bool:
+    moment_at, reference_at = clock.parse_datetime(moment), clock.parse_datetime(reference)
+    return bool(moment_at and reference_at and moment_at > reference_at)
+
+
+def _observation_date(
+    tree: Any, observation_locator: str | None, observation_date: str | None
+) -> tuple[str | None, str]:
+    """Date d'observation et son origine : lue dans la source, donnée par le chercheur, ou aucune."""
+    if observation_locator:
+        observation = parse_any_date(documents.scalar(documents.resolve(tree, observation_locator)))
+        if observation is None:
+            raise ResearchError(f"date d'observation illisible à {observation_locator!r}")
+        return observation, "source"
+    if observation_date:
+        observation = parse_any_date(observation_date)
+        if observation is None:
+            raise ResearchError("observation_date illisible")
+        return observation, "researcher"
+    return None, "none"
+
+
+def _publication_date(archived: Archived, publication_locator: str | None) -> tuple[str, str]:
+    """Date de publication lue dans la source, sinon l'heure de récupération comme borne supérieure."""
+    if not publication_locator:
+        return archived.retrieved_at, "retrieved_at_upper_bound"
+    publication = parse_any_date(documents.scalar(documents.resolve(archived.tree, publication_locator)))
+    if publication is None:
+        raise ResearchError(f"date de publication illisible à {publication_locator!r}")
+    return publication, "source"
+
+
+# ----------------------------------------------------------------------------- lecture des constats
+def _read_fields(tree: Any, fields: Any) -> tuple[dict[str, str], dict[str, str]]:
+    """Valeurs lues aux localisateurs (noms ramenés à ``[A-Za-z0-9_]``) et localisateurs, sous les mêmes noms."""
+    if not isinstance(fields, dict) or not fields or len(fields) > 12:
+        raise ResearchError("fields doit associer 1 à 12 noms à des localisateurs")
+    values: dict[str, str] = {}
+    locators: dict[str, str] = {}
+    for name, locator in fields.items():
+        key = re.sub(r"[^A-Za-z0-9_]", "_", str(name))[:40]
+        value = documents.scalar(documents.resolve(tree, str(locator)))
+        if value == "":
+            raise ResearchError(f"valeur vide à {locator!r}")
+        values[key] = value[:2000]
+        locators[key] = str(locator)
+    return values, locators
+
+
+def _check_required_fields(kind: str, values: dict[str, str], host: str) -> None:
+    for alternatives in REQUIRED_FIELDS[kind]:
+        if not any(name in values for name in alternatives):
+            raise ResearchError(f"un constat {kind} exige le champ {' ou '.join(alternatives)}")
+    if host in MARKET_HOSTS and kind == "signal" and "resolution_rules" not in values:
+        raise ResearchError("une cote de marché exige fields.resolution_rules (règles telles quelles)")
+
+
+def _required_claim(args: dict[str, Any]) -> str:
+    claim = str(args.get("claim") or "")
+    if not claim.strip():
+        raise ResearchError("claim est requis (une phrase neutre en français)")
+    return claim
+
+
+def _clipped(value: Any, size: int) -> str | None:
+    return str(value)[:size] if value else None
+
+
+def _series_spec(args: dict[str, Any]) -> dict[str, Any]:
+    """Où lire la série : liste des lignes, champs de date et de valeur, champ de la date de publication."""
+    return {
+        "rows": str(args.get("rows") or ""),
+        "date_field": str(args.get("date_field") or ""),
+        "value_field": str(args.get("value_field") or ""),
+        "publication_field": args.get("publication_field"),
+    }
+
+
+def _dated_observations(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Lignes à date lisible, triées par date; les ``MAX_SERIES_ROWS`` dernières."""
+    observations = []
+    for row in rows:
+        day = parse_any_date(row["date"])
+        if day is None:
+            continue
+        observations.append({"date": day[:10], "value": row["value"], "row": row["row"]})
+    if not observations:
+        raise ResearchError("aucune date lisible dans la série")
+    observations.sort(key=lambda observation: observation["date"])
+    return observations[-MAX_SERIES_ROWS:]
+
+
+def _publication_locator(rows_locator: str, last: dict[str, Any], publication_field: Any) -> str | None:
+    """Localisateur de la date de publication dans la dernière ligne : un champ, ou un ``[...]`` collé à la ligne."""
+    if not publication_field:
+        return None
+    return (
+        f"{rows_locator}[{last['row']}].{publication_field}"
+        if not str(publication_field).startswith("[")
+        else f"{rows_locator}[{last['row']}]{publication_field}"
+    )
+
+
+def _preview(archived: Archived, offset: int) -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "response_id": archived.response_id,
+        "url": archived.url,
+        "http_status": archived.status,
+        "format": archived.fmt,
+        "host_status": archived.host_status,
+        "retrieved_at": archived.retrieved_at,
+        "last_modified": archived.headers.get("Last-Modified"),
+        **documents.preview(archived.tree, offset),
+    }
+
+
+def _search_source_schema(sources: tuple[str, ...]) -> dict[str, Any]:
+    return {
+        "json": {
+            "type": "object",
+            "properties": {
+                "source": {"type": "string", "enum": list(sources) or ["feeds"]},
+                "query": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 12},
+            },
+            "required": ["source", "query"],
+        }
+    }
 
 
 # ----------------------------------------------------------------------------- l'exécution
@@ -260,37 +520,20 @@ class ResearcherRun:
 
     def _dates(
         self,
-        archived: Any,
-        tree: Any,
+        archived: Archived,
         observation_locator: str | None,
         observation_date: str | None,
         publication_locator: str | None,
     ) -> tuple[str | None, str, str, str]:
-        observation, obs_basis = None, "none"
-        if observation_locator:
-            observation = parse_any_date(documents.scalar(documents.resolve(tree, observation_locator)))
-            if observation is None:
-                raise ResearchError(f"date d'observation illisible à {observation_locator!r}")
-            obs_basis = "source"
-        elif observation_date:
-            observation = parse_any_date(observation_date)
-            if observation is None:
-                raise ResearchError("observation_date illisible")
-            obs_basis = "researcher"
-        if publication_locator:
-            publication = parse_any_date(documents.scalar(documents.resolve(tree, publication_locator)))
-            if publication is None:
-                raise ResearchError(f"date de publication illisible à {publication_locator!r}")
-            pub_basis = "source"
-        else:
-            publication, pub_basis = archived.retrieved_at, "retrieved_at_upper_bound"
-        if _after(publication, archived.retrieved_at):
+        observation, observation_basis = _observation_date(archived.tree, observation_locator, observation_date)
+        publication, publication_basis = _publication_date(archived, publication_locator)
+        if _is_after(publication, archived.retrieved_at):
             raise ResearchError("date de publication postérieure à la récupération : refusée")
-        if observation and _after(observation[:10], publication[:10]) and pub_basis == "source":
+        if observation and _is_after(observation[:10], publication[:10]) and publication_basis == "source":
             raise ResearchError("date d'observation postérieure à la publication")
-        if self.brief.as_of and _after(publication, self.brief.as_of):
+        if self.brief.as_of and _is_after(publication, self.brief.as_of):
             raise ResearchError(f"publié après as_of ({self.brief.as_of}) : hors du point dans le temps demandé")
-        return observation, obs_basis, publication, pub_basis
+        return observation, observation_basis, publication, publication_basis
 
     def _ground(self, text: str, values: list[str], dates: list[str]) -> None:
         missing = documents.grounded(text, values, dates)
@@ -299,7 +542,7 @@ class ResearcherRun:
                 "nombres absents des valeurs lues : " + ", ".join(missing[:5]) + " (réécrire la phrase sans eux)"
             )
 
-    def _base(self, archived: Any, kind: str, label: str, claim: str, issuers: list[str]) -> dict[str, Any]:
+    def _base(self, archived: Archived, kind: str, label: str, claim: str, issuers: list[str]) -> dict[str, Any]:
         n = len(self.findings) + 1
         return {
             "finding_id": f"{self.brief.subject}-{self.brief.researcher}-f{n:02d}",
@@ -310,7 +553,7 @@ class ResearcherRun:
             "kind": kind,
             "label": " ".join(str(label).split())[:160],
             "claim": " ".join(str(claim).split())[:400],
-            "issuers": [i.upper() for i in issuers if isinstance(i, str)][:6],
+            "issuers": [issuer.upper() for issuer in issuers if isinstance(issuer, str)][:6],
             "url": archived.url,
             "host": archived.host,
             "response_id": archived.response_id,
@@ -323,56 +566,38 @@ class ResearcherRun:
         }
 
     # ------------------------------------------------------------------ consignation
-    def record_finding(self, args: dict[str, Any]) -> dict[str, Any]:
+    def _check_room(self) -> None:
         if len(self.findings) >= MAX_FINDINGS:
             raise ResearchError(f"au plus {MAX_FINDINGS} constats par chercheur")
+
+    def record_finding(self, args: dict[str, Any]) -> dict[str, Any]:
+        self._check_room()
         kind = args.get("kind")
         if kind not in FINDING_KINDS:
             raise ResearchError(f"kind doit être parmi {FINDING_KINDS}")
         archived = self.web.get(str(args.get("response_id") or ""))
         if archived.host in MARKET_HOSTS and kind in ("fact", "quote"):
             kind = "signal"  # une cote de marché prédictif est toujours un signal, avec ses règles de résolution
-        fields_in = args.get("fields") or {}
-        if not isinstance(fields_in, dict) or not fields_in or len(fields_in) > 12:
-            raise ResearchError("fields doit associer 1 à 12 noms à des localisateurs")
-        values: dict[str, str] = {}
-        locators: dict[str, str] = {}
-        for name, locator in fields_in.items():
-            key = re.sub(r"[^A-Za-z0-9_]", "_", str(name))[:40]
-            value = documents.scalar(documents.resolve(archived.tree, str(locator)))
-            if value == "":
-                raise ResearchError(f"valeur vide à {locator!r}")
-            values[key] = value[:2000]
-            locators[key] = str(locator)
-        for alternatives in REQUIRED_FIELDS[kind]:
-            if not any(a in values for a in alternatives):
-                raise ResearchError(f"un constat {kind} exige le champ {' ou '.join(alternatives)}")
-        if archived.host in MARKET_HOSTS and kind == "signal" and "resolution_rules" not in values:
-            raise ResearchError("une cote de marché exige fields.resolution_rules (règles telles quelles)")
-        observation, obs_basis, publication, pub_basis = self._dates(
-            archived,
-            archived.tree,
-            args.get("observation_locator"),
-            args.get("observation_date"),
-            args.get("publication_locator"),
+        values, locators = _read_fields(archived.tree, args.get("fields") or {})
+        _check_required_fields(kind, values, archived.host)
+        observation, observation_basis, publication, publication_basis = self._dates(
+            archived, args.get("observation_locator"), args.get("observation_date"), args.get("publication_locator")
         )
         if kind in ("fact", "signal", "quote") and observation is None:
             raise ResearchError("une valeur exige sa date d'observation (observation_locator ou observation_date)")
         label = str(args.get("label") or values.get("title") or kind)
-        claim = str(args.get("claim") or "")
-        if not claim.strip():
-            raise ResearchError("claim est requis (une phrase neutre en français)")
+        claim = _required_claim(args)
         self._ground(f"{label} {claim}", list(values.values()), _dates_pool(observation, publication))
         finding = self._base(archived, kind, label, claim, args.get("issuers") or self.brief.issuers)
         link = values.get("link") or values.get("url")
         finding.update(
             values=values,
             locators=locators,
-            unit=(str(args.get("unit"))[:40] if args.get("unit") else None),
+            unit=_clipped(args.get("unit"), 40),
             observation_date=observation,
-            observation_basis=obs_basis,
+            observation_basis=observation_basis,
             publication_date=publication,
-            publication_basis=pub_basis,
+            publication_basis=publication_basis,
             item_url=link if isinstance(link, str) and link.startswith("https://") else archived.url,
         )
         self.findings.append(finding)
@@ -385,57 +610,32 @@ class ResearcherRun:
         }
 
     def record_series(self, args: dict[str, Any]) -> dict[str, Any]:
-        if len(self.findings) >= MAX_FINDINGS:
-            raise ResearchError(f"au plus {MAX_FINDINGS} constats par chercheur")
+        self._check_room()
         archived = self.web.get(str(args.get("response_id") or ""))
-        rows_locator = str(args.get("rows") or "")
-        date_field, value_field = str(args.get("date_field") or ""), str(args.get("value_field") or "")
-        rows = documents.extract_rows(archived.tree, rows_locator, date_field, value_field)
-        observations = []
-        for row in rows:
-            day = parse_any_date(row["date"])
-            if day is None:
-                continue
-            observations.append({"date": day[:10], "value": row["value"], "row": row["row"]})
-        if not observations:
-            raise ResearchError("aucune date lisible dans la série")
-        observations.sort(key=lambda o: o["date"])
-        observations = observations[-MAX_SERIES_ROWS:]
+        spec = _series_spec(args)
+        rows = documents.extract_rows(archived.tree, spec["rows"], spec["date_field"], spec["value_field"])
+        observations = _dated_observations(rows)
         last = observations[-1]
-        publication_field = args.get("publication_field")
-        publication_locator = None
-        if publication_field:
-            publication_locator = (
-                f"{rows_locator}[{last['row']}].{publication_field}"
-                if not str(publication_field).startswith("[")
-                else f"{rows_locator}[{last['row']}]{publication_field}"
-            )
-        _, _, publication, pub_basis = self._dates(archived, archived.tree, None, last["date"], publication_locator)
+        publication_locator = _publication_locator(spec["rows"], last, spec["publication_field"])
+        _, _, publication, publication_basis = self._dates(archived, None, last["date"], publication_locator)
         label = str(args.get("label") or args.get("series_id") or "série")
-        claim = str(args.get("claim") or "")
-        if not claim.strip():
-            raise ResearchError("claim est requis (une phrase neutre en français)")
+        claim = _required_claim(args)
         self._ground(
             f"{label} {claim}",
-            [o["value"] for o in observations],
+            [observation["value"] for observation in observations],
             _dates_pool(observations[0]["date"], last["date"], publication),
         )
         finding = self._base(archived, "series", label, claim, args.get("issuers") or [])
         finding.update(
             series_id=str(args.get("series_id") or label)[:80],
-            unit=(str(args.get("unit"))[:40] if args.get("unit") else None),
-            frequency=(str(args.get("frequency"))[:20] if args.get("frequency") else None),
-            observations=[{"date": o["date"], "value": o["value"]} for o in observations],
-            series_spec={
-                "rows": rows_locator,
-                "date_field": date_field,
-                "value_field": value_field,
-                "publication_field": publication_field,
-            },
+            unit=_clipped(args.get("unit"), 40),
+            frequency=_clipped(args.get("frequency"), 20),
+            observations=[{"date": observation["date"], "value": observation["value"]} for observation in observations],
+            series_spec=spec,
             observation_date=last["date"],
             observation_basis="source",
             publication_date=publication,
-            publication_basis=pub_basis,
+            publication_basis=publication_basis,
             item_url=archived.url,
             values={"last": last["value"]},
         )
@@ -449,182 +649,97 @@ class ResearcherRun:
         }
 
     # ------------------------------------------------------------------ outils
-    def tools(self) -> list[Any]:
+    def _guarded(self, action: Callable[[], dict[str, Any]]) -> str:
+        """Compte l'appel dans le budget, puis rend au modèle le résultat de l'action ou la raison du refus."""
+        reason = self._spend()
+        if reason:
+            return tool_result({"status": "error", "reason": reason})
+        try:
+            return tool_result(action())
+        except (ResearchError, WebError, documents.DocumentError) as exc:
+            return tool_result({"status": "error", "reason": str(exc)})
+
+    def _search_source(self, source: str, query: str, limit: int) -> dict[str, Any]:
+        if source not in pack_sources(self.brief.packs):
+            raise ResearchError(f"source hors de vos paquets : {source}")
+        adapter = search.ADAPTERS[source]
+        if source == "feeds":
+            return {"status": "ok", **adapter(self.web, query, limit, tuple(self.brief.packs))}
+        return {"status": "ok", **adapter(self.web, str(query)[:250], int(limit))}
+
+    def _check_statcan_allowed(self) -> None:
+        if "www150.statcan.gc.ca" not in pack_hosts(self.brief.packs):
+            raise ResearchError("Statistique Canada n'est pas dans vos paquets")
+
+    def _statcan_table(self, product_id: int) -> dict[str, Any]:
+        self._check_statcan_allowed()
+        archived = self.web.post_json(
+            "https://www150.statcan.gc.ca/t1/wds/rest/getCubeMetadata", [{"productId": int(product_id)}]
+        )
+        return _preview(archived, 0)
+
+    def _statcan_data(self, product_id: int, coordinate: str, latest_n: int) -> dict[str, Any]:
+        self._check_statcan_allowed()
+        if not _COORDINATE.match(str(coordinate)):
+            raise ResearchError("coordinate doit compter 10 identifiants séparés par des points")
+        archived = self.web.post_json(
+            "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromCubePidCoordAndLatestNPeriods",
+            [{"productId": int(product_id), "coordinate": str(coordinate), "latestN": int(latest_n)}],
+        )
+        return _preview(archived, 0)
+
+    def _propose_host(self, url: str, why: str) -> dict[str, Any]:
+        entry = self.web.propose_host(str(url).strip(), why)
+        return {
+            "status": "ok",
+            "host": entry.host,
+            "robots_status": entry.robots_status,
+            "readable": entry.robots_allows,
+            "note": "findings from this host stay in quarantine until a human approves its licence",
+        }
+
+    def _finish(self, tool_context: Any, summary: str, gaps: list[str] | None) -> str:
+        self.finished = True
+        self.summary = " ".join(str(summary).split())[:1200]
+        self.gaps = _strings(gaps or [], 10, 300)
+        tool_context.agent.cancel(after_current_tools=True)
+        return tool_result({"status": "ok", "findings": len(self.findings)})
+
+    def _reading_tools(self) -> list[Any]:
         run = self
         sources = pack_sources(run.brief.packs)
 
-        def guarded(fn):
-            def wrapper(*args, **kwargs):
-                reason = run._spend()
-                if reason:
-                    return tool_result({"status": "error", "reason": reason})
-                try:
-                    return tool_result(fn(*args, **kwargs))
-                except (ResearchError, WebError, documents.DocumentError) as exc:
-                    return tool_result({"status": "error", "reason": str(exc)})
-
-            return wrapper
-
         @tool(
             name="search_source",
-            description="Search a source catalogue or search API of your packs. Sources: " + ", ".join(sources),
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "source": {"type": "string", "enum": list(sources) or ["feeds"]},
-                        "query": {"type": "string"},
-                        "limit": {"type": "integer", "minimum": 1, "maximum": 12},
-                    },
-                    "required": ["source", "query"],
-                }
-            },
+            description=SEARCH_SOURCE_DESCRIPTION + ", ".join(sources),
+            inputSchema=_search_source_schema(sources),
         )
         def search_source(source: str, query: str, limit: int = 8) -> str:
-            @guarded
-            def go():
-                if source not in sources:
-                    raise ResearchError(f"source hors de vos paquets : {source}")
-                adapter = search.ADAPTERS[source]
-                if source == "feeds":
-                    return {"status": "ok", **adapter(run.web, query, limit, tuple(run.brief.packs))}
-                return {"status": "ok", **adapter(run.web, str(query)[:250], int(limit))}
+            return run._guarded(lambda: run._search_source(source, query, limit))
 
-            return go()
-
-        def _preview(archived: Any, offset: int) -> dict[str, Any]:
-            return {
-                "status": "ok",
-                "response_id": archived.response_id,
-                "url": archived.url,
-                "http_status": archived.status,
-                "format": archived.fmt,
-                "host_status": archived.host_status,
-                "retrieved_at": archived.retrieved_at,
-                "last_modified": archived.headers.get("Last-Modified"),
-                **documents.preview(archived.tree, offset),
-            }
-
-        @tool(
-            name="fetch",
-            description="GET a URL on an allowed host; returns a paged preview (path = value lines) and a response_id.",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {"url": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}},
-                    "required": ["url"],
-                }
-            },
-        )
+        @tool(name="fetch", description=FETCH_DESCRIPTION, inputSchema=FETCH_SCHEMA)
         def fetch(url: str, offset: int = 0) -> str:
-            @guarded
-            def go():
-                return _preview(run.web.fetch(str(url).strip()), offset)
+            return run._guarded(lambda: _preview(run.web.fetch(str(url).strip()), offset))
 
-            return go()
-
-        @tool(
-            name="view",
-            description="Show more lines of an already fetched response (no new request).",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {"response_id": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}},
-                    "required": ["response_id", "offset"],
-                }
-            },
-        )
+        @tool(name="view", description=VIEW_DESCRIPTION, inputSchema=VIEW_SCHEMA)
         def view(response_id: str, offset: int) -> str:
-            @guarded
-            def go():
-                return _preview(run.web.get(response_id), offset)
+            return run._guarded(lambda: _preview(run.web.get(response_id), offset))
 
-            return go()
-
-        statcan_allowed = "www150.statcan.gc.ca" in pack_hosts(run.brief.packs)
-
-        @tool(
-            name="statcan_table",
-            description="Statistics Canada table metadata (dimensions and member ids) by product id, e.g. 18100205.",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {"product_id": {"type": "integer"}},
-                    "required": ["product_id"],
-                }
-            },
-        )
+        @tool(name="statcan_table", description=STATCAN_TABLE_DESCRIPTION, inputSchema=STATCAN_TABLE_SCHEMA)
         def statcan_table(product_id: int) -> str:
-            @guarded
-            def go():
-                if not statcan_allowed:
-                    raise ResearchError("Statistique Canada n'est pas dans vos paquets")
-                archived = run.web.post_json(
-                    "https://www150.statcan.gc.ca/t1/wds/rest/getCubeMetadata", [{"productId": int(product_id)}]
-                )
-                return _preview(archived, 0)
+            return run._guarded(lambda: run._statcan_table(product_id))
 
-            return go()
-
-        @tool(
-            name="statcan_data",
-            description="Latest N data points of a Statistics Canada table coordinate (10 member ids joined by dots, "
-            "e.g. 1.1.0.0.0.0.0.0.0.0). Use record_series with rows `[0].object.vectorDataPoint`, date_field refPer, "
-            "value_field value, publication_field releaseTime.",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "product_id": {"type": "integer"},
-                        "coordinate": {"type": "string"},
-                        "latest_n": {"type": "integer", "minimum": 1, "maximum": 60},
-                    },
-                    "required": ["product_id", "coordinate"],
-                }
-            },
-        )
+        @tool(name="statcan_data", description=STATCAN_DATA_DESCRIPTION, inputSchema=STATCAN_DATA_SCHEMA)
         def statcan_data(product_id: int, coordinate: str, latest_n: int = 12) -> str:
-            @guarded
-            def go():
-                if not statcan_allowed:
-                    raise ResearchError("Statistique Canada n'est pas dans vos paquets")
-                if not _COORDINATE.match(str(coordinate)):
-                    raise ResearchError("coordinate doit compter 10 identifiants séparés par des points")
-                archived = run.web.post_json(
-                    "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromCubePidCoordAndLatestNPeriods",
-                    [{"productId": int(product_id), "coordinate": str(coordinate), "latestN": int(latest_n)}],
-                )
-                return _preview(archived, 0)
+            return run._guarded(lambda: run._statcan_data(product_id, coordinate, latest_n))
 
-            return go()
+        return [search_source, fetch, view, statcan_table, statcan_data]
 
-        locator_map = {"type": "object", "additionalProperties": {"type": "string"}}
+    def _record_finding_tool(self) -> Any:
+        run = self
 
-        @tool(
-            name="record_finding",
-            description="Record one finding from a fetched response by locators. kind: news (fields title, link), "
-            "fact or signal or quote (field value; markets also resolution_rules, bid, ask, volume), filing (fields "
-            "form, accession). The code reads every value and date.",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "kind": {"type": "string", "enum": list(FINDING_KINDS)},
-                        "label": {"type": "string"},
-                        "claim": {"type": "string"},
-                        "response_id": {"type": "string"},
-                        "fields": locator_map,
-                        "observation_locator": {"type": "string"},
-                        "observation_date": {"type": "string"},
-                        "publication_locator": {"type": "string"},
-                        "unit": {"type": "string"},
-                        "issuers": {"type": "array", "items": {"type": "string"}},
-                    },
-                    "required": ["kind", "label", "claim", "response_id", "fields"],
-                }
-            },
-        )
-        def record_finding(
+        @tool(name="record_finding", description=RECORD_FINDING_DESCRIPTION, inputSchema=RECORD_FINDING_SCHEMA)
+        def record_finding(  # noqa: PLR0913 - signature imposée par le schéma de l'outil (validée par strands)
             kind: str,
             label: str,
             claim: str,
@@ -648,38 +763,15 @@ class ResearcherRun:
                 "unit": unit,
                 "issuers": issuers,
             }
+            return run._guarded(lambda: run.record_finding(args))
 
-            @guarded
-            def go():
-                return run.record_finding(args)
+        return record_finding
 
-            return go()
+    def _record_series_tool(self) -> Any:
+        run = self
 
-        @tool(
-            name="record_series",
-            description="Record a time series from a fetched response: rows = locator of the list of rows, "
-            "date_field and value_field = paths inside each row (CSV: rows `rows`, fields = column names).",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "label": {"type": "string"},
-                        "claim": {"type": "string"},
-                        "response_id": {"type": "string"},
-                        "rows": {"type": "string"},
-                        "date_field": {"type": "string"},
-                        "value_field": {"type": "string"},
-                        "publication_field": {"type": "string"},
-                        "series_id": {"type": "string"},
-                        "unit": {"type": "string"},
-                        "frequency": {"type": "string"},
-                        "issuers": {"type": "array", "items": {"type": "string"}},
-                    },
-                    "required": ["label", "claim", "response_id", "rows", "date_field", "value_field"],
-                }
-            },
-        )
-        def record_series(
+        @tool(name="record_series", description=RECORD_SERIES_DESCRIPTION, inputSchema=RECORD_SERIES_SCHEMA)
+        def record_series(  # noqa: PLR0913 - signature imposée par le schéma de l'outil (validée par strands)
             label: str,
             claim: str,
             response_id: str,
@@ -705,88 +797,35 @@ class ResearcherRun:
                 "frequency": frequency,
                 "issuers": issuers,
             }
+            return run._guarded(lambda: run.record_series(args))
 
-            @guarded
-            def go():
-                return run.record_series(args)
+        return record_series
 
-            return go()
+    def _closing_tools(self) -> list[Any]:
+        run = self
 
-        @tool(
-            name="propose_host",
-            description="Propose a relevant host outside your packs (at most 2). Its findings stay in quarantine.",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {"url": {"type": "string"}, "why": {"type": "string"}},
-                    "required": ["url", "why"],
-                }
-            },
-        )
+        @tool(name="propose_host", description=PROPOSE_HOST_DESCRIPTION, inputSchema=PROPOSE_HOST_SCHEMA)
         def propose_host(url: str, why: str) -> str:
-            @guarded
-            def go():
-                entry = run.web.propose_host(str(url).strip(), why)
-                return {
-                    "status": "ok",
-                    "host": entry.host,
-                    "robots_status": entry.robots_status,
-                    "readable": entry.robots_allows,
-                    "note": "findings from this host stay in quarantine until a human approves its licence",
-                }
+            return run._guarded(lambda: run._propose_host(url, why))
 
-            return go()
-
-        @tool(
-            name="finish",
-            description="End the mission with a one-paragraph French summary and the evidence not found (gaps).",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "summary": {"type": "string"},
-                        "gaps": {"type": "array", "items": {"type": "string"}},
-                    },
-                    "required": ["summary"],
-                }
-            },
-            context=True,
-        )
+        @tool(name="finish", description=FINISH_DESCRIPTION, inputSchema=FINISH_SCHEMA, context=True)
         def finish(tool_context, summary: str, gaps: list[str] | None = None) -> str:
-            run.finished = True
-            run.summary = " ".join(str(summary).split())[:1200]
-            run.gaps = _strings(gaps or [], 10, 300)
-            tool_context.agent.cancel(after_current_tools=True)
-            return tool_result({"status": "ok", "findings": len(run.findings)})
+            return run._finish(tool_context, summary, gaps)
 
+        return [propose_host, finish]
+
+    def tools(self) -> list[Any]:
         return [
-            search_source,
-            fetch,
-            view,
-            statcan_table,
-            statcan_data,
-            record_finding,
-            record_series,
-            propose_host,
-            finish,
+            *self._reading_tools(),
+            self._record_finding_tool(),
+            self._record_series_tool(),
+            *self._closing_tools(),
         ]
 
 
-def research(
-    *,
-    brief: Brief,
-    store: Store,
-    trace: Trace,
-    model_factory: ModelFactory,
-    model_id: str,
-    web: ResearchWeb | None = None,
-) -> dict[str, Any]:
-    from .packs import describe_packs
-
-    web = web or ResearchWeb(store=store, allowed_hosts=pack_hosts(brief.packs))
-    run = ResearcherRun(brief=brief, store=store, web=web, deadline=time.monotonic() + brief.budget_s)
+def _system_prompt(brief: Brief) -> str:
     subject = SUBJECTS[brief.subject]
-    prompt = SYSTEM_PROMPT.format(
+    return SYSTEM_PROMPT.format(
         subject=subject.code,
         subject_name=subject.name,
         researcher=brief.researcher,
@@ -800,39 +839,25 @@ def research(
         max_tool_calls=brief.max_tool_calls,
         packs=describe_packs(brief.packs),
     )
-    spec = AgentSpec(
-        actor="researcher",
-        name=f"Researcher {brief.subject}-{brief.researcher}",
-        effort="medium",
-        system_prompt=prompt,
-        tools=run.tools(),
-        max_turns=brief.max_tool_calls + 4,
-        max_tokens=8000,
-        tool_summaries={
-            "record_finding": lambda i: {"kind": i.get("kind"), "label": str(i.get("label"))[:80]},
-            "record_series": lambda i: {"label": str(i.get("label"))[:80], "rows": i.get("rows")},
-        },
-    )
-    error = None
-    try:
-        run_agent(spec, "Start the mission.", model_factory=model_factory, model_id=model_id, trace=trace)
-    except AppError as exc:
-        error = f"{exc.code}: {exc.message}"
-    store.put_json(brief.prefix + "findings.json", {"brief": brief.to_dict(), "findings": run.findings})
-    quarantine = [
+
+
+def _quarantine_report(web: ResearchWeb) -> list[dict[str, Any]]:
+    return [
         {
-            "host": q.host,
-            "url": q.url,
-            "why": q.why,
-            "robots_status": q.robots_status,
-            "readable": q.robots_allows,
-            "fetches": q.fetches,
-            "proposed_at": q.proposed_at,
+            "host": entry.host,
+            "url": entry.url,
+            "why": entry.why,
+            "robots_status": entry.robots_status,
+            "readable": entry.robots_allows,
+            "fetches": entry.fetches,
+            "proposed_at": entry.proposed_at,
         }
-        for q in web.quarantine.values()
+        for entry in web.quarantine.values()
     ]
-    if error and not run.findings:
-        raise AppError("model_error", error)
+
+
+def _research_summary(run: ResearcherRun, error: str | None) -> dict[str, Any]:
+    brief, web = run.brief, run.web
     return {
         "subject": brief.subject,
         "researcher": brief.researcher,
@@ -840,9 +865,40 @@ def research(
         "findings_key": brief.prefix + "findings.json",
         "summary": run.summary,
         "gaps": run.gaps,
-        "quarantine": quarantine,
+        "quarantine": _quarantine_report(web),
         "blocked_hosts": dict(web.blocked),
         "requests": dict(web.counts),
         "warnings": web.warnings + ([error] if error else []) + ([] if run.finished else ["finish non appelé"]),
         "tool_calls": run.tool_calls,
     }
+
+
+def research(
+    *,
+    brief: Brief,
+    store: Store,
+    trace: Trace,
+    model_factory: ModelFactory,
+    model_id: str,
+) -> dict[str, Any]:
+    web = ResearchWeb(store=store, allowed_hosts=pack_hosts(brief.packs))
+    run = ResearcherRun(brief=brief, store=store, web=web, deadline=time.monotonic() + brief.budget_s)
+    spec = AgentSpec(
+        actor="researcher",
+        name=f"Researcher {brief.subject}-{brief.researcher}",
+        effort="medium",
+        system_prompt=_system_prompt(brief),
+        tools=run.tools(),
+        max_turns=brief.max_tool_calls + 4,
+        max_tokens=8000,
+        tool_summaries=TOOL_SUMMARIES,
+    )
+    error = None
+    try:
+        run_agent(spec, "Start the mission.", model_factory=model_factory, model_id=model_id, trace=trace)
+    except AppError as exc:
+        error = f"{exc.code}: {exc.message}"
+    store.put_json(brief.prefix + "findings.json", {"brief": brief.to_dict(), "findings": run.findings})
+    if error and not run.findings:
+        raise AppError("model_error", error)
+    return _research_summary(run, error)

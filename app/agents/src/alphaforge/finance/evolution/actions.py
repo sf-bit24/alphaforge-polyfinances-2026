@@ -10,6 +10,10 @@ un marqueur JSON par étape (même modèle que la collecte) :
                       -> staging/<run_id>/evolution/replay/_done.json
     evolution.replay_summary {"action", "client_id", "run_id"?}   (résumé compact, aucun marqueur)
 
+Persona de démonstration (FICTION, ``alphaforge.finance.personas``) : ``"persona": "amira"`` à la place de
+``client_id``, ou ``client_id = "demo-<persona>"`` (forme transmise par la machine) ; l'historique va sous
+``clients/demo-<persona>/portefeuilles/``.
+
 Champs facultatifs de ``tick`` et ``replay`` : ``value_cad`` (valeur initiale, sinon ``investable_wealth`` du
 profil), ``monthly_flow_cad`` (flux mensuel, 0 par défaut), ``overlays`` (booléen, vrai par défaut),
 ``persona_label``. Toute autre clé est refusée (``bad_request``). Sans ``end``, le rejeu va jusqu'au dernier mois
@@ -94,10 +98,11 @@ DEFAULT_REPLAY_MONTHS = 12
 MARKET_SOURCE_ENV = "ALPHAFORGE_MARKET_SOURCE"     # "parquet" (moteur) ou "csv" (export .csv.gz)
 MARKET_URI_ENV = "ALPHAFORGE_MARKET_URI"           # s3://<bucket>/<clé>, clé du magasin ou fichier local
 
-_OPTIONAL = ("value_cad", "monthly_flow_cad", "overlays", "persona_label")
+_OPTIONAL = ("value_cad", "monthly_flow_cad", "overlays", "persona_label", "persona")
 TICK_KEYS = frozenset({"action", "client_id", "run_id", "month", *_OPTIONAL})
 REPLAY_KEYS = frozenset({"action", "client_id", "run_id", "start", "end", *_OPTIONAL})
-SUMMARY_KEYS = frozenset({"action", "client_id", "run_id"})
+SUMMARY_KEYS = frozenset({"action", "client_id", "run_id", "persona"})
+PERSONA_PREFIX = "demo-"      # client_id d'une persona de démonstration : demo-<persona> (FICTION)
 
 ProfileLoader = Callable[[str], InvestorProfile]
 
@@ -196,7 +201,12 @@ class _Ctx:
             self._pit = load_pit(self.store)
         return self._pit
 
-    def load_profile(self, client_id: str) -> InvestorProfile:
+    def load_profile(self, client_id: str, persona: str | None = None) -> InvestorProfile:
+        if persona is not None:
+            # persona de démonstration : profil de test du moteur, sans magasin client (FICTION)
+            from ..personas import load as load_persona
+
+            return load_persona(persona)[0]
         if self._loader is None:
             from ..debate.okf_bridge import OkfClientStore
 
@@ -211,7 +221,8 @@ class _Ctx:
 class _Req:
     def __init__(self, payload: Mapping[str, Any]):
         self.provided = set(payload)
-        self.client_id: str = payload["client_id"]
+        self.persona: str | None = payload.get("persona")
+        self.client_id: str = payload.get("client_id") or f"{PERSONA_PREFIX}{self.persona}"
         self.run_id: str = payload.get("run_id") or ""
         self.month: str = payload.get("month") or ""
         self.start: str | None = payload.get("start")
@@ -243,6 +254,19 @@ def _parse(payload: Any, action: str, allowed: frozenset[str], required: tuple[s
                        {"unknown": unknown, "allowed": sorted(allowed)})
     if "action" in payload and payload["action"] != action:
         raise AppError("bad_request", f"action doit valoir {action}.", {"action": payload["action"]})
+    persona = payload.get("persona")
+    if persona is not None:
+        if payload.get("client_id") is not None:
+            raise AppError("bad_request", "client_id ou persona, pas les deux.", {"field": "persona"})
+        known = _persona_ids()
+        if not isinstance(persona, str) or persona not in known:
+            raise AppError("bad_request", "persona inconnue.", {"field": "persona", "allowed": known})
+        payload = {**payload, "client_id": f"{PERSONA_PREFIX}{persona}"}
+    elif isinstance(payload.get("client_id"), str) and payload["client_id"].startswith(PERSONA_PREFIX):
+        # « demo-<persona> » venant de la machine Step Functions (qui ne transmet qu'un client_id)
+        name = payload["client_id"][len(PERSONA_PREFIX):]
+        if name in _persona_ids():
+            payload = {**payload, "persona": name}
     for k in required:
         if k not in payload or payload[k] is None:
             raise AppError("bad_request", f"{k} est requis.", {"field": k})
@@ -271,6 +295,15 @@ def _parse(payload: Any, action: str, allowed: frozenset[str], required: tuple[s
     if "monthly_flow_cad" in payload and "value_cad" in payload:     # tôt : ni profil ni données touchés
         _check_flow(float(payload["monthly_flow_cad"]), float(payload["value_cad"]))
     return _Req(payload)
+
+
+def _persona_ids() -> list[str]:
+    """Personas FICTION de démonstration (``alphaforge.finance.personas``, PR #47) ; liste vide si absentes."""
+    try:
+        from ..personas import ids
+    except ImportError:
+        return []
+    return list(ids())
 
 
 def _check_flow(flow: float, value: float) -> None:
@@ -479,6 +512,21 @@ def _fail(ctx: _Ctx, marker: str | None, exc: AppError, ident: dict[str, Any]) -
     return _tag(error_response(_release(), exc))
 
 
+def write_error_marker(payload: Any, store: Store | None, code: str, message: str) -> None:
+    """Marqueur d'erreur pour une tâche qui a échoué avant d'atteindre son action (ex. moteur introuvable dans le
+    runtime). Ne remplace jamais un marqueur « ok » (``_write_marker`` est conditionnel)."""
+    if not isinstance(payload, Mapping):
+        return
+    run_id, month = _hint(payload, "run_id", RUN_ID), _hint(payload, "month", MONTH)
+    if not run_id:
+        return
+    action = payload.get("action")
+    marker = tick_marker_key(run_id, month) if action == ACTION_TICK and month else replay_marker_key(run_id)
+    ident = {"run_id": run_id, "client_id": _hint(payload, "client_id", CLIENT_ID)}
+    _fail(_Ctx(store, None, None), marker, AppError(code if code in ("internal", "bad_request") else "internal",
+                                                    message), ident)
+
+
 def _run(ctx: _Ctx, marker: str | None, ident: dict[str, Any], fn: Callable[[], dict[str, Any]]) -> dict[str, Any]:
     try:
         body = fn()
@@ -558,7 +606,7 @@ def _tick(req: _Req, ctx: _Ctx, cfg: EvolutionConfig, marker: str) -> dict[str, 
                                 "stored": {k: params.get(k) for k in _PARAM_FIELDS}})
             _check_overrides(req, params)
 
-    profile = ctx.load_profile(cid)
+    profile = ctx.load_profile(cid, persona=req.persona)
     write_params = params is None
     if params is None:
         params = _params(_ym(origin), _initial_value(req, profile), req.monthly_flow_cad, req.overlays)
@@ -639,7 +687,7 @@ def _replay(req: _Req, ctx: _Ctx, cfg: EvolutionConfig, marker: str) -> dict[str
         raise AppError("conflict", "Historique sans paramètres de trajectoire.",
                        {"reason": "trajectory_params_missing"})
 
-    profile = ctx.load_profile(cid)
+    profile = ctx.load_profile(cid, persona=req.persona)
     # une trajectoire enregistrée fournit les valeurs par défaut des champs absents (origine comprise) ; des
     # paramètres sans version (invocation arrêtée avant le premier ajout) la définissent tout autant
     known = params or {}

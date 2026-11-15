@@ -390,3 +390,33 @@ def test_append_orphan_out_of_sequence_refused():
     with pytest.raises(AppError) as exc:
         A._append(hist, chain[2])
     assert exc.value.details["reason"] == "history_append" and len(hist.index()) == 1
+
+
+# ---------------------------------------------------------------- personas de démonstration (PR #47)
+def test_persona_maps_to_demo_client_id():
+    from alphaforge.finance.evolution import actions as A
+
+    req = A._parse({"action": A.ACTION_REPLAY, "persona": "amira", "run_id": "r1"}, A.ACTION_REPLAY,
+                   A.REPLAY_KEYS, ("client_id", "run_id"))
+    assert req.client_id == "demo-amira" and req.persona == "amira"
+
+
+def test_demo_client_id_from_state_machine_is_a_persona():
+    from alphaforge.finance.evolution import actions as A
+
+    req = A._parse({"action": A.ACTION_REPLAY, "client_id": "demo-robert", "run_id": "r1"}, A.ACTION_REPLAY,
+                   A.REPLAY_KEYS, ("client_id", "run_id"))
+    assert req.persona == "robert"
+
+
+@pytest.mark.parametrize("payload", [
+    {"persona": "amira", "client_id": "c1", "run_id": "r1"},
+    {"persona": "inconnue", "run_id": "r1"},
+])
+def test_persona_misuse_is_refused(payload):
+    from alphaforge.errors import AppError
+    from alphaforge.finance.evolution import actions as A
+
+    with pytest.raises(AppError) as exc:
+        A._parse({"action": A.ACTION_REPLAY, **payload}, A.ACTION_REPLAY, A.REPLAY_KEYS, ("client_id", "run_id"))
+    assert exc.value.code == "bad_request"

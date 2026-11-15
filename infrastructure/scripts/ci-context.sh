@@ -13,13 +13,15 @@ set -eu
 #   EPHEMERAL_ENVS_ENABLED : "true" pour deployer les push feature/*
 #   DESTROY_ENV            : "true" -> tests seulement
 #   DEPLOY_ENV, TF_CLOUD_HOSTNAME, TF_CLOUD_ORGANIZATION : republies tels quels
+#   ECR_REGISTRY_IMAGE     : depot ECR de l'image de l'interface (sinon GHCR)
+#   AWS_ECR_PUSH_ROLE_ARN, AWS_REGION : role et region du push, republies
 #
 # Sorties :
 #   build   : construire et pousser les images
 #   deploy  : images_tfvars + validate -> upload -> plan
 #   apply   : apply apres le plan
-#   image_tag, registry_image, deploy_env, ephemeral_envs_enabled,
-#   tf_cloud_hostname, tf_cloud_organization
+#   image_tag, registry_image, aws_push_role_arn, aws_region, deploy_env,
+#   ephemeral_envs_enabled, tf_cloud_hostname, tf_cloud_organization
 #
 # | evenement                                   | build | deploy | apply |
 # |---------------------------------------------|-------|--------|-------|
@@ -66,8 +68,9 @@ if [ "${DESTROY_ENV:-false}" != "true" ]; then
   esac
 fi
 
-# GHCR exige un chemin en minuscules.
-REGISTRY_IMAGE="ghcr.io/$(printf '%s' "${GITHUB_REPOSITORY:-local/repo}" | tr '[:upper:]' '[:lower:]')"
+# Image de l'interface : le depot ECR du bootstrap s'il est donne, sinon le
+# prefixe GHCR du repo (GHCR exige un chemin en minuscules).
+REGISTRY_IMAGE="${ECR_REGISTRY_IMAGE:-ghcr.io/$(printf '%s' "${GITHUB_REPOSITORY:-local/repo}" | tr '[:upper:]' '[:lower:]')}"
 # 8 caracteres, comme CI_COMMIT_SHORT_SHA cote GitLab.
 IMAGE_TAG=$(printf '%.8s' "${GITHUB_SHA:-local}")
 
@@ -78,6 +81,8 @@ OUT="${GITHUB_OUTPUT:-/dev/null}"
   echo "apply=$APPLY"
   echo "image_tag=$IMAGE_TAG"
   echo "registry_image=$REGISTRY_IMAGE"
+  echo "aws_push_role_arn=${AWS_ECR_PUSH_ROLE_ARN:-}"
+  echo "aws_region=${AWS_REGION:-us-east-1}"
   echo "deploy_env=${DEPLOY_ENV:-}"
   echo "ephemeral_envs_enabled=$EPHEMERAL"
   echo "tf_cloud_hostname=${TF_CLOUD_HOSTNAME:-app.terraform.io}"

@@ -48,12 +48,20 @@ jobs:
       EPHEMERAL_ENVS_ENABLED: ${{ vars.EPHEMERAL_ENVS_ENABLED || 'false' }}
       DESTROY_ENV: ${{ vars.DESTROY_ENV || 'false' }}
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      # Image de l'interface (app/web) et role qui la pousse, crees par
+      # infrastructure/bootstrap/github.tf. Le role n'accepte que les runs de
+      # la branche par defaut, par OIDC : aucune cle AWS dans GitHub.
+      ECR_REGISTRY_IMAGE: "024848478575.dkr.ecr.us-east-1.amazonaws.com/alphaforge-web"
+      AWS_ECR_PUSH_ROLE_ARN: "arn:aws:iam::024848478575:role/alphaforge-github-ecr-push"
+      AWS_REGION: "us-east-1"
     outputs:
       build: ${{ steps.ctx.outputs.build }}
       deploy: ${{ steps.ctx.outputs.deploy }}
       apply: ${{ steps.ctx.outputs.apply }}
       image_tag: ${{ steps.ctx.outputs.image_tag }}
       registry_image: ${{ steps.ctx.outputs.registry_image }}
+      aws_push_role_arn: ${{ steps.ctx.outputs.aws_push_role_arn }}
+      aws_region: ${{ steps.ctx.outputs.aws_region }}
       deploy_env: ${{ steps.ctx.outputs.deploy_env }}
       ephemeral_envs_enabled: ${{ steps.ctx.outputs.ephemeral_envs_enabled }}
       tf_cloud_hostname: ${{ steps.ctx.outputs.tf_cloud_hostname }}
@@ -69,12 +77,19 @@ jobs:
 
   app:
     needs: context
+    # id-token : le job build_web d'app.yml echange son jeton OIDC contre le
+    # role de push ECR. Un workflow appele ne peut pas depasser ces droits.
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/app.yml
     with:
       build: ${{ needs.context.outputs.build }}
       deploy: ${{ needs.context.outputs.deploy }}
       image_tag: ${{ needs.context.outputs.image_tag }}
       registry_image: ${{ needs.context.outputs.registry_image }}
+      aws_push_role_arn: ${{ needs.context.outputs.aws_push_role_arn }}
+      aws_region: ${{ needs.context.outputs.aws_region }}
     secrets: inherit
 
   infra:

@@ -14,6 +14,7 @@ Compte AWS Workshop Studio du Datathon, `us-east-1`, environnement `sandbox`, pr
 | Step Functions | `infra/stepfunctions.tf` | Collecte : A4 et A5 en parallèle, A6, puis ingestion de la Knowledge Base. |
 | EventBridge Scheduler | `infra/scheduler.tf` | Veille : lance la collecte toutes les 6 heures. |
 | SageMaker Processing + Step Functions | `infra/scenarios.tf` | Scénarios probabilistes (facultatif, `scenarios_enabled`) : un job sur l'image scikit-learn d'AWS calcule la table des scénarios hors du poste, de façon reproductible (image et code figés, entrées et sorties dans S3). Step Functions le lance (`.sync`), écrit `_done.json` puis `scenarios/latest.json`. |
+| ECS Fargate + ALB + CloudFront | `infra/web.tf` | Interface Next.js (`app/web/Dockerfile`), `AGENT_MODE=aws`, image ECR `alphaforge-web:<release_id>`. CloudFront donne le HTTPS sur `*.cloudfront.net` (output `web_url`) ; l'ALB direct (`web_alb_url`, HTTP) garde la connexion 900 s pour un build du portefeuille de plus de 60 s, limite de CloudFront. Tâche en sous-réseau public avec IP publique (pas de NAT), joignable seulement depuis l'ALB. Facultatif (`web_enabled`). |
 | Glue + Athena | `infra/scenarios.tf` | Table `scenarios` (parquet, projection de partition sur `run_id`) interrogeable en SQL pour la validation et la démo, sans base à gérer; résultats chiffrés par la clé du bucket. |
 
 ```mermaid
@@ -59,18 +60,19 @@ flowchart LR
 
 | Événement | Jobs app | Jobs infra |
 | --- | --- | --- |
-| Push sur `master` | tests, zip, release | validate, upload, plan, apply |
-| PR qui touche `infrastructure/**` | tests, zip, release | validate, upload, plan (pas d'apply) |
-| Autre PR, autre push, `workflow_dispatch` | tests | aucun |
+| Push sur `master` | tests, zip, image poussée dans ECR, release | validate, upload, plan, apply |
+| PR qui touche `infrastructure/**` | tests, zip, image construite sans push, release | validate, upload, plan (pas d'apply) |
+| Autre PR, autre push, `workflow_dispatch` | tests, image construite sans push | aucun |
 | Variable de repo `DESTROY_ENV=true` | tests | aucun |
 
-GitHub Actions n'a aucun accès AWS : seul HCP Terraform assume le rôle `alphaforge-tfc-run` par OIDC, et c'est lui qui téléverse le zip dans S3. Le zip porte le SHA du commit (`runtime/agents-<sha>.zip`), donc chaque commit déploie un objet immuable et met les quatre runtimes à jour.
+GitHub Actions n'a aucune clé AWS. HCP Terraform assume le rôle `alphaforge-tfc-run` par OIDC, et c'est lui qui téléverse le zip dans S3. Seul le job `build_web`, sur un push de `master`, assume aussi par OIDC le rôle `alphaforge-github-ecr-push`, qui ne peut que pousser dans le dépôt ECR `alphaforge-web`. Le zip porte le SHA du commit (`runtime/agents-<sha>.zip`), donc chaque commit déploie un objet immuable et met les quatre runtimes à jour.
 
 ## Layout
 
 ```text
 infrastructure/
-  bootstrap/          OIDC HCP Terraform -> AWS et rôle des runs (une fois, état local)
+  bootstrap/          OIDC HCP Terraform -> AWS et rôle des runs (main.tf) ; OIDC GitHub,
+                      dépôt ECR et rôle de push de l'image (github.tf) ; une fois, état local
   infra/              module racine Terraform (le bundle téléversé garde ce dossier)
     build/            artefact du run : agents.zip, knowledge/ (jamais commité)
   deploy/
@@ -88,7 +90,7 @@ infrastructure/
    terraform -chdir=infrastructure/bootstrap apply
    ```
 
-   Il crée le fournisseur OIDC `app.terraform.io` et le rôle `alphaforge-tfc-run`, assumable seulement par les runs du workspace `larpathon` de l'organisation `larpathon_2026`. Son ARN est déjà dans `deploy/envs/sandbox.tfvars`.
+   Il crée le fournisseur OIDC `app.terraform.io` et le rôle `alphaforge-tfc-run`, assumable seulement par les runs du workspace `larpathon` de l'organisation `larpathon_2026`. Son ARN est déjà dans `deploy/envs/sandbox.tfvars`. `github.tf` (appliqué le 2026-11-15, même état) ajoute le fournisseur OIDC de GitHub Actions, le dépôt ECR `alphaforge-web`, le rôle `alphaforge-github-ecr-push` (branche `master` seulement) et les rôles liés aux services ECS et ELB ; leurs valeurs sont dans l'env du job `context` de `pipeline.yml`.
 2. **Workspace HCP Terraform** `larpathon` : sans VCS, répertoire de travail `infra`, auto-apply, Terraform 1.17.2, variables d'environnement `TFC_AWS_PROVIDER_AUTH=true` et `TFC_AWS_RUN_ROLE_ARN`.
 3. **GitHub** : secret `TF_API_TOKEN`, variables `EPHEMERAL_ENVS_ENABLED=false` et `TFC_PROJECT_ID`.
 

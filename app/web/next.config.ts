@@ -9,6 +9,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // ECS image (Dockerfile): a self-contained server.js with only the node_modules it needs.
+  output: "standalone",
   poweredByHeader: false,
   // The interface runs with `next dev` for the demo and the video: keep the route badge off the
   // journey's corners (compile and runtime errors are still shown).

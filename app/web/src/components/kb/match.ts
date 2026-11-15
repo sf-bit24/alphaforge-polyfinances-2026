@@ -1,8 +1,13 @@
 import type { KbItem, Locale } from "@/lib/contract/schemas";
 import { okfTypeLabel } from "@/lib/i18n/okf-types";
 
-/** Lower case, without accents: « Série » and « serie » match. */
-const fold = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+/** Lower case, without accents, typographic apostrophes as straight ones: « Série » matches « serie », « d’une » matches « d'une ». */
+const fold = (text: string) =>
+  text
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[’‘]/g, "'")
+    .toLowerCase();
 
 /**
  * The documents of the list that contain `query` in their key, title, description or type, the

@@ -43,6 +43,9 @@ describe("okfTypeLabel (#80)", () => {
     expect(okfTypeLabel("Portfolio Decision", "fr")).toBe("Décision de portefeuille");
     expect(okfTypeLabel("Financial Concept", "fr")).toBe("Notion financière");
     expect(okfTypeLabel("Existing Portfolio", "fr")).toBe("Portefeuille existant");
+    // Same names as the general/ folders (t.kb.groups) and the sections of A6's index.
+    expect(okfTypeLabel("Market Signal", "fr")).toBe("Signal de contexte");
+    expect(okfTypeLabel("Fact", "fr")).toBe("Fait sourcé");
   });
 
   it("gives English labels in sentence case", () => {
@@ -50,6 +53,7 @@ describe("okfTypeLabel (#80)", () => {
     expect(okfTypeLabel("Profile Note", "en")).toBe("Profile note");
     expect(okfTypeLabel("Investor Profile", "en")).toBe("Investor profile");
     expect(okfTypeLabel("Fact", "en")).toBe("Sourced fact");
+    expect(okfTypeLabel("Market Signal", "en")).toBe("Context signal");
     expect(okfTypeLabel("News", "en")).toBe("News");
   });
 
@@ -88,6 +92,7 @@ describe("matchingItems (#80)", () => {
     { key: "general/methodologie/risque.md", title: "Mesure du risque", type: "Methodology", description: null },
     { key: "general/actualites/2026/11/a.md", title: "Banque du Canada", type: "News" },
     { key: "general/index.md", title: "Index de la base", type: "Index" },
+    { key: "general/societes/atd.md", title: "Alimentation Couche-Tard", type: "Company Fundamentals" },
     { key: "general/autre.md", title: "Sans type", type: null },
   ];
   const keys = (query: string, locale: "fr" | "en") => matchingItems(items, query, locale).map((item) => item.key);
@@ -101,6 +106,9 @@ describe("matchingItems (#80)", () => {
   it("ignores accents and case", () => {
     expect(keys("SERIE DE", "fr")).toEqual(["general/donnees/xiu-to.md"]);
     expect(keys("actualite", "fr")).toEqual(["general/actualites/2026/11/a.md"]);
+    // Typed with a straight apostrophe, the label has a typographic one.
+    expect(keys("fondamentaux d'une", "fr")).toEqual(["general/societes/atd.md"]);
+    expect(keys("Fondamentaux d’une société", "fr")).toEqual(["general/societes/atd.md"]);
   });
 
   it("still finds a document by its raw type, key, title or description", () => {

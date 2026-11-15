@@ -40,6 +40,7 @@ BASE_ANSWERS = {
     "q_interests": ["technology", "crypto"],
     "q_crypto_place": "small",
     "q_crypto_max": "2to5",
+    "q_favored_tickers": ["none"],
     "q_hype_reaction": "wait",
     "q_hype_share": "lt2",
     "q_amount": "10k_50k",

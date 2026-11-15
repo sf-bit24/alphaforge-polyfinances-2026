@@ -22,7 +22,17 @@ from alphaforge.finance.portfolio.judge import check
 from alphaforge.finance.portfolio.optimizer import optimize
 
 from .config import StrategyConfig, load_strategy
-from .rules import Candidate, Plan, Ranked, apply_to_policy, degrade_steps, rank_scores, sector_caps, shortlist
+from .rules import (
+    Candidate,
+    Plan,
+    Ranked,
+    apply_to_policy,
+    degrade_steps,
+    interest_asset_floors,
+    rank_scores,
+    sector_caps,
+    shortlist,
+)
 from .rules import stock_floors as _stock_floors
 from .scoring import compute_candidates
 from .style import StyleDecision, StyleInputs, band_target, derive_style, limit
@@ -336,6 +346,12 @@ def apply_strategy(
             add(
                 "result", f"strat.note.{i}", "titre retenu puis retiré (plancher trop petit)", n, "texte", path="floors"
             )
+        # Intérêts servis par un FNB (or → GLD) : ajoutés après les titres, donc retirés en premier par le repli.
+        i_floors, i_owner, i_notes = interest_asset_floors(base, comp, d, inputs, cfg)
+        floors = {**floors, **{t: f for t, f in i_floors.items() if t not in floors}}
+        for i, n in enumerate(i_notes):
+            add("result", f"strat.interest_note.{i}", "intérêt sans plancher", n, "texte", path="bonus.interest_assets")
+        notes = [*notes, *i_notes]
         caps = sector_caps(comp, d.style, inputs, sel_tags, cfg)
         g = band_target(comp, d.pi, cfg)
         keep = set(floors) | set(protect)
@@ -344,7 +360,7 @@ def apply_strategy(
             for c in cands:
                 if c.ticker not in keep and c.ticker not in base.excluded:
                     excl[c.ticker] = f"strat.shortlist (fact strat.rank.{c.ticker})"
-        plan = Plan(growth_floor=g, floors=floors, sector_caps=caps, exclusions=excl)
+        plan = Plan(growth_floor=g, floors=floors, sector_caps=caps, exclusions=excl, interest_floors=i_owner)
 
     with book.step("s0b.feasibility", tool="optimize+check", inputs={"n_limits": len(plan.floors) + len(caps)}):
         feas = _Feasibility(base, as_of)
@@ -384,14 +400,17 @@ def apply_strategy(
                 processing="e_min + π·(e_cap − e_min), arrondi au 5 % inférieur",
             )
         for t, f in plan.floors.items():
+            interest = plan.interest_floors.get(t)
             add(
                 "result",
                 f"strat.floor.{t}",
-                f"plancher du satellite {t}",
+                f"plancher de {t} (intérêt {interest})" if interest else f"plancher du satellite {t}",
                 f,
                 "%",
-                path="floors",
-                processing="min(φ·min(w_each, w_total/K), f_abs)",
+                path="bonus.interest_assets" if interest else "floors",
+                processing="min(φ·plafond de la limite liée, f_abs)"
+                if interest
+                else "min(φ·min(w_each, w_total/K), f_abs)",
             )
         if inputs.amount_cad:
             for t, f in plan.floors.items():
@@ -451,7 +470,7 @@ def apply_strategy(
         decision=d,
         candidates=cands,
         ranking=ranked,
-        shortlist=list(plan.floors),
+        shortlist=[t for t in plan.floors if t not in plan.interest_floors],
         plan=plan,
         fallback=fallback,
         applied=applied,

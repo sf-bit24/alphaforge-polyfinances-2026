@@ -35,6 +35,7 @@ class StyleInputs:
     goal: str | None = None  # objective.goal
     approach: str | None = None  # preferences.approach
     interests: tuple[str, ...] = ()  # preferences.interests
+    favored_tickers: tuple[str, ...] = ()  # preferences.favored_tickers (titres individuels de l'univers)
     exclusions: tuple[str, ...] = ()  # preferences.exclusions
     exclusion_strictness: str | None = None  # preferences.exclusion_strictness
     esg_importance: int | None = None  # preferences.esg_importance (1-5)

@@ -125,3 +125,17 @@ def test_lens_cannot_raise_a_style_floor():
 
 def test_limit_and_selector_import_sanity():
     assert Limit(rule_id="x", kind="exposure", selector=Selector(exposure_tag="tech"), max=0.1, derived_from="t")
+
+
+def test_gold_profile_keeps_gld_in_a_verified_decision():
+    res = build_portfolio(
+        P.amira(), P.AS_OF, strategy=True, style_inputs=StyleInputs(interests=("gold",), amount_cad=100_000)
+    )
+    strat = res.strategy
+    assert strat.plan.interest_floors.get("GLD") == "gold" or any("GLD" in f for f in strat.fallback)
+    if strat.applied and "GLD" in strat.plan.floors:
+        w = {p.asset_id: p.weight for p in res.decision.positions}
+        assert w.get("GLD", 0.0) >= strat.plan.floors["GLD"] - 1e-6
+        assert "GLD" not in strat.shortlist  # un FNB n'est pas un titre retenu par le classement
+    bad = [s for s in verify_decision(res.decision).statements if not s["ok"]]
+    assert not bad, bad

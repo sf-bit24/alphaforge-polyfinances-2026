@@ -267,6 +267,7 @@ def style_inputs_from_view(view: dict[str, Any], portfolio: dict[str, Any] | Non
         goal=g("objective.goal"),
         approach=g("preferences.approach"),
         interests=_tuple(g("preferences.interests")),
+        favored_tickers=_tuple(g("preferences.favored_tickers")),
         exclusions=_tuple(g("preferences.exclusions")),
         exclusion_strictness=g("preferences.exclusion_strictness"),
         esg_importance=int(esg) if isinstance(esg, int | float) else None,

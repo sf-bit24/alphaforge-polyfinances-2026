@@ -21,10 +21,10 @@ res = compile_profile(
     emphasis_path=None,
     questionnaire=None,
 )
-res.policy  # PolicySpec validé ; None si decision_kind ∈ {"incomplet", "protection"}
-res.limits  # les Limit, toujours présentes, même quand policy est None
+res.policy  # PolicySpec validé, toujours émis : le statut le resserre, il ne l'empêche pas (décision 2026-11-15)
+res.limits  # les Limit du mandat
 res.level, res.level_from_R, res.R, res.capacity, res.tolerance, res.l_star, res.e_cap, res.horizon_years
-res.decision_kind  # None | "position_attente" (INCOMPLETE, mandat plafonné) | "incomplet" | "protection"
+res.decision_kind  # None | "position_attente" (INCOMPLETE, mandat plafonné) | "incomplet" | "protection" : signale le statut
 res.emphasis  # {"timeline","risk","diversity","constraints"} -> poids, somme 1 (emphasis.yaml)
 res.emphasis_rules  # ids des règles d'emphase déclenchées
 res.trace  # [{rule, inputs, output, yaml_path}] pour chaque nombre dérivé
@@ -42,9 +42,13 @@ plafonds qui la visent (bac à sable, titre individuel, crypto, exclusions). `re
 ## Chaîne de calcul (risk_levels.yaml v0.2)
 
 1. **Statut.** Un statut `INCOMPLETE` vient du profil, d'un champ `must_have` manquant ou d'un
-   `confidence < status.completeness_min`. Si `investable_wealth` manque, le résultat est `incomplet` et
-   aucun mandat n'est émis. Sinon, c'est une `position_attente` : niveau au plus N2, sans titres
-   individuels, crypto ni bac à sable. Un statut `PROTECTION` donne N0 et `protection`, sans mandat.
+   `confidence < status.completeness_min`. Si un champ `must_have` manque (`investable_wealth`, horizon), le
+   résultat est `incomplet` : le mandat est émis avec des valeurs prudentes par défaut (`missing_defaults`).
+   Sinon, c'est une `position_attente`. Dans les deux cas : niveau au plus N2, sans titres individuels, crypto
+   ni bac à sable. Un statut `PROTECTION` (demandé par le profil, ou règle des dollars sans aucune part
+   d'actions admissible) donne N0, `protection` et un mandat sans titres individuels ni crypto, le plus prudent ;
+   `status.PROTECTION.human_referral` est inscrit dans la trace. **Chaque profil reçoit un mandat, donc un
+   portefeuille** : le pipeline optimise toujours, et l'explication donne la raison chiffrée du statut.
 2. **Horizon du seau risque.** C'est le T minimal des objectifs qui ne relèvent pas d'une règle
    `buckets.rules`. Un retrait récurrent qui commence dans 5 ans ou moins crée une réserve N1 de
    `withdrawal_reserve_years` et repousse T d'autant.

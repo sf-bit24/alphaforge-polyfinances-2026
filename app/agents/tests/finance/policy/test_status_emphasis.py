@@ -41,9 +41,11 @@ def test_low_confidence_counts_as_incomplete():
 def test_incomplet_without_wealth():
     p = amira(status="INCOMPLETE", investable_wealth=None, missing_info=["investable_wealth"])
     r = compile_profile(p, AS_OF)
-    assert r.decision_kind == "incomplet" and r.policy is None
+    # Chaque profil reçoit un mandat : le statut le resserre (niveau plafonné, valeurs prudentes par défaut).
+    assert r.decision_kind == "incomplet" and r.policy is not None
     assert LV_idx(r.level) <= 2
     assert any(m.startswith("investable_wealth") for m in r.missing_defaults)
+    assert r.policy.missing_defaults == r.missing_defaults
 
 
 def LV_idx(L):
@@ -52,16 +54,19 @@ def LV_idx(L):
 
 def test_protection_status():
     r = compile_profile(robert(status="PROTECTION"), AS_OF)
-    assert r.level == "N0" and r.decision_kind == "protection" and r.policy is None
+    assert r.level == "N0" and r.decision_kind == "protection" and r.policy is not None
     b = by(r)
     assert b["conc.single_each"].max == 0 and b["alloc.crypto"].max == 0
+    assert {lim.rule_id for lim in r.policy.limits} >= {"conc.single_each", "alloc.crypto"}  # le mandat les porte
+    assert any(t["rule"] == "status.PROTECTION.human_referral" and t["output"] is True for t in r.trace)
 
 
 def test_protection_from_dollar_rule():
     # l* = 0.10 < min_e L_plan(e) = 0.1299 (e = 10 %) -> aucun e admissible
     r = compile_profile(robert(max_acceptable_loss_cad=90_000), AS_OF)
-    assert r.decision_kind == "protection" and r.level == "N0" and r.policy is None
+    assert r.decision_kind == "protection" and r.level == "N0" and r.policy is not None
     assert any(t["rule"] == "dollar_rule.protection" for t in r.trace)
+    assert r.e_cap == 0  # aucune part d'actions ne tient dans l* : le mandat n'en admet aucune
 
 
 def test_buckets_cap_whole_policy_when_all_goals_are_short_besoin():

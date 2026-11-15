@@ -7,6 +7,7 @@ from alphaforge.finance.backtest.paths import long_data_available
 
 NEEDS_ENGINE = {
     "test_pipeline_rules.py",
+    "test_every_profile_portfolio.py",
     "test_pipeline_holdings.py",
     "test_integration_optimizer.py",
     "test_personas.py",

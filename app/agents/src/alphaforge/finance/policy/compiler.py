@@ -1670,6 +1670,9 @@ def _decision_kind(
         kind,
         "status",
     )
+    if kind == "protection":  # revue humaine demandée par le statut : l'explication la cite depuis la trace
+        referral = bool(context.risk_levels["status"]["PROTECTION"].get("human_referral"))
+        context.record("status.PROTECTION.human_referral", {}, referral, "status.PROTECTION.human_referral")
     return kind
 
 
@@ -1760,9 +1763,10 @@ def _compile_mandate(
     context.trace.extend(emphasis_trace)
     kind = _decision_kind(decision, assessment.missing_must_have, context)
     signature = _signature(inputs, request, questionnaire, context)
-    policy = None
-    if kind not in ("protection", "incomplet"):
-        policy = _policy_spec(inputs, signature, limits, excluded, context)
+    # Chaque profil reçoit un mandat : le statut (protection, incomplet, position d'attente) le resserre déjà
+    # (niveau N0 et e_cap nul en protection, niveau plafonné si incomplet, valeurs prudentes par défaut) et
+    # decision_kind le signale ; il n'empêche plus la construction du portefeuille.
+    policy = _policy_spec(inputs, signature, limits, excluded, context)
     return CompileResult(
         policy=policy,
         level=decision.level,

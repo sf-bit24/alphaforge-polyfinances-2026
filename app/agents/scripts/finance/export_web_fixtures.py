@@ -19,16 +19,17 @@ import json
 import sys
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-AGENTS = HERE.parents[1]
 # Le code de CE dépôt d'abord (un venv peut avoir une installation éditable d'un autre worktree), puis tests/.
-sys.path[:0] = [str(AGENTS / "src"), str(AGENTS)]
+# Deux insertions en tête (app/agents puis app/agents/src) : ruff admet ces appels avant les imports (E402).
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from tests.finance.policy import _personas as P  # noqa: E402
+from tests.finance.policy import _personas as personas
 
-from alphaforge.finance.debate.pipeline import Request, build_portfolio  # noqa: E402
-from alphaforge.finance.strategy import StyleInputs  # noqa: E402
+from alphaforge.finance.debate.pipeline import Request, build_portfolio
+from alphaforge.finance.strategy import StyleInputs
 
+AGENTS = Path(__file__).resolve().parents[2]
 DEFAULT_OUT = AGENTS.parent / "web" / "src" / "lib" / "fixtures"
 
 # client_id fixes (UUID v4) des profils de démonstration : la réponse du runtime en porte toujours un.
@@ -40,15 +41,15 @@ CLIENT_IDS = {
 
 SCENARIOS = {
     "amira": {
-        "profile": P.amira,
+        "profile": personas.amira,
         "request": None,
         "style_inputs": StyleInputs(
             employment_sector="technology", goal="growth", interests=("technology",), amount_cad=100_000
         ),
     },
-    "mateo": {"profile": P.mateo, "request": None, "style_inputs": StyleInputs(amount_cad=150_000)},
+    "mateo": {"profile": personas.mateo, "request": None, "style_inputs": StyleInputs(amount_cad=150_000)},
     "robert": {
-        "profile": P.robert,
+        "profile": personas.robert,
         "request": Request("TSLA", amount_cad=50_000),
         "style_inputs": StyleInputs(amount_cad=200_000),
     },
@@ -60,7 +61,7 @@ def response_for(persona: str) -> dict:
     profile = sc["profile"]()
     result = build_portfolio(
         profile,
-        P.AS_OF,
+        personas.AS_OF,
         request=sc["request"],
         mode="rules",
         style_inputs=sc["style_inputs"],
@@ -72,7 +73,7 @@ def response_for(persona: str) -> dict:
         "ok": True,
         "release": "fixture",
         "client_id": client_id,
-        "as_of": P.AS_OF.isoformat(),
+        "as_of": personas.AS_OF.isoformat(),
         "mode": "rules",
         "simulation_only": True,
         "decision_key": f"clients/{client_id}/decisions/{decision.decision_id}.md",

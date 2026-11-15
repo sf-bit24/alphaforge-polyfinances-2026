@@ -168,6 +168,9 @@ class FakeEngine:
             def note_client_inputs(self, inputs):
                 engine.client_inputs.append(dict(inputs))
 
+            def methodology(self):
+                return [("general/methodologie/m.md", "méthode")]
+
         def flush():
             engine.flushed += 1
 
@@ -214,6 +217,7 @@ def test_build_runs_the_engine_and_returns_the_decision(portfolio_settings, stor
     [call] = engine.calls
     assert call["as_of"] == date(2026, 11, 12) and call["request"] == FakeRequest("TSLA", 50000)
     assert call["guardrail_id"] == "gr1" and call["guardrail_version"] == "3"
+    assert call["grounding_docs"] == [("general/methodologie/m.md", "méthode")]  # source de l'ancrage
     # Étape 0 active par défaut : variables de style lues dans la vue du profil, comme finance/debate/app.py.
     assert call["strategy"] is True and call["style_preference"] is None
     assert call["style_inputs"] == ("style-inputs", "growth") and engine.views == [CLIENT_ID]

@@ -14,6 +14,7 @@ Garanties :
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -27,7 +28,15 @@ from alphaforge.finance.portfolio.optimizer import optimize
 
 from . import roles
 from .esg import esg_exclusions, esg_preference
-from .explain import grounding_check, no_allocation_explanation, rephrase, skeleton
+from .explain import (
+    grounding_check,
+    grounding_context,
+    keep_grounded,
+    merge_grounding,
+    no_allocation_explanation,
+    rephrase,
+    skeleton,
+)
 from .facts import FactBook, fmt, sha256_json
 from .merge import apply_amendments
 from .schemas import LENS_FR, LENSES, DebateRound
@@ -135,6 +144,7 @@ def build_portfolio(
     style_inputs=None,
     scenarios: bool | None = None,
     scenario_tool=None,
+    grounding_docs: Sequence[tuple[str, str]] = (),
 ) -> BuildResult:
     if compile_fn is None:
         from alphaforge.finance.policy import compile_profile as compile_fn
@@ -446,13 +456,18 @@ def build_portfolio(
 
     scenario_context = ScenarioContext(final_w, final_policy, profile, mode, scenario_tool)
     expl = attach_scenarios(book, expl, scenario_context, enabled=scenarios)
+    template = expl
     report: list[str] = []
     if rephrase_explanation if rephrase_explanation is not None else mode == "llm":
         try:
             expl, report = rephrase(book, expl, profile.knowledge_level)
         except Exception:  # repli : le gabarit reste ; l'étape « explainer » de la trace garde l'erreur
             report = ["Reformulation abandonnée : les gabarits sont conservés."]
-    grounding = grounding_check(book, expl, guardrail_id, guardrail_version) if guardrail_id else None
+    grounding = None
+    if guardrail_id:
+        expl, grounding, report = _grounded(
+            book, expl, template, report, guardrail_id, guardrail_version, rep.checks, verdicts, grounding_docs
+        )
 
     singles = set(strat.shortlist) | {c.ticker for c in strat.candidates} if strat else set()
     positions = [
@@ -552,6 +567,37 @@ def _holding_statement(book: FactBook, fids: list[str]) -> Statement:
     if "holdings.top_share" in f:
         text += f", soit {fmt(f['holdings.top_share'].value, '%')} du patrimoine investissable"
     return Statement(text_fr=text + ".", fact_ids=fids)
+
+
+def _grounded(book, expl, template, report, guardrail_id, guardrail_version, checks, verdicts, docs):
+    """Ancrage Guardrails énoncé par énoncé, contre les faits cités, la décision et les fiches de méthode.
+
+    Un énoncé reformulé non ancré reprend son gabarit, revérifié ; un gabarit non ancré est signalé dans le rapport.
+    """
+    with book.step(
+        "explainability",
+        tool="bedrock.apply_guardrail",
+        inputs={"guardrail_id": guardrail_id, "guardrail_version": guardrail_version, "docs": [k for k, _ in docs]},
+    ) as ev:
+        context = grounding_context(book, checks, verdicts)
+        grounding = grounding_check(book, expl, guardrail_id, guardrail_version, context=context, docs=docs)
+        expl, reverted = keep_grounded(expl, template, grounding)
+        if reverted:
+            again = grounding_check(
+                book, expl, guardrail_id, guardrail_version, context=context, docs=docs, only=set(reverted)
+            )
+            grounding = merge_grounding(grounding, again)
+            report = report + [f"{sec}[{i}] reformulation non ancrée : gabarit conservé" for sec, i in reverted]
+        report = report + [
+            f"{r['section']}[{r['index']}] sous le seuil d'ancrage (score {r.get('score')})"
+            for r in grounding["statements"]
+            if r.get("action") == "GUARDRAIL_INTERVENED"
+        ]
+        ev.output_summary = (
+            f"{grounding['checked']} énoncés vérifiés, {grounding['below']} sous le seuil, "
+            f"{grounding['errors']} en erreur, {len(reverted)} gabarits remis"
+        )
+    return expl, grounding, report
 
 
 def _style_counterfactuals(book, comp, profile, as_of, strat, style_inputs, cfs, protect=()) -> list[Statement]:

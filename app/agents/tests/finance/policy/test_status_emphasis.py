@@ -132,7 +132,7 @@ def test_envelope_monotone_from_10pct():
     assert min(lp, key=lp.get) == 10
 
 
-CALIB_OUT = Path(__file__).resolve().parents[5] / "research" / "calibration" / "out"
+CALIB_OUT = Path(__file__).resolve().parents[1] / "fixtures" / "calibration"
 
 
 @pytest.mark.skipif(not (CALIB_OUT / "calib_grid5.csv").exists(), reason="CSV de calibration absents")

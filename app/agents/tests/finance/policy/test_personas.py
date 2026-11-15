@@ -1,4 +1,4 @@
-"""Personas de la revue v0.2 (research/calibration/review/persona_v02.py, marge quotidienne 4 pts)."""
+"""Personas de la revue v0.2 (app/agents/scripts/calibration/review/persona_v02.py, marge quotidienne 4 pts)."""
 
 from __future__ import annotations
 

@@ -3,7 +3,7 @@
 Compilateur **déterministe** du profil investisseur en mandat `PolicySpec 0.2.0-draft`, selon
 `app/agents/src/alphaforge/finance/policy/risk_levels.yaml` v0.2.0, qui reste le moteur de référence. Simulation seulement, jamais un conseil.
 
-Il porte en code de bibliothèque la logique de `research/calibration/review/expand.py` (`emit`) et de
+Il porte en code de bibliothèque la logique de `app/agents/scripts/calibration/review/expand.py` (`emit`) et de
 `persona_v02.py`. Les scripts de revue ne sont pas importés.
 
 ## API
@@ -69,7 +69,7 @@ plafonds qui la visent (bac à sable, titre individuel, crypto, exclusions). `re
    `policy_defaults` sont copiés du YAML et restreints à l'univers, qui est le starter (31 tickers réels).
 
 **L'enveloppe ENV(e)** vient de `envelope_v02.yaml`. Ce fichier est généré par
-`envelope.build_from_calibration(research/calibration/out)`, avec la même définition que `v02.py` et le
+`envelope.build_from_calibration(app/agents/tests/finance/fixtures/calibration)`, avec la même définition que `v02.py` et le
 sha256 des CSV. Un test le régénère et le compare, et vérifie qu'il reproduit les budgets et les `L_plan`
 de chaque niveau du YAML.
 

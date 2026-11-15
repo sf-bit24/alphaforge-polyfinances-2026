@@ -1,4 +1,4 @@
-"""Profils de test (entrees HYPOTHESE de research/calibration/review/persona_v02.py). Fiction, simulation."""
+"""Profils de test (entrees HYPOTHESE de app/agents/scripts/calibration/review/persona_v02.py). Fiction, simulation."""
 
 from __future__ import annotations
 

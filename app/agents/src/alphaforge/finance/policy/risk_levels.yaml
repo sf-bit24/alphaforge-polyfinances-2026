@@ -1,14 +1,14 @@
 # policy/risk_levels.yaml — AlphaForge AI, v0.2.0 RECONCILIEE (simulation seulement, jamais un conseil)
-# Fusion : architecture profil -> R de la v0.1 (PhD1, research/calibration/review (proposition théorique v0.1, non versionnée))
-#          + budgets EMPIRIQUES (PhD2, research/calibration/out/*.csv, data_sha256 008f122d5da4f8f7, dernier mois 2026-09).
+# Fusion : architecture profil -> R de la v0.1 (PhD1, app/agents/scripts/calibration/review (proposition théorique v0.1, non versionnée))
+#          + budgets EMPIRIQUES (PhD2, app/agents/tests/finance/fixtures/calibration/*.csv, data_sha256 008f122d5da4f8f7, dernier mois 2026-09).
 # Conforme a contracts/policy.py (PolicySpec 0.2.0-draft) : chaque entree de limits_template -> 1 Limit par niveau.
 # Conventions : pertes en fraction positive (0.31 = -31 %), base CAD, rendements MENSUELS (engine/metrics).
 # Abreviations des sources :
-#   G5  = research/calibration/out/calib_grid5.csv   (familles CAD77_main, CAD71_USeq, USD46 ; grille 5 %)
-#   HC  = research/calibration/out/halfcash_env.csv  (CAD77_hc, CAD71_hc, USD46_hc ; revenu fixe 50/50 obligations/T-bills)
-#   TM  = research/calibration/out/tails_monthly.csv ; TD = tails_daily_starter.csv
+#   G5  = app/agents/tests/finance/fixtures/calibration/calib_grid5.csv   (familles CAD77_main, CAD71_USeq, USD46 ; grille 5 %)
+#   HC  = app/agents/tests/finance/fixtures/calibration/halfcash_env.csv  (CAD77_hc, CAD71_hc, USD46_hc ; revenu fixe 50/50 obligations/T-bills)
+#   TM  = app/agents/tests/finance/fixtures/calibration/tails_monthly.csv ; TD = tails_daily_starter.csv
 #   ENV(e, col) = max sur les 3 familles de la colonne col a la part actions e (G5 si e > 10, HC si e <= 10)
-#   Script de recalcul : research/calibration/review/v02.py (budgets), research/calibration/review/persona_v02.py (personas)
+#   Script de recalcul : app/agents/scripts/calibration/review/v02.py (budgets), app/agents/scripts/calibration/review/persona_v02.py (personas)
 version: "0.2.0"
 schema: "PolicySpec 0.2.0-draft"
 supersedes: "0.1.0 (PhD1) + bandes PhD2"
@@ -20,7 +20,7 @@ measurement:
   CVAR:    {horizon: monthly, beta: 0.95, used_by: [optimizer, judge],
             scenarios: "historique mensuel raccorde aux history_proxies, 1977-01 -> dernier mois (lookback_months: 597)"}
             # Si l'optimiseur garde lookback_months=120 sur tickers reels : CVaR mensuelle ~0.93x celle du long
-            # historique (e60 : 4.64 % vs 4.97 %, research/calibration/review/check.py) -> la contrainte est un peu laxiste ; le Judge rattrape (CVAR12M).
+            # historique (e60 : 4.64 % vs 4.97 %, app/agents/scripts/calibration/review/check.py) -> la contrainte est un peu laxiste ; le Judge rattrape (CVAR12M).
   CVAR12M: {horizon: "12 mois glissants chevauchants, rendements composes", beta: 0.95, used_by: [judge], blocking: true,
             series: "portefeuille a poids constants, reequilibre mensuel, raccorde aux proxys, CAD, depuis max(1971-02, debut des proxys)",
             no_proxy_rule: "actifs sans proxy (crypto) EXCLUS de la serie ; borne ajoutee : + sum_j w_j * delta_j (sous-additivite et homogeneite de la CVaR, perte <= delta_j p.s.)"}
@@ -71,7 +71,7 @@ levels:
        vol: 0.150, cvar_m: 0.092, cvar_12m: 0.245, mdd: 0.505, s2022: 0.200, L_plan: 0.543}
        # G5 @e100 : 0.1488 | 0.0917 | 0.2447 | 0.5031 | 0.1992
   # Controle externe : CAD 1971-02, 60 % US_MKT / 40 % CA_GOV_10Y -> CVaR95-12m 13.0 % (implementeur 13.3 % a 2026-10) <= N3 0.140 ;
-  # 100 % US_MKT -> 23.4 % (impl. 23.6 %) <= N5 0.245. Recalcul : research/calibration/review/s2.py.
+  # 100 % US_MKT -> 23.4 % (impl. 23.6 %) <= N5 0.245. Recalcul : app/agents/scripts/calibration/review/s2.py.
   budgets_when_capped: "si e_cap < e_max(niveau) : budgets = arrondi_sup(ENV(e_cap)) (meme regle, meme fichier)"
 
 # Plafond d'horizon (NOUVEAU) : T = annees avant le 1er retrait du seau risque.
@@ -246,7 +246,7 @@ limits_template:
   - {rule_id: risk.stress_2022,    kind: risk, selector: {measure: STRESS_2022}, max: "{s2022}", blocking: true, derived_from: "level", source: "#levels.<L>.s2022"}  # Judge seulement : rendement civil 2022 en CAD, tickers REELS ; non vérifiable = refus prudent
 # Actifs sans proxy long : exclus de la série raccordée, borne + sum_j w_j * delta_j sur CVAR12M et MDD (PolicySpec.loss_bounds).
 loss_bounds: {BTC-USD: 0.90, ETH-USD: 0.90}
-loss_bounds_source: "planification : pires baisses observées BTC 0.744, ETH 0.898 (research/calibration/out/tails_monthly.csv) arrondies à 0.90"
+loss_bounds_source: "planification : pires baisses observées BTC 0.744, ETH 0.898 (app/agents/tests/finance/fixtures/calibration/tails_monthly.csv) arrondies à 0.90"
 
 # Exemple developpe (N3 plein, l_star = 0.349, sans crypto, pas de sandbox) — valeurs que l'emetteur doit produire :
 example_N3:

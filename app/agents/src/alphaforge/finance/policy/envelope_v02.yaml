@@ -3,8 +3,8 @@
 version: 0.2.0
 definition: ENV(e,col) = max des familles ; HC (CAD77_hc, CAD71_hc, USD46_hc) si e<=10, sinon G5 (CAD77_main, CAD71_USeq, USD46) ; y2022 en perte positive
 source_files:
-  G5: {path: research/calibration/out/calib_grid5.csv, sha256: fc7c06d2533ce73e09929108c2bb27dd6f85be15a3b7d36a60f04c136941b583}
-  HC: {path: research/calibration/out/halfcash_env.csv, sha256: f106aeff759605ca3e32be8adfd216e42a982f556a0f53f40ab96d8f7929ff12}
+  G5: {path: app/agents/tests/finance/fixtures/calibration/calib_grid5.csv, sha256: fc7c06d2533ce73e09929108c2bb27dd6f85be15a3b7d36a60f04c136941b583}
+  HC: {path: app/agents/tests/finance/fixtures/calibration/halfcash_env.csv, sha256: f106aeff759605ca3e32be8adfd216e42a982f556a0f53f40ab96d8f7929ff12}
 equity_pct:
   0: {vol: 0.034739, cvar95_m: 0.014143, cvar95_12m: 0.037746, mdd: 0.104424, y2022: 0.042634, family_set: HC}
   5: {vol: 0.034629, cvar95_m: 0.013758, cvar95_12m: 0.030457, mdd: 0.094275, y2022: 0.048081, family_set: HC}

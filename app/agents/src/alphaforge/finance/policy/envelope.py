@@ -1,7 +1,7 @@
 """Enveloppe historique ENV(e) : pire de 3 histoires a la part actions e (grille 5 %).
 
 ENV(e, col) = max sur les familles {CAD77, CAD71, USD46} ; demi-cash (HC) si e <= 10, sinon G5.
-Meme definition que research/calibration/review/v02.py (envof / ref), portee ici sans pandas au
+Meme definition que app/agents/scripts/calibration/review/v02.py (envof / ref), portee ici sans pandas au
 moment de l'execution : les valeurs sont figees dans ``envelope_v02.yaml`` (fichier de donnees
 versionne, sha256 des CSV source inclus). ``build_from_calibration`` regenere ce fichier.
 SIMULATION SEULEMENT.
@@ -23,7 +23,7 @@ HC_MAX_EQUITY = 10  # e <= 10 -> portefeuille de reference demi-cash (reference_
 
 
 def build_from_calibration(out_dir: str | Path) -> dict:
-    """Recalcule l'enveloppe depuis research/calibration/out (calib_grid5.csv, halfcash_env.csv)."""
+    """Recalcule l'enveloppe depuis tests/finance/fixtures/calibration (calib_grid5.csv, halfcash_env.csv)."""
     import pandas as pd
 
     out = Path(out_dir)
@@ -46,7 +46,10 @@ def build_from_calibration(out_dir: str | Path) -> dict:
         "definition": "ENV(e,col) = max des familles ; HC (CAD77_hc, CAD71_hc, USD46_hc) si e<=10, "
         "sinon G5 (CAD77_main, CAD71_USeq, USD46) ; y2022 en perte positive",
         "source_files": {
-            k: {"path": f"research/calibration/out/{p.name}", "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
+            k: {
+                "path": f"app/agents/tests/finance/fixtures/calibration/{p.name}",
+                "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+            }
             for k, p in files.items()
         },
         "equity_pct": rows,

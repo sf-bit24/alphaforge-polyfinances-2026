@@ -1,6 +1,6 @@
 """F1 — compilateur deterministe InvestorProfile -> PolicySpec (risk_levels.yaml v0.2).
 
-Porte en code de bibliotheque la logique de research/calibration/review/expand.py (emit) et
+Porte en code de bibliotheque la logique de app/agents/scripts/calibration/review/expand.py (emit) et
 persona_v02.py (capacite, tolerance, regle des dollars). Chaque nombre derive est inscrit dans
 ``trace`` avec son chemin YAML ; chaque Limit porte ``source = risk_levels.yaml@<ver>#<chemin>``.
 SIMULATION SEULEMENT — jamais un conseil financier.

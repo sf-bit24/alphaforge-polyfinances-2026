@@ -24,3 +24,14 @@ variable "portfolio_enabled" {
   type        = bool
   default     = false
 }
+
+variable "portfolio_market_data_sha" {
+  description = "Empreinte (data_sha256 de data_version.json) des donnees longues du moteur finance, deposees a la main sous runtime/market/long/<sha>/ du bucket des bases OKF : parquets prives (licences yfinance, Moody's, OCDE), jamais dans git ni dans le zip. Le runtime portfolio les telecharge au premier build."
+  type        = string
+  default     = "008f122d5da4f8f7"
+
+  validation {
+    condition     = can(regex("^[0-9a-f]{16}$", var.portfolio_market_data_sha))
+    error_message = "portfolio_market_data_sha : 16 caracteres hexadecimaux (data_sha256 de data_version.json)."
+  }
+}

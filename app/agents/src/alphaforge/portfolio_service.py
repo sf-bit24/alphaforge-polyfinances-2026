@@ -18,7 +18,9 @@ Simulation seulement : aucune transaction, aucun conseil personnalisé.
 from __future__ import annotations
 
 import logging
+import os
 import re
+import tempfile
 import threading
 from collections.abc import Callable
 from datetime import date
@@ -38,13 +40,15 @@ REQUEST_KEYS = {"ticker", "amount_cad", "weight"}
 class FinanceEngine:
     """Accès paresseux au moteur du volet finance (importé au premier ``build``, une seule fois)."""
 
-    def __init__(self) -> None:
+    def __init__(self, store: Store | None = None) -> None:
         self._lock = threading.Lock()
         self._loaded: dict[str, Any] | None = None
+        self._store = store
 
     def load(self) -> dict[str, Any]:
         with self._lock:
             if self._loaded is None:
+                ensure_market_data(self._store)  # avant l'import du moteur : il lit ALPHAFORGE_BT_DATA
                 try:
                     from .finance.debate import okf_bridge, pipeline
                     from .finance.observability import telemetry
@@ -74,6 +78,52 @@ class FinanceEngine:
             return self._loaded
 
 
+MARKET_FILES = (
+    "data_version.json",
+    "assets.csv",
+    "coverage.csv",
+    "qa_overlap.csv",
+    "monthly_returns.parquet",
+    "fx_monthly.parquet",
+    "inflation_monthly.parquet",
+    "lookthrough_us_mkt.parquet",
+)
+
+
+def ensure_market_data(store: Store | None, root: str | None = None) -> str | None:
+    """Données longues du moteur (parquets privés, jamais dans le zip) : copiées de
+    ``<ALPHAFORGE_MARKET_PREFIX>/`` vers ``/tmp`` au premier build, puis ``ALPHAFORGE_BT_DATA`` pointe dessus.
+    Sans préfixe (local, CI) ou si ``ALPHAFORGE_BT_DATA`` est déjà posée : rien à faire. L'empreinte de
+    ``data_version.json`` doit finir le préfixe, sinon on refuse (pas de données silencieusement différentes)."""
+    prefix = os.environ.get("ALPHAFORGE_MARKET_PREFIX", "").strip("/")
+    if os.environ.get("ALPHAFORGE_BT_DATA") or not prefix or store is None:
+        return os.environ.get("ALPHAFORGE_BT_DATA")
+    sha = prefix.rsplit("/", 1)[-1]
+    # /tmp : seul répertoire inscriptible de la microVM AgentCore ; un sous-dossier par empreinte de données.
+    dest = os.path.join(root or os.path.join(tempfile.gettempdir(), "alphaforge-long"), sha)
+    os.makedirs(dest, exist_ok=True)
+    for name in MARKET_FILES:
+        path = os.path.join(dest, name)
+        if os.path.exists(path):
+            continue
+        obj = store.get(f"{prefix}/{name}")
+        if obj is None:
+            raise AppError("internal", f"Données longues absentes : {prefix}/{name}.", {"prefix": prefix})
+        tmp = path + ".part"
+        with open(tmp, "wb") as fh:
+            fh.write(obj.body)
+        os.replace(tmp, path)
+    import json as _json
+
+    with open(os.path.join(dest, "data_version.json"), encoding="utf-8") as fh:
+        got = _json.load(fh).get("data_sha256")
+    if got != sha:
+        raise AppError("internal", "Empreinte des données longues inattendue.", {"expected": sha, "got": got})
+    os.environ["ALPHAFORGE_BT_DATA"] = dest
+    logger.info("market data ready: %s", dest)
+    return dest
+
+
 class PortfolioService:
     def __init__(
         self,
@@ -86,7 +136,7 @@ class PortfolioService:
         self.settings = settings
         self.store = store
         self.app = app
-        self._engine = engine or FinanceEngine().load
+        self._engine = engine or FinanceEngine(store).load
         self._questionnaire: Any | None = None
 
     def handle(self, payload: Any) -> dict[str, Any]:
@@ -142,7 +192,15 @@ class PortfolioService:
             return AppError("bad_request", pick(locale, fr, en), details)
 
         client_id = payload.get("client_id")
-        if not is_client_id(client_id):
+        persona = payload.get("persona")
+        if persona is not None:
+            from .finance.personas import ids as persona_ids
+
+            if client_id is not None:
+                raise bad("client_id ou persona, pas les deux.", "client_id or persona, not both.")
+            if persona not in persona_ids():
+                raise bad("persona inconnu.", "Unknown persona.", allowed=persona_ids())
+        elif not is_client_id(client_id):
             raise bad("client_id doit être un UUID v4.", "client_id must be a UUID v4.")
         as_of = payload.get("as_of")
         if as_of is not None:
@@ -181,6 +239,7 @@ class PortfolioService:
                 )
         return {
             "client_id": client_id,
+            "persona": persona,
             "as_of": as_of,
             "mode": mode,
             "strategy": strategy,
@@ -205,14 +264,26 @@ class PortfolioService:
             self._questionnaire = Questionnaire.load()
         client_store = bridge.OkfClientStore(self.store, self._questionnaire, locale=locale)
         market_store = bridge.OkfMarketStore(self.store)
-        try:
-            profile = client_store.load_profile(args["client_id"])
-        except KeyError as exc:
-            raise AppError("not_found", pick(locale, "Profil introuvable.", "Profile not found.")) from exc
-        # Étape 0 : variables de style du profil court, lues comme dans finance/debate/app.py.
-        style_inputs = None
-        if args["strategy"]:
-            style_inputs = engine["style_inputs_from_view"](client_store.view(args["client_id"])[0])
+        persona_label = None
+        if args["persona"]:
+            # Persona FICTION de démonstration : profil de test du moteur, variables de style de demo.yaml.
+            from .finance.personas import load as load_persona
+
+            profile, style_inputs, demo_request, persona_label = load_persona(args["persona"])
+            if args["request"] is None and demo_request:
+                args["request"] = demo_request
+            if not args["strategy"]:
+                style_inputs = None
+            args["client_id"] = profile.profile_id
+        else:
+            try:
+                profile = client_store.load_profile(args["client_id"])
+            except KeyError as exc:
+                raise AppError("not_found", pick(locale, "Profil introuvable.", "Profile not found.")) from exc
+            # Étape 0 : variables de style du profil court, lues comme dans finance/debate/app.py.
+            style_inputs = None
+            if args["strategy"]:
+                style_inputs = engine["style_inputs_from_view"](client_store.view(args["client_id"])[0])
         as_of = args["as_of"] or pipeline.DEFAULT_AS_OF
         try:
             result = pipeline.build_portfolio(
@@ -235,8 +306,13 @@ class PortfolioService:
                 except Exception:
                     logger.exception("telemetry flush failed")
         decision_key = client_store.save_decision(result.decision, result.policy)
+        audit = self._audit(result.decision)
         return {
             "client_id": args["client_id"],
+            "persona": args["persona"],
+            "persona_label": persona_label,
+            "fiction": bool(args["persona"]),
+            "audit": audit,
             "as_of": as_of.isoformat(),
             "mode": args["mode"],
             "simulation_only": True,
@@ -254,3 +330,24 @@ class PortfolioService:
             "grounding": result.grounding,
             "strategy": result.strategy.summary() if result.strategy is not None else None,
         }
+
+    def _audit(self, decision: Any) -> dict[str, Any] | None:
+        """Chaîne d'audit (finance/observability/audit.py) : tête dans DynamoDB, décision dans le bucket de traces.
+        Seulement si Terraform a posé la table et le bucket ; un échec est rapporté sans annuler la simulation."""
+        table, bucket = os.environ.get("ALPHAFORGE_DECISIONS_TABLE"), os.environ.get("ALPHAFORGE_TRACE_BUCKET")
+        if not (table and bucket):
+            return None
+        try:
+            from .finance.observability import audit
+
+            root = os.path.join(tempfile.gettempdir(), "alphaforge-audit")
+            os.makedirs(root, exist_ok=True)
+            entry = audit.record_decision(
+                decision,
+                root,
+                aws={"region": self.settings.region, "bucket": bucket, "decisions_table": table},
+            )
+            return {k: entry.get(k) for k in ("seq", "record_hash", "prev_hash", "s3_key", "otel_trace_id")}
+        except Exception as exc:
+            logger.exception("audit record failed")
+            return {"error": type(exc).__name__}

@@ -55,6 +55,15 @@ case "$package_scenarios" in
 esac
 
 # Zip du runtime portfolio (section 4 bis) : 0 (défaut) ou 1, vérifié avant tout travail.
+# Sans variable explicite, le zip portfolio suit l'environnement deploye : construit si
+# infrastructure/deploy/envs/<DEPLOY_ENV>.tfvars active portfolio_enabled (aucune modification de la CI requise).
+if [ -z "${ALPHAFORGE_PACKAGE_PORTFOLIO:-}" ]; then
+    tfvars="$(cd -- "$(dirname -- "$0")/../../.." && pwd)/infrastructure/deploy/envs/${DEPLOY_ENV:-sandbox}.tfvars"
+    if [ -f "$tfvars" ] && grep -Eq '^[[:space:]]*portfolio_enabled[[:space:]]*=[[:space:]]*true' "$tfvars"; then
+        ALPHAFORGE_PACKAGE_PORTFOLIO=1
+        echo "portfolio_enabled = true in $(basename -- "$tfvars"): building agents-portfolio.zip"
+    fi
+fi
 package_portfolio=${ALPHAFORGE_PACKAGE_PORTFOLIO:-0}
 case "$package_portfolio" in
     0 | 1) ;;

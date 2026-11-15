@@ -47,10 +47,12 @@ locals {
   agentcore_portfolio_runtimes = {
     for role, runtime in {
       portfolio = {
-        description    = "Portefeuille simule : etape 0, A3, lentilles et Judge du volet finance (simulation seulement)."
-        s3_read        = concat(["general/*", "clients/*"], local.agentcore_profile_scenarios_keys)
+        description = "Portefeuille simule : etape 0, A3, lentilles et Judge du volet finance (simulation seulement)."
+        # runtime/market/* : donnees longues du moteur (parquets prives, jamais dans le zip ni dans git),
+        # telechargees au premier build (ALPHAFORGE_MARKET_PREFIX).
+        s3_read        = concat(["general/*", "clients/*", "runtime/market/*"], local.agentcore_profile_scenarios_keys)
         s3_write       = ["clients/*"]
-        s3_list        = concat(["general/*", "clients/*"], local.agentcore_profile_scenarios_keys)
+        s3_list        = concat(["general/*", "clients/*", "runtime/market/*"], local.agentcore_profile_scenarios_keys)
         knowledge_base = true
         guardrail      = true
       }
@@ -154,6 +156,10 @@ locals {
     ALPHAFORGE_MODEL_MAIN      = var.agentcore_model_id
     ALPHAFORGE_MODEL_LENS      = var.agentcore_model_id
     ALPHAFORGE_LLM_STORE       = "/tmp/alphaforge-llm-records"
+    # Chaine d'audit (finance/observability/audit.py) : tete dans DynamoDB, decision dans le bucket de traces.
+    ALPHAFORGE_TRACE_BUCKET = aws_s3_bucket.traces.bucket
+    # Donnees longues du moteur, par empreinte (data_version.json) : runtime/market/long/<data_sha>/.
+    ALPHAFORGE_MARKET_PREFIX = "runtime/market/long/${var.portfolio_market_data_sha}"
   })
 
   # Variables propres a un role, fusionnees apres les variables communes.
@@ -277,8 +283,12 @@ data "aws_iam_policy_document" "agentcore" {
   }
 
   statement {
-    sid       = "Tracing"
-    actions   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords", "xray:GetSamplingRules", "xray:GetSamplingTargets"]
+    sid = "Tracing"
+    # PutSpans / PutSpansForIndexing : endpoint OTLP de X-Ray (Transaction Search), utilise par le volet finance.
+    actions = [
+      "xray:PutTraceSegments", "xray:PutTelemetryRecords", "xray:GetSamplingRules", "xray:GetSamplingTargets",
+      "xray:PutSpans", "xray:PutSpansForIndexing",
+    ]
     resources = ["*"]
   }
 

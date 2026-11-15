@@ -1,0 +1,33 @@
+# Personas de démonstration (FICTION) du runtime portfolio : action build avec {"persona": "<id>"}.
+# Profils : copies des personas de test du moteur (tests/finance/policy/_personas.py), identifiant demo-<id>.
+# Variables du profil court : choisies par l'équipe pour la démo, jamais tirées des fiches persona (règle « entrées
+# seulement ») ; aucune ne change un budget de risque. Simulation éducative seulement, jamais un conseil.
+status: FICTION
+personas:
+  amira:
+    label: "Amira, 26 ans, développeuse (FICTION)"
+    style_inputs:
+      goal: growth
+      approach: mixed
+      interests: [technology, crypto]
+      employment_sector: technology
+      knowledge_level: intermediate
+    request: null
+  mateo:
+    label: "Mateo, 41 ans, deux enfants, critères ESG (FICTION)"
+    style_inputs:
+      goal: retirement
+      approach: mixed
+      exclusions: [fossil_fuels]
+      exclusion_strictness: absolute
+      esg_importance: 5
+      knowledge_level: intermediate
+    request: null
+  robert:
+    label: "Robert, 59 ans, proche de la retraite, demande un titre médiatisé (FICTION)"
+    style_inputs:
+      goal: preservation
+      approach: mixed
+      knowledge_level: intermediate
+      hype_reaction: buy_some
+    request: {ticker: TSLA, amount_cad: 50000}

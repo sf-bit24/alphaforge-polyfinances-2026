@@ -52,8 +52,11 @@ const ACCOUNT_PATTERNS: Array<[RegExp, AccountType]> = [
 
 const HEADER_WORDS = /\b(ticker|symbole|symbol|titre|security|quantit[ée]|quantity|qty|compte|account|valeur|value|devise|currency)\b/i;
 
-/** Cash, like `_CASH_NAME` of the Python runtime (portfolio.py). */
+/** Cash, like `_CASH_NAME` of the Python runtime (portfolio.py): tested on a name, when there is no symbol. */
 export const CASH_NAME = /\b(cash|encaisse|liquidit|comptant)/i;
+
+/** A symbol cell that says cash: exactly a cash word. CASH.TO is an ETF, not cash. */
+const CASH_SYMBOL = /^(cash|encaisse|liquidit[ée]s?|comptant)$/i;
 
 /** A symbol with its Canadian listing: `RY.TO`, `VFV.TO`, `REI.UN.TO`, `ABC.V`. */
 const LISTED_SYMBOL = /^[A-Z][A-Z0-9.]{0,7}\.(TO|V|NE|CN)$/i;
@@ -209,7 +212,7 @@ function identifyRow(symbol: string, name: string): Security {
   }
   const asset = findAssetByTicker(symbol);
   if (asset) return { asset, symbol: null, cash: false };
-  if (CASH_NAME.test(symbol)) return { asset: null, symbol: null, cash: true };
+  if (CASH_SYMBOL.test(symbol)) return { asset: null, symbol: null, cash: true };
   return { asset: null, symbol: symbol.toUpperCase(), cash: false };
 }
 

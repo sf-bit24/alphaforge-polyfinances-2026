@@ -224,7 +224,8 @@ export function normalizeConfirmed(input: PositionInput, locale: Locale): Positi
   const row = rowOf(input);
   const asset = findAssetByTicker(input.ticker ?? null);
   if (asset) return positionFromAsset(row, asset, locale);
-  const isCash = input.asset_class === "cash" || CASH_NAME.test(input.ticker || input.name || "");
+  // Like `_is_cash` of the Python runtime: the name says cash only when there is no symbol (CASH.TO is an ETF).
+  const isCash = input.asset_class === "cash" || (!input.ticker && CASH_NAME.test(input.name ?? ""));
   return isCash ? cashPosition(row, input.name ?? null, locale) : unlistedPosition(input, row, locale);
 }
 

@@ -110,6 +110,34 @@ describe("issue #82: confirming the review without a change keeps every value", 
   });
 });
 
+describe("issue #82: CASH.TO is an ETF, not cash", () => {
+  it("keeps 100 CASH.TO of free text unidentified with its 100 shares, before and after confirmation", () => {
+    const { positions } = extractPositions({ text: "100 CASH.TO" }, "fr");
+    const expected = { ticker: "CASH.TO", quantity: 100, resolved: false, value_cad: null };
+    expect(positions).toEqual([expect.objectContaining({ ...expected, asset_class: null })]);
+    expect(confirmedUnchanged(positions)).toEqual([expect.objectContaining({ ...expected, asset_class: "other" })]);
+  });
+
+  it("keeps a CASH.TO row of a CSV as a security, with its symbol and quantity", () => {
+    const csv = "Symbole,Description,Quantité,Prix,Valeur marchande,Devise\nCASH.TO,Global X High Interest Savings ETF,100,50.05,5005,CAD";
+    const { positions } = extractPositions({ files: [csvFile(csv)] }, "fr");
+    const expected = { ticker: "CASH.TO", name: "Global X High Interest Savings ETF", quantity: 100, value_cad: 5005, resolved: false };
+    expect(positions).toEqual([expect.objectContaining(expected)]);
+    expect(confirmedUnchanged(positions)).toEqual([expect.objectContaining(expected)]);
+    expect(confirmedUnchanged(positions)[0]?.asset_class).not.toBe("cash");
+  });
+
+  it("reads only an exact cash word as cash in the symbol column", () => {
+    const csv = "Symbole,Description,Valeur marchande,Devise\nCASHFLOW,Fonds XYZ,1000,CAD\nEncaisse,,1200,CAD\n,Liquidités,300,CAD";
+    const { positions } = extractPositions({ files: [csvFile(csv)] }, "fr");
+    expect(positions.map((position) => [position.ticker, position.asset_class])).toEqual([
+      ["CASHFLOW", null],
+      [null, "cash"],
+      [null, "cash"],
+    ]);
+  });
+});
+
 describe("issue #82: account numbers in the pasted text", () => {
   it("masks usual account numbers, and keeps the SIN masked", () => {
     const screened = screenMessage("Mon CELI chez Disnat, compte 123-45678-9 :");

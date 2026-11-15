@@ -56,7 +56,7 @@ export function Dialog({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-brand-500"
+              className="rounded-md p-1.5 text-ink-500 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-2 focus-visible:outline-focus"
               aria-label={t.common.close}
             >
               <X aria-hidden className="size-5" />

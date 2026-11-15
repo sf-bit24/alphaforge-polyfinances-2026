@@ -33,7 +33,7 @@ export function CompletenessMeter({ completeness, compact = false }: { completen
         aria-valuetext={`${formatPercent(displayed, locale)} · ${t.panel.threshold} · ${t.panel.cap}`}
         className="relative mt-3"
       >
-        <div className="relative h-2.5 overflow-hidden rounded-full bg-brand-100">
+        <div className="relative h-2.5 overflow-hidden rounded-full bg-soft">
           <div className="absolute inset-y-0 right-0 bg-ink-200" style={{ left: pct(cap) }} />
           <div
             className="absolute inset-y-0 left-0 rounded-full bg-brand-500 transition-[width] duration-500 ease-out"
@@ -82,7 +82,7 @@ function SegmentedMeter({ label, value, steps, text }: { label: string; value: n
             key={index}
             className={cn(
               "h-1.5 flex-1 first:rounded-l-full last:rounded-r-full",
-              value !== null && index < value ? "bg-brand-500" : "bg-brand-100",
+              value !== null && index < value ? "bg-navy" : "bg-ink-100",
             )}
           />
         ))}

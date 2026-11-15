@@ -92,10 +92,18 @@ function toInput(row: Row): PositionInput {
 }
 
 const CELL =
-  "w-full rounded-md border-0 bg-white px-2 py-1.5 text-sm text-ink-950 ring-1 ring-ink-200 ring-inset focus:ring-2 focus:ring-brand-500 focus:outline-none aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-critical";
+  "w-full rounded-md border-0 bg-white px-2 py-1.5 text-sm text-ink-950 ring-1 ring-ink-200 ring-inset focus:ring-2 focus:ring-navy focus:outline-none aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-critical";
 
-/** `portfolio_review`: the investor corrects A2's positions, then confirms. */
-export function PortfolioReviewStep({ portfolio, message }: { portfolio: PortfolioView; message: string | null }) {
+/** `portfolio_review`: the investor corrects A2's positions, then confirms (`onConfirm` lets the journey walk on). */
+export function PortfolioReviewStep({
+  portfolio,
+  message,
+  onConfirm,
+}: {
+  portfolio: PortfolioView;
+  message: string | null;
+  onConfirm?: (positions: PositionInput[]) => Promise<boolean>;
+}) {
   const { t, locale } = useI18n();
   const session = useSession();
   const [rows, setRows] = useState<Row[]>(() => portfolio.positions.map(rowOf));
@@ -144,7 +152,7 @@ export function PortfolioReviewStep({ portfolio, message }: { portfolio: Portfol
       return;
     }
     setProblem(null);
-    void session.confirmPortfolio(rows.map(toInput));
+    void (onConfirm ?? session.confirmPortfolio)(rows.map(toInput));
   };
 
   return (
@@ -180,11 +188,11 @@ export function PortfolioReviewStep({ portfolio, message }: { portfolio: Portfol
                   t.review.columns.valueCad,
                   t.review.columns.status,
                 ].map((label) => (
-                  <th key={label} scope="col" className="px-3 py-2 font-semibold whitespace-nowrap">
+                  <th key={label} scope="col" className="px-2 py-2 font-semibold whitespace-nowrap">
                     {label}
                   </th>
                 ))}
-                <th scope="col" className="px-3 py-2">
+                <th scope="col" className="px-2 py-2">
                   <span className="sr-only">{t.review.columns.actions}</span>
                 </th>
               </tr>
@@ -202,48 +210,48 @@ export function PortfolioReviewStep({ portfolio, message }: { portfolio: Portfol
                 const issue = invalid(row);
                 const base = row.base;
                 return (
-                  <tr key={row.key} className={cn("border-b border-ink-150 align-top", row.edited && "bg-brand-50/30")}>
-                    <td className="w-32 px-3 py-2">
+                  <tr key={row.key} className={cn("border-b border-ink-150 align-top", row.edited && "bg-soft")}>
+                    <td className="w-28 px-2 py-2">
                       <input
                         value={row.ticker}
                         onChange={(event) => update(row.key, { ticker: event.target.value })}
                         aria-label={`${t.review.columns.ticker}, ${t.review.rowLabel(index + 1)}`}
                         aria-invalid={issue.ticker || undefined}
                         placeholder={t.review.tickerPlaceholder}
-                        className={cn(CELL, "min-w-28 font-mono uppercase")}
+                        className={cn(CELL, "min-w-24 font-mono uppercase")}
                         disabled={confirming}
                       />
                       {base.raw ? <p className="mt-1 truncate font-mono text-[0.65rem] text-ink-400" title={base.raw}>{base.raw}</p> : null}
                     </td>
-                    <td className="max-w-48 px-3 py-2">
+                    <td className="max-w-40 px-2 py-2">
                       <p className="truncate font-medium text-ink-900" title={base.name ?? undefined}>
                         {base.name ?? "—"}
                       </p>
                       {base.asset_class ? <p className="text-xs text-ink-500">{t.assetClasses[base.asset_class]}</p> : null}
                     </td>
-                    <td className="w-28 px-3 py-2">
+                    <td className="w-24 px-2 py-2">
                       <input
                         value={row.quantity}
                         inputMode="decimal"
                         onChange={(event) => update(row.key, { quantity: event.target.value })}
                         aria-label={`${t.review.columns.quantity}, ${t.review.rowLabel(index + 1)}`}
                         aria-invalid={issue.quantity || undefined}
-                        className={cn(CELL, "min-w-24 text-right tabular-nums")}
+                        className={cn(CELL, "min-w-20 text-right tabular-nums")}
                         disabled={confirming}
                       />
                     </td>
-                    <td className="w-32 px-3 py-2">
+                    <td className="w-28 px-2 py-2">
                       <input
                         value={row.marketValue}
                         inputMode="decimal"
                         onChange={(event) => update(row.key, { marketValue: event.target.value })}
                         aria-label={`${t.review.columns.value}, ${t.review.rowLabel(index + 1)}`}
                         aria-invalid={issue.marketValue || undefined}
-                        className={cn(CELL, "min-w-28 text-right tabular-nums")}
+                        className={cn(CELL, "min-w-24 text-right tabular-nums")}
                         disabled={confirming}
                       />
                     </td>
-                    <td className="w-20 px-3 py-2">
+                    <td className="w-16 px-2 py-2">
                       <input
                         value={row.currency}
                         list="currency-options"
@@ -251,16 +259,16 @@ export function PortfolioReviewStep({ portfolio, message }: { portfolio: Portfol
                         onChange={(event) => update(row.key, { currency: event.target.value.toUpperCase() })}
                         aria-label={`${t.review.columns.currency}, ${t.review.rowLabel(index + 1)}`}
                         aria-invalid={issue.currency || undefined}
-                        className={cn(CELL, "min-w-18 font-mono uppercase")}
+                        className={cn(CELL, "min-w-16 font-mono uppercase")}
                         disabled={confirming}
                       />
                     </td>
-                    <td className="w-36 px-3 py-2">
+                    <td className="w-32 px-2 py-2">
                       <select
                         value={row.account}
                         onChange={(event) => update(row.key, { account: event.target.value as AccountType | "" })}
                         aria-label={`${t.review.columns.account}, ${t.review.rowLabel(index + 1)}`}
-                        className={cn(CELL, "min-w-40")}
+                        className={cn(CELL, "min-w-32")}
                         disabled={confirming}
                       >
                         <option value="">—</option>
@@ -271,7 +279,7 @@ export function PortfolioReviewStep({ portfolio, message }: { portfolio: Portfol
                         ))}
                       </select>
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap tabular-nums">
+                    <td className="px-2 py-2 whitespace-nowrap tabular-nums">
                       {typeof base.price === "number" ? (
                         <span
                           title={base.price_date && base.price_source ? t.review.priceSource(formatDate(base.price_date, locale), base.price_source) : undefined}
@@ -283,10 +291,10 @@ export function PortfolioReviewStep({ portfolio, message }: { portfolio: Portfol
                         "—"
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
+                    <td className="px-2 py-2 text-right whitespace-nowrap tabular-nums">
                       {typeof base.value_cad === "number" && !row.edited ? formatMoney(base.value_cad, locale, "CAD") : "—"}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-2 py-2">
                       {row.edited ? (
                         <Badge tone="brand">{t.review.edited}</Badge>
                       ) : base.resolved ? (

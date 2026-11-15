@@ -4,8 +4,8 @@ import { useHealth } from "@/lib/client/health";
 import { useI18n } from "@/lib/i18n/provider";
 import { cn } from "@/components/ui/cn";
 
-/** Which backend the gateway talks to, and whether the runtime answers. */
-export function ModeChip() {
+/** Which backend the gateway talks to (simulator, local runtime, AWS AgentCore), and whether it answers. */
+export function ModeChip({ className }: { className?: string }) {
   const { locale, t } = useI18n();
   const { status, health } = useHealth(locale);
   const label = health ? t.mode[health.mode] : t.mode.checking;
@@ -24,17 +24,10 @@ export function ModeChip() {
   return (
     <span
       title={title}
-      className="hidden items-center gap-2 rounded-full bg-white/8 px-2.5 py-1 text-xs text-ink-100 ring-1 ring-white/15 sm:inline-flex"
+      className={cn("items-center gap-2 rounded-full border border-line bg-white px-2.5 py-1 text-xs text-ink-600", className ?? "inline-flex")}
     >
-      <span
-        aria-hidden
-        className={cn(
-          "size-2 rounded-full",
-          ok ? "bg-good" : failed ? "bg-critical" : "animate-pulse-dot bg-warning",
-        )}
-      />
-      <span className="font-medium">{label}</span>
-      {health?.agent ? <span className="font-mono text-[0.7rem] text-ink-300">{health.agent.release}</span> : null}
+      <span aria-hidden className={cn("size-2 rounded-full", ok ? "bg-good" : failed ? "bg-critical" : "animate-pulse-dot bg-warning")} />
+      <span className="font-medium text-ink-950">{label}</span>
       {failed ? <span className="sr-only">{t.mode.unreachable}</span> : null}
     </span>
   );

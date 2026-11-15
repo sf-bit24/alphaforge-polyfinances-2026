@@ -7,8 +7,8 @@ import { cn } from "@/components/ui/cn";
 
 const LOCALES: Locale[] = ["fr", "en"];
 
-/** Switches the interface at once, and asks the runtime to localize agent texts too. */
-export function LanguageToggle({ tone = "dark" }: { tone?: "dark" | "light" }) {
+/** The drafts' FR / EN switch. It changes the interface at once and asks the runtime to localize agent texts too. */
+export function LanguageToggle({ className }: { className?: string }) {
   const { locale, setLocale, t } = useI18n();
   const session = useSession();
 
@@ -19,14 +19,7 @@ export function LanguageToggle({ tone = "dark" }: { tone?: "dark" | "light" }) {
   };
 
   return (
-    <div
-      role="group"
-      aria-label={t.language.label}
-      className={cn(
-        "inline-flex rounded-lg p-0.5 text-xs font-semibold",
-        tone === "dark" ? "bg-white/10 ring-1 ring-white/15" : "bg-ink-100 ring-1 ring-ink-200",
-      )}
-    >
+    <div role="group" aria-label={t.language.label} className={cn("flex overflow-hidden rounded-md border border-line text-[13px]", className)}>
       {LOCALES.map((option) => {
         const active = option === locale;
         return (
@@ -37,14 +30,8 @@ export function LanguageToggle({ tone = "dark" }: { tone?: "dark" | "light" }) {
             aria-label={t.language.switchTo[option]}
             onClick={() => change(option)}
             className={cn(
-              "rounded-md px-2.5 py-1 uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-300",
-              tone === "dark"
-                ? active
-                  ? "bg-white text-ink-950"
-                  : "text-ink-200 hover:text-white"
-                : active
-                  ? "bg-white text-ink-950 shadow-sm"
-                  : "text-ink-600 hover:text-ink-900",
+              "px-2.5 py-1 uppercase transition-colors",
+              active ? "bg-navy text-white" : "bg-white text-ink-500 hover:text-navy",
             )}
           >
             {option}

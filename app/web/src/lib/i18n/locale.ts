@@ -17,6 +17,29 @@ export function formatPercent(share: number, locale: Locale, digits = 0): string
   }).format(share);
 }
 
+/** A change with its sign, minus as U+2212 like the drafts: "+1,2 %", "−9,8 %". */
+export function formatSignedPercent(share: number, locale: Locale, digits = 1): string {
+  return `${share >= 0 ? "+" : "−"}${formatPercent(Math.abs(share), locale, digits)}`;
+}
+
+/** A difference of two returns, in percentage points: "−35,5 pts". */
+export function formatSignedPoints(share: number, locale: Locale, digits = 1): string {
+  return `${share >= 0 ? "+" : "−"}${formatNumber(Math.abs(share) * 100, locale, digits)} pts`;
+}
+
+/** An axis value in thousands or millions of dollars: "450 k$" / "$450k". */
+export function formatCompactMoney(value: number, locale: Locale): string {
+  const millions = Math.abs(value) >= 1_000_000;
+  const amount = formatNumber(value / (millions ? 1_000_000 : 1000), locale, millions ? 1 : 0);
+  const unit = millions ? "M" : "k";
+  return locale === "fr" ? `${amount} ${unit}$` : `$${amount}${unit}`;
+}
+
+/** Money with a U+2212 minus for losses: "−39 200 $". */
+export function formatSignedMoney(value: number, locale: Locale, currency = "CAD", digits = 0): string {
+  return `${value < 0 ? "−" : ""}${formatMoney(Math.abs(value), locale, currency, digits)}`;
+}
+
 export function formatMoney(value: number, locale: Locale, currency = "CAD", digits = 0): string {
   try {
     return new Intl.NumberFormat(intlLocale(locale), {
@@ -49,7 +72,10 @@ export function formatDate(iso: string, locale: Locale): string {
 export function formatTime(iso: string, locale: Locale): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return new Intl.DateTimeFormat(intlLocale(locale), { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(date);
+  // A clock time, 21:34:58 (fr-CA would otherwise write « 21 h 34 min 58 s », which reads like a duration).
+  const parts = new Intl.DateTimeFormat(intlLocale(locale), { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "00";
+  return `${part("hour")}:${part("minute")}:${part("second")}`;
 }
 
 export function formatDuration(ms: number, locale: Locale): string {
@@ -59,4 +85,9 @@ export function formatDuration(ms: number, locale: Locale): string {
   const minutes = Math.floor(seconds / 60);
   const rest = Math.round(seconds % 60);
   return `${minutes} min ${rest} s`;
+}
+
+/** Typographic apostrophes in text written by the runtime or the agents: l'argent → l’argent. */
+export function curly(text: string): string {
+  return text.replace(/(?<=\p{L})'(?=\p{L})/gu, "’");
 }

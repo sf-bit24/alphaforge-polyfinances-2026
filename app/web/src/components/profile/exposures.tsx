@@ -43,7 +43,7 @@ function BarList({ title, rows, total }: { title: string; rows: Row[]; total: nu
             <span className="truncate text-ink-800">{row.name}</span>
             <span aria-hidden className="relative h-3 rounded-r-[4px]">
               <span
-                className="absolute inset-y-0 left-0 rounded-r-[4px] bg-brand-500 transition-[width] duration-500 group-hover:bg-brand-600"
+                className="absolute inset-y-0 left-0 rounded-r-[4px] bg-navy transition-[width] duration-500 group-hover:bg-ink-700"
                 style={{ width: `${Math.max(1.5, (row.share / max) * 100)}%` }}
               />
             </span>

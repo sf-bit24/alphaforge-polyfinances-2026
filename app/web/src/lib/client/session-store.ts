@@ -26,7 +26,7 @@ export interface AnsweredItem {
 }
 
 export type ConversationEntry =
-  | { id: string; role: "agent"; at: string; message: string | null; questions: Question[]; stage: Stage }
+  | { id: string; role: "agent"; at: string; message: string | null; questions: Question[]; stage: Stage; runId?: string }
   | { id: string; role: "user"; at: string; answers: AnsweredItem[]; message: string | null; stop: boolean };
 
 export interface SessionSnapshot {
@@ -119,6 +119,9 @@ export class SessionStore {
   getSnapshot = (): SessionSnapshot => this.snapshot;
 
   getServerSnapshot = (): SessionSnapshot => INITIAL;
+
+  /** The latest ClientState, for code that just awaited an action (render code reads the snapshot instead). */
+  getState = (): ClientState | null => this.snapshot.state;
 
   configure(locale: Locale, messages: ErrorMessages): void {
     this.locale = locale;
@@ -399,6 +402,8 @@ export class SessionStore {
                 message: result.message,
                 questions: result.questions,
                 stage: result.stage,
+                // Links the message to the trace of the request that produced it.
+                runId: finished.id,
               },
             ]
           : this.snapshot.conversation;

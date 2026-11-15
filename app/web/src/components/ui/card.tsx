@@ -25,7 +25,7 @@ export function CardHeader({
   const Heading = level === 2 ? "h2" : "h3";
   return (
     <header className={cn("flex items-start gap-3 border-b border-ink-150 px-5 py-4", className)}>
-      {icon ? <span className="mt-0.5 text-brand-600">{icon}</span> : null}
+      {icon ? <span className="mt-0.5 text-navy">{icon}</span> : null}
       <div className="min-w-0 flex-1">
         <Heading id={id} className="text-[0.95rem] font-semibold tracking-tight text-ink-950">
           {title}

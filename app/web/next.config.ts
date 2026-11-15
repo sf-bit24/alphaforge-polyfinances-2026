@@ -10,6 +10,9 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // The interface runs with `next dev` for the demo and the video: keep the route badge off the
+  // journey's corners (compile and runtime errors are still shown).
+  devIndicators: false,
   // The AWS SDK clients are only used by the server-side gateway; keep them out of the bundle.
   serverExternalPackages: [
     "@aws-sdk/client-bedrock-agentcore",
@@ -18,6 +21,10 @@ const nextConfig: NextConfig = {
   ],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
+  },
+  // The profile is built on the journey (/) since the approved drafts; keep old links working.
+  async redirects() {
+    return [{ source: "/profile", destination: "/", permanent: false }];
   },
 };
 

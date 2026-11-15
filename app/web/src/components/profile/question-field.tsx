@@ -3,6 +3,7 @@
 import { Bot, Info, ListChecks } from "lucide-react";
 import type { Question } from "@/lib/contract/schemas";
 import { questionDomId, type Draft } from "@/lib/client/answers";
+import { curly } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/components/ui/cn";
@@ -59,14 +60,14 @@ export function QuestionField({
           size === "lg" ? "text-xl leading-snug sm:text-[1.4rem]" : "text-base leading-snug",
         )}
       >
-        {question.prompt}
+        {curly(question.prompt)}
       </Heading>
       {question.help ? (
         <p id={helpId} className="mt-2 flex items-start gap-2 text-sm text-ink-600">
-          <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-brand-500" />
+          <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-navy" />
           <span>
             <span className="sr-only">{t.question.help} : </span>
-            {question.help}
+            {curly(question.help)}
           </span>
         </p>
       ) : null}

@@ -5,7 +5,7 @@ type Tone = "neutral" | "brand" | "good" | "warning" | "critical" | "outline";
 
 const TONES: Record<Tone, string> = {
   neutral: "bg-ink-100 text-ink-700",
-  brand: "bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-100",
+  brand: "bg-soft text-navy ring-1 ring-inset ring-line",
   good: "bg-good-wash text-good-ink",
   warning: "bg-warning-wash text-warning-ink",
   critical: "bg-critical-wash text-critical-ink",

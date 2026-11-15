@@ -147,9 +147,9 @@ def strategy_statements(book: FactBook, final: dict | None = None) -> dict[str, 
     out["data_used"].append(
         Statement(
             text_fr=f"Style de composition retenu : {STYLE_FR.get(f['strat.style'].value, v('strat.style'))}. "
-            "Il ne change ni le niveau de risque, ni la "
-            "part maximale d'actions, ni les budgets de perte ; il peut placer le portefeuille plus haut dans sa "
-            "bande, donc avec plus de risque, toujours sous ces budgets.",
+            "Il ne relève ni le niveau de risque, ni la "
+            "part d'actions visée, ni les budgets de perte : il règle la composition (titres retenus, planchers "
+            "des satellites, plafonds sectoriels). Il peut donc ajouter du risque, toujours sous ces budgets.",
             fact_ids=["strat.style"],
             label="HYPOTHESE",
         )

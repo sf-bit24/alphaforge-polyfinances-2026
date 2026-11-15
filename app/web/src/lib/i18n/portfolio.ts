@@ -174,7 +174,7 @@ export const portfolioFr = {
   },
   trace: {
     title: "Trace d’exécution",
-    count: ((count: number) => `${count} étapes`) as Fn<[number]>,
+    count: ((count: number) => `${count} étape${count > 1 ? "s" : ""}`) as Fn<[number]>,
     facts: ((count: number) => `${count} fait${count > 1 ? "s" : ""}`) as Fn<[number]>,
     status: { ok: "ok", erreur: "erreur", refus: "refus" } as Record<string, string>,
   },
@@ -378,7 +378,7 @@ export const portfolioEn: PortfolioStrings = {
   },
   trace: {
     title: "Execution trace",
-    count: ((count: number) => `${count} steps`) as Fn<[number]>,
+    count: ((count: number) => `${count} step${count === 1 ? "" : "s"}`) as Fn<[number]>,
     facts: ((count: number) => `${count} fact${count > 1 ? "s" : ""}`) as Fn<[number]>,
     status: { ok: "ok", erreur: "error", refus: "refusal" },
   },

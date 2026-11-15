@@ -6,7 +6,7 @@ choisit le point d'entrée :
 | `AGENT_ROLE` | Agents | Rôle |
 | --- | --- | --- |
 | `profile` | questionnaire déterministe, A1 `createProfile-Agent`, A2 `AnalyseExistingPortfolio-Agent` | Profil investisseur en cinq dimensions, portefeuille existant, complétude, traces, SSE. |
-| `press` | A4 | Actualités datées (Yahoo Finance RSS, Google News RSS, GDELT) vers `staging/<run_id>/press/`. |
+| `press` | A4 | Actualités datées (communiqués Newswire.ca et PR Newswire, GDELT) vers `staging/<run_id>/press/`. |
 | `data` | A5 | Séries et cours datés (Banque du Canada Valet, FRED, Yahoo Finance) vers `staging/<run_id>/data/`. |
 | `supervisor` | A6 | Contrôle ce qui est arrivé dans `staging/<run_id>/` et écrit les documents OKF sous `general/`. |
 
@@ -39,7 +39,7 @@ app/agents/
       kb.py                      kb.list / kb.get, recherche dans la Knowledge Base générale
       service.py                 toutes les actions de CONTRACTS.md §3
     collect/
-      http.py, fetchers.py       sources publiques sans clé, hôtes en liste blanche, User-Agent générique
+      http.py, fetchers.py       sources publiques sans clé, hôtes en liste blanche, User-Agent déclaré
       press.py, data.py          A4 et A5
       supervisor.py              A6 : contrôles du code, revue éditoriale, documents OKF, index général
       staging.py, service.py     éléments collectés, tâche asynchrone et marqueur _done.json
@@ -150,13 +150,18 @@ provenance `a1:<tour>` ou `a2:<tour>`.
 | --- | --- | --- |
 | `www.bankofcanada.ca` | A5 | API Valet (taux directeur, rendements, IPC, USD/CAD). |
 | `fred.stlouisfed.org` | A5 | `fredgraph.csv` (taux, rendements, IPC, chômage aux États-Unis). |
-| `query1.finance.yahoo.com` | A5, A2 | Graphique quotidien d'un titre absent du jeu de départ. |
-| `feeds.finance.yahoo.com` | A4 | Titres d'actualité par symbole (RSS). |
-| `news.google.com` | A4 | Recherche Google News (RSS). |
-| `api.gdeltproject.org` | A4 | GDELT DOC 2.0 (au plus une requête toutes les six secondes). |
+| `query1.finance.yahoo.com` | A5, A2 | Graphique quotidien d'un titre absent du jeu de départ. Le robots.txt de l'hôte interdit tout : exception assumée par l'équipe, faute d'alternative officielle gratuite. |
+| `api.gdeltproject.org` | A4 | GDELT DOC 2.0, filtre `sourcelang:french` ou `english` (au plus une requête toutes les six secondes). |
+| `www.newswire.ca` | A4 | Communiqués d'émetteurs (Cision/CNW), flux RSS général et services financiers. |
+| `www.prnewswire.com` | A4 | Communiqués d'émetteurs (Cision), flux RSS des services financiers. |
 
 Seuls ces hôtes sont joignables, en HTTPS, redirections comprises; les adresses sont construites par le code. Le
-User-Agent est générique et ne contient aucun renseignement personnel.
+User-Agent déclare le robot, `AlphaForgeResearchBot/0.1 (+https://github.com/sf-bit24/alphaforge-polyfinances-2026)`,
+sans renseignement personnel; FRED ne reçoit `curl/8.0` qu'en repli, une seule fois, s'il refuse ce User-Agent. Aucun
+filtre n'est contourné : un 403, un 429 ou une coupure remonte comme erreur et l'agent passe à une autre source.
+`feeds.finance.yahoo.com` et `news.google.com` ne sont plus lus, leur robots.txt interdisant les chemins utilisés
+(vérifié le 2026-11-15). Des communiqués, A4 ne garde que les métadonnées (titre, lien, émetteur, dates, symboles) et
+son propre résumé : l'extrait RSS sert au résumé puis est jeté.
 
 ## Volet finance (`alphaforge.finance`, simulation seulement)
 

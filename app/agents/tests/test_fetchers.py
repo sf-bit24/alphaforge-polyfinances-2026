@@ -64,35 +64,39 @@ def test_yahoo_chart_parsing():
         fetchers.parse_yahoo_chart({"chart": {"result": None, "error": {"code": "Not Found"}}}, "X", "u")
 
 
-RSS = """<?xml version="1.0"?><rss><channel>
-<item><title>RBC beats estimates</title><link>https://finance.yahoo.com/news/rbc-1.html</link>
-<description>&lt;p&gt;Royal Bank reported &amp;amp; more&lt;/p&gt;</description>
-<pubDate>Thu, 13 Nov 2026 14:00:00 +0000</pubDate></item>
+NEWSWIRE = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel>
+<item><title>Sagicor Financial Corrects Dividend Payment Date</title>
+<link>https://www.newswire.ca/news-releases/sagicor-1.html</link>
+<pubDate>Fri, 14 Nov 2026 21:05:00 +0000</pubDate>
+<description><![CDATA[<p>TORONTO /CNW/ - Sagicor Financial Company Ltd. (TSX: SFC) &amp; more...</p>]]>
+</description>
+<dc:contributor><![CDATA[Sagicor Financial Company Ltd.]]></dc:contributor><dc:language>en</dc:language></item>
+<item><title>Perpetua Resources Announces Third Quarter 2026 Financial Results</title>
+<link>https://www.newswire.ca/news-releases/perpetua-2.html</link>
+<pubDate>Fri, 14 Nov 2026 22:00:00 +0000</pubDate>
+<description>Perpetua Resources Corp. (Nasdaq: PPTA) (TSX: PPTA) and Slate (TSX: SLT.U, TSXV: AGET)</description>
+<dc:contributor>Perpetua Resources Corp.</dc:contributor><dc:language>en-US</dc:language></item>
 <item><title></title><link>https://x</link></item>
 </channel></rss>"""
 
 
-def test_yahoo_rss_parsing():
-    items = fetchers.parse_yahoo_rss(RSS, "RY.TO")
-    assert len(items) == 1
-    item = items[0]
-    assert item.published_at == "2026-11-13T14:00:00Z" and item.tickers == ["RY.TO"]
-    assert item.snippet == "Royal Bank reported & more" and item.provider == "yahoo_rss"
+def test_press_release_parsing():
+    items = fetchers.parse_press_releases(NEWSWIRE, "newswire_ca_financial")
+    assert len(items) == 2
+    first, second = items
+    assert first.source == "Newswire.ca (Cision)" and first.provider == "newswire_ca_financial"
+    assert first.issuer == "Sagicor Financial Company Ltd." and first.tickers == ["SFC.TO"]
+    assert first.published_at == "2026-11-14T21:05:00Z" and first.language == "en"
+    assert first.snippet.endswith("& more...") and "<p>" not in first.snippet
+    assert second.tickers == ["PPTA", "PPTA.TO", "SLT-U.TO", "AGET.V"] and second.language == "en"
 
 
-GOOGLE = """<?xml version="1.0"?><rss><channel>
-<item><title>La Banque du Canada maintient son taux - Radio-Canada</title>
-<link>https://news.google.com/rss/articles/abc?oc=5</link><pubDate>Wed, 12 Nov 2026 15:30:00 GMT</pubDate>
-<source url="https://ici.radio-canada.ca">Radio-Canada</source></item>
-</channel></rss>"""
-
-
-def test_google_news_parsing():
-    items = fetchers.parse_google_news(GOOGLE, "fr")
-    assert items[0].title == "La Banque du Canada maintient son taux"
-    assert items[0].source == "Radio-Canada" and items[0].published_at == "2026-11-12T15:30:00Z"
-    url = fetchers.build_google_news_url("Banque du Canada", 7, "fr")
-    assert url.startswith("https://news.google.com/rss/search?q=Banque%20du%20Canada%20when%3A7d&hl=fr-CA")
+def test_listing_tickers_and_feed_allowlist():
+    assert fetchers.listing_tickers("Acme (NYSE: BRK.B; CSE: XYZ)") == ["BRK-B", "XYZ.CN"]
+    assert fetchers.listing_tickers("no listing here") == []
+    with pytest.raises(FetchError):
+        fetchers.fetch_press_releases("google_news")
 
 
 def test_gdelt_parsing():
@@ -115,7 +119,11 @@ def test_gdelt_parsing():
     with pytest.raises(FetchError):
         fetchers.parse_gdelt("Please limit requests to one every 5 seconds")
     url = fetchers.build_gdelt_url("TSX", datetime(2026, 11, 7, tzinfo=UTC), datetime(2026, 11, 14, tzinfo=UTC))
-    assert "startdatetime=20261107000000" in url and "mode=artlist" in url
+    assert "startdatetime=20261107000000" in url and "mode=artlist" in url and "sourcelang" not in url
+    url = fetchers.build_gdelt_url(
+        "Banque du Canada", datetime(2026, 11, 7, tzinfo=UTC), datetime(2026, 11, 14, tzinfo=UTC), language="fr"
+    )
+    assert "query=Banque+du+Canada+sourcelang%3Afrench" in url
 
 
 def test_http_get_only_allows_listed_https_hosts():
@@ -123,6 +131,9 @@ def test_http_get_only_allows_listed_https_hosts():
         http_get("https://example.com/x")
     with pytest.raises(FetchError):
         http_get("http://www.bankofcanada.ca/valet/")
+    for blocked in ("https://news.google.com/rss/search?q=x", "https://feeds.finance.yahoo.com/rss/2.0/headline?s=RY"):
+        with pytest.raises(FetchError, match="host not allowed"):
+            http_get(blocked)
 
 
 def test_fetchers_refuse_unlisted_series_and_symbols():
@@ -140,7 +151,7 @@ def test_rss_with_entity_declarations_is_refused():
         "<rss><channel><item><title>&a;</title></item></channel></rss>"
     )
     with pytest.raises(FetchError):
-        fetchers.parse_yahoo_rss(bomb, "RY.TO")
+        fetchers.parse_press_releases(bomb, "newswire_ca")
 
 
 def test_gzip_bodies_are_bounded_after_decompression():
@@ -160,3 +171,47 @@ def test_redirects_must_stay_on_listed_hosts():
     handler = http._AllowlistRedirects()
     with pytest.raises(FetchError):
         handler.redirect_request(None, None, 302, "Found", {}, "https://evil.example.com/")
+
+
+class _FakeResponse:
+    status = 200
+    headers = {"Content-Type": "text/csv"}
+
+    def __init__(self, body=b"ok"):
+        self._body = body
+
+    def read(self, _n):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_declared_user_agent_and_fred_fallback(monkeypatch):
+    import urllib.error
+
+    from alphaforge.collect import http
+
+    seen = []
+
+    def fake_open(request, timeout):
+        agent = request.get_header("User-agent")
+        seen.append((request.full_url, agent))
+        if "fred" in request.full_url and agent == http.USER_AGENT:
+            raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, None)
+        if request.full_url.endswith("/y"):
+            raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", {}, None)
+        return _FakeResponse()
+
+    monkeypatch.setattr(http._OPENER, "open", fake_open)
+    assert http.USER_AGENT.startswith("AlphaForgeResearchBot/") and "github.com" in http.USER_AGENT
+    assert http_get("https://www.bankofcanada.ca/valet/x").status == 200
+    assert seen[-1][1] == http.USER_AGENT
+    assert http_get("https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFF").status == 200
+    assert [agent for _, agent in seen[1:]] == [http.USER_AGENT, "curl/8.0"]
+    with pytest.raises(FetchError) as refused:
+        http_get("https://www.bankofcanada.ca/valet/y")
+    assert refused.value.status == 429 and len(seen) == 4

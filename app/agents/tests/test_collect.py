@@ -61,19 +61,22 @@ def test_other_bad_requests(store, tmp_path):
 
 def test_press_collect_runs_in_the_background_and_writes_its_marker(store, tmp_path, monkeypatch):
     candidate = fetchers.NewsCandidate(
-        title="RBC beats estimates",
-        url="https://finance.yahoo.com/news/rbc-1.html",
-        source="Yahoo Finance",
+        title="RBC reports fourth quarter results",
+        url="https://www.newswire.ca/news-releases/rbc-1.html",
+        source="Newswire.ca (Cision)",
         published_at="2099-11-13T14:00:00Z",
-        snippet="Royal Bank reported results.",
+        snippet="Royal Bank of Canada (TSX: RY) reported results.",
         language="en",
-        provider="yahoo_rss",
+        provider="newswire_ca_financial",
         tickers=["RY.TO"],
+        issuer="Royal Bank of Canada",
     )
-    monkeypatch.setattr(fetchers, "fetch_yahoo_headlines", lambda symbol: [candidate] if symbol == "RY.TO" else [])
+    monkeypatch.setattr(
+        fetchers, "fetch_press_releases", lambda provider: [candidate] if provider == "newswire_ca_financial" else []
+    )
     factory = ScriptedFactory(
         [
-            [("tool", "fetch_ticker_headlines", {"tickers": ["RY.TO", "TD.TO"]})],
+            [("tool", "fetch_press_releases", {})],
             [
                 (
                     "tool",
@@ -109,6 +112,8 @@ def test_press_collect_runs_in_the_background_and_writes_its_marker(store, tmp_p
     item = store.get_json(marker["keys"][0])
     assert item["kind"] == "news" and item["url"] == candidate.url and item["published_at"] == candidate.published_at
     assert item["summary"].startswith("RBC a publié")
+    assert item["tickers"] == ["RY.TO"] and item["data"]["issuer"] == "Royal Bank of Canada"
+    assert "snippet" not in item["data"] and "reported results" not in str(item)
     assert app.started == ["press:exec-1-press"] and app.completed == [1]
     again = service.handle({"action": "collect", "run_id": "exec-1-press"})
     assert again["already_done"] is True and len(app.started) == 1

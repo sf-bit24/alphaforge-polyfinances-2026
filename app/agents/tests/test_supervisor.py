@@ -22,7 +22,7 @@ def news(item_id="news-1", **overrides):
         language="fr",
         tickers=["RY.TO"],
         summary="La Banque du Canada a maintenu son taux directeur.",
-        data={"provider": "google_news"},
+        data={"provider": "gdelt"},
     )
     item.update(overrides)
     return item

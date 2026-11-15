@@ -151,10 +151,11 @@ def test_daily_tables_from_raw_files(tmp_path):
 
 
 def test_universe_yaml_keeps_the_starter_columns():
-    from alphaforge.finance.backtest import daily_data
+    import yaml
 
-    rows = daily_data.universe_rows(include_proposed=False)
-    assert [r["ticker"] for r in rows] == list(starter.universe())
+    rows = yaml.safe_load(market.UNIVERSE_FILE.read_text(encoding="utf-8"))["assets"]
+    assert [r["ticker"] for r in rows if not r.get("proposed")] == list(starter.universe())
+    assert all(set(r) - {"proposed"} == set(starter.Asset.__dataclass_fields__) for r in rows)
 
 
 # ----------------------------------------------------------------------------- aucune lecture directe du starter

@@ -22,7 +22,6 @@ sources:
     title: "Jeu de départ AlphaForge AI : prix quotidiens ajustés"
     resource: "starter:prices_daily.csv (colonne adj_close)"
 data:
-  catalog_id: rendement_total
   aliases: [rendement, rendement total, dividende, distribution, ça rapporte, rendement annuel]
   related: [interets-composes, inflation, frais, volatilite, baisse-maximale]
 ---
@@ -61,7 +60,6 @@ Le code calcule le rendement; le modèle ne l'estime jamais.
 
 | Où | Données | Résultat |
 | --- | --- | --- |
-| Faits d'un actif (vidéos tldoole) | Prix quotidiens ajustés (`adj_close`) du jeu de départ | Rendement total (dernier prix / premier prix − 1), rendement annuel moyen et valeur de 100 $ investis |
 | Risque d'un portefeuille (moteur) | Rendements mensuels d'un portefeuille rééquilibré chaque mois | Rendement historique annualisé, marqué « passé, pas une prévision » |
 
 - `adj_close` est ajusté des dividendes et des fractionnements (énoncé officiel, p. 12) : le rendement calculé inclut

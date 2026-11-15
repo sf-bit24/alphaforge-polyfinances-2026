@@ -65,23 +65,28 @@ Testé en réel le 2026-11-14 (us-east-1) : la lentille Risque (Haiku 5.5) a app
 ## Déploiement
 
 `app.py` est le point d'entrée `BedrockAgentCoreApp` en streaming (`start` → `round` × 2 →
-`decision`). Le profil est lu et la décision écrite dans l'OKF client (`OKF_ROOT`). Les variables
-`GUARDRAIL_ID` et `GUARDRAIL_VERSION` activent l'ancrage contextuel.
+`decision`). Le profil est lu et la décision écrite dans l'OKF client, avec le magasin de l'app
+(`okf_bridge.stores_from_env`, `ALPHAFORGE_STORE` = `s3` ou `local`) : `clients/<id>/profil.md` en
+lecture, `clients/<id>/decisions/` en écriture. Les variables `ALPHAFORGE_GUARDRAIL_ID` et
+`ALPHAFORGE_GUARDRAIL_VERSION` activent l'ancrage contextuel.
 
-## Dépendances (pas encore sur `master`)
+## Modules utilisés
 
-- `contracts/` (`InvestorProfile`, `Decision`, `PolicySpec` 0.2.0-draft) ;
-- `research/finance/portfolio/` (F2-F4) et `research/finance/llm/` (rejeu) : équipe finance ;
-- `research/backtest/` : session données ;
-- `research/finance/policy_compiler/` (F1) et `research/finance/okf/` : en cours sur cette branche.
+- `alphaforge.finance.contracts` : `InvestorProfile`, `Decision`, `PolicySpec` ;
+- `alphaforge.finance.policy` (F1), `alphaforge.finance.portfolio` (F2-F4),
+  `alphaforge.finance.llm` (rejeu) ;
+- `alphaforge.finance.backtest` : moteur et données longues (`python -m alphaforge.finance.backtest.build_data`).
 
 ## Tests
 
 ```sh
-PYTHONPATH=.:research/finance python -m pytest research/finance/agents/tests -q
+cd app/agents && uv sync --group dev --group finance && uv run pytest tests/finance/debate -q
 ```
 
-`tests/test_pipeline_rules.py` (3 tests, environ 15 s) : la décision est valide et chaque phrase est
+Les tests qui demandent les données longues sont sautés quand elles sont absentes
+(`alphaforge.finance.backtest.paths.long_data_available`).
+
+`test_pipeline_rules.py` (3 tests, environ 15 s) : la décision est valide et chaque phrase est
 vérifiée ; la demande TSLA de 50 000 $ donne `refus_encadre` avec un contrefactuel ; trois
 exécutions donnent une décision identique.
 

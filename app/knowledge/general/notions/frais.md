@@ -19,7 +19,6 @@ sources:
     title: "2026 Projection Assumption Guidelines (FP Canada Standards Council et Institut de planification financière)"
     resource: "https://www.fpcanada.ca/docs/professionalsitelibraries/standards/projection-assumption-guidelines.pdf (section 5 : hypothèses brutes de frais, relevé dans rules/canada_2026.yaml, statut verified)"
 data:
-  catalog_id: frais
   aliases: [frais, rfg, frais de gestion, ratio des frais de gestion, commission, frais de courtage, mer]
   related: [fnb, interets-composes, rendement-total, reequilibrage]
 ---
@@ -57,9 +56,6 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 
 Le code fait le calcul; le modèle ne l'estime jamais.
 
-- L'outil `fee_drag` des faits tldoole compare un montant placé à un rendement annuel constant, avec et sans frais
-  annuels, sur 1 à 50 ans. Il renvoie les deux valeurs finales, l'écart en dollars et la part perdue, avec l'hypothèse
-  en clair : « une illustration, pas une prévision ».
 - Les rendements historiques viennent de `adj_close`. Pour un FNB, le RFG est déjà prélevé dans la valeur du fonds :
   ses rendements passés sont donc nets de ses frais de gestion.
 - L'optimiseur peut compter des frais d'opération sur la rotation, avec `transaction_cost_bps` (zéro par défaut) et un
@@ -72,7 +68,6 @@ Le code fait le calcul; le modèle ne l'estime jamais.
 - **Frais de conseil et de courtage** : ils ne sont pas dans les prix; les rendements historiques ne les déduisent
   pas. Les hypothèses de projection de FP Canada sont aussi brutes de frais : il faut les retirer soi-même.
 - **Frais d'opération à zéro par défaut** : sans paramètre explicite, la rotation d'un portefeuille paraît gratuite.
-- **Illustration** : `fee_drag` suppose un rendement constant; le vrai effet varie avec le parcours.
 
 ## À ne pas confondre
 

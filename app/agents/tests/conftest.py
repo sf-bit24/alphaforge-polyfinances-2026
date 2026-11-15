@@ -23,17 +23,17 @@ BASE_ANSWERS = {
     "q_horizon": "gt10",
     "q_drop_reaction": "hold",
     "q_risk_attitude": "large",
-    "q_emergency_fund": 6,
+    "q_emergency_fund": "6to12",
     "q_income_stability": "very_stable",
     "q_loss_impact": "none",
     "q_liquidity": "none",
-    "q_withdrawal_pct": 10,
+    "q_withdrawal_pct": "lt10",
     "q_accounts": ["tfsa", "rrsp"],
     "q_currency": "cad_usd",
     "q_esg": 4,
     "q_exclusions": ["tobacco"],
     "q_interests": ["technology", "crypto"],
-    "q_amount": 25000,
+    "q_amount": "10k_50k",
     "q_existing_portfolio": False,
 }
 
@@ -118,11 +118,19 @@ def settings(tmp_path):
     )
 
 
-def make_service(settings, store, factory=None, quote_fetcher=None) -> ProfileService:
+def make_service(settings, store, factory=None, quote_fetcher=None, client_brain=False) -> ProfileService:
     def no_model(**_: Any):
         raise AssertionError("a deterministic action must not create a model")
 
-    return ProfileService(settings, store, model_factory=factory or no_model, quote_fetcher=quote_fetcher)
+    # La base du client écrite par A1 (fin du questionnaire) appelle un modèle de plus : désactivée par défaut
+    # pour que les scripts des autres tests restent alignés; tests/test_client_brain.py l'active.
+    return ProfileService(
+        settings,
+        store,
+        model_factory=factory or no_model,
+        quote_fetcher=quote_fetcher,
+        write_client_brain=client_brain,
+    )
 
 
 def answer_base(service: ProfileService, client_id: str, overrides: dict[str, Any] | None = None) -> dict[str, Any]:

@@ -48,8 +48,8 @@ describe("contract examples (CONTRACTS.md 3.3)", () => {
     // Opaque ids: A1 follow-ups and fallback questions.
     expect(Question.parse({ ...examples.question, id: "a1_2_1", source: "a1", field: null }).id).toBe("a1_2_1");
     expect(Question.parse({ ...examples.question, id: "fb_3_1", source: "deterministic" }).source).toBe("deterministic");
-    // Unknown actors (video feature) and runtime flags are open strings.
-    for (const actor of ["polly", "mediaconvert", "A7", "A9"]) expect(TraceStep.parse({ ...examples.traceStep, actor }).actor).toBe(actor);
+    // Unknown actors and runtime flags are open strings.
+    for (const actor of ["A3", "A9", "custom_tool"]) expect(TraceStep.parse({ ...examples.traceStep, actor }).actor).toBe(actor);
     const flags = ["concentration_sector", "crypto_exposure_high", "cash_heavy", "few_holdings", "unvalued_positions"];
     expect(PortfolioView.parse({ ...examples.portfolioView, exposures: { ...examples.portfolioView.exposures, flags } }).exposures.flags).toEqual(flags);
   });

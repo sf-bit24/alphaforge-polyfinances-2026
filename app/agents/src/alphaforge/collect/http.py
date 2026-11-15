@@ -2,39 +2,63 @@
 
 - Seuls les hôtes de ``ALLOWED_HOSTS`` sont joignables, en HTTPS : les adresses sont construites par le code,
   jamais par le modèle.
-- Un User-Agent générique, sans aucun renseignement personnel. FRED coupe les agents inconnus et accepte celui
-  du script des organisateurs (``curl/8.0``); les autres sources reçoivent ``Mozilla/5.0 (compatible; ...)``.
+- Un User-Agent déclaré, qui nomme le robot et renvoie au dépôt, sans aucun renseignement personnel ni User-Agent
+  de navigateur. FRED l'accepte (test du 2026-11-15); ``curl/8.0``, celui du script des organisateurs, ne sert qu'en
+  repli, une seule fois, si FRED refuse la requête (403 ou coupure).
+- Aucun contournement : un refus (403, 429, défi, coupure) remonte comme ``FetchError`` et l'agent passe à une
+  autre source. Les hôtes dont le robots.txt interdit les chemins lus sont retirés de la liste, sauf
+  ``query1.finance.yahoo.com``, gardé par exception assumée de l'équipe (Brain, « Collecte Web et presse »).
 - Délai et taille de réponse bornés (y compris après décompression); aucun cookie, aucun identifiant.
 - Une redirection n'est suivie que vers un hôte de la liste, en HTTPS.
+- Les agents de recherche (``alphaforge.research``) passent leur propre liste d'hôtes (``allowed_hosts``), plus
+  étroite que ou différente de ``ALLOWED_HOSTS`` : la redirection est vérifiée contre cette même liste.
+- ``post_json`` ne sert qu'aux méthodes de métadonnées de Statistique Canada, appelées par le code.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import zlib
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 
 ALLOWED_HOSTS = frozenset(
     {
         "www.bankofcanada.ca",
         "fred.stlouisfed.org",
+        # Exception assumée : le robots.txt de cet hôte dit « Disallow: / » (vérifié le 2026-11-15).
         "query1.finance.yahoo.com",
-        "feeds.finance.yahoo.com",
-        "news.google.com",
         "api.gdeltproject.org",
+        "www.newswire.ca",
+        "www.prnewswire.com",
     }
 )
-GENERIC_USER_AGENT = "Mozilla/5.0 (compatible; AlphaForge-AI/0.1)"
-HOST_USER_AGENTS = {"fred.stlouisfed.org": "curl/8.0"}
+USER_AGENT = "AlphaForgeResearchBot/0.1 (+https://github.com/sf-bit24/alphaforge-polyfinances-2026)"
+FALLBACK_USER_AGENTS = {"fred.stlouisfed.org": "curl/8.0"}
+# La SEC exige un courriel de contact dans le User-Agent (« fair access ») : sans ALPHAFORGE_CONTACT_EMAIL,
+# ses hôtes répondent 403 et la source est déclarée bloquée. Aucun courriel n'est inventé.
+SEC_HOSTS = frozenset({"www.sec.gov", "data.sec.gov", "efts.sec.gov"})
 DEFAULT_TIMEOUT = 12.0
 DEFAULT_MAX_BYTES = 3_000_000
 
-# GDELT demande au plus une requête toutes les cinq secondes.
-_MIN_INTERVAL = {"api.gdeltproject.org": 6.0}
+# Intervalle minimal entre deux requêtes vers un même hôte (secondes), d'après les règles publiées des sources.
+_MIN_INTERVAL = {
+    "api.gdeltproject.org": 6.0,  # « one every 5 seconds »
+    "www.sec.gov": 0.12,  # 10 requêtes par seconde au plus
+    "data.sec.gov": 0.12,
+    "wikimedia.org": 0.35,  # 200 requêtes par minute avec un User-Agent identifié
+    "sdmx.oecd.org": 3.0,
+    "www150.statcan.gc.ca": 0.05,  # 25 requêtes par seconde par IP
+    "hn.algolia.com": 0.5,
+    "api.bsky.app": 0.2,
+    "api.kraken.com": 1.0,
+}
 _last_call: dict[str, float] = {}
 _interval_lock = threading.Lock()
 
@@ -52,6 +76,7 @@ class HttpResponse:
     status: int
     body: bytes
     content_type: str
+    headers: dict[str, str] = field(default_factory=dict)
 
     def text(self) -> str:
         return self.body.decode("utf-8", errors="replace")
@@ -68,20 +93,31 @@ def _respect_interval(host: str) -> None:
         _last_call[host] = time.monotonic()
 
 
-def _check_url(url: str) -> str:
+def _check_url(url: str, allowed: Iterable[str] | None = None) -> str:
     parsed = urllib.parse.urlsplit(url)
-    if parsed.scheme != "https" or parsed.hostname not in ALLOWED_HOSTS:
+    hosts = ALLOWED_HOSTS if allowed is None else allowed
+    if parsed.scheme != "https" or not parsed.hostname or parsed.hostname not in hosts:
         raise FetchError(f"host not allowed: {parsed.hostname}", url=url)
+    if parsed.username or parsed.password or (parsed.port not in (None, 443)):
+        raise FetchError("credentials or non-standard port not allowed", url=url)
     return parsed.hostname
 
 
 class _AllowlistRedirects(urllib.request.HTTPRedirectHandler):
+    def __init__(self, allowed: Iterable[str] | None = None):
+        super().__init__()
+        self.allowed = None if allowed is None else frozenset(allowed)
+
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        _check_url(newurl)
+        _check_url(newurl, self.allowed)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-_OPENER = urllib.request.build_opener(_AllowlistRedirects)
+_OPENER = urllib.request.build_opener(_AllowlistRedirects())
+
+
+def _opener(allowed: Iterable[str] | None) -> urllib.request.OpenerDirector:
+    return _OPENER if allowed is None else urllib.request.build_opener(_AllowlistRedirects(allowed))
 
 
 def _gunzip(body: bytes, max_bytes: int, url: str) -> bytes:
@@ -95,29 +131,87 @@ def _gunzip(body: bytes, max_bytes: int, url: str) -> bytes:
     return data
 
 
-def http_get(url: str, *, timeout: float = DEFAULT_TIMEOUT, max_bytes: int = DEFAULT_MAX_BYTES) -> HttpResponse:
-    host = _check_url(url)
+def user_agent_for(host: str) -> str:
+    """User-Agent déclaré; la SEC reçoit en plus le courriel de contact s'il est configuré."""
+    contact = (os.environ.get("ALPHAFORGE_CONTACT_EMAIL") or "").strip()
+    if host in SEC_HOSTS and contact:
+        return f"{USER_AGENT} {contact}"
+    return USER_AGENT
+
+
+def http_get(
+    url: str,
+    *,
+    timeout: float = DEFAULT_TIMEOUT,
+    max_bytes: int = DEFAULT_MAX_BYTES,
+    allowed_hosts: Iterable[str] | None = None,
+) -> HttpResponse:
+    host = _check_url(url, allowed_hosts)
     _respect_interval(host)
+    opener = _opener(allowed_hosts)
+    try:
+        return _send(opener, url, user_agent_for(host), timeout, max_bytes)
+    except FetchError as exc:
+        fallback = FALLBACK_USER_AGENTS.get(host)
+        refused = exc.status == 403 or str(exc).startswith("network error")
+        if fallback is None or not refused:
+            raise
+        return _send(opener, url, fallback, timeout, max_bytes)
+
+
+def post_json(
+    url: str,
+    payload: object,
+    *,
+    timeout: float = DEFAULT_TIMEOUT,
+    max_bytes: int = DEFAULT_MAX_BYTES,
+    allowed_hosts: Iterable[str] | None = None,
+) -> HttpResponse:
+    """POST JSON, réservé aux méthodes de lecture qui l'exigent (WDS de Statistique Canada)."""
+    host = _check_url(url, allowed_hosts)
+    _respect_interval(host)
+    data = json.dumps(payload).encode("utf-8")
+    return _send(_opener(allowed_hosts), url, user_agent_for(host), timeout, max_bytes, data=data)
+
+
+def _get_once(url: str, user_agent: str, timeout: float, max_bytes: int) -> HttpResponse:
+    """Compatibilité : une requête GET avec la liste d'hôtes par défaut."""
+    return _send(_OPENER, url, user_agent, timeout, max_bytes)
+
+
+_KEPT_HEADERS = ("Last-Modified", "ETag", "Date", "Content-Type", "Retry-After", "Location")
+
+
+def _send(
+    opener: urllib.request.OpenerDirector,
+    url: str,
+    user_agent: str,
+    timeout: float,
+    max_bytes: int,
+    *,
+    data: bytes | None = None,
+) -> HttpResponse:
+    headers = {"User-Agent": user_agent, "Accept": "*/*", "Accept-Encoding": "gzip"}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
     request = urllib.request.Request(  # noqa: S310 - HTTPS seulement, hôtes en liste blanche (_check_url)
-        url,
-        headers={
-            "User-Agent": HOST_USER_AGENTS.get(host, GENERIC_USER_AGENT),
-            "Accept": "*/*",
-            "Accept-Encoding": "gzip",
-        },
+        url, data=data, headers=headers, method="POST" if data is not None else "GET"
     )
     try:
-        with _OPENER.open(request, timeout=timeout) as response:
+        with opener.open(request, timeout=timeout) as response:
             body = response.read(max_bytes + 1)
             if len(body) > max_bytes:
                 raise FetchError("response too large", url=url)
             if response.headers.get("Content-Encoding") == "gzip":
                 body = _gunzip(body, max_bytes, url)
+            kept = {name: response.headers[name] for name in _KEPT_HEADERS if response.headers.get(name)}
+            final_url = response.geturl() if hasattr(response, "geturl") else url
             return HttpResponse(
-                url=url,
+                url=final_url or url,
                 status=response.status,
                 body=body,
                 content_type=response.headers.get("Content-Type", ""),
+                headers=kept,
             )
     except urllib.error.HTTPError as exc:
         raise FetchError(f"HTTP {exc.code}", status=exc.code, url=url) from exc

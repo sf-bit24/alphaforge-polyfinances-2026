@@ -35,7 +35,7 @@ EPS = 1e-12
 MU_RECOVERY = 0.04  # risk_levels.yaml#dollar_rule.l_cap : « mu_recovery 0.04 (HYPOTHESE) »
 CONCENTRATION_SHARE = 0.10  # signal d'emphase seulement (pas une limite)
 
-# Classes d'actifs du starter (copie de research/backtest data/processed/assets.csv, colonne asset_class),
+# Classes d'actifs du starter (copie de assets.csv du moteur alphaforge.finance.backtest, colonne asset_class),
 # utilisees seulement pour classer une SpecificRequest ; surchargeables via ``asset_classes``.
 STARTER_ASSET_CLASSES = {
     **{t: "etf_equity" for t in ("XIU.TO", "SPY", "QQQ", "ESGV")},

@@ -19,7 +19,6 @@ sources:
     title: "2026 Projection Assumption Guidelines (FP Canada Standards Council et Institut de planification financière)"
     resource: "https://www.fpcanada.ca/docs/professionalsitelibraries/standards/projection-assumption-guidelines.pdf (section 5, relevé dans rules/canada_2026.yaml, statut verified)"
 data:
-  catalog_id: inflation
   aliases: [inflation, pouvoir d'achat, ipc, coût de la vie, rendement réel, indice des prix]
   related: [rendement-total, interets-composes, obligations-et-taux, stress-test-2022, horizon]
 ---
@@ -56,7 +55,7 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 ## Comment AlphaForge AI l'utilise
 
 - Le jeu de départ fournit l'IPC du Canada (variation sur un an, Banque du Canada) et l'IPC des États-Unis (FRED), dans
-  `macro_rates.csv` (énoncé officiel, p. 12). L'outil `macro_series` des faits tldoole les affiche, datés et sourcés.
+  `macro_rates.csv` (énoncé officiel, p. 12).
 - A5 recueille aussi ces séries, avec leur date d'observation (le mois de l'IPC) et leur date de publication, pour la
   base générale.
 - Le fichier `rules/canada_2026.yaml` reprend l'hypothèse d'inflation à long terme des normes de projection 2026 de

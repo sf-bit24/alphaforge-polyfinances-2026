@@ -8,10 +8,15 @@ donnée (le mois d'un IPC, le jour d'une clôture).
 Sources et conditions :
 - Banque du Canada, API Valet : https://www.bankofcanada.ca/terms/
 - FRED, Federal Reserve Bank of St. Louis (``fredgraph.csv``) : https://fred.stlouisfed.org/legal/
-- Yahoo Finance (graphique JSON ``v8/finance/chart`` et flux RSS des manchettes) :
-  https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html
-- Google Actualités (flux RSS de recherche) : https://policies.google.com/terms
+- Yahoo Finance (graphique JSON ``v8/finance/chart``) : https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html;
+  son robots.txt interdit tout, et l'hôte n'est gardé que par exception assumée de l'équipe.
 - GDELT DOC 2.0 : https://www.gdeltproject.org/about.html#termsofuse
+- Communiqués de Newswire.ca et de PR Newswire (Cision), flux RSS offerts par l'éditeur :
+  https://www.prnewswire.com/terms-of-use/. Le robots.txt permet ces flux; les conditions interdisent de
+  republier ou de « scrape » le contenu, d'où la règle : métadonnées et résumé maison seulement, sans le texte.
+
+Les manchettes Yahoo Finance (``feeds.finance.yahoo.com``) et la recherche Google Actualités (``news.google.com/rss``)
+ne sont plus lues : leur robots.txt interdit ces chemins (vérifié le 2026-11-15).
 """
 
 from __future__ import annotations
@@ -234,6 +239,7 @@ class NewsCandidate:
     provider: str
     tickers: list[str] = field(default_factory=list)
     published_at_basis: str = "source"
+    issuer: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -261,77 +267,79 @@ def _rss_date(value: str | None) -> str | None:
         return None
 
 
-def build_yahoo_rss_url(symbol: str) -> str:
-    return f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={urllib.parse.quote(symbol)}&region=US&lang=en-US"
+DC = "{http://purl.org/dc/elements/1.1/}"
+PRESS_RELEASE_FEEDS = {
+    "newswire_ca": (
+        "https://www.newswire.ca/rss/news-releases-list.rss",
+        "Newswire.ca (Cision)",
+    ),
+    "newswire_ca_financial": (
+        "https://www.newswire.ca/rss/financial-services-latest-news/financial-services-latest-news-list.rss",
+        "Newswire.ca (Cision)",
+    ),
+    "prnewswire_financial": (
+        "https://www.prnewswire.com/rss/financial-services-latest-news/financial-services-latest-news-list.rss",
+        "PR Newswire (Cision)",
+    ),
+}
+# « (TSX: SFC) », « (Nasdaq: PPTA) (TSX: PPTA) », « (TSX: SLT.U, SLT) » : bourse, deux-points, symbole.
+_LISTING = re.compile(
+    r"\b(TSXV|TSX|NYSE American|NYSE|Nasdaq|NASDAQ|CSE|Cboe Canada|NEO)\s*:\s*([A-Z][A-Z0-9]*(?:\.[A-Z0-9]+)*)"
+)
+_SUFFIX = {"TSX": ".TO", "TSXV": ".V", "CSE": ".CN", "Cboe Canada": ".NE", "NEO": ".NE"}
 
 
-def parse_yahoo_rss(text: str, symbol: str) -> list[NewsCandidate]:
+def listing_tickers(text: str) -> list[str]:
+    """Symboles cités dans un communiqué, au format de Yahoo Finance (``SLT.U`` à la TSX devient ``SLT-U.TO``)."""
+    out: list[str] = []
+    for exchange, symbol in _LISTING.findall(text or ""):
+        ticker = symbol.replace(".", "-") + _SUFFIX.get(exchange, "")
+        if ticker not in out:
+            out.append(ticker)
+    return out
+
+
+def parse_press_releases(text: str, provider: str) -> list[NewsCandidate]:
+    _, source = PRESS_RELEASE_FEEDS[provider]
     out = []
     for item in _rss_items(text):
         title = clean_text(item.findtext("title"), 300)
         link = (item.findtext("link") or "").strip()
-        published = _rss_date(item.findtext("pubDate"))
         if not title or not link:
             continue
-        out.append(
-            NewsCandidate(
-                title=title,
-                url=link,
-                source="Yahoo Finance",
-                published_at=published or "",
-                snippet=clean_text(item.findtext("description")),
-                language="en",
-                provider="yahoo_rss",
-                tickers=[symbol],
-            )
-        )
-    return out
-
-
-def fetch_yahoo_headlines(symbol: str) -> list[NewsCandidate]:
-    if not SYMBOL.match(symbol):
-        raise FetchError(f"invalid symbol {symbol!r}")
-    return parse_yahoo_rss(http_get(build_yahoo_rss_url(symbol), max_bytes=1_000_000).text(), symbol)
-
-
-def build_google_news_url(query: str, days: int, language: str) -> str:
-    q = urllib.parse.quote(f"{query} when:{max(1, min(days, 30))}d")
-    if language == "en":
-        return f"https://news.google.com/rss/search?q={q}&hl=en-CA&gl=CA&ceid=CA:en"
-    return f"https://news.google.com/rss/search?q={q}&hl=fr-CA&gl=CA&ceid=CA:fr"
-
-
-def parse_google_news(text: str, language: str) -> list[NewsCandidate]:
-    out = []
-    for item in _rss_items(text):
-        raw_title = clean_text(item.findtext("title"), 300)
-        link = (item.findtext("link") or "").strip()
-        source_el = item.find("source")
-        source = clean_text(source_el.text if source_el is not None else "", 120) or "Google Actualités"
-        title = raw_title
-        if source and raw_title.endswith(f" - {source}"):
-            title = raw_title[: -len(source) - 3].strip()
-        if not title or not link:
-            continue
+        description = clean_text(item.findtext("description"))
+        language = (item.findtext(f"{DC}language") or "en").strip().lower()[:2]
         out.append(
             NewsCandidate(
                 title=title,
                 url=link,
                 source=source,
                 published_at=_rss_date(item.findtext("pubDate")) or "",
-                snippet=clean_text(item.findtext("description")),
+                snippet=description,
                 language=language,
-                provider="google_news",
+                provider=provider,
+                tickers=listing_tickers(description),
+                issuer=clean_text(item.findtext(f"{DC}contributor"), 160),
             )
         )
     return out
 
 
-def fetch_google_news(query: str, days: int = 7, language: str = "fr") -> list[NewsCandidate]:
-    return parse_google_news(http_get(build_google_news_url(query, days, language)).text(), language)
+def fetch_press_releases(provider: str) -> list[NewsCandidate]:
+    if provider not in PRESS_RELEASE_FEEDS:
+        raise FetchError(f"feed not allowed: {provider}")
+    url, _ = PRESS_RELEASE_FEEDS[provider]
+    return parse_press_releases(http_get(url, max_bytes=1_000_000).text(), provider)
 
 
-def build_gdelt_url(query: str, start: datetime, end: datetime, max_records: int = 25) -> str:
+GDELT_LANGUAGES = {"fr": "french", "en": "english"}
+
+
+def build_gdelt_url(
+    query: str, start: datetime, end: datetime, max_records: int = 25, language: str | None = None
+) -> str:
+    if language in GDELT_LANGUAGES:
+        query = f"{query} sourcelang:{GDELT_LANGUAGES[language]}"
     params = {
         "query": query,
         "mode": "artlist",
@@ -377,8 +385,12 @@ def parse_gdelt(text: str) -> list[NewsCandidate]:
 
 
 def fetch_gdelt(
-    query: str, since: datetime, until: datetime | None = None, max_records: int = 25
+    query: str,
+    since: datetime,
+    until: datetime | None = None,
+    max_records: int = 25,
+    language: str | None = None,
 ) -> list[NewsCandidate]:
     end = until or datetime.now(UTC)
     start = max(since, end - timedelta(days=30))
-    return parse_gdelt(http_get(build_gdelt_url(query, start, end, max_records), timeout=20).text())
+    return parse_gdelt(http_get(build_gdelt_url(query, start, end, max_records, language), timeout=20).text())

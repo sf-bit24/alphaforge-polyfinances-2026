@@ -18,7 +18,6 @@ export function AppNav() {
     { href: "/details", label: t.appNav.details },
     { href: "/", label: t.appNav.profile },
     { href: "/knowledge", label: t.appNav.knowledge },
-    { href: "/tldoole", label: t.nav.tldoole },
   ];
   const settingsActive = pathname.startsWith("/settings");
   return (

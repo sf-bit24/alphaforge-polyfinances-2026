@@ -10,6 +10,12 @@
 #   press       A4, specialiste de la presse ; appele par Step Functions
 #   data        A5, specialiste des donnees ; appele par Step Functions
 #   supervisor  A6, superviseur de la base generale ; appele par Step Functions
+#   router      A0, routeur et redacteur des questions de recherche ; appele
+#               par la machine recherche (recherche.tf)
+#   expert      E1 a E7, experts de sujet ; appele par la machine recherche,
+#               lance lui-meme ses chercheurs (InvokeAgentRuntime)
+#   researcher  sous-agent de recherche, une session par mission ; appele par
+#               les experts seulement
 #
 # Le contrat des requetes et des reponses est dans app/CONTRACTS.md.
 # =============================================================================
@@ -23,12 +29,18 @@ locals {
   #             absent d'un refus, S3 repondant 403 a un GetObject d'objet
   #             absent quand ListBucket est conditionne.
   # A6 n'ecrit jamais general/methodologie/, geree par Terraform.
+  # Si scenarios_enabled, profile lit aussi la table precalculee des scenarios
+  # (outil scenario_risk, scenarios.tf ; pas encore branche dans le runtime),
+  # en lecture seule : scenarios/latest.json et scenarios/output/, jamais le
+  # code ni les entrees du job. Sinon, aucun droit sous scenarios/.
+  agentcore_profile_scenarios_keys = var.scenarios_enabled ? ["scenarios/latest.json", "scenarios/output/*"] : []
+
   agentcore_runtimes = {
     profile = {
       description    = "Profil investisseur : questions de base deterministes, relances A1, portefeuille existant A2."
-      s3_read        = ["general/*", "clients/*"]
+      s3_read        = concat(["general/*", "clients/*"], local.agentcore_profile_scenarios_keys)
       s3_write       = ["clients/*"]
-      s3_list        = ["general/*", "clients/*"]
+      s3_list        = concat(["general/*", "clients/*"], local.agentcore_profile_scenarios_keys)
       knowledge_base = true
       guardrail      = true
     }
@@ -48,23 +60,43 @@ locals {
       knowledge_base = false
       guardrail      = false
     }
+    # A6 relit aussi archive/ : chaque valeur d'un expert y est verifiee avant
+    # d'ecrire faits, signaux, depots et syntheses (recherche.tf).
     supervisor = {
-      description    = "A6, superviseur OKF : valide staging/ et ecrit la base generale."
-      s3_read        = ["staging/*", "general/*"]
-      s3_write       = ["staging/*/supervisor/*", "general/actualites/*", "general/donnees/*", "general/index.md"]
-      s3_list        = ["staging/*", "general/*"]
+      description = "A6, superviseur OKF : valide staging/ et ecrit la base generale."
+      s3_read     = ["staging/*", "general/*", "archive/*"]
+      s3_write = [
+        "staging/*/supervisor/*", "general/actualites/*", "general/donnees/*", "general/index.md",
+        "general/faits/*", "general/signaux/*", "general/depots/*", "general/recherches/*",
+      ]
+      s3_list        = ["staging/*", "general/*", "archive/*"]
       knowledge_base = false
       guardrail      = false
     }
-    # tldoole (tldoole.tf) : A7 lit le journal et le portefeuille, A8 ecrit les
-    # elements des videos sous clients/<id>/tldoole/.
-    tldoole = {
-      description    = "tldoole : A7 detecte les concepts mal compris, A8 scenarise les videos (Polly, MediaConvert par Step Functions)."
-      s3_read        = ["clients/*/profil.md", "clients/*/journal.md", "clients/*/portefeuille-existant.md", "clients/*/tldoole/*"]
-      s3_write       = ["clients/*/tldoole/*"]
-      s3_list        = ["clients/*/profil.md", "clients/*/journal.md", "clients/*/portefeuille-existant.md", "clients/*/tldoole/*"]
+    # Recherche par experts (recherche.tf, app/CONTRACTS.md section 11).
+    router = {
+      description    = "A0 : routage des questions de recherche et synthese finale."
+      s3_read        = ["staging/*/router/*", "staging/*/experts/*"]
+      s3_write       = ["staging/*/router/*"]
+      s3_list        = ["staging/*/router/*", "staging/*/experts/*"]
+      knowledge_base = false
+      guardrail      = false
+    }
+    expert = {
+      description    = "E1 a E7 : experts de sujet ; lancent n chercheurs, une session chacun."
+      s3_read        = ["staging/*/experts/*", "staging/*/researchers/*"]
+      s3_write       = ["staging/*/experts/*"]
+      s3_list        = ["staging/*/experts/*", "staging/*/researchers/*"]
       knowledge_base = true
-      guardrail      = true
+      guardrail      = false
+    }
+    researcher = {
+      description    = "Chercheur : une mission par session, lit les hotes de ses paquets et archive chaque reponse."
+      s3_read        = ["staging/*/researchers/*"]
+      s3_write       = ["staging/*/researchers/*", "archive/*"]
+      s3_list        = ["staging/*/researchers/*"]
+      knowledge_base = false
+      guardrail      = false
     }
   }
 
@@ -89,7 +121,7 @@ locals {
   # Variables propres a un role, fusionnees apres les variables communes.
   agentcore_role_env = {
     profile = local.agentcore_profile_env
-    tldoole = merge(local.agentcore_profile_env, local.tldoole_runtime_env)
+    expert  = merge({ ALPHAFORGE_KB_ID = aws_bedrockagent_knowledge_base.general.id }, local.recherche_expert_env)
   }
 }
 

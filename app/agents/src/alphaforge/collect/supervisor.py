@@ -29,6 +29,7 @@ from strands import tool
 from .. import clock, okf
 from ..agentkit import AgentSpec, ModelFactory, run_agent, tool_result
 from ..errors import AppError
+from ..research import checks as research_checks
 from ..store import Store
 from ..trace import Trace
 from . import staging
@@ -45,6 +46,8 @@ them as an editor, using only their titles, sources, dates and summaries:
 price-prediction article, or that reports the same event as another item of the list (keep the most informative \
 and credible one);
 - accept data series and quotes unless they look malformed;
+- accept facts, market signals, filings and research briefs unless they look malformed, off-topic, or written as \
+advice or a forecast (these were researched by subject experts and their values were re-read by the code);
 - give every rejection a short reason in French, and 1 to 3 short French tags to accepted news (for example taux, \
 inflation, energie, technologie, banques, commerce, marches).
 Call review_items once with your decisions (items you do not mention are accepted), then call finish.
@@ -178,7 +181,9 @@ def news_doc(candidate: Candidate, now: str) -> okf.OkfDoc:
         "",
         item.get("summary") or "",
         "",
-        "Résumé rédigé par A4 à partir du titre et de l'extrait fournis par la source; à vérifier dans l'article.",
+        f"Résumé rédigé par {data.get('collected_by') or 'A4'} à partir du titre et de l'extrait fournis par "
+        "la source; "
+        "à vérifier dans l'article.",
         "",
         "## Limites",
         "",
@@ -210,7 +215,7 @@ def news_doc(candidate: Candidate, now: str) -> okf.OkfDoc:
             "tickers": tickers,
             "provider": data.get("provider"),
             "published_at_basis": data.get("published_at_basis", "source"),
-            "collected_by": "A4",
+            "collected_by": data.get("collected_by") or "A4",
             "run_id": data.get("run_id"),
             "staging_key": candidate.key,
         },
@@ -303,12 +308,24 @@ def write_general_index(store: Store, now: str) -> None:
         except okf.OkfError:
             return info.key, info.key
 
-    sections = {"methodologie": [], "notions": [], "societes": [], "actualites": [], "donnees": []}
+    sections = {
+        "methodologie": [],
+        "notions": [],
+        "societes": [],
+        "actualites": [],
+        "donnees": [],
+        "recherches": [],
+        "faits": [],
+        "signaux": [],
+        "depots": [],
+    }
     selected = [
         i for i in infos if i.key.startswith(("general/methodologie/", "general/notions/", "general/societes/"))
     ]
     selected += [i for i in infos if i.key.startswith("general/actualites/")][:150]
     selected += [i for i in infos if i.key.startswith("general/donnees/")][:150]
+    for folder in ("recherches", "faits", "signaux", "depots"):
+        selected += [i for i in infos if i.key.startswith(f"general/{folder}/")][:100]
     with ThreadPoolExecutor(max_workers=8) as pool:
         for key, doc_title in pool.map(title, selected):
             folder = key.split("/")[1]
@@ -341,6 +358,22 @@ def write_general_index(store: Store, now: str) -> None:
         f"## Données ({counts['donnees']}, les plus récentes)",
         "",
         *sections["donnees"],
+        "",
+        f"## Synthèses de recherche ({counts['recherches']}, les plus récentes)",
+        "",
+        *sections["recherches"],
+        "",
+        f"## Faits sourcés ({counts['faits']}, les plus récents)",
+        "",
+        *sections["faits"],
+        "",
+        f"## Signaux de contexte ({counts['signaux']}, les plus récents)",
+        "",
+        *sections["signaux"],
+        "",
+        f"## Dépôts réglementaires ({counts['depots']}, les plus récents)",
+        "",
+        *sections["depots"],
         "",
     ]
     doc = okf.new_doc(
@@ -454,9 +487,26 @@ def curate(
                 staged.append((info.key, store.get_json(info.key)))
             except (ValueError, json.JSONDecodeError):
                 staged.append((info.key, None))
-    trace.add("storage", "store", "Éléments collectés lus", f"staging/{run_id}/", outputs={"items": len(staged)})
+    research_staged = research_checks.list_staged(store, run_id)
+    trace.add(
+        "storage",
+        "store",
+        "Éléments collectés lus",
+        f"staging/{run_id}/",
+        outputs={"items": len(staged), "research_items": len(research_staged)},
+    )
     existing = _existing_index(store)
     candidates, rejected = validate_items(staged, existing)
+    quarantined: list[dict[str, Any]] = []
+    if research_staged:
+        known = existing["news_keys"] | existing["data_keys"]
+        for prefix in research_checks.RESEARCH_PREFIXES:
+            known |= {info.key for info in store.list(prefix, limit=20000)}
+        research_candidates, research_rejected, quarantined = research_checks.validate_research(
+            research_staged, known, store, url_hashes=existing["url_hashes"]
+        )
+        candidates = [*candidates, *research_candidates]
+        rejected += research_rejected
     trace.add(
         "deterministic",
         "A6",
@@ -524,11 +574,27 @@ def curate(
         candidates = kept
     now = clock.iso()
     written = []
+    by_id = {c.item["id"]: c for c in candidates}
+    briefs = [c for c in candidates if c.item["kind"] == "brief"]
+    for brief in briefs:
+        refs = getattr(brief, "refs", {})
+        missing = [c for c in (brief.item.get("data") or {}).get("citations") or [] if c not in by_id and c not in refs]
+        if missing:
+            rejected.append({"key": brief.key, "reason": "synthèse : éléments cités rejetés par la revue"})
+            candidates = [c for c in candidates if c is not brief]
     for candidate in candidates:
         if time.monotonic() - started > budget_seconds:
             rejected.append({"key": candidate.key, "reason": "délai de curation dépassé"})
             continue
-        doc = news_doc(candidate, now) if candidate.item["kind"] == "news" else data_doc(candidate, now)
+        kind = candidate.item["kind"]
+        if kind == "news":
+            doc = news_doc(candidate, now)
+        elif kind in ("series", "quote"):
+            doc = data_doc(candidate, now)
+        elif kind == "brief":
+            doc = research_checks.brief_doc(candidate, now, {**candidate.refs, **by_id})
+        else:
+            doc = research_checks.research_doc(candidate, now)
         problems = okf.validate(doc)
         if problems:
             rejected.append({"key": candidate.key, "reason": "document OKF invalide : " + "; ".join(problems)})
@@ -544,4 +610,14 @@ def curate(
     )
     if written:
         write_general_index(store, now)
-    return {"written": written, "rejected": rejected, "warnings": warnings}
+    result: dict[str, Any] = {"written": written, "rejected": rejected, "warnings": warnings}
+    if research_staged:
+        proposals = research_checks.quarantine_proposals(store, run_id)
+        if quarantined or proposals:
+            store.put_json(
+                f"staging/{run_id}/supervisor/quarantine.json",
+                {"run_id": run_id, "items": quarantined, "proposed_hosts": proposals, "written_at": now},
+            )
+        result["quarantined"] = len(quarantined)
+        result["proposed_hosts"] = len(proposals)
+    return result

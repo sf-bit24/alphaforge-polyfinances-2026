@@ -37,7 +37,6 @@ sources:
     title: "Énoncé officiel du défi AlphaForge AI (Datathon PolyFinances 2026)"
     resource: "Énoncé officiel, Encadrement responsable (p. 17)"
 data:
-  catalog_id: celi_reer
   aliases: [celi, reer, celiapp, tfsa, rrsp, fhsa, compte enregistré, abri fiscal]
   related: [fnb, interets-composes, horizon, frais]
 ---
@@ -78,7 +77,6 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 
 - Le questionnaire demande dans quels types de comptes l'argent sera placé (CELI, REER, REEE, FERR, non enregistré,
   ou « je ne sais pas »); A2 relève aussi le type de compte des lignes d'un portefeuille existant.
-- Répondre « je ne sais pas » peut déclencher une vidéo tldoole sur ces comptes.
 - Les plafonds sont versionnés avec leur source dans `finance/rules/canada_2026.yaml`; seules les valeurs marquées
   vérifiées peuvent être citées. Le moteur ne calcule pas encore l'impôt ni les droits de cotisation d'un investisseur.
 

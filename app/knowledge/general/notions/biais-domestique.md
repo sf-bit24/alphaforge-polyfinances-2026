@@ -16,7 +16,6 @@ sources:
     title: "Jeu de départ AlphaForge AI : univers d'actifs et prix quotidiens"
     resource: "starter:assets_universe.csv et starter:prices_daily.csv"
 data:
-  catalog_id: biais_domestique
   aliases: [biais domestique, trop canadien, seulement canadien, home bias, portefeuille canadien]
   related: [diversification, risque-de-change, concentration, expositions-consolidees, fnb]
 ---
@@ -56,8 +55,7 @@ soi : c'est une concentration géographique qu'il faut voir et comprendre.
 Le code analyse un portefeuille existant; le modèle explique. Le constat `home_bias_canada` est levé quand au moins
 60 % de la valeur hors encaisse est cotée à la Bourse de Toronto ou libellée en dollars canadiens. Ce seuil est à relire
 par le volet finance de l'équipe. Les prix viennent du jeu de départ ou de Yahoo Finance, et les positions en dollars
-américains sont converties au dernier taux USD/CAD du jeu de départ. Le constat peut déclencher la vidéo tldoole sur le
-biais domestique.
+américains sont converties au dernier taux USD/CAD du jeu de départ.
 
 Pour un portefeuille proposé, le barème ne pose pas de plafond géographique. Ses portefeuilles de référence, qui servent
 à calibrer les niveaux de risque, répartissent le plus souvent la part actions à parts égales entre le Canada et les

@@ -273,10 +273,12 @@ resource "aws_bedrock_guardrail" "cadre" {
       output_enabled = true
     }
     # Le NAS ecrit avec espaces ou tirets (« 046 454 286 ») echappe au filtre gere : regex.
+    # Separateurs obligatoires : sans eux, la regex bloquait les bornes du questionnaire
+    # (« max: 100000000 ») dans le contexte d'A1 ; 9 chiffres colles restent au filtre gere.
     regexes_config {
       name           = "nas-canadien"
-      description    = "Numero d'assurance sociale canadien, 9 chiffres groupes par 3"
-      pattern        = "\\b\\d{3}[ -]?\\d{3}[ -]?\\d{3}\\b"
+      description    = "NAS canadien ecrit en 3 groupes de 3 chiffres separes par espace ou tiret"
+      pattern        = "\\b\\d{3}[ -]\\d{3}[ -]\\d{3}\\b"
       action         = "BLOCK"
       input_action   = "BLOCK"
       output_action  = "BLOCK"

@@ -1,4 +1,4 @@
-"""Application ``BedrockAgentCoreApp`` : un seul code, quatre runtimes choisis par ``AGENT_ROLE``.
+"""Application ``BedrockAgentCoreApp`` : un seul code, un runtime par ``AGENT_ROLE``.
 
 ``POST /invocations`` reçoit le JSON de CONTRACTS.md; une réponse générateur devient un flux SSE
 (``text/event-stream``, un événement JSON par ligne ``data:``). ``GET /ping`` est servi par l'application :
@@ -54,10 +54,10 @@ def build_service(settings: Settings, app: Any, store: Store | None = None) -> A
         from .collect.service import CollectorService
 
         return CollectorService(settings, store, app)
-    if settings.role == "tldoole":
-        from .tldoole.service import TldooleService
+    if settings.role in ("router", "expert", "researcher"):
+        from .research.service import ResearchService
 
-        return TldooleService(settings, store, app)
+        return ResearchService(settings, store, app)
     raise ValueError(f"AGENT_ROLE must be one of {ROLES}, got {settings.role!r}")
 
 

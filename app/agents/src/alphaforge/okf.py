@@ -22,9 +22,12 @@ DOC_TYPES = (
     "Financial Concept",
     "Company Fundamentals",
     "Index",
-    # Fonctionnalité vidéo tldoole.
-    "Concept Gaps",
-    "Learning Video",
+    "Profile Note",  # note de la base d'un client, écrite par A1 avec son skill (profile/skills/)
+    # Recherche par experts (A0, E1 à E7, CONTRACTS.md section 11).
+    "Fact",
+    "Market Signal",
+    "Regulatory Filing",
+    "Research Brief",
 )
 REQUIRED_KEYS = ("type", "title", "description", "tags", "status", "owners", "sensitivity", "generated", "sources")
 KEY_ORDER = (*REQUIRED_KEYS[:8], "stale_after", "sources", "data")

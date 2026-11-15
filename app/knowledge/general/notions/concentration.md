@@ -13,13 +13,12 @@ sources:
     title: "Atelier BNCD : comprendre l'investisseur avant de bâtir la solution"
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositives 8 (risque de concentration) et 9 (diversifier)"
   - id: politique-risque
-    title: "Politique de risque d'AlphaForge AI, niveaux N0 à N5"
+    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), sections satellites et limits_template (conc.*, exp.tech)"
   - id: constats-portefeuille
     title: "Constats calculés sur un portefeuille existant"
     resource: "app/agents/src/alphaforge/profile/portfolio.py (THRESHOLDS, seuils à relire par le volet finance)"
 data:
-  catalog_id: concentration
   aliases: [concentration, concentré, une seule action, un seul titre, tous mes oeufs]
   related: [diversification, expositions-consolidees, biais-domestique, types-de-risque, baisse-maximale]
 ---

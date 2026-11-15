@@ -1,7 +1,7 @@
 ---
 type: Financial Concept
 title: Intérêts composés
-description: Des gains qui produisent à leur tour des gains, comment AlphaForge AI l'illustre, ses limites et comment l'expliquer à chaque niveau.
+description: Des gains qui produisent à leur tour des gains, comment AlphaForge AI l'utilise, ses limites et comment l'expliquer à chaque niveau.
 tags: [notion, rendement, interets-composes, horizon]
 status: draft
 owners: [alphaforge-a1]
@@ -16,7 +16,6 @@ sources:
     title: "Atelier AWS : aide-mémoire, pièges classiques des données financières"
     resource: "Atelier AWS du Datathon PolyFinances 2026, section 3 (rendement passé)"
 data:
-  catalog_id: interets_composes
   aliases: [intérêts composés, composition, boule de neige, intérêt sur intérêt, effet composé]
   related: [rendement-total, frais, horizon, inflation, fonds-urgence]
 ---
@@ -49,23 +48,16 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 - Pour que l'effet joue, les revenus doivent rester investis : un rendement « distributions réinvesties » et un
   rendement « distributions retirées » ne se comparent pas (atelier BNCD, diapositive 6).
 
-## Comment AlphaForge AI l'illustre
+## Comment AlphaForge AI l'utilise
 
-Le code fait le calcul; le modèle ne l'estime jamais.
-
-- L'outil `compound_growth` des faits tldoole simule un montant initial et des versements mensuels à un taux annuel
-  constant, converti en taux mensuel équivalent, sur 1 à 50 ans. Il renvoie la valeur finale, le total versé et la
-  croissance, avec une courbe.
-- Chaque résultat porte son hypothèse en clair : « rendement constant, sans frais ni impôt : une illustration, pas une
-  prévision ». Le taux est un paramètre choisi, pas un rendement attendu.
 - Les rendements historiques calculés à partir de `adj_close` (dividendes réinvestis) intègrent déjà l'effet composé
   (voir [Rendement total](rendement-total.md)).
 
 ## Limites
 
-- **Taux constant** : un vrai placement ne rapporte jamais le même taux chaque année. La volatilité et les baisses
-  changent le parcours, et une perte en début de période pèse plus longtemps.
-- **Sans frais ni impôt** : l'illustration les ignore; un vrai résultat serait plus bas.
+- **Taux constant** : un calcul à taux fixe simplifie. Un vrai placement ne rapporte jamais le même taux chaque année.
+  La volatilité et les baisses changent le parcours, et une perte en début de période pèse plus longtemps.
+- **Sans frais ni impôt** : un calcul simple les ignore; un vrai résultat serait plus bas.
 - **Nominal** : la valeur finale est en dollars futurs; l'inflation en réduit le pouvoir d'achat (voir
   [Inflation](inflation.md)).
 - **Hypothèse, pas promesse** : le rendement passé ne garantit pas le rendement futur (atelier AWS, section 3).

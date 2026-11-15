@@ -14,7 +14,7 @@ import pandas as pd
 spec = importlib.util.spec_from_file_location("calib", str(_HERE / "calib.py"))
 C = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(C)
-from engine.data import load_returns
+from alphaforge.finance.backtest.data import load_returns
 
 C.EQ = list(range(0, 101, 5))
 fams = ["CAD77_main", "CAD71_USeq", "USD46", "USD26"]

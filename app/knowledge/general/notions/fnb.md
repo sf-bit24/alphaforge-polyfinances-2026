@@ -15,11 +15,10 @@ sources:
   - id: enonce-officiel
     title: "Énoncé officiel du défi AlphaForge AI (Datathon PolyFinances 2026)"
     resource: "Énoncé officiel, p. 10 (exemples de FNB d'actions, obligataires et liés à l'or) et p. 11 (données des FNB)"
-  - id: regles-composition
-    title: "Barème des niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+  - id: politique-risque
+    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, composition (etf_equity_each_max, etf_bond_each_max, forbidden_all)"
 data:
-  catalog_id: fnb
   aliases: [fnb, fonds négocié en bourse, fonds indiciel, etf, exchange-traded fund, fonds coté]
   related: [diversification, frais, expositions-consolidees, obligations-et-taux, concentration]
 ---

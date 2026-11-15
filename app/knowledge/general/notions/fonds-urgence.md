@@ -18,11 +18,10 @@ sources:
   - id: regles-canada
     title: "Paramètres canadiens d'AlphaForge AI : protection SADC"
     resource: "app/agents/src/alphaforge/finance/rules/canada_2026.yaml, cdic.coverage_limit_per_category et cdic.insured_categories (vérifiés, 2026, https://www.cdic.ca/your-coverage/whats-covered/)"
-  - id: risk-levels
+  - id: politique-risque
     title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, section capacity (emergency_req_months, hard_caps)"
 data:
-  catalog_id: fonds_urgence
   aliases: [fonds d'urgence, coussin, réserve d'urgence, imprévu, liquidité]
   related: [tolerance-et-capacite, horizon, baisse-maximale]
 ---
@@ -64,7 +63,6 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
   après 55 ans ou à la retraite. Un coussin de moins d'un mois plafonne la capacité; une réponse manquante est traitée
   comme aucune réserve, par prudence (`risk_levels.yaml`, section `capacity`).
 - Un coussin insuffisant donne plus de poids à la lentille « risque » de l'explication, sans changer les limites.
-- Un coussin de moins de trois mois peut déclencher une vidéo tldoole sur le fonds d'urgence.
 
 ## Limites
 

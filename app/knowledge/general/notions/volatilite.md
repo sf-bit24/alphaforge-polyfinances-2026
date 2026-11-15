@@ -22,10 +22,9 @@ sources:
     title: "Jeu de départ AlphaForge AI : prix quotidiens ajustés"
     resource: "starter:prices_daily.csv (colonne adj_close)"
   - id: politique-risque
-    title: "Politique de risque d'AlphaForge AI, niveaux N0 à N5"
+    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), section measurement"
 data:
-  catalog_id: volatilite
   aliases: [volatilité, fluctuations, écart-type, ça bouge, montagnes russes, yo-yo]
   related: [baisse-maximale, var-cvar, diversification, horizon, tolerance-et-capacite]
 ---
@@ -63,7 +62,6 @@ Le code calcule la volatilité; le modèle ne l'estime jamais.
 
 | Où | Données | Calcul |
 | --- | --- | --- |
-| Faits d'un actif (vidéos tldoole) | Prix quotidiens ajustés (`adj_close`) du jeu de départ | Écart-type des rendements logarithmiques quotidiens, multiplié par √252 (√365 pour un cryptoactif, coté tous les jours) |
 | Risque d'un portefeuille (moteur, Judge) | Rendements mensuels d'un portefeuille rééquilibré chaque mois, en devise du mandat | Écart-type (ddof = 1) multiplié par √12 |
 
 - Chaque niveau de risque (N0 à N5) porte un plafond de volatilité (mesure `VOL`), dans

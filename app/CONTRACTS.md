@@ -6,16 +6,21 @@ Périmètre de la version 1 : construire le profil (questions de base détermini
 
 ## 1. Runtimes AgentCore
 
-Un seul zip de code (`app/agents`, Python 3.13, linux/arm64) alimente quatre runtimes, qui ne diffèrent que par `AGENT_ROLE` et par leur rôle IAM.
+Un seul zip de code (`app/agents`, Python 3.13, linux/arm64) alimente tous les runtimes, qui ne diffèrent que par `AGENT_ROLE` et par leur rôle IAM.
 
 | Runtime AgentCore | `AGENT_ROLE` | Appelé par | Accès S3 (moindre privilège) |
 | --- | --- | --- | --- |
 | `alphaforge_sandbox_profile` | `profile` | serveur Next.js | lit `general/`, lit et écrit `clients/` |
 | `alphaforge_sandbox_press` | `press` | Step Functions | lit et écrit `staging/<run_id>/press/` |
 | `alphaforge_sandbox_data` | `data` | Step Functions | lit et écrit `staging/<run_id>/data/` |
-| `alphaforge_sandbox_supervisor` | `supervisor` | Step Functions | lit `staging/` et `general/`; écrit `staging/<run_id>/supervisor/`, `general/actualites/`, `general/donnees/` et `general/index.md`, jamais `general/methodologie/` ni `general/societes/` (gérés par Terraform). L'ingestion de la Knowledge Base est lancée par Step Functions, pas par A6. |
+| `alphaforge_sandbox_supervisor` | `supervisor` | Step Functions | lit `staging/`, `general/` et `archive/`; écrit `staging/<run_id>/supervisor/`, `general/actualites/`, `general/donnees/`, `general/faits/`, `general/signaux/`, `general/depots/`, `general/recherches/` et `general/index.md`, jamais `general/methodologie/` ni `general/societes/` (gérés par Terraform). L'ingestion de la Knowledge Base est lancée par Step Functions, pas par A6. |
+| `alphaforge_sandbox_router` | `router` | Step Functions (`recherche`) | lit `staging/<run_id>/router/` et `staging/<run_id>/experts/`; écrit `staging/<run_id>/router/` (section 11) |
+| `alphaforge_sandbox_expert` | `expert` | Step Functions (`recherche`) | lit `staging/<run_id>/experts/` et `staging/<run_id>/researchers/`; écrit `staging/<run_id>/experts/`; Knowledge Base; `InvokeAgentRuntime` sur le runtime `researcher` seulement (section 11) |
+| `alphaforge_sandbox_researcher` | `researcher` | runtime `expert` | lit et écrit `staging/<run_id>/researchers/`; écrit `archive/` (section 11) |
 
 Chaque rôle n'a `s3:ListBucket` que sous ses propres préfixes. Pour un objet absent, S3 répond donc 403 (`AccessDenied`) et non 404 : le magasin vérifie alors l'absence par `ListObjectsV2` sur la clé exacte, et ne conclut à un refus que si l'objet existe.
+
+Ajout facultatif (section 10), seulement si `scenarios_enabled = true` : le rôle de `profile` lit aussi `scenarios/latest.json` et `scenarios/output/` (lecture et liste seulement), pour l'outil `scenario_risk` (état cible : l'outil n'est pas encore branché dans le runtime).
 
 Variables d'environnement posées par Terraform sur chaque runtime :
 
@@ -31,6 +36,9 @@ Variables d'environnement posées par Terraform sur chaque runtime :
 | `ALPHAFORGE_MODEL_ID` | `us.anthropic.claude-opus-5-5` | Profil d'inférence Bedrock de tous les agents. |
 | `ALPHAFORGE_KB_ID` | `ABCDEFGHIJ` | Knowledge Base de la base générale (vide en local). |
 | `ALPHAFORGE_GUARDRAIL_ID` / `ALPHAFORGE_GUARDRAIL_VERSION` | `abc123` / `1` | Guardrail du cadre responsable, appliqué aux agents du runtime `profile` (vide en local). |
+| `ALPHAFORGE_RESEARCHER_NAME` | `alphaforge_sandbox_researcher` | Runtime `expert` : nom du runtime des chercheurs, dont l'ARN est trouvé par `ListAgentRuntimes`. `ALPHAFORGE_RESEARCHER_ARN` le remplace s'il est posé; sans l'un ni l'autre (local), les chercheurs tournent dans des fils. |
+| `ALPHAFORGE_RESEARCHER_MODEL_ID` | (vide) | Facultatif : modèle des chercheurs; par défaut `ALPHAFORGE_MODEL_ID`. Le rôle IAM n'autorise que `ALPHAFORGE_MODEL_ID`. |
+| `ALPHAFORGE_CONTACT_EMAIL` | (vide) | Facultatif : courriel ajouté au User-Agent pour la SEC seulement (accès équitable d'EDGAR); sans lui, la SEC répond 403 et ses hôtes sont déclarés bloqués. |
 
 Transport : `POST /invocations`, corps JSON, réponse JSON (`application/json`), ou SSE (`text/event-stream`) quand la requête contient `"stream": true` (section 3.4). `GET /ping` est servi par `BedrockAgentCoreApp`.
 
@@ -83,7 +91,7 @@ stateDiagram-v2
 | `portfolio.submit` | `client_id`, `text` facultatif, `files` facultatif : `[{ "name", "media_type", "data_base64" }]` | A2 extrait des positions; étape `portfolio_review`. Au moins `text` ou un fichier. 10 Mo au plus par fichier, 5 fichiers. |
 | `portfolio.confirm` | `client_id`, `positions` (liste de `Position`, corrigée par l'investisseur) | Calcule les expositions par le code, écrit `portefeuille-existant.md`; étape `followups`. |
 | `portfolio.skip` | `client_id` | Passe aux relances sans portefeuille. |
-| `followup.reply` | `client_id`, `answers` facultatif : `[{ "question_id", "value" }]`, `message` facultatif, `stop` facultatif (booléen) | A1 enregistre, met le profil à jour, renvoie ses relances ou passe à `complete`. `stop: true` n'est accepté qu'à partir de 70 %. Sans `answers` ni `message` à l'arrivée en `followups`, A1 pose ses premières relances. |
+| `followup.reply` | `client_id`, `answers` facultatif : `[{ "question_id", "value" }]`, `message` facultatif, `stop` facultatif (booléen) | A1 enregistre, met le profil à jour, renvoie ses relances ou passe à `complete`. `stop: true` n'est accepté qu'à partir de 70 %. Sans `answers` ni `message` à l'arrivée en `followups`, A1 pose ses premières relances. Au passage à `complete` (y compris par `stop: true`), A1 écrit la base du client avec son skill (section 5) ; un échec est inscrit à la trace et n'empêche pas l'étape. |
 | `settings.update` | `client_id`, `locale` facultatif, `knowledge_level` facultatif | Change la langue ou le niveau de connaissances (réglages). |
 | `profile.get` | `client_id` | Comme `session.resume`, avec en plus `documents`. |
 | `kb.list` | `prefix` (`general/` ou `clients/<client_id>/`) | `{ "items": [{ "key", "title", "type", "description", "updated_at" }] }` |
@@ -107,7 +115,7 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
 }
 ```
 
-- `questions` : les questions à afficher maintenant. En `base_questions`, exactement une. En `followups`, de zéro à trois, posées par A1. Vide en `existing_portfolio`, `portfolio_review` et `complete`.
+- `questions` : les questions à afficher maintenant. En `base_questions`, exactement une. En `followups`, de zéro à trois, posées par A1 ou par le code (secours `fb_`, confirmations `cf_`). Vide en `existing_portfolio`, `portfolio_review` et `complete`.
 - `message` : texte Markdown de l'agent (A1 ou A2) dans la langue de `locale`, adapté au niveau de connaissances. Il vaut `null` après une transition déterministe.
 - `portfolio` : `PortfolioView` dès que A2 a proposé des positions, sinon `null`.
 - `trace` : les étapes de cette requête seulement. L'historique complet est dans la base du client.
@@ -135,7 +143,7 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
 
 - `source` : `deterministic` ou `a1`.
 - `field` : champ du profil que la réponse renseigne, sous la même forme que `facts[].field` (`<dimension>.<nom>`), ou `null` (facultatif).
-- `id` : `q_<nom>` pour une question de base (`questionnaire.yaml`), `a1_<tour>_<n>` pour une relance d'A1. Si A1 est indisponible, le code pose des questions de repli `fb_<tour>_<n>`, avec `source: deterministic`.
+- `id` : `q_<nom>` pour une question de base (`questionnaire.yaml`), `a1_<tour>_<n>` pour une relance d'A1. Si A1 est indisponible, le code pose des questions de repli `fb_<tour>_<n>`, avec `source: deterministic`. `cf_<tour>_<n>` est une question de confirmation posée par le code quand A1 a tiré une valeur d'un texte libre (`source: deterministic`, `kind: boolean`, `field: null`) : « oui » garde la valeur, « non » la retire. Au plus deux par tour, comptées dans les trois questions du tour.
 - `dimension` : `knowledge`, `objective`, `horizon`, `risk_tolerance`, `risk_capacity`, `constraints`, `preferences`, `context`.
 - `kind` et type de `value` attendu : `single_choice` (chaîne parmi `options[].value`), `multi_choice` (liste de chaînes), `boolean` (booléen), `number` (nombre, borné par `min` et `max`), `money` (nombre, `unit` = devise, `CAD` par défaut), `percent` (nombre de 0 à 100), `scale` (entier de `min` à `max`), `text` (chaîne de 1 à 2 000 caractères).
 - Les textes (`prompt`, `help`, `label`) sont déjà dans la langue de `locale`; l'interface n'en traduit aucun.
@@ -210,7 +218,7 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
 { "id": "st_01", "at": "2026-11-14T23:10:00.120Z", "kind": "deterministic", "actor": "questionnaire", "title": "Question suivante choisie par les règles", "detail": "q_horizon après q_goal", "inputs": { "question_id": "q_goal" }, "outputs": { "next": "q_horizon" }, "sources": [], "duration_ms": 3 }
 ```
 
-- `kind` : `deterministic`, `agent`, `model`, `tool`, `storage`, `guardrail`. `actor` : `questionnaire`, `completeness`, `A1`, `A2`, `A4`, `A5`, `A6`, `store`, `guardrail`. `A7`, `A8`, `polly` et `mediaconvert` sont réservés à la fonctionnalité vidéo tldoole, décrite dans sa propre section.
+- `kind` : `deterministic`, `agent`, `model`, `tool`, `storage`, `guardrail`. `actor` : `questionnaire`, `completeness`, `A1`, `A2`, `A4`, `A5`, `A6`, `store`, `guardrail`.
 - `sources` : `[{ "id", "title", "resource", "published_at"?, "observed_at"?, "retrieved_at"? }]`.
 - Une trace ne contient ni raisonnement interne du modèle ni secret : le titre et le détail décrivent l'action observable (outil appelé, entrées, résultat).
 
@@ -261,16 +269,27 @@ clients/<client_id>/index.md
 clients/<client_id>/profil.md               profil et ses données structurées
 clients/<client_id>/portefeuille-existant.md
 clients/<client_id>/journal.md              chaque réponse, avec sa provenance et sa date
+clients/<client_id>/<note>.md               notes écrites par A1 avec son skill (Profile Note), par exemple dimensions/horizon.md et synthese.md
 clients/<client_id>/traces/<horodatage>-<action>.json
 staging/<run_id>/<role>/<id>.json
 staging/<run_id>/<role>/_done.json
+general/faits/<libellé>/<AAAA-MM-JJ>-<hash>.md        écrit par A6 (section 11)
+general/signaux/<libellé>/<AAAA-MM-JJ>-<hash>.md      écrit par A6
+general/depots/<ticker>/<accession>.md                écrit par A6
+general/recherches/<AAAA>/<MM>/<slug>-<hash>.md       écrit par A6 (synthèses d'A0)
+staging/<run_id>/router/plan.json, _routed.json, _composed.json, brief-<hash>.json
+staging/<run_id>/experts/<sujet>/<id>.json, brief.json, _done.json
+staging/<run_id>/researchers/<sujet>-<rk>/findings.json, _done.json
+staging/<run_id>/supervisor/quarantine.json           éléments et hôtes en quarantaine
+archive/<hôte>/<AAAA-MM-JJ>/<sha256>.json              réponse brute archivée par un chercheur
 runtime/agents-<release>.zip                code des runtimes, poussé par Terraform
+scenarios/...                               scénarios probabilistes, hors de la base OKF (section 10)
 ```
 
 Chaque document `.md` est un document OKF : un frontmatter YAML puis un corps Markdown.
 
 ```yaml
-type: Investor Profile            # Investor Profile, Existing Portfolio, Profile Journal, News, Data Series, Methodology, Financial Concept, Company Fundamentals, Index
+type: Investor Profile            # Investor Profile, Existing Portfolio, Profile Journal, Profile Note, News, Data Series, Methodology, Financial Concept, Company Fundamentals, Index
 title: Profil investisseur
 description: Profil en cinq dimensions, niveau de connaissances et complétude.
 tags: [profil-investisseur]
@@ -284,8 +303,11 @@ sources:
 data: {}                          # données structurées lues par le code (profil, positions, série…)
 ```
 
+- Dans `profil.md`, un fait tiré d'un texte libre porte `confirmed: false` (`data.facts.<champ>`) jusqu'à la réponse à sa question `cf_`. Il n'entre ni dans `ProfileView`, ni dans la complétude, ni dans les scores. S'il remplace une valeur confirmée, il la garde dans `replaces` (`value`, `provenance`, `at`, facultatif) : elle reste en vigueur jusqu'à la réponse, et « non » la rétablit. Un fait sans la clé `confirmed` est confirmé.
+- Notes du client (`Profile Note`) : à la fin du questionnaire, le runtime `profile` invoque A1 avec le skill `app/agents/src/alphaforge/profile/skills/client-brain-init/SKILL.md`, qui fixe la structure des notes ; ensuite, `client-brain-update` les met à jour quand les faits confirmés ou les skills changent. Changer la structure dans le skill suffit : la mise à jour suivante réorganise chaque base. A1 écrit le chemin, le titre et le texte ; le code construit le frontmatter (`sources` tirées des champs cités, `data.skill`, `data.skills_version`, `data.cites`), vérifie l'OKF, refuse les chemins hors du dossier du client et les documents écrits par le code (`index.md`, `profil.md`, `journal.md`, `portefeuille-existant.md`, `traces/`), et n'y admet aucune valeur à confirmer. Le runtime n'a pas `s3:DeleteObject` : une note retirée est réécrite avec `data.retired: true`, et `kb.list` comme `index.md` l'omettent. L'état est dans `profil.md`, `data.brain` (`skills_version`, `values`, `documents`).
 - `journal.md` porte ses entrées dans `data.entries[]`, en ajout seulement, une entrée par événement : `{at, kind, provenance, ...}`.
-  - `kind` vaut `answer` (`field`, `value`, `question_id`?, `previous`?), `message` ou `stage` (`value`, `previous`, `note`).
+  - `kind` vaut `answer` (`field`, `value`, `question_id`?, `option`?, `previous`?), `message` ou `stage` (`value`, `previous`, `note`).
+  - `option` (facultatif) : identifiant de la tranche choisie quand une question à choix renseigne un champ numérique (`number`, `money`, `percent`). `value` est alors le nombre que le code a écrit dans le champ, tiré de `questionnaire.yaml` (option `number`) ou calculé par le code pour une relance.
   - Une entrée `message` garde le texte libre de l'investisseur (`followup.reply.message`) avec sa provenance `a1:<tour>`, `text` et `locale`. Elle n'est écrite qu'après un tour d'A1 réussi, donc jamais quand le garde-fou bloque.
   - Une requête écrit le journal au plus une fois.
 - La base générale ne contient rien d'un client; une base de client ne recopie pas la base générale.
@@ -322,125 +344,6 @@ Le serveur Next.js appelle AWS avec les identifiants AWS du poste (chaîne par d
 | `ALPHAFORGE_PREFIX` | `alphaforge_sandbox` | Préfixe des runtimes; l'ARN de `<préfixe>_profile` est trouvé par son nom (`ListAgentRuntimes`). |
 | `ALPHAFORGE_STATE_MACHINE` | `alphaforge-sandbox-collecte` | Machine de collecte, trouvée par son nom (`ListStateMachines`). |
 
-## 8. tldoole : vidéos sur les concepts mal compris
-
-Un agent repère les concepts que l'investisseur ne comprend pas encore. Pour chacun, l'investisseur reçoit une vidéo verticale d'environ une minute (1080 × 1920, sous-titres incrustés). Les points clés viennent du catalogue validé (`app/agents/src/alphaforge/tldoole/concepts.yaml`) et les chiffres du code (`facts.py`), chacun avec sa source. Tout tourne sur AWS : AgentCore, Bedrock, Polly, MediaConvert, Step Functions, EventBridge, S3 et KMS.
-
-### 8.1 Runtime `alphaforge_sandbox_tldoole`
-
-`AGENT_ROLE=tldoole`, même zip que les autres runtimes. Variables en plus de la section 1 : `ALPHAFORGE_KB_ID`, `ALPHAFORGE_GUARDRAIL_ID` et `ALPHAFORGE_GUARDRAIL_VERSION` (comme `profile`), puis :
-
-| Variable | Exemple | Rôle |
-| --- | --- | --- |
-| `ALPHAFORGE_TLDOOLE_STATE_MACHINE_ARN` | `arn:aws:states:us-east-1:…:stateMachine:alphaforge-sandbox-tldoole` | Machine lancée par `request` et `feedback`. Vide en local : la vidéo reste `queued`, sauf si `ALPHAFORGE_TLDOOLE_INLINE=1`. |
-| `ALPHAFORGE_TLDOOLE_MAX_PER_RUN` | `2` | Vidéos créées au plus par une détection. |
-| `ALPHAFORGE_TLDOOLE_MAX_PER_DAY` | `6` | Vidéos créées au plus par investisseur et par jour (UTC). |
-
-Accès S3, en motifs de clés exacts (comme `agentcore.tf`) :
-
-- lecture et `s3:prefix` : `clients/*/profil.md`, `clients/*/journal.md`, `clients/*/portefeuille-existant.md`, `clients/*/tldoole/*` ;
-- écriture : `clients/*/tldoole/*`.
-
-S'y ajoutent `polly:SynthesizeSpeech`, `states:StartExecution` sur la machine, `bedrock:Retrieve` et `bedrock:ApplyGuardrail`.
-
-Le rôle MediaConvert de tldoole a `GetObject`, `GetObjectVersion` et `PutObject` sur `clients/*/tldoole/*`. Le bucket est versionné, et les téléchargeurs d'incrustations et de polices de MediaConvert lisent une version précise de l'objet : sans `GetObjectVersion`, le job échoue (erreur 1404 sur la police, 1010 sur une image).
-
-Sessions AgentCore : `<client_id>-detect` pour `detect`, `<client_id>-<video_id>` pour `produce` et `finalize`, `<client_id>-feed` pour l'interface.
-
-Développement local : `AGENT_ROLE=tldoole ALPHAFORGE_STORE=local PORT=8081 uv run python main.py`. Le magasin local sert `detect`, `produce` (écrans, narration Polly réelle, sous-titres), `feed`, `feedback` et `request`. MediaConvert n'existe que sur AWS, donc `produce` y renvoie `settings: null`.
-
-### 8.2 Actions
-
-Enveloppe et codes d'erreur de la section 2. Toutes les actions acceptent `health`.
-
-| Action | Appelée par | Entrée (en plus de `action`) | Réponse |
-| --- | --- | --- | --- |
-| `detect` | Step Functions | `client_id`, `run_id` | `{"accepted": true, "marker": "clients/<id>/tldoole/runs/<run_id>/detect.json", "client_id", "run_id"}`. Le travail tourne en arrière-plan (`/ping` à `HealthyBusy`). |
-| `produce` | Step Functions | `client_id`, `video_id` | `{"accepted": true, "marker": "clients/<id>/tldoole/videos/<video_id>/_produced.json", …}`, en arrière-plan. |
-| `finalize` | Step Functions | `client_id`, `video_id`, `job` : `{"status": "COMPLETE" \| "ERROR", "id"?, "duration_ms"?, "error"?}` | `{"video": VideoCard}`. Idempotente : une vidéo `ready` le reste. |
-| `feed` | interface | `client_id` | `Feed` |
-| `feedback` | interface | `client_id`, `video_id`, et au moins l'un de `verdict` (`understood` ou `unclear`) et `quiz_answer` (indice) | `{"video": VideoCard, "quiz": {"correct", "answer", "explanation"} \| null, "follow_up": VideoCard \| null}`. Une réponse `unclear`, ou un quiz raté, crée une version plus simple (au plus 3 versions par concept) et lance la machine. |
-| `request` | interface | `client_id`, `concept_id` (du catalogue) | `{"video": VideoCard, "created": bool}`. Une vidéo déjà en cours pour ce concept est renvoyée telle quelle. Au-delà de la limite quotidienne : `conflict`. |
-
-`"wait": true` exécute `detect` ou `produce` dans la requête et renvoie le marqueur sous `result`. C'est réservé au développement et aux tests.
-
-Marqueur de `detect` : `{"status": "ok" | "error", "client_id", "run_id", "video_ids": [], "gaps": [Gap], "skipped"?: "no_new_signal", "error", "started_at", "finished_at", "release", "trace": [TraceStep]}`.
-
-Marqueur de `produce` : `{"status", "client_id", "video_id", "duration_ms", "settings": {…réglages CreateJob de MediaConvert…} | null, "output_key", "error", …}`. Step Functions soumet `settings` avec son propre rôle MediaConvert : le runtime ne passe aucun rôle.
-
-### 8.3 Types
-
-`VideoCard` :
-
-```json
-{
-  "video_id": "v20261115t002943-fnb-ffd7",
-  "concept_id": "fnb", "label": "FNB", "title": "Un FNB, c'est quoi ?",
-  "status": "ready", "level": "beginner", "locale": "fr", "reason": "detected", "version": 1,
-  "created_at": "2026-11-15T00:29:43Z", "updated_at": "2026-11-15T00:31:02Z", "duration_ms": 68988,
-  "why": [{ "kind": "message", "quote": "je ne comprends pas trop c'est quoi un FNB", "provenance": "a1:1", "at": "2026-11-15T00:29:39Z" }],
-  "quiz": { "question": "Que recevez-vous en achetant une part d'un FNB ?", "options": ["…", "…"] },
-  "sources": [{ "id": "starter-prices-daily", "title": "Jeu de départ, prix quotidiens ajustés (Yahoo Finance)", "resource": "starter:prices_daily.csv" }],
-  "feedback": null, "error": null, "doc_key": "clients/<id>/tldoole/videos/<video_id>/fiche.md",
-  "video_url": "https://…signée…", "poster_url": "https://…", "captions_url": "https://…"
-}
-```
-
-- `status` : `queued`, puis `scripting` (A8), `rendering` (écrans, Polly, MediaConvert), et enfin `ready` ou `failed`.
-- `reason` : `detected` (A7), `request` (demandée) ou `feedback` (version plus simple). `why[].kind` : `message`, `answer`, `portfolio`, `request` ou `feedback`.
-- `quiz` ne contient jamais la bonne réponse : seul `feedback` la renvoie.
-- Les URL sont des URL S3 signées valables une heure. Elles valent `null` en local et tant que la vidéo n'est pas prête (`poster_url` existe dès `rendering`).
-
-`Gap` : `{"concept_id", "label", "status": "open" | "video" | "waiting" | "unclear" | "resolved", "confidence", "reason", "detector": "A7" | "rules", "video_id", "detected_at"}`.
-
-`Feed` : `{"client_id", "locale", "videos": [VideoCard], "gaps": [Gap], "pending", "catalog": [{"concept_id", "label", "title"}]}`.
-
-Trace : `actor` vaut aussi `A7` (détecteur), `A8` (scénariste), `polly` ou `mediaconvert`.
-
-### 8.4 Détection (A7) et scénario (A8)
-
-- **Signaux déterministes** (`signals.py`) : un message de l'investisseur qui nomme un concept avec une marque d'incompréhension (« c'est quoi », « je ne comprends pas », « what is »…), des réponses contradictoires (accepter de fortes variations mais tout vendre à la baisse ; horizon court et goût du risque élevé ; perte majeure mais attitude risquée ; comptes « je ne sais pas »…), et les drapeaux du portefeuille calculés par A2.
-- **A7** juge les signaux nouveaux depuis la dernière détection. Chaque lacune cite sa preuve : une citation exacte vérifiée par le code, ou la preuve d'une règle. Sans modèle, les règles d'au moins 0,6 suffisent. Une lacune d'au moins 0,6 crée une vidéo si le concept n'en a pas déjà une en cours, prête ou comprise.
-- **A8** écrit de 4 à 7 scènes (`hook`, `statement`, `number`, `chart`, `compare`, `list`, `outro`), au plus 950 caractères de narration et un quiz. Il ne s'appuie que sur les points clés du concept et sur les outils de faits (`asset_stats`, `compare_assets`, `macro_series`, `fx_usdcad`, `compound_growth`, `fee_drag`, `client_portfolio`). Tout nombre d'une scène vient d'un fait que la scène cite. Le code refuse aussi toute recommandation d'achat ou de vente. Le Guardrail (`ApplyGuardrail`, sortie) relit la narration.
-
-### 8.5 Magasin
-
-```text
-clients/<client_id>/tldoole/index.json                       lacunes, vidéos, dernière détection (écritures If-Match)
-clients/<client_id>/tldoole/lacunes.md                       OKF « Concept Gaps »
-clients/<client_id>/tldoole/runs/<run_id>/detect.json        marqueur de detect
-clients/<client_id>/tldoole/videos/<video_id>/fiche.md       OKF « Learning Video » (transcription, quiz, sources)
-clients/<client_id>/tldoole/videos/<video_id>/storyboard.json
-clients/<client_id>/tldoole/videos/<video_id>/scene-NN.png   écrans 1080 × 1920 dessinés par le code
-clients/<client_id>/tldoole/videos/<video_id>/background.png, narration.mp3, captions.srt, captions.vtt, caption-font.ttf
-clients/<client_id>/tldoole/videos/<video_id>/_produced.json marqueur de produce
-clients/<client_id>/tldoole/videos/<video_id>/video.mp4      écrit par MediaConvert
-```
-
-### 8.6 Machine `alphaforge-sandbox-tldoole`
-
-Elle est déclenchée par le runtime avec l'entrée `{"source": "request" | "feedback", "client_id", "video_ids"}`. Une règle EventBridge peut aussi la lancer à chaque écriture de `clients/*/journal.md` (une par requête du runtime `profile`). Cette règle existe mais reste `DISABLED` tant que `tldoole_trigger_enabled` vaut `false`, sa valeur par défaut : la détection A7 ne tourne alors pas d'elle-même.
-
-```mermaid
-flowchart LR
-    E["S3 : journal.md écrit"] -->|"EventBridge"| W["Anti-rebond : attendre 45 s"]
-    W --> C{"Dernière version du journal ?"}
-    C -->|"non"| X["Remplacée"]
-    C -->|"oui"| A7["A7 detect, puis sonde du marqueur"]
-    R["request / feedback"] --> M
-    A7 -->|"video_ids"| M["Map, 2 vidéos à la fois"]
-    M --> A8["A8 produce, puis sonde du marqueur"]
-    A8 --> MC["MediaConvert createJob.sync"]
-    MC --> F["finalize : ready"]
-    A8 -.->|"erreur"| FE["finalize : failed"]
-    MC -.->|"erreur"| FE
-```
-
-### 8.7 Interface
-
-- Page `/tldoole` : fil vertical (lecture muette automatique quand la vidéo est visible), boutons « J'ai compris » et « Encore flou », « Pourquoi ? » (les preuves d'A7), « Sources », quiz, concepts repérés et demande d'une vidéo.
-- Route `POST /api/tldoole` (`feed`, `feedback`, `request`) côté serveur. Elle suit le même `AGENT_MODE` : `mock` (simulateur en mémoire), `local` (`LOCAL_TLDOOLE_URL`, par défaut `http://localhost:8081/invocations`) ou `aws` (`InvokeAgentRuntime` sur `<ALPHAFORGE_PREFIX>_tldoole`, trouvé par son nom).
-
 ## 9. Volet finance (proposition, hors version 1)
 
 Pour le portefeuille guidé (A3, agents d'analyse, Judge), à valider par l'équipe. Rien ne change pour les
@@ -456,3 +359,202 @@ runtimes de la version 1. Les schémas Pydantic sont dans `app/agents/src/alphaf
 - Les appels LLM du volet finance passent par `alphaforge.finance.llm` (rejeu enregistré, clé sha256). Le Guardrail
   est toujours référencé par une version numérotée, jamais `DRAFT`.
 - `TraceEvent.otel_trace_id` relie chaque étape à sa trace OpenTelemetry (X-Ray, JSONL local).
+
+## 10. Scénarios probabilistes (facultatif)
+
+Ajout facultatif à la version 1, activé par la variable Terraform `scenarios_enabled` (faux par défaut : avec `false`, le plan ne change rien pour les scénarios). Le bundle du job n'est construit que si `ALPHAFORGE_PACKAGE_SCENARIOS=1` (en CI : ajouter `ALPHAFORGE_PACKAGE_SCENARIOS: ${{ vars.ALPHAFORGE_PACKAGE_SCENARIOS || '0' }}` à l'étape `package.sh` de `.github/workflows/app.yml`, pas encore fait car le jeton de l'équipe n'a pas le droit `workflow`; absente, la variable vaut 0), à poser avec `scenarios_enabled = true`. Simulation seulement : la table décrit l'incertitude du risque selon un modèle, ce n'est pas une prévision. Infra : `infrastructure/infra/scenarios.tf`; code : `app/agents/src/alphaforge/scenarios/`.
+
+```mermaid
+flowchart LR
+    U["Équipe (console ou CLI)"] -->|"StartExecution"| SF["Step Functions : alphaforge-sandbox-scenarios"]
+    SF -->|"request.json"| S3[("S3 + KMS : scenarios/")]
+    SF -->|"createProcessingJob.sync"| SM["SageMaker Processing : image scikit-learn d'AWS"]
+    SM -->|"lit code et requête"| S3
+    SM -->|"sources publiques (Internet)"| WEB["FRED, Ken French, Shiller, or, Yahoo Finance"]
+    SM -->|"écrit output/<run_id>/"| S3
+    SF -->|"_done.json, puis latest.json"| S3
+    P["Runtime profile : outil scenario_risk (état cible, pas encore branché)"] -.->|"lit latest.json et output/"| S3
+    A["Athena : alphaforge-sandbox-scenarios"] -->|"table Glue, projection run_id"| S3
+```
+
+### 10.1 Lancer une exécution
+
+Machine `alphaforge-sandbox-scenarios` (output Terraform `scenarios_state_machine_arn`). Aucun déclencheur périodique.
+
+```sh
+aws stepfunctions start-execution --region us-east-1 \
+  --state-machine-arn "arn:aws:states:us-east-1:<compte>:stateMachine:alphaforge-sandbox-scenarios" \
+  --input '{"params": {"config": "small", "seed": 20261114}}'
+```
+
+Entrée : `{"run_id"?: string, "params"?: object}`.
+
+- `run_id` vaut par défaut le nom de l'exécution (un UUID) et suit `^[A-Za-z0-9-]{1,36}$` : il entre dans les clés S3 et dans le nom du job SageMaker, `alphaforge-sandbox-scn-<run_id>`. Unicité : `request.json` et les deux marqueurs `_done.json` sont écrits par `PutObject` conditionnel (`IfNoneMatch: "*"`). Un `run_id` déjà utilisé fait échouer l'exécution dès l'écriture de la requête (`RunIdAlreadyUsed`, S3 `PreconditionFailed`), avant tout calcul, sans marqueur; la requête, les sorties et le marqueur d'un run existant ne sont jamais réécrits.
+- `params` est recopié dans `request.json`. `run.sh` n'en accepte que `config` (nom d'une configuration livrée, `small` ou `full`, ou chemin), `seed`, `fitted_through` (`AAAA-MM`) et `workers`, traduits en options de `python -m alphaforge.scenarios.job`. Toute autre clé fait échouer le job avant le calcul.
+
+Sortie : `{"run_id", "processing_job": {"name", "arn", "status", "started_at", "ended_at"}, "latest": "scenarios/latest.json"}`. En cas d'échec du job, la machine écrit `_done.json` avec `status: "error"` (s'il n'existe pas déjà), laisse `latest.json` inchangé et échoue (`ScenariosJobFailed`).
+
+### 10.2 Job SageMaker Processing
+
+- Image : `683313688378.dkr.ecr.us-east-1.amazonaws.com/sagemaker-scikit-learn:1.4-2-py312-1.0.3403.0` (image AWS, Python 3.12, linux/amd64; variable `scenarios_image_uri`, étiquette de build complète obligatoire). Aucune image du projet, aucun ECR du projet.
+- Instance : `ml.m5.4xlarge` × 1, 30 Go, 8 h au plus (28 800 s; variables `scenarios_instance_*`, `scenarios_volume_size_gb`, `scenarios_max_runtime_seconds`). `configs/full.yaml` utilise 8 processus sur cette instance (3 à 4 Go chacun).
+- Réseau : configuration par défaut de SageMaker (sans VPC ni isolation réseau), donc accès Internet sortant, nécessaire pour reconstruire les données depuis les sources publiques.
+- Code : `scenarios/code/<release_id>/` contient `run.sh` et `scenarios.zip`, construits par `app/agents/scripts/package.sh` (section 6 du script) et envoyés par Terraform, comme `runtime/agents-<release>.zip`.
+
+| Chemin dans le conteneur | Contenu |
+| --- | --- |
+| `/opt/ml/processing/input/code/` | `run.sh` (point d'entrée : `/bin/sh run.sh --request … --output …`) et `scenarios.zip` |
+| `/opt/ml/processing/input/request/request.json` | `{"schema": "scenarios-request/v0.1", "run_id", "release", "execution", "requested_at", "params"}` |
+| `/opt/ml/processing/app/` | `scenarios.zip` extrait : `alphaforge/scenarios/`, `alphaforge/data/starter/`, `alphaforge/finance/backtest/` (`__init__`, `build_data`, `bonds`, `paths`), le catalogue versionné de `alphaforge/data/long/` (jamais de parquet ni `raw/`), dépendances figées |
+| `/opt/ml/processing/work/long/` | `ALPHAFORGE_BT_DATA` : données longues reconstruites par le job, jamais envoyées dans S3 |
+| `/opt/ml/processing/output/` | tout ce que le job y écrit est envoyé sous `scenarios/output/<run_id>/` à la fin du job |
+
+`run.sh` place `/opt/ml/processing/app` en tête de `sys.path` (fichier `.pth`, lu même sous `python -I`), pose `ALPHAFORGE_STARTER_DIR` et `ALPHAFORGE_BT_DATA=/opt/ml/processing/work/long`, lance `python3 -I -m alphaforge.finance.backtest.build_data` (échec si le module manque au bundle), puis `python3 -m alphaforge.scenarios.job --input $ALPHAFORGE_BT_DATA --output /opt/ml/processing/output` et les options de `params`.
+
+Variables d'environnement du job : `ALPHAFORGE_RUN_ID`, `ALPHAFORGE_RELEASE` (SHA court du commit, à reporter dans `code_sha` ou le manifeste), `ALPHAFORGE_ENV`, `ALPHAFORGE_REGION`, `ALPHAFORGE_IMAGE`, `ALPHAFORGE_STARTER_DIR` (posée par `run.sh`). Le job ne fait aucun appel AWS : il lit et écrit seulement des fichiers locaux.
+
+### 10.3 Disposition S3
+
+```text
+scenarios/code/<release_id>/run.sh, scenarios.zip   Terraform
+scenarios/input/requests/<run_id>/request.json      Step Functions
+scenarios/output/<run_id>/manifest.json             le job : configuration, graine, data_sha256, code_sha, durées
+scenarios/output/<run_id>/request.json              le job (copie par run.sh)
+scenarios/output/<run_id>/runtime/                  le job : JSON et CSV compacts lus par l'outil scenario_risk
+scenarios/output/<run_id>/table/scenarios.parquet   le job : table complète, seul fichier lu par Athena
+scenarios/output/<run_id>/_done.json                Step Functions : {"status": "ok" | "error", "run_id", "release", "image", "processing_job", "output_prefix", "table_prefix", "finished_at", "error"?}
+scenarios/latest.json                               Step Functions, après un run réussi : {"run_id", "release", "marker", "output_prefix", "manifest", "updated_at"}
+scenarios/athena-results/                           Athena, expire après 7 jours
+```
+
+- Hors `general/` : la Knowledge Base n'indexe jamais les scénarios.
+- Le job n'écrit que sous `scenarios/output/` et jamais `_done.json` (refus explicite dans son rôle IAM). Le runtime `profile` lit seulement `scenarios/latest.json` et `scenarios/output/`.
+- Le dossier `table/` ne doit contenir que des fichiers parquet : Athena lit tout ce qui s'y trouve.
+- Les données construites par `alphaforge.finance.backtest.build_data` (sources sous licence : Yahoo Finance, Moody's, OCDE) restent dans le volume du job; elles ne sont ni versionnées, ni dans le bundle de code, ni dans les sorties.
+- L'outil `scenario_risk` refuse une table dont le sha256 n'est pas déclaré par le manifeste, et un run figé (`run_id` fixé) dont `_done.json` n'a pas `status: "ok"`.
+
+### 10.4 Table et requêtes Athena
+
+Base Glue `alphaforge_sandbox_scenarios`, table `scenarios`, partition `run_id` par projection `injected` : aucune partition à ajouter après un run, mais chaque requête nomme son `run_id` (lu dans `latest.json`). Groupe de travail `alphaforge-sandbox-scenarios` : résultats chiffrés par la clé KMS du bucket, 1 Gio lu au plus par requête.
+
+Colonnes (miroir de `schema.COLUMNS`, schéma 0.2) : `schema_version`, `model_id`, `family`, `currency`, `mix_id`, `horizon_years` (int), `basis`, `metric`, `value`, `ci_lo`, `ci_hi` (double), `n_paths`, `n_boot` (int), `seed` (bigint), `fitted_through`, `window_start`, `n_hist_months` (int), `hypothese` (boolean), `data_sha256`, `code_sha`. Les types parquet doivent correspondre (int32, int64, float64, bool); une colonne ajoutée au schéma doit l'être aussi dans `scenarios.tf`.
+
+```sql
+SELECT model_id, mix_id, horizon_years, basis, value, ci_lo, ci_hi
+FROM alphaforge_sandbox_scenarios.scenarios
+WHERE run_id = '<run_id de latest.json>' AND family = 'CAD77' AND metric = 'p_loss_gt_20';
+```
+
+## 11. Recherche par experts de sujet
+
+Un expert par sujet lance lui-même n chercheurs, un par session AgentCore (une microVM chacun), et juge ce qu'ils
+rapportent. Le code de `app/agents/src/alphaforge/research/` applique toutes les règles : le modèle choisit quoi
+chercher et combien de chercheurs, le code décide si c'est permis. Les collecteurs A4 et A5 (sections 4 et 6)
+restent en place.
+
+### 11.1 Rôles
+
+| Rôle | Agent | Actions | Marqueur |
+| --- | --- | --- | --- |
+| `router` | A0 : choisit 1 à 4 sujets et une sous-question par sujet, puis rédige la synthèse finale | `route`, `compose` | `staging/<run_id>/router/_routed.json`, `_composed.json` |
+| `expert` | E1 Macro et politique, E2 Taux, change et matières, E3 Sociétés et marchés, E4 Fonds et durabilité, E5 Logement et économie réelle, E6 Attentes et positionnement, E7 Actualités et attention | `research` | `staging/<run_id>/experts/<sujet>/_done.json` |
+| `researcher` | Sous-agent générique, une mission par session | `research` | `staging/<run_id>/researchers/<sujet>-<rk>/_done.json` |
+
+Toutes les actions suivent la section 4 : acceptation immédiate (`accepted`, `already_running`, `already_done`),
+travail en tâche asynchrone, marqueur `{status, role, action, run_id, …, error, started_at, finished_at, release,
+trace}` écrit à la fin, que la tâche réussisse ou non.
+
+### 11.2 Requêtes
+
+```json
+{"action": "route", "run_id": "…", "question": "…", "issuers"?: ["ENB.TO"], "themes"?: ["esg"], "as_of"?: "2026-11-01", "depth"?: "quick|standard|deep", "since"?: "AAAA-MM-JJ"}
+{"action": "compose", "run_id": "…"}
+{"action": "research", "run_id": "…", "subject": "E4", "mode": "sweep|question", "question"?, "sub_question"?, "issuers"?, "themes"?, "as_of"?, "depth"?, "since"?, "max_researchers"?}
+{"action": "research", "run_id": "…", "subject": "E4", "researcher": "r2", "objective": "…", "evidence_wanted"?: [], "packs": ["funds-sustainability"], "issuers"?, "themes"?, "since"?, "as_of"?, "budget_s"?, "max_tool_calls"?}
+```
+
+- `since` vaut par défaut sept jours avant la date du jour (un an au plus); `issuers` vaut l'univers du jeu de
+  départ en mode `sweep`. `question` est requise en mode `question`, sans aucune donnée de client.
+- `depth` fixe le nombre de chercheurs par tour : `quick` 3, `standard` 6, `deep` 10, avec deux tours au plus
+  et 24 chercheurs par exécution, partagés par A0 entre les sujets (`max_researchers`).
+- Un chercheur ne reçoit que des paquets de son sujet; budget de 240 s et 20 appels d'outils par défaut (300 s et
+  20 appels au plus). Session : `<run_id>-<sujet>-<rk>` complété à 48 caractères.
+
+### 11.3 Paquets de sources et règles de collecte
+
+`research/packs.py` tient les 14 paquets (hôtes permis, sources de recherche, points d'accès connus, pièges), le
+registre des hôtes (licence, lien, texte d'attribution, plafond de requêtes par session, exception au robots.txt) et
+les sept sujets. Phase 1 : sources sans clé seulement.
+
+- HTTPS seulement, hôtes du paquet seulement (redirections comprises), User-Agent déclaré (section 4).
+- robots.txt lu avant chaque hôte (RFC 9309, groupe du robot sinon `*`, et `Claude-User` en plus); seule exception :
+  `query1.finance.yahoo.com`, notée dans le constat.
+- Coupe-circuit : 401, 403, 407, 429, 451, coupure ou défi anti-robot bloquent l'hôte pour la session.
+- Pages HTML refusées; XLSX, ZIP et PDF refusés en phase 1.
+- Chaque réponse est archivée (`archive/…`) avec l'adresse, le statut, `Last-Modified`, `ETag` et `retrieved_at`.
+- Quarantaine : `propose_host` (2 hôtes par chercheur) n'accepte qu'un hôte qui résout vers des adresses publiques
+  et dont le robots.txt permet le chemin; 3 lectures au plus; ses éléments ne vont jamais dans `general/`.
+- Hacker News et Bluesky ne servent qu'à compter des mentions : le texte lu en transit n'est ni archivé ni gardé.
+
+### 11.4 Constats
+
+`staging/<run_id>/researchers/<sujet>-<rk>/findings.json` : `{"brief": {…}, "findings": [ … ]}`. Un constat est un
+pointeur : le modèle donne des localisateurs (`observations[3].FXUSDCAD.v`, `rows[12].Value`, `items[0].title`),
+le code lit les valeurs et les dates dans la réponse archivée.
+
+```json
+{"finding_id": "E2-r1-f01", "kind": "fact|signal|quote|filing|news|series", "label": "…", "claim": "phrase neutre en français",
+ "values": {"value": "1.4257"}, "locators": {"value": "observations[2].FXUSDCAD.v"}, "series_spec"?: {"rows", "date_field", "value_field", "publication_field"},
+ "observations"?: [{"date", "value"}], "observation_date", "observation_basis": "source|researcher", "publication_date",
+ "publication_basis": "source|retrieved_at_upper_bound", "retrieved_at", "url", "item_url", "host", "host_status": "allowed|exception|quarantined|derived",
+ "robots_ok_at_fetch", "response_id", "archive_key", "licence", "licence_url", "attribution_text", "licence_note", "as_of", "issuers"}
+```
+
+Refusés à la consignation : localisateur non résolu, valeur vide, date de publication postérieure à la récupération
+ou à `as_of`, observation sans date, cote de marché sans `resolution_rules`, nombre de la phrase absent des valeurs
+lues (un nombre suivi d'une unité doit venir d'une valeur, jamais d'une date).
+
+### 11.5 Éléments et synthèses
+
+L'expert met en attente un élément par constat retenu (`staging/<run_id>/experts/<sujet>/<id>.json`), au format de la
+section 4 avec les types `fact`, `signal`, `filing` en plus, et deux blocs : `data.provenance` (dates, millésime,
+requête, archive, localisateurs, licence, attribution, robots, `as_of`, `adjustment`) et `data.market` (`venue`,
+`venue_market_id`, `bid`, `ask`, `volume`, `open_interest`, `resolution_rules`, `settlement_source`,
+`quality_tier` : `high` si volume d'au moins 1 M et fourchette d'au plus 2 cents, sinon `medium` ou
+`illustrative`). En mode `question`, il écrit aussi `brief.json` (synthèse du sujet, citations, lacunes). A0 écrit
+`brief-<hash>.json`, de type `brief` : `data.text`, `data.citations` (identifiants d'éléments), `data.subjects`,
+`data.gaps`, `data.as_of`.
+
+### 11.6 Contrôles d'A6
+
+En plus de ceux de la section 4, avec une raison pour chaque rejet : réponse archivée relue et chaque valeur (chaque
+observation d'une série) identique; `licence` et `attribution_text` présents; robots.txt respecté sauf exception;
+éléments en quarantaine retenus dans `staging/<run_id>/supervisor/quarantine.json` avec les hôtes proposés; nombres
+du titre et du résumé fondés; rien de publié après `as_of`; cotes avec leurs règles; synthèse dont chaque citation
+renvoie à un élément retenu et chaque nombre à un élément cité. Types OKF : `Fact`, `Market Signal`,
+`Regulatory Filing`, `Research Brief`. Le marqueur d'A6 ajoute `quarantined` et `proposed_hosts`.
+
+### 11.7 Machine `alphaforge-sandbox-recherche`
+
+```mermaid
+flowchart LR
+    S["Scheduler (sweep) ou interface (question)"] --> M{"mode"}
+    M -->|"question"| R["A0 route"]
+    R --> X["Map : un expert par sujet choisi"]
+    M -->|"sweep"| X
+    X -->|"chaque expert"| W["n sessions researcher"]
+    X --> C{"mode"}
+    C -->|"question"| P["A0 compose"]
+    C -->|"sweep"| A6["A6 curate"]
+    P --> A6
+    A6 --> I["Ingestion de la Knowledge Base"]
+```
+
+- Entrée : `{"mode"?: "sweep" | "question", "run_id"?, "question"?, "subjects"?: ["E1", …], "issuers"?,
+  "themes"?, "as_of"?, "depth"?, "since"?}`; `mode` vaut `sweep` par défaut, `subjects` les sept sujets, `depth`
+  `quick` en `sweep` et `standard` en `question`.
+- Un expert en échec n'arrête pas les autres; un échec d'A0, d'A6 ou de l'ingestion fait échouer l'exécution.
+  Délai de 1800 s par expert ou par étape d'A0, sondage toutes les 15 s.
+- La planification `alphaforge-sandbox-recherche` (jours ouvrables, 17 h 30 HE, mode `sweep`) est désactivée par
+  défaut (`recherche_schedule_enabled`).
+

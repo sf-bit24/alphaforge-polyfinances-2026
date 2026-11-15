@@ -15,11 +15,10 @@ sources:
   - id: enonce-officiel
     title: "Énoncé officiel du défi AlphaForge AI (Datathon PolyFinances 2026)"
     resource: "Énoncé officiel, p. 10 (FNB obligataires) et p. 11 (obligations et taux : sensibilité aux taux, rôle des actifs défensifs)"
-  - id: regles-composition
-    title: "Barème des niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+  - id: politique-risque
+    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, composition (long_duration_max, etf_bond_each_max), history_proxies et reference_portfolios"
 data:
-  catalog_id: obligations_taux
   aliases: [obligation, obligations, taux d'intérêt, taux directeur, rendement obligataire, cpg, bond, durée]
   related: [inflation, types-de-risque, stress-test-2022, fnb, diversification, horizon]
 ---
@@ -63,8 +62,6 @@ Le code calcule; le modèle explique.
 - **Historique long** : avant leur lancement, ces FNB sont prolongés par des séries de taux (XBB.TO par les obligations
   du Canada à 10 ans, AGG par celles des États-Unis à 5 ans, TLT à 20 ans, ZST.TO par les bons du Trésor). Le moteur
   reconstitue des rendements d'obligation à échéance constante à partir de ces taux. Ce raccord est une hypothèse.
-- **Taux observés** : la vidéo tldoole sur les obligations peut citer le rendement des obligations du Canada à 10 ans
-  (série Banque du Canada `BD.CDN.10YR.DQ.YLD`).
 
 ## Limites
 

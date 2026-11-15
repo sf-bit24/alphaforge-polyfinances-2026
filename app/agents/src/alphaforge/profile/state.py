@@ -127,8 +127,26 @@ class ClientSession:
     def turn(self) -> int:
         return int(self.data.get("turn") or 0)
 
+    def confirmed_facts(self) -> dict[str, dict[str, Any]]:
+        """Faits confirmés. Un fait tiré d'un texte libre (``confirmed: false``) n'y entre qu'après la
+        confirmation de l'investisseur; s'il remplace une valeur confirmée, c'est elle (``replaces``) qui compte
+        en attendant. Un fait sans la clé ``confirmed`` est confirmé."""
+        out = {}
+        for field_id, fact in self.facts.items():
+            if fact.get("confirmed") is not False:
+                out[field_id] = fact
+            elif isinstance(fact.get("replaces"), dict):
+                out[field_id] = fact["replaces"]
+        return out
+
     def values(self) -> dict[str, Any]:
-        return {field_id: fact.get("value") for field_id, fact in self.facts.items()}
+        """Valeurs confirmées : complétude, scores, conditions ``when``, arrêt et ``ProfileView`` ne voient pas
+        une valeur qui attend sa confirmation."""
+        return {field_id: fact.get("value") for field_id, fact in self.confirmed_facts().items()}
+
+    def unconfirmed(self) -> dict[str, dict[str, Any]]:
+        """Faits tirés d'un texte libre qui attendent la confirmation de l'investisseur."""
+        return {field_id: fact for field_id, fact in self.facts.items() if fact.get("confirmed") is False}
 
     def next_turn(self) -> int:
         self.data["turn"] = self.turn + 1
@@ -173,17 +191,27 @@ class ClientSession:
         *,
         question_id: str | None = None,
         at: str | None = None,
+        option: str | None = None,
+        confirmed: bool = True,
     ) -> Any:
         """Écrit un fait validé et l'inscrit au journal (``kind: answer``, ``field``, ``value``, ``question_id``?,
-        ``previous``?)."""
+        ``option``?, ``previous``?). ``option`` est l'identifiant de la tranche choisie quand un clic écrit un
+        nombre. ``confirmed=False`` marque une valeur tirée d'un texte libre, à faire confirmer."""
         if not PROVENANCE.match(provenance):
             raise ValueError(f"invalid provenance {provenance!r}")
         at = at or clock.iso()
-        previous = self.facts.get(field_id, {}).get("value")
+        existing = self.facts.get(field_id) or {}
+        previous = existing.get("value")
         if value is None:
             self.facts.pop(field_id, None)
         else:
             self.facts[field_id] = {"value": value, "provenance": provenance, "at": at}
+            if not confirmed:
+                self.facts[field_id]["confirmed"] = False
+                # Une valeur confirmée remplacée par un texte libre reste en vigueur jusqu'à la confirmation.
+                replaced = existing.get("replaces") if existing.get("confirmed") is False else existing
+                if replaced:
+                    self.facts[field_id]["replaces"] = {k: replaced[k] for k in ("value", "provenance", "at")}
         entry: dict[str, Any] = {
             "at": at,
             "kind": "answer",
@@ -193,10 +221,51 @@ class ClientSession:
         }
         if question_id:
             entry["question_id"] = question_id
+        if option is not None:
+            entry["option"] = option
         if previous is not None and previous != value:
             entry["previous"] = previous
         self.new_journal.append(entry)
         return previous
+
+    def confirm_fact(self, field_id: str, provenance: str, *, question_id: str) -> None:
+        """L'investisseur confirme une valeur tirée d'un texte libre : ``kind: answer`` avec ``question_id``."""
+        if not PROVENANCE.match(provenance):
+            raise ValueError(f"invalid provenance {provenance!r}")
+        fact = self.facts[field_id]
+        fact.pop("confirmed", None)
+        fact.pop("replaces", None)
+        self.new_journal.append(
+            {
+                "at": clock.iso(),
+                "kind": "answer",
+                "provenance": provenance,
+                "field": field_id,
+                "value": fact.get("value"),
+                "question_id": question_id,
+            }
+        )
+
+    def reject_fact(self, field_id: str, provenance: str, *, question_id: str | None = None) -> None:
+        """L'investisseur refuse une valeur tirée d'un texte libre : la valeur confirmée qu'elle remplaçait revient,
+        sinon le champ redevient manquant. Le journal garde la valeur refusée dans ``previous``."""
+        replaced = (self.facts.get(field_id) or {}).get("replaces")
+        if isinstance(replaced, dict):
+            rejected = self.facts[field_id]["value"]
+            self.facts[field_id] = dict(replaced)
+            entry: dict[str, Any] = {
+                "at": clock.iso(),
+                "kind": "answer",
+                "provenance": provenance,
+                "field": field_id,
+                "value": replaced["value"],
+                "previous": rejected,
+            }
+            if question_id:
+                entry["question_id"] = question_id
+            self.new_journal.append(entry)
+        else:
+            self.set_fact(field_id, None, provenance, question_id=question_id)
 
     def record_answer(self, question_id: str, value: Any) -> None:
         self.answers[question_id] = {"value": value, "at": clock.iso()}
@@ -242,8 +311,27 @@ class ClientSession:
             {"actor": actor, "text": text, "locale": locale, "at": clock.iso()} if text else None
         )
 
-    def remember_questions(self, questions: list[dict[str, Any]], turn: int) -> None:
+    def remember_questions(
+        self,
+        questions: list[dict[str, Any]],
+        turn: int,
+        *,
+        choices: dict[str, dict[str, Any]] | None = None,
+        confirmations: dict[str, str] | None = None,
+        reasons: dict[str, str] | None = None,
+    ) -> None:
+        """Questions envoyées à l'investisseur. Les tables des tranches (identifiant → nombre) restent hors des
+        questions, dans ``pending_choices``, et le champ visé par une question de confirmation ``cf_`` dans
+        ``pending_confirmations``. ``followup_counts`` compte les questions générées par A1 et les
+        questions ouvertes envoyées dans la session (``asked`` est tronqué et contient aussi le secours)."""
         self.data["pending_questions"] = questions
+        ids = {question["id"] for question in questions}
+        self.data["pending_choices"] = {qid: table for qid, table in (choices or {}).items() if qid in ids}
+        self.data["pending_confirmations"] = {qid: f for qid, f in (confirmations or {}).items() if qid in ids}
+        counts = dict(self.data.get("followup_counts") or {})
+        counts["generated"] = int(counts.get("generated") or 0) + sum(q.get("source") == "a1" for q in questions)
+        counts["open"] = int(counts.get("open") or 0) + sum(q.get("kind") == "text" for q in questions)
+        self.data["followup_counts"] = counts
         asked = list(self.data.get("asked") or [])
         for question in questions:
             asked.append(
@@ -255,9 +343,15 @@ class ClientSession:
                     "prompt": question["prompt"],
                     "answer": None,
                     "answered": False,
+                    **({"reason": reasons[question["id"]]} if reasons and question["id"] in reasons else {}),
                 }
             )
         self.data["asked"] = asked[-ASKED_HISTORY:]
+
+    def clear_pending(self) -> None:
+        self.data["pending_questions"] = []
+        self.data["pending_choices"] = {}
+        self.data["pending_confirmations"] = {}
 
     def mark_answered(self, question_id: str, value: Any) -> None:
         for item in self.data.get("asked") or []:
@@ -295,7 +389,13 @@ class ClientSession:
         if self.new_journal:
             self._append_journal(store, trace)
         if self.index_dirty:
-            write_client_index(store, self.client_id, self.locale, has_portfolio=self.has_portfolio_doc(store))
+            write_client_index(
+                store,
+                self.client_id,
+                self.locale,
+                has_portfolio=self.has_portfolio_doc(store),
+                notes=(self.data.get("brain") or {}).get("documents"),
+            )
             self.index_dirty = False
         self.created = False
 
@@ -368,7 +468,14 @@ def new_journal_doc(locale: str) -> okf.OkfDoc:
     )
 
 
-def write_client_index(store: Store, client_id: str, locale: str, *, has_portfolio: bool) -> None:
+def write_client_index(
+    store: Store,
+    client_id: str,
+    locale: str,
+    *,
+    has_portfolio: bool,
+    notes: list[dict[str, Any]] | None = None,
+) -> None:
     now = clock.iso()
     en = locale == "en"
     lines = [
@@ -386,6 +493,9 @@ def write_client_index(store: Store, client_id: str, locale: str, *, has_portfol
     if has_portfolio:
         lines.append("- [" + ("Existing portfolio" if en else "Portefeuille existant") + "](portefeuille-existant.md)")
     lines.append("- " + ("Execution traces: `traces/`" if en else "Traces d'exécution : `traces/`"))
+    if notes:
+        lines += ["", "## " + ("Notes written by A1" if en else "Notes écrites par A1"), ""]
+        lines += [f"- [{note.get('title') or note['path']}]({note['path']})" for note in notes]
     doc = okf.new_doc(
         type="Index",
         title="Base du client" if not en else "Client knowledge base",
@@ -464,10 +574,10 @@ def render_profile_body(
         fact = session.facts.get(spec.id)
         if not fact:
             continue
-        row = (
-            f"| {spec.label_text(locale)} | {format_field_value(spec, fact['value'], locale).replace('|', '/')} "
-            f"| {fact.get('provenance', '')} | {fact.get('at', '')} |"
-        )
+        shown = format_field_value(spec, fact["value"], locale).replace("|", "/")
+        if fact.get("confirmed") is False:
+            shown += " (to be confirmed)" if en else " (à confirmer)"
+        row = f"| {spec.label_text(locale)} | {shown} | {fact.get('provenance', '')} | {fact.get('at', '')} |"
         by_dimension.setdefault(spec.dimension, []).append(row)
     for dimension, rows in by_dimension.items():
         lines += [

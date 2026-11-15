@@ -9,8 +9,9 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from engine import metrics as M
-from engine.data import load_returns
+
+from alphaforge.finance.backtest import metrics as M
+from alphaforge.finance.backtest.data import load_returns
 
 warnings.filterwarnings("ignore")
 OUT = os.environ.get("CALIB_OUT", str(_HERE / "out")) + "/"

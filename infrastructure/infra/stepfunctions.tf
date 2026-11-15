@@ -270,7 +270,11 @@ data "aws_iam_policy_document" "logs_key" {
     condition {
       test     = "ArnLike"
       variable = "kms:EncryptionContext:aws:logs:arn"
-      values   = ["arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/vendedlogs/states/${local.prefix}-*"]
+      # Plus le groupe des jobs SageMaker des scenarios (scenarios.tf).
+      values = concat(
+        ["arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/vendedlogs/states/${local.prefix}-*"],
+        local.scenarios_kms_log_group_arns,
+      )
     }
   }
 }

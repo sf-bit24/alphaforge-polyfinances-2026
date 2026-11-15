@@ -19,7 +19,6 @@ sources:
     title: "Jeu de départ AlphaForge AI : prix quotidiens ajustés"
     resource: "starter:prices_daily.csv (colonne adj_close)"
 data:
-  catalog_id: baisse_maximale
   aliases: [baisse maximale, drawdown, perte maximale, pire baisse, creux]
   related: [volatilite, pire-rendement-12-mois, var-cvar, horizon, tolerance-et-capacite]
 ---
@@ -60,7 +59,6 @@ Le code calcule la baisse maximale; le modèle ne l'estime jamais. Deux calculs 
 
 | Où | Données | Résultat |
 | --- | --- | --- |
-| Faits d'un actif (vidéos tldoole) | Prix quotidiens ajustés (`adj_close`) du jeu de départ | Baisse en pourcentage négatif, avec le mois du sommet, du creux et de la récupération |
 | Risque d'un portefeuille (moteur, Judge) | Rendements mensuels d'un portefeuille rééquilibré chaque mois vers ses poids | Perte positive (0,25 = 25 %) et nombre de mois de récupération |
 
 - Le Judge vérifie la baisse maximale comme plafond bloquant (règle `risk.mdd`) : il refuse une proposition qui le

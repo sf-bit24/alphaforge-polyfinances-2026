@@ -7,6 +7,8 @@
 #   clients/    une base OKF par investisseur, ecrite par le runtime profile
 #   staging/    collecte brute d'A4 et A5, marqueurs _done.json, expire
 #   runtime/    zip du code des runtimes AgentCore, un objet par commit
+#   scenarios/  code, entrees et sorties du job des scenarios (scenarios.tf),
+#               hors general/ : jamais indexe par la Knowledge Base
 #
 # Rien n'y vit seulement : la base generale de depart est versionnee dans
 # app/knowledge/, et les bases des clients s'exportent vers le poste avant la
@@ -19,7 +21,11 @@ locals {
   s3_kms_user_role_arns = concat(
     [for role in aws_iam_role.agentcore : role.arn],
     [aws_iam_role.knowledge_base.arn, aws_iam_role.collecte.arn],
-    local.tldoole_kms_user_role_arns,
+    # Recherche par experts (recherche.tf) : la machine lit les marqueurs.
+    [aws_iam_role.recherche.arn],
+    # Scenarios (scenarios.tf) : job SageMaker et machine Step Functions.
+    aws_iam_role.scenarios_job[*].arn,
+    aws_iam_role.scenarios[*].arn,
   )
 }
 
@@ -135,6 +141,22 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
     }
     expiration {
       days = var.s3_staging_expiration_days
+    }
+  }
+
+  # Resultats des requetes Athena (scenarios.tf) : jetables. Seulement si
+  # scenarios_enabled, pour que false laisse le bucket inchange.
+  dynamic "rule" {
+    for_each = var.scenarios_enabled ? ["athena-results-expire"] : []
+    content {
+      id     = rule.value
+      status = "Enabled"
+      filter {
+        prefix = "scenarios/athena-results/"
+      }
+      expiration {
+        days = 7
+      }
     }
   }
 

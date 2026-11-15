@@ -1,0 +1,29 @@
+# policy_compiler/questionnaire_adapter.yaml — sorties du questionnaire (brain product/questionnaire-profil.md,
+# commit a65a0b3, statut « A confirmer ») -> champs InvestorProfile consommes par F1. Simulation seulement.
+# Moteur de reference : policy/risk_levels.yaml v0.2 (capacite, tolerance, regle des dollars, seaux).
+# Regle du brain respectee : « un meme fait ne baisse pas les limites par deux chemins ».
+version: "0.1.0"
+tolerance:
+  # Agregation des sous-scores de tolerance (0-1) en un seul Score 0-100 (InvestorProfile.tolerance_declared).
+  #   min                    : DEFAUT. Le sous-score le plus bas l'emporte. Choix de conception aligne sur le
+  #                            questionnaire AMF (« le plafond le plus bas l'emporte ») ; pas une obligation.
+  #   mean_minus_half_range  : regle du brain : moyenne ponderee renormalisee - 0.5 x (max - min).
+  # Dans les deux cas le risque effectif reste min(tolerance, capacite) (31-103CP), applique par F1.
+  aggregation: min
+  weights: {declared: 0.30, scenarios: 0.30, revealed: 0.20, test: 0.20}
+  range_penalty: 0.5
+  single_subscore_confidence: 0.6      # brain : « avec un seul sous-score, la confiance vaut 0,6 »
+  default_confidence: 0.7              # sinon (seuil de confiance d'un champ critique du brain)
+capacity:
+  # capacity_score 0-1 -> InvestorProfile.capacity_assessed (0-100). F1 prend min(C_faits, capacity_assessed) :
+  # le plus strict des deux l'emporte, sans cumul (pas de double penalite).
+  scale: 100
+loss:
+  # L (en $, sur M_risque) -> max_acceptable_loss_cad. max_acceptable_loss_pct est retire : TR-03/TR-04/SF-04
+  # sont deja dans L (un seul chemin). F1 calcule l_declared = L / investable_wealth (= M_risque).
+  drop_pct_when_L_given: true
+liquid_pocket:
+  # La poche liquide sort du mandat risque : investable_wealth = M - poche. Les objectifs qu'elle couvre
+  # (covered_goal_ids) sortent du calcul de T et de q ; s'ils incluent des retraits de retraite en zone de
+  # sequence (sequence_reserve_years), F1 n'ajoute PAS sa propre reserve buckets.withdrawal_reserve_years.
+  bucket_level: N0

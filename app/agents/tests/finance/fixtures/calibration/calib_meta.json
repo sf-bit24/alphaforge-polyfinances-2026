@@ -1,0 +1,209 @@
+{
+ "data_version": {
+  "data_sha256": "008f122d5da4f8f7",
+  "built_utc": "2026-11-14T22:15:31+00:00",
+  "last_complete_month": "2026-10-31"
+ },
+ "load_info": {
+  "CAD77_main": {
+   "currency": "CAD",
+   "fx_fill": "none",
+   "fx_flat_filled": {},
+   "requested": [
+    "1977-01-31",
+    null
+   ],
+   "effective": [
+    "1977-01-31",
+    "2026-09-30"
+   ],
+   "n_months": 597,
+   "limiting_start_asset": "CA_EQ",
+   "limiting_start_date": "1977-01-31",
+   "limiting_end_asset": "US_MKT",
+   "limiting_end_date": "2026-09-30",
+   "dropped_internal_gaps": 0,
+   "warnings": []
+  },
+  "CAD77_annual": {
+   "currency": "CAD",
+   "fx_fill": "none",
+   "fx_flat_filled": {},
+   "requested": [
+    "1977-01-31",
+    null
+   ],
+   "effective": [
+    "1977-01-31",
+    "2026-09-30"
+   ],
+   "n_months": 597,
+   "limiting_start_asset": "CA_EQ",
+   "limiting_start_date": "1977-01-31",
+   "limiting_end_asset": "US_MKT",
+   "limiting_end_date": "2026-09-30",
+   "dropped_internal_gaps": 0,
+   "warnings": []
+  },
+  "CAD77_allbond": {
+   "currency": "CAD",
+   "fx_fill": "none",
+   "fx_flat_filled": {},
+   "requested": [
+    "1977-01-31",
+    null
+   ],
+   "effective": [
+    "1977-01-31",
+    "2026-09-30"
+   ],
+   "n_months": 597,
+   "limiting_start_asset": "CA_EQ",
+   "limiting_start_date": "1977-01-31",
+   "limiting_end_asset": "US_MKT",
+   "limiting_end_date": "2026-09-30",
+   "dropped_internal_gaps": 0,
+   "warnings": []
+  },
+  "CAD77_halfcash": {
+   "currency": "CAD",
+   "fx_fill": "none",
+   "fx_flat_filled": {},
+   "requested": [
+    "1977-01-31",
+    null
+   ],
+   "effective": [
+    "1977-01-31",
+    "2026-09-30"
+   ],
+   "n_months": 597,
+   "limiting_start_asset": "CA_EQ",
+   "limiting_start_date": "1977-01-31",
+   "limiting_end_asset": "US_MKT",
+   "limiting_end_date": "2026-09-30",
+   "dropped_internal_gaps": 0,
+   "warnings": []
+  },
+  "CAD77_gold5": {
+   "currency": "CAD",
+   "fx_fill": "none",
+   "fx_flat_filled": {},
+   "requested": [
+    "1977-01-31",
+    null
+   ],
+   "effective": [
+    "1977-01-31",
+    "2026-09-30"
+   ],
+   "n_months": 597,
+   "limiting_start_asset": "CA_EQ",
+   "limiting_start_date": "1977-01-31",
+   "limiting_end_asset": "US_MKT",
+   "limiting_end_date": "2026-09-30",
+   "dropped_internal_gaps": 0,
+   "warnings": []
+  },
+  "CAD71_USeq": {
+   "currency": "CAD",
+   "fx_fill": "none",
+   "fx_flat_filled": {},
+   "requested": [
+    "1971-02-28",
+    null
+   ],
+   "effective": [
+    "1971-02-28",
+    "2026-09-30"
+   ],
+   "n_months": 668,
+   "limiting_start_asset": "US_MKT",
+   "limiting_start_date": "1971-02-28",
+   "limiting_end_asset": "US_MKT",
+   "limiting_end_date": "2026-09-30",
+   "dropped_internal_gaps": 0,
+   "warnings": []
+  },
+  "USD26": {
+   "currency": "USD",
+   "fx_fill": "none",
+   "fx_flat_filled": {},
+   "requested": [
+    "1926-08-31",
+    null
+   ],
+   "effective": [
+    "1926-08-31",
+    "2026-09-30"
+   ],
+   "n_months": 1202,
+   "limiting_start_asset": "UST_5Y",
+   "limiting_start_date": "1926-08-31",
+   "limiting_end_asset": "US_MKT",
+   "limiting_end_date": "2026-09-30",
+   "dropped_internal_gaps": 0,
+   "warnings": []
+  },
+  "USD26_10y": {
+   "currency": "USD",
+   "fx_fill": "none",
+   "fx_flat_filled": {},
+   "requested": [
+    "1926-08-31",
+    null
+   ],
+   "effective": [
+    "1926-08-31",
+    "2026-09-30"
+   ],
+   "n_months": 1202,
+   "limiting_start_asset": "US_MKT",
+   "limiting_start_date": "1926-07-31",
+   "limiting_end_asset": "US_MKT",
+   "limiting_end_date": "2026-09-30",
+   "dropped_internal_gaps": 0,
+   "warnings": []
+  },
+  "USD46": {
+   "currency": "USD",
+   "fx_fill": "none",
+   "fx_flat_filled": {},
+   "requested": [
+    "1946-01-31",
+    null
+   ],
+   "effective": [
+    "1946-01-31",
+    "2026-09-30"
+   ],
+   "n_months": 969,
+   "limiting_start_asset": "UST_5Y",
+   "limiting_start_date": "1926-08-31",
+   "limiting_end_asset": "US_MKT",
+   "limiting_end_date": "2026-09-30",
+   "dropped_internal_gaps": 0,
+   "warnings": []
+  },
+  "CAD21_recent": {
+   "currency": "CAD",
+   "fx_fill": "none",
+   "fx_flat_filled": {},
+   "requested": [
+    "2021-01-31",
+    null
+   ],
+   "effective": [
+    "2021-01-31",
+    "2026-09-30"
+   ],
+   "n_months": 69,
+   "limiting_start_asset": "CA_EQ",
+   "limiting_start_date": "1977-01-31",
+   "limiting_end_asset": "US_MKT",
+   "limiting_end_date": "2026-09-30",
+   "dropped_internal_gaps": 0,
+   "warnings": []
+  }
+ }
+}

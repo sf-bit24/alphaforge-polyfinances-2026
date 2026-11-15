@@ -1,6 +1,7 @@
 # ruff: noqa: E402  # script de recherche : sys.path avant les imports, import * voulu
 """AlphaForge risk-band calibration (simulation only). Run:
-cd research/backtest && CALIB_DIR=../calibration .venv/bin/python -I ../calibration/calib.py
+cd app/agents && CALIB_OUT=/tmp/calib uv run --group finance python scripts/calibration/calib.py
+(données longues : python -m alphaforge.finance.backtest.build_data)
 Outputs -> $CALIB_OUT (défaut : $CALIB_DIR/out/)
 """
 
@@ -13,9 +14,10 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from engine import metrics as M
-from engine.data import data_version, load_inflation, load_returns
-from engine.windows import windows
+
+from alphaforge.finance.backtest import metrics as M
+from alphaforge.finance.backtest.data import data_version, load_inflation, load_returns
+from alphaforge.finance.backtest.windows import windows
 
 warnings.filterwarnings("ignore")
 OUT = os.environ.get("CALIB_OUT", str(_HERE / "out")) + "/"

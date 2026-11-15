@@ -1,9 +1,6 @@
-import sys
-
 import numpy as np
 
-sys.path.insert(0, __import__("os").environ.get("BACKTEST_DIR", "research/backtest"))
-from engine.data import load_returns
+from alphaforge.finance.backtest.data import load_returns
 
 
 def roll(r, n):

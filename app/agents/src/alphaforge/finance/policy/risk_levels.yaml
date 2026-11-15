@@ -182,7 +182,7 @@ biases:    # resserrer seulement (test de monotonie)
 
 # ---------------------------------------------------------------------------------------------
 # 7. PROXYS D'HISTORIQUE (PolicySpec.history_proxies ; status HYPOTHESE pour tous)
-#    Source : research/backtest/README.md "Proxys et couverture" + data/processed/assets.csv (proxy_for_ticker, universe_tickers)
+#    Source : alphaforge/finance/backtest/README.md "Proxys et couverture" + assets.csv des données longues (proxy_for_ticker, universe_tickers)
 #    Choix : actions individuelles -> industrie Ken French (queue plus dure que CA_EQ) ; CA_EQ = repli.
 # ---------------------------------------------------------------------------------------------
 history_proxies:

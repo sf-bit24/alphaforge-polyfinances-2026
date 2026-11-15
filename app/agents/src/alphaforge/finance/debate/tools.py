@@ -131,7 +131,7 @@ def risk_evidence(c: LensContext) -> list[str]:
                 processing="contribution d'Euler à la CVaR mensuelle",
             )
         )
-    W = wealth(c.profile)
+    investable_cad = wealth(c.profile)
     for s in analysis.stress_report(w):
         if s.covered and s.period_return is not None:
             ids.append(
@@ -144,15 +144,15 @@ def risk_evidence(c: LensContext) -> list[str]:
                     processing=f"{s.start}..{s.end}, tickers réels",
                 )
             )
-            if W:
+            if investable_cad:
                 ids.append(
                     b.add(
                         f"{p}.stress_cad.{s.episode}",
                         f"Perte en dollars pendant {s.label_fr}",
-                        max(-s.period_return, 0.0) * W,
+                        max(-s.period_return, 0.0) * investable_cad,
                         "CAD",
                         dataset=ENGINE,
-                        processing=f"perte × patrimoine investissable déclaré ({W:,.0f} $)",
+                        processing=f"perte × patrimoine investissable déclaré ({investable_cad:,.0f} $)",
                     )
                 )
     if c.profile.max_acceptable_loss_cad is not None:
@@ -238,6 +238,18 @@ def lens_evidence(lens: str, c: LensContext) -> list[str]:
 
 
 # ------------------------------------------------------------------------- outils Strands
+LENS_TOOLS = {
+    "timeline": ("horizon_distribution", "stress_episodes"),
+    "risk": ("stress_episodes", "horizon_distribution"),
+    "diversity": ("exposure", "esg_evidence"),
+    "constraints": ("exposure", "esg_evidence"),
+}
+# Outils de la base générale (magasin OKF), ajoutés à ces lentilles seulement si ``evidence_fn`` est fourni : sans
+# lui, les listes d'outils, donc les clés de rejeu LLM, ne changent pas.
+OKF_TOOLS = ("fundamentals_evidence", "filings_evidence")
+OKF_TOOL_LENSES = ("diversity", "constraints")
+
+
 def strands_tools(lens: str, c: LensContext) -> list:
     """Outils à la demande d'une lentille. Chaque appel est tracé et renvoie des fact_ids."""
     from strands import tool
@@ -246,12 +258,32 @@ def strands_tools(lens: str, c: LensContext) -> list:
         with c.book.step(f"lens.{lens}", tool=name, inputs=kw):
             return c.book.show(fn(**kw))
 
+    names = LENS_TOOLS[lens]
+    if c.evidence_fn is not None and lens in OKF_TOOL_LENSES:
+        names = (*names, *OKF_TOOLS)
+    return [_TOOL_MAKERS[name](tool, c, run) for name in names]
+
+
+def _absorb_evidence(c: LensContext, ticker: str, topic: str) -> list[str]:
+    """Facts de la base générale pour ``ticker`` et ``topic``, rattachés à l'étape courante de la trace."""
+    return c.book.absorb(
+        [x.model_copy(update={"trace_id": c.book.current}) for x in c.evidence_fn(ticker, topic, c.as_of) or []]
+    )
+
+
+# Une fabrique par outil : elle reçoit le décorateur ``tool`` de Strands, le contexte et le traceur ``run``. Le nom,
+# la signature et la docstring de chaque fonction décorée sont ce que lit le modèle : ne pas les changer.
+def _stress_episodes(tool, c: LensContext, run: Callable):
     @tool
     def stress_episodes() -> list[dict]:
         """Rendement et perte en dollars du candidat pendant les crises historiques couvertes
         (2022, 2020, etc.). Renvoie des fact_id à citer."""
         return run("stress_episodes", lambda: [i for i in risk_evidence(c) if ".stress" in i])
 
+    return stress_episodes
+
+
+def _horizon_distribution(tool, c: LensContext, run: Callable):
     @tool
     def horizon_distribution(years: float) -> list[dict]:
         """Distribution historique des rendements composés du candidat sur `years` années
@@ -280,6 +312,10 @@ def strands_tools(lens: str, c: LensContext) -> list:
 
         return run("horizon_distribution", f, years=years)
 
+    return horizon_distribution
+
+
+def _exposure(tool, c: LensContext, run: Callable):
     @tool
     def exposure(tag: str) -> list[dict]:
         """Exposition consolidée (look-through des FNB) du candidat à un thème : tech, energy,
@@ -300,6 +336,10 @@ def strands_tools(lens: str, c: LensContext) -> list:
 
         return run("exposure", f, tag=tag)
 
+    return exposure
+
+
+def _esg_evidence(tool, c: LensContext, run: Callable):
     @tool
     def esg_evidence(ticker: str) -> list[dict]:
         """Preuves ESG datées (exclusions d'indices, incidents, émissions) pour un titre de la base
@@ -308,12 +348,14 @@ def strands_tools(lens: str, c: LensContext) -> list:
         def f(ticker):
             if c.evidence_fn is None:
                 return []
-            return c.book.absorb(
-                [x.model_copy(update={"trace_id": c.book.current}) for x in c.evidence_fn(ticker, "esg", c.as_of) or []]
-            )
+            return _absorb_evidence(c, ticker, "esg")
 
         return run("esg_evidence", f, ticker=ticker)
 
+    return esg_evidence
+
+
+def _fundamentals_evidence(tool, c: LensContext, run: Callable):
     @tool
     def fundamentals_evidence(ticker: str) -> list[dict]:
         """Chiffres financiers publiés par une société de la base générale (produits, bénéfice, BPA dilué,
@@ -321,15 +363,14 @@ def strands_tools(lens: str, c: LensContext) -> list:
         n'entrent pas dans le classement des titres. Liste vide si la société n'est pas couverte."""
 
         def f(ticker):
-            return c.book.absorb(
-                [
-                    x.model_copy(update={"trace_id": c.book.current})
-                    for x in c.evidence_fn(ticker, "fundamentals", c.as_of) or []
-                ]
-            )
+            return _absorb_evidence(c, ticker, "fundamentals")
 
         return run("fundamentals_evidence", f, ticker=ticker)
 
+    return fundamentals_evidence
+
+
+def _filings_evidence(tool, c: LensContext, run: Callable):
     @tool
     def filings_evidence(ticker: str) -> list[dict]:
         """Dépôts réglementaires récents d'une société (formulaire, numéro, date de dépôt), connus à la date de la
@@ -337,22 +378,18 @@ def strands_tools(lens: str, c: LensContext) -> list:
         un changement du mandat. Liste vide si aucun dépôt n'est connu."""
 
         def f(ticker):
-            return c.book.absorb(
-                [
-                    x.model_copy(update={"trace_id": c.book.current})
-                    for x in c.evidence_fn(ticker, "filings", c.as_of) or []
-                ]
-            )
+            return _absorb_evidence(c, ticker, "filings")
 
         return run("filings_evidence", f, ticker=ticker)
 
-    by_lens = {
-        "timeline": [horizon_distribution, stress_episodes],
-        "risk": [stress_episodes, horizon_distribution],
-        "diversity": [exposure, esg_evidence],
-        "constraints": [exposure, esg_evidence],
-    }
-    if c.evidence_fn is not None:  # seulement avec le magasin OKF : sans lui, outils (donc rejeux) inchangés
-        by_lens["diversity"] = [*by_lens["diversity"], fundamentals_evidence, filings_evidence]
-        by_lens["constraints"] = [*by_lens["constraints"], fundamentals_evidence, filings_evidence]
-    return by_lens[lens]
+    return filings_evidence
+
+
+_TOOL_MAKERS = {
+    "stress_episodes": _stress_episodes,
+    "horizon_distribution": _horizon_distribution,
+    "exposure": _exposure,
+    "esg_evidence": _esg_evidence,
+    "fundamentals_evidence": _fundamentals_evidence,
+    "filings_evidence": _filings_evidence,
+}

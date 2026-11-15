@@ -338,6 +338,9 @@ MUST_HAVE_FR = {"investable_wealth": "le montant à investir", "goals.horizon": 
 PLANNING_LOSS_FR = "la plus petite perte de planification des portefeuilles possibles"
 SAME_VALUE = 1e-12
 NECESSARY_FR = " serait nécessaire pour qu'une allocation soit possible"
+# Libellé de l'objectif principal du questionnaire (from_profile_view) : « objectif : <code de l'option> », code
+# anglais brut (« retirement ») ; l'explication le nomme « votre objectif principal ».
+MAIN_GOAL_PREFIX = "objectif : "
 
 
 def no_allocation_explanation(
@@ -634,8 +637,9 @@ class _ProtectionFacts:
         goal = self.levers.horizon_goal if self.levers else None
         if goal is not None:
             self.goal_facts[goal.goal_id] = horizon
-        if goal is not None and _covered(self.book, goal.label, [horizon]):
-            text = f"Votre objectif « {goal.label} » fixe l'horizon de placement à {self.v(horizon)}."
+        name = _goal_words(self.book, goal, [horizon]) if goal is not None else None
+        if name is not None:
+            text = f"{name[0].upper()}{name[1:]} fixe l'horizon de placement à {self.v(horizon)}."
         else:
             text = f"L'horizon de placement retenu est de {self.v(horizon)}."
         return Statement(
@@ -729,7 +733,7 @@ class _ProtectionFacts:
         if option.kind == "without_goal":
             after = self._horizon_after(option)
             return f"sans {name}, l'horizon passerait à {self.v(after)}", [*ids, after]
-        target = self.add(f"lever.{goal.goal_id}.horizon", f"Horizon testé pour l'objectif « {goal.label} »",
+        target = self.add(f"lever.{goal.goal_id}.horizon", f"Horizon testé pour {_goal_title(goal)}",
                           *_duration(option.value), "plus petit horizon testé qui lève la règle des dollars")
         text = f"un horizon d'au moins {self.v(target)} pour {name}"
         if _duration(option.horizon_after) != _duration(option.value):  # réserve de retraits : T ne vaut pas l'horizon
@@ -743,12 +747,26 @@ class _ProtectionFacts:
                         *_duration(option.horizon_after), "trace horizon.T_risk de la compilation du profil modifié")
 
     def _goal_name(self, goal: GoalRef) -> tuple[str, list[str]]:
-        """« l'objectif « libellé » », ou « votre objectif à 5,0 ans » si le libellé a des nombres non sourcés."""
+        """Nom de l'objectif (``_goal_words``), ou « votre objectif à 5,0 ans » si son libellé a des nombres non
+        sourcés."""
         fid = self.goal_facts.get(goal.goal_id)
         if fid is None:
-            fid = self.add(f"goal.{goal.goal_id}.horizon", f"Horizon de l'objectif « {goal.label} »",
+            fid = self.add(f"goal.{goal.goal_id}.horizon", f"Horizon de {_goal_title(goal)}",
                            *_duration(goal.horizon_years), "trace horizon.T_risk")
             self.goal_facts[goal.goal_id] = fid
-        if _covered(self.book, goal.label, [fid]):
-            return f"l'objectif « {goal.label} »", [fid]
-        return f"votre objectif à {self.v(fid)}", [fid]
+        return _goal_words(self.book, goal, [fid]) or f"votre objectif à {self.v(fid)}", [fid]
+
+
+def _goal_title(goal: GoalRef) -> str:
+    """Nom de l'objectif dans le libellé d'un Fact : « l'objectif principal » ou « l'objectif « libellé » »."""
+    return "l'objectif principal" if goal.label.startswith(MAIN_GOAL_PREFIX) else f"l'objectif « {goal.label} »"
+
+
+def _goal_words(book: FactBook, goal: GoalRef, fact_ids: list[str]) -> str | None:
+    """Nom de l'objectif dans une phrase : « votre objectif principal » pour celui du questionnaire (son libellé porte
+    le code brut de l'option), « votre objectif « libellé » » si chaque nombre du libellé est sourcé, sinon None."""
+    if goal.label.startswith(MAIN_GOAL_PREFIX):
+        return "votre objectif principal"
+    if _covered(book, goal.label, fact_ids):
+        return f"votre objectif « {goal.label} »"
+    return None

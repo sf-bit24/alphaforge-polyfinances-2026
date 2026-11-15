@@ -88,6 +88,14 @@ def _assert_number_rule(book: FactBook, expl) -> None:
                 assert not re.search(r"\d", st.text_fr.replace("N0", "")), st.text_fr
 
 
+def _assert_no_raw_goal_code(book: FactBook, expl) -> None:
+    """Le libellé de l'objectif principal (from_profile_view : « objectif : retirement ») porte le code anglais brut de
+    l'option : ni les phrases ni les libellés des Facts ne le citent (issue #78)."""
+    texts = [st.text_fr for sec in SECTIONS for st in getattr(expl, sec)] + [f.label_fr for f in book.facts.values()]
+    for text in texts:
+        assert "objectif :" not in text and not re.search(r"\b(retirement|growth|project|income)\b", text), text
+
+
 # --------------------------------------------------------------------------- le cas e2e
 
 
@@ -184,9 +192,10 @@ def test_short_horizon_names_the_goal_that_fixes_it_and_a_verified_lever():
     assert "vous dites" not in why and "ans)" not in why
     assert _texts(expl, "what_would_change") == [
         "Un horizon de placement plus long rendrait une allocation possible. Par exemple : un horizon d'au moins "
-        "5,1 ans pour l'objectif « objectif : growth »."
+        "5,1 ans pour votre objectif principal."
     ]
     _assert_levers_give_a_mandate(profile)
+    _assert_no_raw_goal_code(book, expl)
     _assert_number_rule(book, expl)
 
 
@@ -274,13 +283,14 @@ def test_real_e2e_profile_names_both_causes_and_only_verified_levers():
         "Une perte admissible d'au moins 1 299 $ sur ce montant serait nécessaire pour qu'une allocation soit "
         "possible.",
         "Un horizon de placement plus long serait nécessaire pour qu'une allocation soit possible. Par exemple : sans "
-        "l'objectif « retraits prévus sous 12 mois », l'horizon passerait à 5,0 ans ; ou un horizon d'au moins 5,1 ans "
-        "pour l'objectif « objectif : retirement ».",
+        "votre objectif « retraits prévus sous 12 mois », l'horizon passerait à 5,0 ans ; ou un horizon d'au moins "
+        "5,1 ans pour votre objectif principal.",
         "Ensemble, ces changements rendraient une allocation possible : une nouvelle compilation du profil modifié le "
         "vérifie.",
     ]
     assert "3,6 ans" not in " ".join(_texts(expl, "what_would_change"))
     _assert_levers_give_a_mandate(profile)
+    _assert_no_raw_goal_code(book, expl)
     _assert_number_rule(book, expl)
 
 
@@ -410,12 +420,14 @@ def test_protection_with_a_missing_must_have_keeps_complete_and_a_necessary_leve
     assert profile.missing_info == ["context.amount_cad"]
     comp, book, expl = _explain(profile)
     assert comp.decision_kind == "protection"
+    assert _texts(expl, "why")[0].startswith("Votre objectif principal fixe l'horizon de placement à 12,0 mois.")
     assert _texts(expl, "why")[-1] == "Il manque aussi une information indispensable au calcul (le montant à investir)."
+    _assert_no_raw_goal_code(book, expl)
     changes = _texts(expl, "what_would_change")
     assert changes[0] == "Compléter : context.amount_cad."
     assert changes[1] == (
         "Un horizon de placement plus long serait nécessaire pour qu'une allocation soit possible. Par exemple : un "
-        "horizon d'au moins 3,6 ans pour l'objectif « objectif : growth »."
+        "horizon d'au moins 3,6 ans pour votre objectif principal."
     )
     assert len(changes) == 2  # ni « rendrait une allocation possible », ni « Ensemble »
     levers = no_mandate_cause(comp, profile, AS_OF).levers

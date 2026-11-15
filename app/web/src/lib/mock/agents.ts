@@ -16,6 +16,9 @@ function both(build: (locale: Locale) => string): L {
   return { fr: build("fr"), en: build("en") };
 }
 
+/** What replaces a personal detail in the screened text, in the investor's language. */
+const MASKED: L = { fr: "[masqué]", en: "[masked]" };
+
 export interface Screening {
   text: string;
   masked: number;
@@ -62,14 +65,14 @@ const OFF_TOPIC = /(météo|meteo|weather|recette|recipe|blague|joke|sport|hocke
  * Guardrail on the investor's free text: refuse a SIN (`guardrail_blocked`, before anything is read or written),
  * mask the other personal data, flag advice requests.
  */
-export function screenMessage(message: string): Screening {
+export function screenMessage(message: string, locale: Locale = "fr"): Screening {
   if (SIN_PATTERN.test(message)) throw new MockError("guardrail_blocked", SIN_REFUSAL, { reason: "personal_data", entity: "CA_SIN" });
   let text = message;
   let masked = 0;
   for (const pattern of PII_PATTERNS) {
     text = text.replace(pattern, () => {
       masked += 1;
-      return "[masqué]";
+      return MASKED[locale];
     });
   }
   return {
@@ -133,11 +136,25 @@ function emergencyFundFact(lower: string): ExtractedFact | null {
   };
 }
 
+/** A high-interest debt in the investor's words. */
+const DEBT = String.raw`(?:dettes?|debts?|cartes? de crédit|credit[- ]cards?)`;
+const SOME_DEBT = new RegExp(DEBT);
+
+/**
+ * A negation, then only words that keep it on the debt: « je n'ai pas de dette », « ni dette ni prêt », « aucune
+ * autre dette », "no credit card debt", "I don't have any high-interest debt". "I can't pay off my credit card"
+ * and « j'ai plus de dettes que d'épargne » stay debts.
+ */
+const NO_DEBT = new RegExp(
+  String.raw`(?:\b(?:pas|aucune?|sans|z[ée]ro|jamais|ni|no|not|never|neither|nor|without)|n't|n'\w+ plus)` +
+    String.raw`(?:\s+(?:de|d'autres?|autres?|other|have|any|had|eu|vraiment|really|high[- ]interest|consumer|outstanding))*\s+${DEBT}|\bdebt[- ]free\b`,
+);
+
 function debtFact(lower: string): ExtractedFact | null {
-  if (/(pas|aucune?|no|zero|zéro|sans)\s+(de\s+|d')?(dettes?|debts?)/.test(lower)) {
+  if (NO_DEBT.test(lower)) {
     return { field: "risk_capacity.high_interest_debt", value: false, note: { fr: "aucune dette à taux élevé", en: "no high-interest debt" } };
   }
-  if (/(dettes?|debts?|carte de crédit|credit card)/.test(lower)) {
+  if (SOME_DEBT.test(lower)) {
     return { field: "risk_capacity.high_interest_debt", value: true, note: { fr: "une dette à taux élevé", en: "high-interest debt" } };
   }
   return null;

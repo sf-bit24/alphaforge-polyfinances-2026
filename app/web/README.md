@@ -24,7 +24,7 @@ Le contrat avec les runtimes Python et l'infrastructure est `app/CONTRACTS.md` :
 Le tableau de bord, la page Détails et l'assistant ne sont pas branchés sur le moteur de portefeuille (A3, lentilles, Judge) : seule la page `/portfolio` affiche ses décisions. Décision de l'équipe du 2026-11-14 :
 
 - en mode `mock`, les tuiles du tableau de bord, la page Détails et les réponses de l'assistant aux questions suggérées sur le portefeuille (le piège des 50 000 $, l'or, NVDA) reprennent l'exemple des maquettes, marqué « Valeurs d'exemple » et « Exemple simulé » (`src/lib/sample/`, série synthétique calibrée : volatilité 6,1 %, baisse 2022 de −9,8 %, 400 000 $);
-- en modes `local` et `aws`, aucun chiffre inventé : les tuiles montrent ce que le code calcule (complétude, risque retenu, horizon, niveau, portefeuille existant valorisé par A2) et la page Détails annonce la version 2.
+- en modes `local` et `aws`, aucun chiffre inventé : les tuiles montrent ce que le code calcule (complétude, risque retenu, horizon, niveau, portefeuille existant valorisé par A2). La page Détails a deux tuiles : « Votre portefeuille simulé » décrit ce que le moteur construit à partir du profil (proposition sous ses limites, débat avec les quatre lentilles, contrôle du Judge, explication sourcée) et mène à `/portfolio`, profil « Mon profil »; « Votre portefeuille existant » montre les expositions du portefeuille confirmé, valorisé par A2, ou renvoie au profil s'il n'y en a pas.
 
 ### Animations
 

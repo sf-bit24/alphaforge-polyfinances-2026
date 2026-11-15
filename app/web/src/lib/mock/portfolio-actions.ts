@@ -179,7 +179,7 @@ export function submitPortfolio(record: ClientRecord, request: PortfolioSubmitRe
   record.lastA2Turn = record.turn;
   const provenance = `a2:${record.turn}`;
 
-  const screening = screenMessage(request.text ?? "");
+  const screening = screenMessage(request.text ?? "", locale);
   trace.add(inputGuardrailStep(screening, locale));
   trace.add(analysisStep(request, locale));
   const extraction = extractPositions({ text: screening.text, files: request.files }, locale);

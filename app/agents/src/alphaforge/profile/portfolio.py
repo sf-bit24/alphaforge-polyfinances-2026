@@ -99,7 +99,8 @@ QuoteFetcher = Callable[[str], Quote]
 
 @dataclass
 class RawPosition:
-    raw: str
+    # Ligne telle qu'écrite, sinon symbole et nom; ``None`` pour une ligne ajoutée sans l'un ni l'autre.
+    raw: str | None
     ticker: str | None = None
     name: str | None = None
     quantity: float | None = None
@@ -147,7 +148,7 @@ def raw_from_dict(item: dict[str, Any]) -> RawPosition:
     currency = (text("currency", 8) or "").upper() or None
     asset_class = text("asset_class", 20) or text("asset_class_hint", 20)
     return RawPosition(
-        raw=text("raw", 300) or " ".join(filter(None, [text("ticker"), text("name")])) or "?",
+        raw=text("raw", 300) or " ".join(filter(None, [text("ticker"), text("name")])) or None,
         ticker=text("ticker", 30),
         name=text("name"),
         quantity=_number(item.get("quantity")),
@@ -310,7 +311,9 @@ class Resolver:
             position, reason = self._resolve_one(f"p{index}", raw)
             positions.append(position)
             if reason:
-                unresolved.append({"raw": raw.raw, "reason": reason, "position_id": position["id"]})
+                # Une ligne non résolue garde un texte (contrat) : l'id de la position quand la ligne n'en a pas.
+                label = raw.raw or position["id"]
+                unresolved.append({"raw": label, "reason": reason, "position_id": position["id"]})
         return positions, unresolved
 
     def _convert_to_cad(self, position: dict[str, Any], local_value: float, currency: str | None) -> str | None:
@@ -539,7 +542,9 @@ def build_view(
 
 
 def positions_to_raws(positions: list[dict[str, Any]]) -> list[RawPosition]:
-    """Positions corrigées par l'investisseur vers des lignes brutes (prix et valeurs recalculés par le code)."""
+    """Positions corrigées par l'investisseur vers des lignes brutes (prix et valeurs recalculés par le code).
+
+    Une ligne sans symbole, sans nom et sans valeur déclarée (ligne ajoutée puis laissée vide) est ignorée."""
     raws = []
     for item in positions:
         if not isinstance(item, dict):

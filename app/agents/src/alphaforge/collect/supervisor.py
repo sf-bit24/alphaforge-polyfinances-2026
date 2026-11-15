@@ -21,7 +21,8 @@ import json
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
+from functools import partial
 from typing import Any
 
 from strands import tool
@@ -37,6 +38,9 @@ from . import staging
 MAX_ITEMS = 200
 NEWS_STALE_DAYS = 90
 DATA_STALE_DAYS = 35
+DATA_KINDS = ("series", "quote")
+# Dernières observations reprises dans le tableau d'un document de données.
+DOCUMENT_OBSERVATIONS = 30
 
 SYSTEM_PROMPT = """You are A6, the Supervisor OKF of AlphaForge AI's general knowledge base, in a simulation-only \
 decision-support prototype for Canadian retail investors. The items below already passed the code's checks (source \
@@ -89,85 +93,92 @@ def _data_target(item: dict[str, Any]) -> str:
     return f"general/donnees/{staging.series_slug(str(series))}/{item['observed_at'][:10]}.md"
 
 
+class _ItemRejectedError(Exception):
+    """Un contrôle du code écarte l'élément; le message est la raison gardée dans les rejets."""
+
+
+def _require_identified_source(item: Any) -> None:
+    if not isinstance(item, dict) or not item.get("id") or not item.get("title"):
+        raise _ItemRejectedError("élément mal formé (id ou titre manquant)")
+    if item.get("kind") not in staging.ITEM_KINDS:
+        raise _ItemRejectedError("type d'élément inconnu")
+    url = item.get("url")
+    if not item.get("source") or not isinstance(url, str) or not url.startswith("https://"):
+        raise _ItemRejectedError("source manquante (nom et adresse https requis)")
+
+
+def _publication_date(item: dict[str, Any]) -> datetime:
+    """Date de publication d'un élément bien daté : lisible, et pas après sa récupération."""
+    published = clock.parse_datetime(item.get("published_at"))
+    if published is None:
+        raise _ItemRejectedError("date de publication manquante ou illisible")
+    retrieved = clock.parse_datetime(item.get("retrieved_at"))
+    if retrieved is None:
+        raise _ItemRejectedError("date de récupération manquante ou illisible")
+    if published > retrieved:
+        raise _ItemRejectedError("publié après sa date de récupération")
+    return published
+
+
+def _data_placement(item: dict[str, Any], published: datetime, existing: dict[str, set[str]]) -> tuple[str, list[str]]:
+    """Document cible d'une série ou d'une cotation, et ses clés de doublon."""
+    observed = clock.parse_datetime(item.get("observed_at"))
+    if observed is None:
+        raise _ItemRejectedError("date d'observation manquante")
+    if observed > published:
+        raise _ItemRejectedError("date d'observation postérieure à la publication")
+    target = _data_target(item)
+    if target in existing["data_keys"]:
+        raise _ItemRejectedError(f"doublon d'un document existant : {target}")
+    return target, [target]
+
+
+def _news_placement(item: dict[str, Any], existing: dict[str, set[str]]) -> tuple[str, list[str]]:
+    """Document cible d'une actualité, et ses clés de doublon (adresse canonique et titre)."""
+    target, url_hash, title = _news_target(item)
+    if url_hash in existing["url_hashes"] or target in existing["news_keys"]:
+        raise _ItemRejectedError("doublon d'un document existant (même adresse)")
+    if title in existing["titles"]:
+        raise _ItemRejectedError("doublon d'un document existant (même titre)")
+    return target, [f"url:{url_hash}", f"title:{title}"]
+
+
+def _checked_candidate(key: str, item: Any, existing: dict[str, set[str]], first_keys: dict[str, str]) -> Candidate:
+    """Candidat d'un élément qui passe tous les contrôles; lève ``_ItemRejectedError`` avec la raison sinon.
+
+    ``first_keys`` garde, pour chaque clé de doublon déjà vue dans la collecte, l'élément qui l'a posée.
+    """
+    _require_identified_source(item)
+    published = _publication_date(item)
+    if item["kind"] in DATA_KINDS:
+        target, dedupe_keys = _data_placement(item, published, existing)
+    else:
+        target, dedupe_keys = _news_placement(item, existing)
+    duplicate_of = next((first_keys[k] for k in dedupe_keys if k in first_keys), None)
+    if duplicate_of:
+        raise _ItemRejectedError(f"doublon dans la collecte : {duplicate_of}")
+    for dedupe_key in dedupe_keys:
+        first_keys[dedupe_key] = key
+    return Candidate(key=key, item=item, target=target, dedupe=dedupe_keys)
+
+
 def validate_items(
     staged: list[tuple[str, Any]], existing: dict[str, set[str]]
 ) -> tuple[list[Candidate], list[dict[str, str]]]:
     """Contrôles déterministes; renvoie les candidats retenus et les rejets ``{key, reason}``."""
     accepted: list[Candidate] = []
     rejected: list[dict[str, str]] = []
-    seen: dict[str, str] = {}
+    first_keys: dict[str, str] = {}
     for key, item in staged:
-
-        def reject(reason: str, key: str = key) -> None:
-            rejected.append({"key": key, "reason": reason})
-
-        if not isinstance(item, dict) or not item.get("id") or not item.get("title"):
-            reject("élément mal formé (id ou titre manquant)")
-            continue
-        if item.get("kind") not in staging.ITEM_KINDS:
-            reject("type d'élément inconnu")
-            continue
-        url = item.get("url")
-        if not item.get("source") or not isinstance(url, str) or not url.startswith("https://"):
-            reject("source manquante (nom et adresse https requis)")
-            continue
-        published = clock.parse_datetime(item.get("published_at"))
-        if published is None:
-            reject("date de publication manquante ou illisible")
-            continue
-        retrieved = clock.parse_datetime(item.get("retrieved_at"))
-        if retrieved is None:
-            reject("date de récupération manquante ou illisible")
-            continue
-        if published > retrieved:
-            reject("publié après sa date de récupération")
-            continue
-        if item["kind"] in ("series", "quote"):
-            observed = clock.parse_datetime(item.get("observed_at"))
-            if observed is None:
-                reject("date d'observation manquante")
-                continue
-            if observed > published:
-                reject("date d'observation postérieure à la publication")
-                continue
-            target = _data_target(item)
-            keys = [target]
-            if target in existing["data_keys"]:
-                reject(f"doublon d'un document existant : {target}")
-                continue
-        else:
-            target, url_hash, title = _news_target(item)
-            keys = [f"url:{url_hash}", f"title:{title}"]
-            if url_hash in existing["url_hashes"] or target in existing["news_keys"]:
-                reject("doublon d'un document existant (même adresse)")
-                continue
-            if title in existing["titles"]:
-                reject("doublon d'un document existant (même titre)")
-                continue
-        duplicate_of = next((seen[k] for k in keys if k in seen), None)
-        if duplicate_of:
-            reject(f"doublon dans la collecte : {duplicate_of}")
-            continue
-        for k in keys:
-            seen[k] = key
-        accepted.append(Candidate(key=key, item=item, target=target, dedupe=keys))
+        try:
+            accepted.append(_checked_candidate(key, item, existing, first_keys))
+        except _ItemRejectedError as rejection:
+            rejected.append({"key": key, "reason": str(rejection)})
     return accepted, rejected
 
 
-def news_doc(candidate: Candidate, now: str) -> okf.OkfDoc:
-    item = candidate.item
-    data = item.get("data") or {}
-    published = clock.parse_datetime(item["published_at"])
-    tickers = [t for t in item.get("tickers") or []]
-    tags = ["actualites", *candidate.tags, *[t.lower() for t in tickers]]
-    source_entry = {
-        "id": item["id"],
-        "title": item["title"],
-        "resource": item["url"],
-        "published_at": item["published_at"],
-        "retrieved_at": item["retrieved_at"],
-    }
-    body = [
+def _news_body(item: dict[str, Any], data: dict[str, Any], tickers: list[str]) -> str:
+    lines = [
         f"# {item['title']}",
         "",
         f"- Source : {item['source']} — <{item['url']}>",
@@ -191,6 +202,42 @@ def news_doc(candidate: Candidate, now: str) -> okf.OkfDoc:
         "- Une nouvelle n'entre dans une simulation qu'à partir de sa date de publication.",
         "",
     ]
+    return "\n".join(lines)
+
+
+def _news_data(candidate: Candidate, data: dict[str, Any], tickers: list[str]) -> dict[str, Any]:
+    item = candidate.item
+    return {
+        "kind": "news",
+        "item_id": item["id"],
+        "url": item["url"],
+        "source": item["source"],
+        "published_at": item["published_at"],
+        "observed_at": item.get("observed_at"),
+        "retrieved_at": item["retrieved_at"],
+        "language": item.get("language"),
+        "tickers": tickers,
+        "provider": data.get("provider"),
+        "published_at_basis": data.get("published_at_basis", "source"),
+        "collected_by": data.get("collected_by") or "A4",
+        "run_id": data.get("run_id"),
+        "staging_key": candidate.key,
+    }
+
+
+def news_doc(candidate: Candidate, now: str) -> okf.OkfDoc:
+    item = candidate.item
+    data = item.get("data") or {}
+    published = clock.parse_datetime(item["published_at"])
+    tickers = list(item.get("tickers") or [])
+    tags = ["actualites", *candidate.tags, *[ticker.lower() for ticker in tickers]]
+    source_entry = {
+        "id": item["id"],
+        "title": item["title"],
+        "resource": item["url"],
+        "published_at": item["published_at"],
+        "retrieved_at": item["retrieved_at"],
+    }
     return okf.new_doc(
         type="News",
         title=item["title"],
@@ -203,41 +250,15 @@ def news_doc(candidate: Candidate, now: str) -> okf.OkfDoc:
         status="stable",
         stale_after=clock.iso(published + timedelta(days=NEWS_STALE_DAYS)),
         sources=[source_entry],
-        data={
-            "kind": "news",
-            "item_id": item["id"],
-            "url": item["url"],
-            "source": item["source"],
-            "published_at": item["published_at"],
-            "observed_at": item.get("observed_at"),
-            "retrieved_at": item["retrieved_at"],
-            "language": item.get("language"),
-            "tickers": tickers,
-            "provider": data.get("provider"),
-            "published_at_basis": data.get("published_at_basis", "source"),
-            "collected_by": data.get("collected_by") or "A4",
-            "run_id": data.get("run_id"),
-            "staging_key": candidate.key,
-        },
-        body="\n".join(body),
+        data=_news_data(candidate, data, tickers),
+        body=_news_body(item, data, tickers),
     )
 
 
-def data_doc(candidate: Candidate, now: str) -> okf.OkfDoc:
-    item = candidate.item
-    data = item.get("data") or {}
+def _data_body(item: dict[str, Any], data: dict[str, Any]) -> str:
     rows = data.get("observations") or data.get("closes") or []
-    observed = clock.parse_datetime(item["observed_at"])
-    source_entry = {
-        "id": item["id"],
-        "title": item["title"],
-        "resource": item["url"],
-        "published_at": item["published_at"],
-        "observed_at": item["observed_at"],
-        "retrieved_at": item["retrieved_at"],
-    }
     basis = data.get("published_at_basis")
-    body = [
+    lines = [
         f"# {item['title']}",
         "",
         f"- Source : {item['source']} — <{item['url']}>",
@@ -260,7 +281,7 @@ def data_doc(candidate: Candidate, now: str) -> okf.OkfDoc:
         "",
         "| Date | Valeur |",
         "| --- | --- |",
-        *[f"| {row['date']} | {row['value']} |" for row in rows[-30:]],
+        *[f"| {row['date']} | {row['value']} |" for row in rows[-DOCUMENT_OBSERVATIONS:]],
         "",
         "## Limites",
         "",
@@ -268,6 +289,37 @@ def data_doc(candidate: Candidate, now: str) -> okf.OkfDoc:
         "- Les séries FRED sont les dernières valeurs révisées; les cours Yahoo Finance ne sont pas certifiés.",
         "",
     ]
+    return "\n".join(lines)
+
+
+def _data_payload(candidate: Candidate, data: dict[str, Any]) -> dict[str, Any]:
+    item = candidate.item
+    return {
+        "kind": item["kind"],
+        "item_id": item["id"],
+        **{k: v for k, v in data.items() if k != "run_id"},
+        "url": item["url"],
+        "source": item["source"],
+        "published_at": item["published_at"],
+        "observed_at": item["observed_at"],
+        "retrieved_at": item["retrieved_at"],
+        "run_id": data.get("run_id"),
+        "staging_key": candidate.key,
+    }
+
+
+def data_doc(candidate: Candidate, now: str) -> okf.OkfDoc:
+    item = candidate.item
+    data = item.get("data") or {}
+    observed = clock.parse_datetime(item["observed_at"])
+    source_entry = {
+        "id": item["id"],
+        "title": item["title"],
+        "resource": item["url"],
+        "published_at": item["published_at"],
+        "observed_at": item["observed_at"],
+        "retrieved_at": item["retrieved_at"],
+    }
     series = data.get("series_id") or data.get("symbol")
     return okf.new_doc(
         type="Data Series",
@@ -281,101 +333,90 @@ def data_doc(candidate: Candidate, now: str) -> okf.OkfDoc:
         status="stable",
         stale_after=clock.iso(observed + timedelta(days=DATA_STALE_DAYS)),
         sources=[source_entry],
-        data={
-            "kind": item["kind"],
-            "item_id": item["id"],
-            **{k: v for k, v in data.items() if k != "run_id"},
-            "url": item["url"],
-            "source": item["source"],
-            "published_at": item["published_at"],
-            "observed_at": item["observed_at"],
-            "retrieved_at": item["retrieved_at"],
-            "run_id": data.get("run_id"),
-            "staging_key": candidate.key,
-        },
-        body="\n".join(body),
+        data=_data_payload(candidate, data),
+        body=_data_body(item, data),
     )
 
 
-def write_general_index(store: Store, now: str) -> None:
-    infos = [i for i in store.list("general/", limit=5000) if i.key.endswith(".md") and i.key != "general/index.md"]
-    infos.sort(key=lambda i: i.key, reverse=True)
+@dataclass(frozen=True)
+class _IndexSection:
+    """Une rubrique de l'index de la base générale."""
 
-    def title(info: Any) -> tuple[str, str]:
-        obj = store.get(info.key)
-        try:
-            return info.key, okf.parse(obj.text).title if obj else info.key
-        except okf.OkfError:
-            return info.key, info.key
+    folder: str
+    heading: str
+    # Nombre de documents listés, les plus récents d'abord; ``None`` : tous, par ordre alphabétique.
+    latest: int | None
 
-    sections = {
-        "methodologie": [],
-        "notions": [],
-        "societes": [],
-        "actualites": [],
-        "donnees": [],
-        "recherches": [],
-        "faits": [],
-        "signaux": [],
-        "depots": [],
+
+INDEX_SECTIONS = (
+    _IndexSection("methodologie", "Méthodologie ({count})", None),
+    _IndexSection("notions", "Notions financières ({count})", None),
+    _IndexSection("societes", "Sociétés ({count})", None),
+    _IndexSection("actualites", "Actualités ({count}, les plus récentes)", 150),
+    _IndexSection("donnees", "Données ({count}, les plus récentes)", 150),
+    _IndexSection("recherches", "Synthèses de recherche ({count}, les plus récentes)", 100),
+    _IndexSection("faits", "Faits sourcés ({count}, les plus récents)", 100),
+    _IndexSection("signaux", "Signaux de contexte ({count}, les plus récents)", 100),
+    _IndexSection("depots", "Dépôts réglementaires ({count}, les plus récents)", 100),
+)
+
+
+def _document_title(store: Store, key: str) -> str:
+    """Titre du document, ou sa clé s'il est absent ou illisible."""
+    stored = store.get(key)
+    try:
+        return okf.parse(stored.text).title if stored else key
+    except okf.OkfError:
+        return key
+
+
+def _index_entries(store: Store, keys: list[str]) -> dict[str, list[str]]:
+    """Liens de l'index par rubrique; ``keys`` est trié du plus récent au plus ancien."""
+    listed = {
+        section.folder: [key for key in keys if key.startswith(f"general/{section.folder}/")][: section.latest]
+        for section in INDEX_SECTIONS
     }
-    selected = [
-        i for i in infos if i.key.startswith(("general/methodologie/", "general/notions/", "general/societes/"))
-    ]
-    selected += [i for i in infos if i.key.startswith("general/actualites/")][:150]
-    selected += [i for i in infos if i.key.startswith("general/donnees/")][:150]
-    for folder in ("recherches", "faits", "signaux", "depots"):
-        selected += [i for i in infos if i.key.startswith(f"general/{folder}/")][:100]
+    selected = [key for folder_keys in listed.values() for key in folder_keys]
     with ThreadPoolExecutor(max_workers=8) as pool:
-        for key, doc_title in pool.map(title, selected):
-            folder = key.split("/")[1]
-            if folder in sections:
-                sections[folder].append(f"- [{doc_title}]({key.removeprefix('general/')})")
-    counts = {name: sum(1 for i in infos if i.key.startswith(f"general/{name}/")) for name in sections}
-    body = [
+        titles = dict(zip(selected, pool.map(partial(_document_title, store), selected), strict=True))
+    return {
+        folder: [f"- [{titles[key]}]({key.removeprefix('general/')})" for key in folder_keys]
+        for folder, folder_keys in listed.items()
+    }
+
+
+def _index_body(entries: dict[str, list[str]], counts: dict[str, int]) -> str:
+    lines = [
         "# Base générale d'AlphaForge AI",
         "",
         "Savoir commun à tous les investisseurs : méthodologie, notions financières, chiffres publiés des sociétés, "
         "actualités datées et données publiques. Elle ne "
         "contient rien d'un client. Chaque actualité ou donnée garde sa date de publication et sa date d'observation.",
         "",
-        f"## Méthodologie ({counts['methodologie']})",
-        "",
-        *sorted(sections["methodologie"]),
-        "",
-        f"## Notions financières ({counts['notions']})",
-        "",
-        *sorted(sections["notions"]),
-        "",
-        f"## Sociétés ({counts['societes']})",
-        "",
-        *sorted(sections["societes"]),
-        "",
-        f"## Actualités ({counts['actualites']}, les plus récentes)",
-        "",
-        *sections["actualites"],
-        "",
-        f"## Données ({counts['donnees']}, les plus récentes)",
-        "",
-        *sections["donnees"],
-        "",
-        f"## Synthèses de recherche ({counts['recherches']}, les plus récentes)",
-        "",
-        *sections["recherches"],
-        "",
-        f"## Faits sourcés ({counts['faits']}, les plus récents)",
-        "",
-        *sections["faits"],
-        "",
-        f"## Signaux de contexte ({counts['signaux']}, les plus récents)",
-        "",
-        *sections["signaux"],
-        "",
-        f"## Dépôts réglementaires ({counts['depots']}, les plus récents)",
-        "",
-        *sections["depots"],
-        "",
     ]
+    for section in INDEX_SECTIONS:
+        links = entries[section.folder]
+        lines += [
+            "## " + section.heading.format(count=counts[section.folder]),
+            "",
+            *(sorted(links) if section.latest is None else links),
+            "",
+        ]
+    return "\n".join(lines)
+
+
+def write_general_index(store: Store, now: str) -> None:
+    keys = [
+        info.key
+        for info in store.list("general/", limit=5000)
+        if info.key.endswith(".md") and info.key != "general/index.md"
+    ]
+    keys.sort(reverse=True)
+    entries = _index_entries(store, keys)
+    counts = {
+        section.folder: sum(1 for key in keys if key.startswith(f"general/{section.folder}/"))
+        for section in INDEX_SECTIONS
+    }
     doc = okf.new_doc(
         type="Index",
         title="Base générale",
@@ -391,9 +432,32 @@ def write_general_index(store: Store, now: str) -> None:
         status="stable",
         sources=[],
         data={"counts": counts},
-        body="\n".join(body),
+        body=_index_body(entries, counts),
     )
     store.put_text("general/index.md", okf.render(doc))
+
+
+REVIEW_ITEMS_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {
+            "decisions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "decision": {"type": "string", "enum": ["accept", "reject"]},
+                        "reason": {"type": "string"},
+                        "tags": {"type": "array", "items": {"type": "string"}, "maxItems": 3},
+                    },
+                    "required": ["id", "decision"],
+                },
+            }
+        },
+        "required": ["decisions"],
+    }
+}
 
 
 class ReviewState:
@@ -409,43 +473,10 @@ class ReviewState:
         @tool(
             name="review_items",
             description="Record editorial decisions: id, decision accept or reject, reason (French), tags.",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "decisions": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "id": {"type": "string"},
-                                    "decision": {"type": "string", "enum": ["accept", "reject"]},
-                                    "reason": {"type": "string"},
-                                    "tags": {"type": "array", "items": {"type": "string"}, "maxItems": 3},
-                                },
-                                "required": ["id", "decision"],
-                            },
-                        }
-                    },
-                    "required": ["decisions"],
-                }
-            },
+            inputSchema=REVIEW_ITEMS_SCHEMA,
         )
         def review_items(decisions: list[dict[str, Any]]) -> str:
-            unknown = []
-            for decision in decisions:
-                candidate = state.by_id.get(decision.get("id")) if isinstance(decision, dict) else None
-                if candidate is None:
-                    unknown.append(decision.get("id") if isinstance(decision, dict) else None)
-                    continue
-                if decision.get("decision") == "reject":
-                    reason = " ".join(str(decision.get("reason") or "rejeté par la revue éditoriale").split())[:200]
-                    state.rejections[candidate.item["id"]] = reason
-                else:
-                    state.rejections.pop(candidate.item["id"], None)
-                    candidate.tags = [staging.slugify(str(t), 30) for t in (decision.get("tags") or [])][:3]
-            state.reviewed = True
-            return tool_result({"status": "ok", "rejected": len(state.rejections), "unknown_ids": unknown})
+            return tool_result(state.record_decisions(decisions))
 
         @tool(
             name="finish",
@@ -460,17 +491,24 @@ class ReviewState:
 
         return [review_items, finish]
 
+    def record_decisions(self, decisions: list[dict[str, Any]]) -> dict[str, Any]:
+        unknown = []
+        for decision in decisions:
+            candidate = self.by_id.get(decision.get("id")) if isinstance(decision, dict) else None
+            if candidate is None:
+                unknown.append(decision.get("id") if isinstance(decision, dict) else None)
+            elif decision.get("decision") == "reject":
+                reason = " ".join(str(decision.get("reason") or "rejeté par la revue éditoriale").split())[:200]
+                self.rejections[candidate.item["id"]] = reason
+            else:
+                self.rejections.pop(candidate.item["id"], None)
+                candidate.tags = [staging.slugify(str(tag), 30) for tag in (decision.get("tags") or [])][:3]
+        self.reviewed = True
+        return {"status": "ok", "rejected": len(self.rejections), "unknown_ids": unknown}
 
-def curate(
-    *,
-    run_id: str,
-    store: Store,
-    trace: Trace,
-    model_factory: ModelFactory,
-    model_id: str,
-    budget_seconds: float = 240,
-) -> dict[str, Any]:
-    started = time.monotonic()
+
+def _marker_warnings(store: Store, run_id: str) -> list[str]:
+    """Un marqueur de A4 ou A5 absent ou en erreur n'empêche pas la curation : il devient un avertissement."""
     warnings: list[str] = []
     for role in ("press", "data"):
         marker = store.get_json(staging.marker_key(run_id, role))
@@ -478,6 +516,11 @@ def curate(
             warnings.append(f"marqueur {role} absent : curation de ce qui est arrivé")
         elif marker.get("status") != "ok":
             warnings.append(f"marqueur {role} en erreur : {marker.get('error')}")
+    return warnings
+
+
+def _read_staged(store: Store, run_id: str) -> list[tuple[str, Any]]:
+    """Éléments déposés par A4 et A5; un élément illisible vaut ``None`` et sera rejeté par les contrôles."""
     staged: list[tuple[str, Any]] = []
     for role in ("press", "data"):
         for info in store.list(staging.staging_prefix(run_id, role), limit=MAX_ITEMS):
@@ -487,6 +530,30 @@ def curate(
                 staged.append((info.key, store.get_json(info.key)))
             except (ValueError, json.JSONDecodeError):
                 staged.append((info.key, None))
+    return staged
+
+
+def _validate_research(
+    store: Store, research_staged: list[Any], existing: dict[str, set[str]]
+) -> tuple[list[Candidate], list[dict[str, str]], list[dict[str, Any]]]:
+    known = existing["news_keys"] | existing["data_keys"]
+    for prefix in research_checks.RESEARCH_PREFIXES:
+        known |= {info.key for info in store.list(prefix, limit=20000)}
+    return research_checks.validate_research(research_staged, known, store, url_hashes=existing["url_hashes"])
+
+
+@dataclass
+class _Intake:
+    """Ce que les contrôles du code ont retenu, rejeté et mis en quarantaine."""
+
+    candidates: list[Candidate]
+    rejected: list[dict[str, str]]
+    quarantined: list[dict[str, Any]]
+    has_research: bool
+
+
+def _checked_intake(store: Store, run_id: str, trace: Trace) -> _Intake:
+    staged = _read_staged(store, run_id)
     research_staged = research_checks.list_staged(store, run_id)
     trace.add(
         "storage",
@@ -499,12 +566,7 @@ def curate(
     candidates, rejected = validate_items(staged, existing)
     quarantined: list[dict[str, Any]] = []
     if research_staged:
-        known = existing["news_keys"] | existing["data_keys"]
-        for prefix in research_checks.RESEARCH_PREFIXES:
-            known |= {info.key for info in store.list(prefix, limit=20000)}
-        research_candidates, research_rejected, quarantined = research_checks.validate_research(
-            research_staged, known, store, url_hashes=existing["url_hashes"]
-        )
+        research_candidates, research_rejected, quarantined = _validate_research(store, research_staged, existing)
         candidates = [*candidates, *research_candidates]
         rejected += research_rejected
     trace.add(
@@ -514,67 +576,85 @@ def curate(
         None,
         outputs={"accepted": len(candidates), "rejected": len(rejected)},
     )
-    if candidates:
-        review = ReviewState(candidates)
-        listing = [
-            {
-                "id": c.item["id"],
-                "kind": c.item["kind"],
-                "title": c.item["title"],
-                "source": c.item["source"],
-                "published_at": c.item["published_at"],
-                "observed_at": c.item.get("observed_at"),
-                "tickers": c.item.get("tickers"),
-                "summary": str(c.item.get("summary") or "")[:300],
-            }
-            for c in candidates
-        ]
-        spec = AgentSpec(
-            actor="A6",
-            name="Supervisor OKF",
-            effort="medium",
-            system_prompt=SYSTEM_PROMPT,
-            tools=review.tools(),
-            max_turns=4,
-            max_tokens=16000,
-            tool_summaries={
-                "review_items": lambda i: {
-                    "decisions": len(i.get("decisions") or []),
-                    "rejects": sum(
-                        1 for d in i.get("decisions") or [] if isinstance(d, dict) and d.get("decision") == "reject"
-                    ),
-                }
-            },
+    return _Intake(candidates, rejected, quarantined, has_research=bool(research_staged))
+
+
+def _review_listing(candidates: list[Candidate]) -> list[dict[str, Any]]:
+    """Ce que l'agent lit de chaque élément pour sa revue éditoriale."""
+    return [
+        {
+            "id": c.item["id"],
+            "kind": c.item["kind"],
+            "title": c.item["title"],
+            "source": c.item["source"],
+            "published_at": c.item["published_at"],
+            "observed_at": c.item.get("observed_at"),
+            "tickers": c.item.get("tickers"),
+            "summary": str(c.item.get("summary") or "")[:300],
+        }
+        for c in candidates
+    ]
+
+
+def _review_summary(tool_input: dict[str, Any]) -> dict[str, int]:
+    decisions = tool_input.get("decisions") or []
+    return {
+        "decisions": len(decisions),
+        "rejects": sum(1 for d in decisions if isinstance(d, dict) and d.get("decision") == "reject"),
+    }
+
+
+def _run_editorial_review(
+    candidates: list[Candidate], warnings: list[str], *, model_factory: ModelFactory, model_id: str, trace: Trace
+) -> ReviewState:
+    """Fait relire les candidats par l'agent; une revue indisponible ou muette devient un avertissement."""
+    review = ReviewState(candidates)
+    spec = AgentSpec(
+        actor="A6",
+        name="Supervisor OKF",
+        effort="medium",
+        system_prompt=SYSTEM_PROMPT,
+        tools=review.tools(),
+        max_turns=4,
+        max_tokens=16000,
+        tool_summaries={"review_items": _review_summary},
+    )
+    try:
+        run_agent(
+            spec,
+            "<items>\n" + json.dumps(_review_listing(candidates), ensure_ascii=False) + "\n</items>",
+            model_factory=model_factory,
+            model_id=model_id,
+            trace=trace,
         )
-        try:
-            run_agent(
-                spec,
-                "<items>\n" + json.dumps(listing, ensure_ascii=False) + "\n</items>",
-                model_factory=model_factory,
-                model_id=model_id,
-                trace=trace,
-            )
-        except AppError as exc:
-            warnings.append(f"revue éditoriale indisponible ({exc.code})")
-        if not review.reviewed:
-            # Sans revue, seules les données dont le texte vient du code sont écrites ; les actualités
-            # (résumé rédigé par A4) attendent la prochaine collecte, qui les proposera de nouveau.
-            warnings.append("A6 n'a rendu aucune décision : actualités non publiées, données écrites")
-        kept = []
-        for candidate in candidates:
-            reason = review.rejections.get(candidate.item["id"])
-            if reason:
-                rejected.append({"key": candidate.key, "reason": f"revue éditoriale : {reason}"})
-            elif not review.reviewed and candidate.item["kind"] == "news":
-                rejected.append(
-                    {"key": candidate.key, "reason": "revue éditoriale indisponible : actualité non publiée"}
-                )
-            else:
-                kept.append(candidate)
-        candidates = kept
-    now = clock.iso()
-    written = []
-    by_id = {c.item["id"]: c for c in candidates}
+    except AppError as exc:
+        warnings.append(f"revue éditoriale indisponible ({exc.code})")
+    if not review.reviewed:
+        # Sans revue, seules les données dont le texte vient du code sont écrites ; les actualités
+        # (résumé rédigé par A4) attendent la prochaine collecte, qui les proposera de nouveau.
+        warnings.append("A6 n'a rendu aucune décision : actualités non publiées, données écrites")
+    return review
+
+
+def _kept_after_review(
+    review: ReviewState, candidates: list[Candidate], rejected: list[dict[str, str]]
+) -> list[Candidate]:
+    kept = []
+    for candidate in candidates:
+        reason = review.rejections.get(candidate.item["id"])
+        if reason:
+            rejected.append({"key": candidate.key, "reason": f"revue éditoriale : {reason}"})
+        elif not review.reviewed and candidate.item["kind"] == "news":
+            rejected.append({"key": candidate.key, "reason": "revue éditoriale indisponible : actualité non publiée"})
+        else:
+            kept.append(candidate)
+    return kept
+
+
+def _without_orphan_briefs(
+    candidates: list[Candidate], by_id: dict[str, Candidate], rejected: list[dict[str, str]]
+) -> list[Candidate]:
+    """Écarte les synthèses qui citent un élément que la revue a rejeté."""
     briefs = [c for c in candidates if c.item["kind"] == "brief"]
     for brief in briefs:
         refs = getattr(brief, "refs", {})
@@ -582,19 +662,58 @@ def curate(
         if missing:
             rejected.append({"key": brief.key, "reason": "synthèse : éléments cités rejetés par la revue"})
             candidates = [c for c in candidates if c is not brief]
+    return candidates
+
+
+def _document_for(candidate: Candidate, now: str, by_id: dict[str, Candidate]) -> okf.OkfDoc:
+    kind = candidate.item["kind"]
+    if kind == "news":
+        return news_doc(candidate, now)
+    if kind in DATA_KINDS:
+        return data_doc(candidate, now)
+    if kind == "brief":
+        return research_checks.brief_doc(candidate, now, {**candidate.refs, **by_id})
+    return research_checks.research_doc(candidate, now)
+
+
+def _quarantine_report(store: Store, run_id: str, quarantined: list[dict[str, Any]], now: str) -> dict[str, int]:
+    """Écrit la quarantaine de la recherche, s'il y en a une, et renvoie ses compteurs."""
+    proposals = research_checks.quarantine_proposals(store, run_id)
+    if quarantined or proposals:
+        store.put_json(
+            f"staging/{run_id}/supervisor/quarantine.json",
+            {"run_id": run_id, "items": quarantined, "proposed_hosts": proposals, "written_at": now},
+        )
+    return {"quarantined": len(quarantined), "proposed_hosts": len(proposals)}
+
+
+def curate(  # noqa: PLR0913 - signature gardée : le service de collecte et les tests l'appellent par mots-clés
+    *,
+    run_id: str,
+    store: Store,
+    trace: Trace,
+    model_factory: ModelFactory,
+    model_id: str,
+    budget_seconds: float = 240,
+) -> dict[str, Any]:
+    started = time.monotonic()
+    warnings = _marker_warnings(store, run_id)
+    intake = _checked_intake(store, run_id, trace)
+    candidates, rejected = intake.candidates, intake.rejected
+    if candidates:
+        review = _run_editorial_review(
+            candidates, warnings, model_factory=model_factory, model_id=model_id, trace=trace
+        )
+        candidates = _kept_after_review(review, candidates, rejected)
+    now = clock.iso()
+    written = []
+    by_id = {c.item["id"]: c for c in candidates}
+    candidates = _without_orphan_briefs(candidates, by_id, rejected)
     for candidate in candidates:
         if time.monotonic() - started > budget_seconds:
             rejected.append({"key": candidate.key, "reason": "délai de curation dépassé"})
             continue
-        kind = candidate.item["kind"]
-        if kind == "news":
-            doc = news_doc(candidate, now)
-        elif kind in ("series", "quote"):
-            doc = data_doc(candidate, now)
-        elif kind == "brief":
-            doc = research_checks.brief_doc(candidate, now, {**candidate.refs, **by_id})
-        else:
-            doc = research_checks.research_doc(candidate, now)
+        doc = _document_for(candidate, now, by_id)
         problems = okf.validate(doc)
         if problems:
             rejected.append({"key": candidate.key, "reason": "document OKF invalide : " + "; ".join(problems)})
@@ -611,13 +730,6 @@ def curate(
     if written:
         write_general_index(store, now)
     result: dict[str, Any] = {"written": written, "rejected": rejected, "warnings": warnings}
-    if research_staged:
-        proposals = research_checks.quarantine_proposals(store, run_id)
-        if quarantined or proposals:
-            store.put_json(
-                f"staging/{run_id}/supervisor/quarantine.json",
-                {"run_id": run_id, "items": quarantined, "proposed_hosts": proposals, "written_at": now},
-            )
-        result["quarantined"] = len(quarantined)
-        result["proposed_hosts"] = len(proposals)
+    if intake.has_research:
+        result.update(_quarantine_report(store, run_id, intake.quarantined, now))
     return result

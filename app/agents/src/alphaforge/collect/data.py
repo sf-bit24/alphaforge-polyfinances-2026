@@ -13,6 +13,7 @@ est une borne supérieure sûre (``data.published_at_basis = "retrieved_at_upper
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -33,6 +34,50 @@ PROVIDER_NAMES = {
     "yahoo": "Yahoo Finance",
 }
 MAX_OBSERVATIONS = 30
+# Environ un mois de séances.
+MAX_CLOSES = 22
+MAX_QUOTES_PER_CALL = 16
+MAX_NOTE_CHARS = 300
+QUOTE_WORKERS = 6
+# Les séries mensuelles n'ont que quelques observations dans la fenêtre du passage : on lit plus loin en arrière.
+WINDOW_MARGIN_DAYS = 120
+BUDGET_EXHAUSTED = {"status": "error", "reason": "time budget exhausted; call finish"}
+
+
+def _series_ids_schema(allowed: Iterable[str]) -> dict[str, Any]:
+    return {
+        "json": {
+            "type": "object",
+            "properties": {"series_ids": {"type": "array", "items": {"type": "string", "enum": list(allowed)}}},
+            "required": ["series_ids"],
+        }
+    }
+
+
+FETCH_QUOTES_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {"tickers": {"type": "array", "items": {"type": "string"}, "maxItems": MAX_QUOTES_PER_CALL}},
+        "required": ["tickers"],
+    }
+}
+STAGE_DATA_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {"fetch_id": {"type": "string"}, "note": {"type": "string"}},
+                    "required": ["fetch_id", "note"],
+                },
+            }
+        },
+        "required": ["items"],
+    }
+}
+FINISH_SCHEMA = {"json": {"type": "object", "properties": {"note": {"type": "string"}}, "required": ["note"]}}
 
 SYSTEM_PROMPT = """You are A5, the DataSpecialist of AlphaForge AI, a simulation-only decision-support prototype. You \
 collect dated macroeconomic series and market quotes for a general knowledge base that explains investment context \
@@ -62,19 +107,18 @@ class DataRun:
     warnings: list[str] = field(default_factory=list)
     finished: bool = False
 
-    def _expired(self) -> bool:
+    def _is_expired(self) -> bool:
         return time.monotonic() > self.deadline
 
-    def _start(self) -> str:
-        # Fenêtre élargie pour que les séries mensuelles aient au moins quelques observations.
-        return (date.fromisoformat(self.since) - timedelta(days=120)).isoformat()
+    def _window_start(self) -> str:
+        return (date.fromisoformat(self.since) - timedelta(days=WINDOW_MARGIN_DAYS)).isoformat()
 
     def _series_brief(self, data: fetchers.SeriesData) -> dict[str, Any]:
-        fid = f"s:{data.provider}:{data.series_id}"
-        self.fetched[fid] = data
-        recent = [o for o in data.observations if o["date"] >= self.since]
+        fetch_id = f"s:{data.provider}:{data.series_id}"
+        self.fetched[fetch_id] = data
+        recent = [observation for observation in data.observations if observation["date"] >= self.since]
         return {
-            "fetch_id": fid,
+            "fetch_id": fetch_id,
             "series_id": data.series_id,
             "label": data.label,
             "unit": data.unit,
@@ -84,123 +128,50 @@ class DataRun:
             "latest": data.latest,
         }
 
+    def _quote_brief(self, quote: fetchers.Quote) -> dict[str, Any]:
+        fetch_id = f"q:{quote.symbol}"
+        self.fetched[fetch_id] = quote
+        return {
+            "fetch_id": fetch_id,
+            "symbol": quote.symbol,
+            "currency": quote.currency,
+            "last_close": quote.last_close,
+            "last_date": quote.last_date,
+        }
+
     def tools(self) -> list[Any]:
         run = self
 
         @tool(
             name="fetch_boc_series",
             description="Fetch Bank of Canada Valet series. Allowed: " + ", ".join(fetchers.BOC_SERIES),
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "series_ids": {"type": "array", "items": {"type": "string", "enum": list(fetchers.BOC_SERIES)}}
-                    },
-                    "required": ["series_ids"],
-                }
-            },
+            inputSchema=_series_ids_schema(fetchers.BOC_SERIES),
         )
         def fetch_boc_series(series_ids: list[str]) -> str:
-            if run._expired():
-                return tool_result({"status": "error", "reason": "time budget exhausted; call finish"})
-            wanted = [s for s in dict.fromkeys(series_ids) if s in fetchers.BOC_SERIES]
-            if not wanted:
-                return tool_result({"status": "error", "reason": "no allowed series"})
-            try:
-                result = fetchers.fetch_boc(wanted, run._start())
-            except (fetchers.FetchError, ValueError) as exc:
-                run.warnings.append(f"boc: {exc}")
-                return tool_result({"status": "error", "reason": str(exc)})
-            return tool_result({"status": "ok", "series": [run._series_brief(d) for d in result.values()]})
+            return tool_result(run._fetch_boc_series(series_ids))
 
         @tool(
             name="fetch_fred_series",
             description="Fetch FRED series (fredgraph.csv). Allowed: " + ", ".join(fetchers.FRED_SERIES),
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "series_ids": {"type": "array", "items": {"type": "string", "enum": list(fetchers.FRED_SERIES)}}
-                    },
-                    "required": ["series_ids"],
-                }
-            },
+            inputSchema=_series_ids_schema(fetchers.FRED_SERIES),
         )
         def fetch_fred_series(series_ids: list[str]) -> str:
-            if run._expired():
-                return tool_result({"status": "error", "reason": "time budget exhausted; call finish"})
-            wanted = [s for s in dict.fromkeys(series_ids) if s in fetchers.FRED_SERIES]
-            out, errors = [], []
-            for series_id in wanted:
-                try:
-                    out.append(run._series_brief(fetchers.fetch_fred(series_id, run._start())))
-                except (fetchers.FetchError, ValueError) as exc:
-                    errors.append({"series_id": series_id, "error": str(exc)})
-                    run.warnings.append(f"fred {series_id}: {exc}")
-            return tool_result({"status": "ok", "series": out, "errors": errors})
+            return tool_result(run._fetch_fred_series(series_ids))
 
         @tool(
             name="fetch_quotes",
             description="Fetch the last daily closes of up to 16 tickers of the run from Yahoo Finance.",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {"tickers": {"type": "array", "items": {"type": "string"}, "maxItems": 16}},
-                    "required": ["tickers"],
-                }
-            },
+            inputSchema=FETCH_QUOTES_SCHEMA,
         )
         def fetch_quotes(tickers: list[str]) -> str:
-            if run._expired():
-                return tool_result({"status": "error", "reason": "time budget exhausted; call finish"})
-            wanted = [t for t in dict.fromkeys(tickers) if t in run.tickers][:16]
-
-            def one(symbol: str) -> tuple[str, Any]:
-                try:
-                    return symbol, fetchers.fetch_yahoo_chart(symbol)
-                except fetchers.FetchError as exc:
-                    return symbol, exc
-
-            out, errors = [], []
-            with ThreadPoolExecutor(max_workers=6) as pool:
-                for symbol, quote in pool.map(one, wanted):
-                    if isinstance(quote, Exception):
-                        errors.append(symbol)
-                        continue
-                    fid = f"q:{quote.symbol}"
-                    run.fetched[fid] = quote
-                    out.append(
-                        {
-                            "fetch_id": fid,
-                            "symbol": quote.symbol,
-                            "currency": quote.currency,
-                            "last_close": quote.last_close,
-                            "last_date": quote.last_date,
-                        }
-                    )
-            return tool_result({"status": "ok", "quotes": out, "failed": errors})
+            return tool_result(run._fetch_quotes(tickers))
 
         @tool(
             name="stage_data",
             description=(
                 "Stage fetched series or quotes. Each item: fetch_id and a neutral French note without numbers."
             ),
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "items": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {"fetch_id": {"type": "string"}, "note": {"type": "string"}},
-                                "required": ["fetch_id", "note"],
-                            },
-                        }
-                    },
-                    "required": ["items"],
-                }
-            },
+            inputSchema=STAGE_DATA_SCHEMA,
         )
         def stage_data(items: list[dict[str, Any]]) -> str:
             return tool_result(run._stage(items))
@@ -208,7 +179,7 @@ class DataRun:
         @tool(
             name="finish",
             description="End the collection with a one-sentence note.",
-            inputSchema={"json": {"type": "object", "properties": {"note": {"type": "string"}}, "required": ["note"]}},
+            inputSchema=FINISH_SCHEMA,
             context=True,
         )
         def finish(note: str, tool_context) -> str:
@@ -218,28 +189,75 @@ class DataRun:
 
         return [fetch_boc_series, fetch_fred_series, fetch_quotes, stage_data, finish]
 
+    def _fetch_boc_series(self, series_ids: list[str]) -> dict[str, Any]:
+        if self._is_expired():
+            return BUDGET_EXHAUSTED
+        wanted = [series_id for series_id in dict.fromkeys(series_ids) if series_id in fetchers.BOC_SERIES]
+        if not wanted:
+            return {"status": "error", "reason": "no allowed series"}
+        try:
+            fetched = fetchers.fetch_boc(wanted, self._window_start())
+        except (fetchers.FetchError, ValueError) as exc:
+            self.warnings.append(f"boc: {exc}")
+            return {"status": "error", "reason": str(exc)}
+        return {"status": "ok", "series": [self._series_brief(data) for data in fetched.values()]}
+
+    def _fetch_fred_series(self, series_ids: list[str]) -> dict[str, Any]:
+        if self._is_expired():
+            return BUDGET_EXHAUSTED
+        wanted = [series_id for series_id in dict.fromkeys(series_ids) if series_id in fetchers.FRED_SERIES]
+        briefs, errors = [], []
+        for series_id in wanted:
+            try:
+                briefs.append(self._series_brief(fetchers.fetch_fred(series_id, self._window_start())))
+            except (fetchers.FetchError, ValueError) as exc:
+                errors.append({"series_id": series_id, "error": str(exc)})
+                self.warnings.append(f"fred {series_id}: {exc}")
+        return {"status": "ok", "series": briefs, "errors": errors}
+
+    def _fetch_quotes(self, tickers: list[str]) -> dict[str, Any]:
+        if self._is_expired():
+            return BUDGET_EXHAUSTED
+        wanted = [ticker for ticker in dict.fromkeys(tickers) if ticker in self.tickers][:MAX_QUOTES_PER_CALL]
+        briefs, failed = [], []
+        with ThreadPoolExecutor(max_workers=QUOTE_WORKERS) as pool:
+            for symbol, quote in pool.map(_quote_or_error, wanted):
+                if isinstance(quote, Exception):
+                    failed.append(symbol)
+                else:
+                    briefs.append(self._quote_brief(quote))
+        return {"status": "ok", "quotes": briefs, "failed": failed}
+
     def _stage(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         results = []
         for entry in items:
-            fid = entry.get("fetch_id") if isinstance(entry, dict) else None
-            fetched = self.fetched.get(fid) if isinstance(fid, str) else None
+            fetch_id = entry.get("fetch_id") if isinstance(entry, dict) else None
+            fetched = self.fetched.get(fetch_id) if isinstance(fetch_id, str) else None
             if fetched is None:
-                results.append({"fetch_id": fid, "status": "error", "reason": "unknown fetch_id"})
+                results.append({"fetch_id": fetch_id, "status": "error", "reason": "unknown fetch_id"})
                 continue
-            note = " ".join(str(entry.get("note") or "").split())[:300]
+            note = " ".join(str(entry.get("note") or "").split())[:MAX_NOTE_CHARS]
             item = (
                 series_item(fetched, note, self.run_id)
                 if isinstance(fetched, fetchers.SeriesData)
                 else quote_item(fetched, note, self.run_id)
             )
             if item is None:
-                results.append({"fetch_id": fid, "status": "error", "reason": "no observation"})
+                results.append({"fetch_id": fetch_id, "status": "error", "reason": "no observation"})
                 continue
             key = staging.item_key(self.run_id, "data", item["id"])
             self.store.put_json(key, item)
             self.staged[item["id"]] = key
-            results.append({"fetch_id": fid, "status": "ok", "id": item["id"]})
+            results.append({"fetch_id": fetch_id, "status": "ok", "id": item["id"]})
         return {"results": results, "staged": len(self.staged)}
+
+
+def _quote_or_error(symbol: str) -> tuple[str, Any]:
+    """Cotation du symbole, ou l'erreur de récupération : un échec n'interrompt pas les autres symboles."""
+    try:
+        return symbol, fetchers.fetch_yahoo_chart(symbol)
+    except fetchers.FetchError as exc:
+        return symbol, exc
 
 
 def _number_fr(value: float) -> str:
@@ -298,7 +316,7 @@ def quote_item(quote: fetchers.Quote, note: str, run_id: str) -> dict[str, Any] 
     published = quote.market_time or retrieved
     if published > retrieved:
         published = retrieved
-    closes = quote.closes[-22:]
+    closes = quote.closes[-MAX_CLOSES:]
     value = _number_fr(quote.last_close)
     summary = (
         f"Dernière clôture : {value} {quote.currency or ''} le {quote.last_date} "
@@ -334,7 +352,7 @@ def quote_item(quote: fetchers.Quote, note: str, run_id: str) -> dict[str, Any] 
     )
 
 
-def collect(
+def collect(  # noqa: PLR0913 - même signature que press.collect : le service les appelle avec les mêmes arguments
     *,
     run_id: str,
     since: str,

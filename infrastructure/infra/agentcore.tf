@@ -162,11 +162,18 @@ locals {
     ALPHAFORGE_TRACE_BUCKET = aws_s3_bucket.traces.bucket
   })
 
+  # Courriel de contact de la SEC, pose seulement sur les runtimes qui lisent le
+  # Web (collect/http.py ne l'ajoute qu'au User-Agent des hotes de la SEC).
+  agentcore_contact_env = var.sec_contact_email == "" ? {} : { ALPHAFORGE_CONTACT_EMAIL = var.sec_contact_email }
+
   # Variables propres a un role, fusionnees apres les variables communes.
   agentcore_role_env = {
-    profile   = local.agentcore_profile_env
-    expert    = merge({ ALPHAFORGE_KB_ID = aws_bedrockagent_knowledge_base.general.id }, local.recherche_expert_env)
-    portfolio = local.agentcore_portfolio_env
+    profile    = local.agentcore_profile_env
+    press      = local.agentcore_contact_env
+    data       = local.agentcore_contact_env
+    expert     = merge({ ALPHAFORGE_KB_ID = aws_bedrockagent_knowledge_base.general.id }, local.recherche_expert_env)
+    researcher = local.agentcore_contact_env
+    portfolio  = local.agentcore_portfolio_env
   }
 
   # Zip du runtime portfolio (package.sh, ALPHAFORGE_PACKAGE_PORTFOLIO=1). S'il

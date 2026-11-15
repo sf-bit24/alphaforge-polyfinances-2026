@@ -7,6 +7,17 @@ variable "agentcore_model_id" {
   default     = "us.anthropic.claude-opus-5-5"
 }
 
+variable "sec_contact_email" {
+  description = "Courriel ajoute au User-Agent pour la SEC seulement (acces equitable d'EDGAR). Vide : la SEC repond 403 et ses hotes sont declares bloques."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.sec_contact_email == "" || can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.sec_contact_email))
+    error_message = "sec_contact_email doit etre vide ou un courriel."
+  }
+}
+
 variable "agentcore_idle_session_timeout" {
   description = "Secondes d'inactivite avant qu'AgentCore libere la microVM d'une session."
   type        = number

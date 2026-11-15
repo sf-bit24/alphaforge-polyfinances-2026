@@ -205,3 +205,105 @@ def find_asset(ticker: str | None, name: str | None = None, currency: str | None
                 if wanted == known or (len(wanted) >= 6 and (wanted in known or known in wanted)):
                     return asset
     return None
+
+
+# --------------------------------------------------------------------------- séries à une date (point-in-time)
+# Utilisées par l'étape 0 du volet finance (indicateurs par titre). Ne lisent jamais au-delà de ``as_of`` :
+# ``last_prices()`` lit la dernière ligne du fichier (2026-11-12) et n'est donc pas utilisable pour une date passée.
+
+
+@dataclass(frozen=True)
+class DailyRow:
+    date: str
+    close: float
+    adj_close: float
+    volume: float
+
+
+@lru_cache(maxsize=1)
+def _daily() -> dict[str, tuple[DailyRow, ...]]:
+    out: dict[str, list[DailyRow]] = {}
+    with (DATA_DIR / "prices_daily.csv").open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            out.setdefault(row["ticker"], []).append(
+                DailyRow(row["date"], float(row["close"]), float(row["adj_close"]), float(row["volume"] or 0.0))
+            )
+    return {t: tuple(sorted(rows, key=lambda r: r.date)) for t, rows in out.items()}
+
+
+def daily(ticker: str, as_of: str | None = None, start: str | None = None) -> tuple[DailyRow, ...]:
+    """Lignes quotidiennes du titre, de ``start`` (inclus) à ``as_of`` (inclus), dates ISO."""
+    rows = _daily().get(ticker, ())
+    return tuple(r for r in rows if (start is None or r.date >= start) and (as_of is None or r.date <= as_of))
+
+
+def close_on_or_before(ticker: str, as_of: str) -> DailyRow | None:
+    rows = daily(ticker, as_of)
+    return rows[-1] if rows else None
+
+
+@lru_cache(maxsize=1)
+def _corporate_actions() -> tuple[dict[str, str], ...]:
+    return tuple(_rows("corporate_actions.csv"))
+
+
+def dividends(ticker: str, start: str, end: str) -> list[tuple[str, float]]:
+    """Dividendes par action (déjà ajustés des fractionnements dans le starter) avec ``start < ex_date <= end``.
+    Les lignes ``split`` sont ignorées : les fractionnements sont déjà appliqués aux prix."""
+    return [
+        (r["ex_date"], float(r["value"]))
+        for r in _corporate_actions()
+        if r["ticker"] == ticker and r["action"] == "dividend" and start < r["ex_date"] <= end
+    ]
+
+
+def _minus_days(iso: str, days: int) -> str:
+    from datetime import date, timedelta
+
+    return (date.fromisoformat(iso) - timedelta(days=days)).isoformat()
+
+
+def dividend_yield_ttm(ticker: str, as_of: str) -> float | None:
+    """Rendement du dividende sur 12 mois : dividendes avec ex-date dans ]as_of − 365 j, as_of] / clôture à as_of.
+    ``close`` et dividendes sont dans la même base (ajustés des fractionnements seulement). None si aucun prix."""
+    px = close_on_or_before(ticker, as_of)
+    if px is None or px.close <= 0:
+        return None
+    total = sum(v for _, v in dividends(ticker, _minus_days(as_of, 365), as_of))
+    return total / px.close
+
+
+@lru_cache(maxsize=1)
+def _fx_series() -> tuple[tuple[str, float], ...]:
+    return tuple(sorted((r["date"], float(r["usdcad"])) for r in _rows("fx_usdcad_daily.csv")))
+
+
+def usdcad_on_or_before(iso: str) -> float | None:
+    """Taux de la Banque du Canada au dernier jour ouvrable <= ``iso`` (report du dernier taux connu : les jours
+    fériés canadiens n'ont pas de ligne)."""
+    best = None
+    for d, v in _fx_series():
+        if d > iso:
+            break
+        best = v
+    return best
+
+
+def median_dollar_volume_cad(ticker: str, as_of: str, days: int = 63) -> float | None:
+    """Valeur médiane échangée par jour (``close × volume``) sur les ``days`` dernières séances, en CAD."""
+    rows = daily(ticker, as_of)[-days:]
+    asset = universe().get(ticker)
+    if not rows or asset is None:
+        return None
+    vals = []
+    for r in rows:
+        fx = 1.0 if asset.currency == "CAD" else usdcad_on_or_before(r.date)
+        if fx is None:
+            continue
+        vals.append(r.close * r.volume * fx)
+    if not vals:
+        return None
+    vals.sort()
+    n = len(vals)
+    return vals[n // 2] if n % 2 else 0.5 * (vals[n // 2 - 1] + vals[n // 2])
+

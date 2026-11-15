@@ -179,35 +179,54 @@ def _norm_name(value: str) -> str:
     return re.sub(r"[^a-z0-9 ]+", " ", value.lower()).strip()
 
 
+def _symbol_variants(symbol: str, hint: str | None) -> list[str]:
+    """Variantes essayées quand le symbole n'est pas dans l'univers tel quel, dans l'ordre d'essai."""
+    variants = []
+    if hint != "US":
+        variants.append(f"{symbol}.TO")
+    if hint == "CA" and symbol.endswith(".TO"):
+        variants.append(symbol)
+    if hint != "CA":
+        variants.append(symbol.split(".")[0])
+    return variants
+
+
+def _find_by_symbol(assets: dict[str, Asset], ticker: str | None, currency: str | None) -> Asset | None:
+    symbol, hint = normalize_symbol(ticker)
+    if not symbol:
+        return None
+    if symbol in assets:
+        return assets[symbol]
+    for variant in _symbol_variants(symbol, hint):
+        asset = assets.get(variant)
+        if asset and (currency is None or asset.currency == currency.upper() or hint is None):
+            return asset
+    return None
+
+
+def _find_by_name(assets: dict[str, Asset], name: str | None) -> Asset | None:
+    if not name:
+        return None
+    wanted = _norm_name(name)
+    if len(wanted) < 4:
+        return None
+    for asset in assets.values():
+        known = _norm_name(asset.name)
+        if wanted == known or (len(wanted) >= 6 and (wanted in known or known in wanted)):
+            return asset
+    return None
+
+
 def find_asset(
     ticker: str | None, name: str | None = None, currency: str | None = None, assets: dict[str, Asset] | None = None
 ) -> Asset | None:
     """Cherche un titre de l'univers par symbole (variantes ``.TO``, préfixes de bourse) puis par nom.
     ``assets`` : univers à parcourir (par défaut celui du jeu de départ; ``alphaforge.market`` passe le sien)."""
     assets = universe() if assets is None else assets
-    symbol, hint = normalize_symbol(ticker)
-    if symbol:
-        if symbol in assets:
-            return assets[symbol]
-        candidates = []
-        if hint != "US":
-            candidates.append(f"{symbol}.TO")
-        if hint == "CA" and symbol.endswith(".TO"):
-            candidates.append(symbol)
-        if hint != "CA":
-            candidates.append(symbol.split(".")[0])
-        for candidate in candidates:
-            asset = assets.get(candidate)
-            if asset and (currency is None or asset.currency == currency.upper() or hint is None):
-                return asset
-    if name:
-        wanted = _norm_name(name)
-        if len(wanted) >= 4:
-            for asset in assets.values():
-                known = _norm_name(asset.name)
-                if wanted == known or (len(wanted) >= 6 and (wanted in known or known in wanted)):
-                    return asset
-    return None
+    asset = _find_by_symbol(assets, ticker, currency)
+    if asset is not None:
+        return asset
+    return _find_by_name(assets, name)
 
 
 # --------------------------------------------------------------------------- séries à une date (point-in-time)
@@ -309,4 +328,3 @@ def median_dollar_volume_cad(ticker: str, as_of: str, days: int = 63) -> float |
     vals.sort()
     n = len(vals)
     return vals[n // 2] if n % 2 else 0.5 * (vals[n // 2 - 1] + vals[n // 2])
-

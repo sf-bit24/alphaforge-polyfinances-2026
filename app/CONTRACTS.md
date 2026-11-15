@@ -6,14 +6,17 @@ Périmètre de la version 1 : construire le profil (questions de base détermini
 
 ## 1. Runtimes AgentCore
 
-Un seul zip de code (`app/agents`, Python 3.13, linux/arm64) alimente quatre runtimes, qui ne diffèrent que par `AGENT_ROLE` et par leur rôle IAM.
+Un seul zip de code (`app/agents`, Python 3.13, linux/arm64) alimente tous les runtimes, qui ne diffèrent que par `AGENT_ROLE` et par leur rôle IAM.
 
 | Runtime AgentCore | `AGENT_ROLE` | Appelé par | Accès S3 (moindre privilège) |
 | --- | --- | --- | --- |
 | `alphaforge_sandbox_profile` | `profile` | serveur Next.js | lit `general/`, lit et écrit `clients/` |
 | `alphaforge_sandbox_press` | `press` | Step Functions | lit et écrit `staging/<run_id>/press/` |
 | `alphaforge_sandbox_data` | `data` | Step Functions | lit et écrit `staging/<run_id>/data/` |
-| `alphaforge_sandbox_supervisor` | `supervisor` | Step Functions | lit `staging/` et `general/`; écrit `staging/<run_id>/supervisor/`, `general/actualites/`, `general/donnees/` et `general/index.md`, jamais `general/methodologie/` ni `general/societes/` (gérés par Terraform). L'ingestion de la Knowledge Base est lancée par Step Functions, pas par A6. |
+| `alphaforge_sandbox_supervisor` | `supervisor` | Step Functions | lit `staging/`, `general/` et `archive/`; écrit `staging/<run_id>/supervisor/`, `general/actualites/`, `general/donnees/`, `general/faits/`, `general/signaux/`, `general/depots/`, `general/recherches/` et `general/index.md`, jamais `general/methodologie/` ni `general/societes/` (gérés par Terraform). L'ingestion de la Knowledge Base est lancée par Step Functions, pas par A6. |
+| `alphaforge_sandbox_router` | `router` | Step Functions (`recherche`) | lit `staging/<run_id>/router/` et `staging/<run_id>/experts/`; écrit `staging/<run_id>/router/` (section 11) |
+| `alphaforge_sandbox_expert` | `expert` | Step Functions (`recherche`) | lit `staging/<run_id>/experts/` et `staging/<run_id>/researchers/`; écrit `staging/<run_id>/experts/`; Knowledge Base; `InvokeAgentRuntime` sur le runtime `researcher` seulement (section 11) |
+| `alphaforge_sandbox_researcher` | `researcher` | runtime `expert` | lit et écrit `staging/<run_id>/researchers/`; écrit `archive/` (section 11) |
 
 Chaque rôle n'a `s3:ListBucket` que sous ses propres préfixes. Pour un objet absent, S3 répond donc 403 (`AccessDenied`) et non 404 : le magasin vérifie alors l'absence par `ListObjectsV2` sur la clé exacte, et ne conclut à un refus que si l'objet existe.
 
@@ -33,6 +36,9 @@ Variables d'environnement posées par Terraform sur chaque runtime :
 | `ALPHAFORGE_MODEL_ID` | `us.anthropic.claude-opus-5-5` | Profil d'inférence Bedrock de tous les agents. |
 | `ALPHAFORGE_KB_ID` | `ABCDEFGHIJ` | Knowledge Base de la base générale (vide en local). |
 | `ALPHAFORGE_GUARDRAIL_ID` / `ALPHAFORGE_GUARDRAIL_VERSION` | `abc123` / `1` | Guardrail du cadre responsable, appliqué aux agents du runtime `profile` (vide en local). |
+| `ALPHAFORGE_RESEARCHER_NAME` | `alphaforge_sandbox_researcher` | Runtime `expert` : nom du runtime des chercheurs, dont l'ARN est trouvé par `ListAgentRuntimes`. `ALPHAFORGE_RESEARCHER_ARN` le remplace s'il est posé; sans l'un ni l'autre (local), les chercheurs tournent dans des fils. |
+| `ALPHAFORGE_RESEARCHER_MODEL_ID` | (vide) | Facultatif : modèle des chercheurs; par défaut `ALPHAFORGE_MODEL_ID`. Le rôle IAM n'autorise que `ALPHAFORGE_MODEL_ID`. |
+| `ALPHAFORGE_CONTACT_EMAIL` | (vide) | Facultatif : courriel ajouté au User-Agent pour la SEC seulement (accès équitable d'EDGAR); sans lui, la SEC répond 403 et ses hôtes sont déclarés bloqués. |
 
 Transport : `POST /invocations`, corps JSON, réponse JSON (`application/json`), ou SSE (`text/event-stream`) quand la requête contient `"stream": true` (section 3.4). `GET /ping` est servi par `BedrockAgentCoreApp`.
 
@@ -266,6 +272,15 @@ clients/<client_id>/journal.md              chaque réponse, avec sa provenance 
 clients/<client_id>/traces/<horodatage>-<action>.json
 staging/<run_id>/<role>/<id>.json
 staging/<run_id>/<role>/_done.json
+general/faits/<libellé>/<AAAA-MM-JJ>-<hash>.md        écrit par A6 (section 11)
+general/signaux/<libellé>/<AAAA-MM-JJ>-<hash>.md      écrit par A6
+general/depots/<ticker>/<accession>.md                écrit par A6
+general/recherches/<AAAA>/<MM>/<slug>-<hash>.md       écrit par A6 (synthèses d'A0)
+staging/<run_id>/router/plan.json, _routed.json, _composed.json, brief-<hash>.json
+staging/<run_id>/experts/<sujet>/<id>.json, brief.json, _done.json
+staging/<run_id>/researchers/<sujet>-<rk>/findings.json, _done.json
+staging/<run_id>/supervisor/quarantine.json           éléments et hôtes en quarantaine
+archive/<hôte>/<AAAA-MM-JJ>/<sha256>.json              réponse brute archivée par un chercheur
 runtime/agents-<release>.zip                code des runtimes, poussé par Terraform
 scenarios/...                               scénarios probabilistes, hors de la base OKF (section 10)
 ```
@@ -546,3 +561,117 @@ SELECT model_id, mix_id, horizon_years, basis, value, ci_lo, ci_hi
 FROM alphaforge_sandbox_scenarios.scenarios
 WHERE run_id = '<run_id de latest.json>' AND family = 'CAD77' AND metric = 'p_loss_gt_20';
 ```
+
+## 11. Recherche par experts de sujet
+
+Un expert par sujet lance lui-même n chercheurs, un par session AgentCore (une microVM chacun), et juge ce qu'ils
+rapportent. Le code de `app/agents/src/alphaforge/research/` applique toutes les règles : le modèle choisit quoi
+chercher et combien de chercheurs, le code décide si c'est permis. Les collecteurs A4 et A5 (sections 4 et 6)
+restent en place.
+
+### 11.1 Rôles
+
+| Rôle | Agent | Actions | Marqueur |
+| --- | --- | --- | --- |
+| `router` | A0 : choisit 1 à 4 sujets et une sous-question par sujet, puis rédige la synthèse finale | `route`, `compose` | `staging/<run_id>/router/_routed.json`, `_composed.json` |
+| `expert` | E1 Macro et politique, E2 Taux, change et matières, E3 Sociétés et marchés, E4 Fonds et durabilité, E5 Logement et économie réelle, E6 Attentes et positionnement, E7 Actualités et attention | `research` | `staging/<run_id>/experts/<sujet>/_done.json` |
+| `researcher` | Sous-agent générique, une mission par session | `research` | `staging/<run_id>/researchers/<sujet>-<rk>/_done.json` |
+
+Toutes les actions suivent la section 4 : acceptation immédiate (`accepted`, `already_running`, `already_done`),
+travail en tâche asynchrone, marqueur `{status, role, action, run_id, …, error, started_at, finished_at, release,
+trace}` écrit à la fin, que la tâche réussisse ou non.
+
+### 11.2 Requêtes
+
+```json
+{"action": "route", "run_id": "…", "question": "…", "issuers"?: ["ENB.TO"], "themes"?: ["esg"], "as_of"?: "2026-11-01", "depth"?: "quick|standard|deep", "since"?: "AAAA-MM-JJ"}
+{"action": "compose", "run_id": "…"}
+{"action": "research", "run_id": "…", "subject": "E4", "mode": "sweep|question", "question"?, "sub_question"?, "issuers"?, "themes"?, "as_of"?, "depth"?, "since"?, "max_researchers"?}
+{"action": "research", "run_id": "…", "subject": "E4", "researcher": "r2", "objective": "…", "evidence_wanted"?: [], "packs": ["funds-sustainability"], "issuers"?, "themes"?, "since"?, "as_of"?, "budget_s"?, "max_tool_calls"?}
+```
+
+- `since` vaut par défaut sept jours avant la date du jour (un an au plus); `issuers` vaut l'univers du jeu de
+  départ en mode `sweep`. `question` est requise en mode `question`, sans aucune donnée de client.
+- `depth` fixe le nombre de chercheurs par tour : `quick` 3, `standard` 6, `deep` 10, avec deux tours au plus
+  et 24 chercheurs par exécution, partagés par A0 entre les sujets (`max_researchers`).
+- Un chercheur ne reçoit que des paquets de son sujet; budget de 240 s et 20 appels d'outils par défaut (300 s et
+  20 appels au plus). Session : `<run_id>-<sujet>-<rk>` complété à 48 caractères.
+
+### 11.3 Paquets de sources et règles de collecte
+
+`research/packs.py` tient les 14 paquets (hôtes permis, sources de recherche, points d'accès connus, pièges), le
+registre des hôtes (licence, lien, texte d'attribution, plafond de requêtes par session, exception au robots.txt) et
+les sept sujets. Phase 1 : sources sans clé seulement.
+
+- HTTPS seulement, hôtes du paquet seulement (redirections comprises), User-Agent déclaré (section 4).
+- robots.txt lu avant chaque hôte (RFC 9309, groupe du robot sinon `*`, et `Claude-User` en plus); seule exception :
+  `query1.finance.yahoo.com`, notée dans le constat.
+- Coupe-circuit : 401, 403, 407, 429, 451, coupure ou défi anti-robot bloquent l'hôte pour la session.
+- Pages HTML refusées; XLSX, ZIP et PDF refusés en phase 1.
+- Chaque réponse est archivée (`archive/…`) avec l'adresse, le statut, `Last-Modified`, `ETag` et `retrieved_at`.
+- Quarantaine : `propose_host` (2 hôtes par chercheur) n'accepte qu'un hôte qui résout vers des adresses publiques
+  et dont le robots.txt permet le chemin; 3 lectures au plus; ses éléments ne vont jamais dans `general/`.
+- Hacker News et Bluesky ne servent qu'à compter des mentions : le texte lu en transit n'est ni archivé ni gardé.
+
+### 11.4 Constats
+
+`staging/<run_id>/researchers/<sujet>-<rk>/findings.json` : `{"brief": {…}, "findings": [ … ]}`. Un constat est un
+pointeur : le modèle donne des localisateurs (`observations[3].FXUSDCAD.v`, `rows[12].Value`, `items[0].title`),
+le code lit les valeurs et les dates dans la réponse archivée.
+
+```json
+{"finding_id": "E2-r1-f01", "kind": "fact|signal|quote|filing|news|series", "label": "…", "claim": "phrase neutre en français",
+ "values": {"value": "1.4257"}, "locators": {"value": "observations[2].FXUSDCAD.v"}, "series_spec"?: {"rows", "date_field", "value_field", "publication_field"},
+ "observations"?: [{"date", "value"}], "observation_date", "observation_basis": "source|researcher", "publication_date",
+ "publication_basis": "source|retrieved_at_upper_bound", "retrieved_at", "url", "item_url", "host", "host_status": "allowed|exception|quarantined|derived",
+ "robots_ok_at_fetch", "response_id", "archive_key", "licence", "licence_url", "attribution_text", "licence_note", "as_of", "issuers"}
+```
+
+Refusés à la consignation : localisateur non résolu, valeur vide, date de publication postérieure à la récupération
+ou à `as_of`, observation sans date, cote de marché sans `resolution_rules`, nombre de la phrase absent des valeurs
+lues (un nombre suivi d'une unité doit venir d'une valeur, jamais d'une date).
+
+### 11.5 Éléments et synthèses
+
+L'expert met en attente un élément par constat retenu (`staging/<run_id>/experts/<sujet>/<id>.json`), au format de la
+section 4 avec les types `fact`, `signal`, `filing` en plus, et deux blocs : `data.provenance` (dates, millésime,
+requête, archive, localisateurs, licence, attribution, robots, `as_of`, `adjustment`) et `data.market` (`venue`,
+`venue_market_id`, `bid`, `ask`, `volume`, `open_interest`, `resolution_rules`, `settlement_source`,
+`quality_tier` : `high` si volume d'au moins 1 M et fourchette d'au plus 2 cents, sinon `medium` ou
+`illustrative`). En mode `question`, il écrit aussi `brief.json` (synthèse du sujet, citations, lacunes). A0 écrit
+`brief-<hash>.json`, de type `brief` : `data.text`, `data.citations` (identifiants d'éléments), `data.subjects`,
+`data.gaps`, `data.as_of`.
+
+### 11.6 Contrôles d'A6
+
+En plus de ceux de la section 4, avec une raison pour chaque rejet : réponse archivée relue et chaque valeur (chaque
+observation d'une série) identique; `licence` et `attribution_text` présents; robots.txt respecté sauf exception;
+éléments en quarantaine retenus dans `staging/<run_id>/supervisor/quarantine.json` avec les hôtes proposés; nombres
+du titre et du résumé fondés; rien de publié après `as_of`; cotes avec leurs règles; synthèse dont chaque citation
+renvoie à un élément retenu et chaque nombre à un élément cité. Types OKF : `Fact`, `Market Signal`,
+`Regulatory Filing`, `Research Brief`. Le marqueur d'A6 ajoute `quarantined` et `proposed_hosts`.
+
+### 11.7 Machine `alphaforge-sandbox-recherche`
+
+```mermaid
+flowchart LR
+    S["Scheduler (sweep) ou interface (question)"] --> M{"mode"}
+    M -->|"question"| R["A0 route"]
+    R --> X["Map : un expert par sujet choisi"]
+    M -->|"sweep"| X
+    X -->|"chaque expert"| W["n sessions researcher"]
+    X --> C{"mode"}
+    C -->|"question"| P["A0 compose"]
+    C -->|"sweep"| A6["A6 curate"]
+    P --> A6
+    A6 --> I["Ingestion de la Knowledge Base"]
+```
+
+- Entrée : `{"mode"?: "sweep" | "question", "run_id"?, "question"?, "subjects"?: ["E1", …], "issuers"?,
+  "themes"?, "as_of"?, "depth"?, "since"?}`; `mode` vaut `sweep` par défaut, `subjects` les sept sujets, `depth`
+  `quick` en `sweep` et `standard` en `question`.
+- Un expert en échec n'arrête pas les autres; un échec d'A0, d'A6 ou de l'ingestion fait échouer l'exécution.
+  Délai de 1800 s par expert ou par étape d'A0, sondage toutes les 15 s.
+- La planification `alphaforge-sandbox-recherche` (jours ouvrables, 17 h 30 HE, mode `sweep`) est désactivée par
+  défaut (`recherche_schedule_enabled`).
+

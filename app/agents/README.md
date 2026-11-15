@@ -1,14 +1,17 @@
 # AlphaForge AI : agents Python (AgentCore Runtime)
 
-Un seul code Python sert les quatre runtimes AgentCore décrits dans `app/CONTRACTS.md`. La variable `AGENT_ROLE`
+Un seul code Python sert tous les runtimes AgentCore décrits dans `app/CONTRACTS.md`. La variable `AGENT_ROLE`
 choisit le point d'entrée :
 
 | `AGENT_ROLE` | Agents | Rôle |
 | --- | --- | --- |
 | `profile` | questionnaire déterministe, A1 `createProfile-Agent`, A2 `AnalyseExistingPortfolio-Agent` | Profil investisseur en cinq dimensions, portefeuille existant, complétude, traces, SSE. |
-| `press` | A4 | Actualités datées (Yahoo Finance RSS, Google News RSS, GDELT) vers `staging/<run_id>/press/`. |
+| `press` | A4 | Actualités datées (communiqués Newswire.ca et PR Newswire, GDELT) vers `staging/<run_id>/press/`. |
 | `data` | A5 | Séries et cours datés (Banque du Canada Valet, FRED, Yahoo Finance) vers `staging/<run_id>/data/`. |
 | `supervisor` | A6 | Contrôle ce qui est arrivé dans `staging/<run_id>/` et écrit les documents OKF sous `general/`. |
+| `router` | A0 | Recherche par experts : choisit les sujets d'une question, puis rédige la synthèse finale (section 11). |
+| `expert` | E1 à E7 | Expert de sujet : lance lui-même n chercheurs, une session AgentCore chacun, et met en attente leurs constats. |
+| `researcher` | chercheur | Une mission par session : cherche dans les hôtes de ses paquets et consigne des constats par localisateur. |
 
 Principes appliqués partout : le code calcule, le modèle explique, chaque nombre cite sa source. Le cadre est une
 simulation : aucune transaction réelle, aucun conseil personnalisé. Les questions de base viennent d'un questionnaire
@@ -41,7 +44,7 @@ app/agents/
       kb.py                      kb.list / kb.get, recherche dans la Knowledge Base générale
       service.py                 toutes les actions de CONTRACTS.md §3
     collect/
-      http.py, fetchers.py       sources publiques sans clé, hôtes en liste blanche, User-Agent générique
+      http.py, fetchers.py       sources publiques sans clé, hôtes en liste blanche, User-Agent déclaré
       press.py, data.py          A4 et A5
       supervisor.py              A6 : contrôles du code, revue éditoriale, documents OKF, index général
       staging.py, service.py     éléments collectés, tâche asynchrone et marqueur _done.json
@@ -97,6 +100,23 @@ A6 écrit son marqueur avec `status: "ok"` même si A4 ou A5 a échoué ou n'a r
 d'A6 lui-même donne `status: "error"`. `run_id` doit
 respecter `^[A-Za-z0-9_-]{1,64}$`. Une collecte est bornée : 30 actualités, 6 recherches, quelques minutes au plus.
 
+### Recherche par experts en local
+
+Sans `ALPHAFORGE_RESEARCHER_NAME` ni `ALPHAFORGE_RESEARCHER_ARN`, un expert lance ses chercheurs dans des fils du même
+processus, avec le même magasin : toute la chaîne tourne sur un poste.
+
+```sh
+AGENT_ROLE=expert ALPHAFORGE_STORE=local PORT=8084 uv run python main.py
+curl -s 127.0.0.1:8084/invocations -H 'content-type: application/json' \
+  -d '{"action":"research","run_id":"local-2","subject":"E2","mode":"sweep","depth":"quick"}'
+# staging/local-2/experts/E2/_done.json, puis A6 :
+curl -s 127.0.0.1:8083/invocations -H 'content-type: application/json' -d '{"action":"curate","run_id":"local-2"}'
+```
+
+Les paquets de sources, le registre des hôtes et les sujets sont dans `src/alphaforge/research/packs.py`; un hôte
+nouveau n'entre dans un paquet qu'après la lecture humaine de sa licence (les hôtes proposés par les chercheurs
+restent en quarantaine, `staging/<run_id>/supervisor/quarantine.json`).
+
 ## Tests et qualité
 
 ```sh
@@ -125,7 +145,7 @@ Le runtime démarre avec `python main.py` (point d'entrée `["main.py"]`, sans `
 
 | Variable | Défaut | Rôle |
 | --- | --- | --- |
-| `AGENT_ROLE` | `profile` | `profile`, `press`, `data` ou `supervisor`. |
+| `AGENT_ROLE` | `profile` | `profile`, `press`, `data`, `supervisor`, `tldoole`, `router`, `expert` ou `researcher`. |
 | `ALPHAFORGE_ENV` | `local` | Environnement, renvoyé par `health`. |
 | `ALPHAFORGE_RELEASE` | `dev` | SHA court du commit, renvoyé dans chaque réponse. |
 | `ALPHAFORGE_REGION` | `AWS_REGION`, sinon `us-east-1` | Région des appels AWS. |
@@ -153,13 +173,18 @@ provenance `a1:<tour>` ou `a2:<tour>`.
 | --- | --- | --- |
 | `www.bankofcanada.ca` | A5 | API Valet (taux directeur, rendements, IPC, USD/CAD). |
 | `fred.stlouisfed.org` | A5 | `fredgraph.csv` (taux, rendements, IPC, chômage aux États-Unis). |
-| `query1.finance.yahoo.com` | A5, A2 | Graphique quotidien d'un titre absent du jeu de départ. |
-| `feeds.finance.yahoo.com` | A4 | Titres d'actualité par symbole (RSS). |
-| `news.google.com` | A4 | Recherche Google News (RSS). |
-| `api.gdeltproject.org` | A4 | GDELT DOC 2.0 (au plus une requête toutes les six secondes). |
+| `query1.finance.yahoo.com` | A5, A2 | Graphique quotidien d'un titre absent du jeu de départ. Le robots.txt de l'hôte interdit tout : exception assumée par l'équipe, faute d'alternative officielle gratuite. |
+| `api.gdeltproject.org` | A4 | GDELT DOC 2.0, filtre `sourcelang:french` ou `english` (au plus une requête toutes les six secondes). |
+| `www.newswire.ca` | A4 | Communiqués d'émetteurs (Cision/CNW), flux RSS général et services financiers. |
+| `www.prnewswire.com` | A4 | Communiqués d'émetteurs (Cision), flux RSS des services financiers. |
 
 Seuls ces hôtes sont joignables, en HTTPS, redirections comprises; les adresses sont construites par le code. Le
-User-Agent est générique et ne contient aucun renseignement personnel.
+User-Agent déclare le robot, `AlphaForgeResearchBot/0.1 (+https://github.com/sf-bit24/alphaforge-polyfinances-2026)`,
+sans renseignement personnel; FRED ne reçoit `curl/8.0` qu'en repli, une seule fois, s'il refuse ce User-Agent. Aucun
+filtre n'est contourné : un 403, un 429 ou une coupure remonte comme erreur et l'agent passe à une autre source.
+`feeds.finance.yahoo.com` et `news.google.com` ne sont plus lus, leur robots.txt interdisant les chemins utilisés
+(vérifié le 2026-11-15). Des communiqués, A4 ne garde que les métadonnées (titre, lien, émetteur, dates, symboles) et
+son propre résumé : l'extrait RSS sert au résumé puis est jeté.
 
 ## Volet finance (`alphaforge.finance`, simulation seulement)
 

@@ -80,3 +80,5 @@ ignore = ["S101", "S311"]
 # Les tests du moteur appellent pytest.importorskip (numpy, pandas, scipy) avant leurs imports, pour sauter proprement
 # quand le groupe finance n'est pas installé (CI : uv sync --frozen).
 "tests/finance/backtest/**" = ["E402"]
+# Registre des sources : adresses complètes des points d'accès, plus longues que la ligne.
+"src/alphaforge/research/packs.py" = ["E501"]

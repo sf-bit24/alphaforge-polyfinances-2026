@@ -60,10 +60,45 @@ export interface ExtractedFact {
   note: L;
 }
 
+/** Numbers in words, one to twelve, as investors write a number of months. */
+const NUMBER_WORDS: Record<string, number> = Object.fromEntries(
+  [
+    ["un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix", "onze", "douze"],
+    ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"],
+  ].flatMap((words) => words.map((word, index) => [word, index + 1])),
+);
+
+/** A number of months, in digits or in words ("six-month" too); « dix-huit » or "twenty-four" is not read as « huit » or "four". */
+const MONTHS = new RegExp(`(?:\\b(\\d{1,2})|(?<![\\w-])(${Object.keys(NUMBER_WORDS).join("|")}))[\\s-]*(?:mois|months?)\\b`, "g");
+
+/** Words that tie a number of months to money set aside. */
+const SAVINGS = /urgence|emergency|coussin|cushion|précaution|precaution|côté|aside|épargne|savings/g;
+
+/** Characters between two matches of the same text. */
+const gap = (left: RegExpExecArray, right: RegExpExecArray) =>
+  Math.max(0, right.index - (left.index + left[0].length), left.index - (right.index + right[0].length));
+
+/**
+ * The number of months nearest a savings word of the same clause: « dans un mois, j'achète une
+ * maison; j'ai 4 mois de côté » reads 4. A comma does not end the clause (« côté épargne, j'ai six mois »).
+ */
+function savedMonths(lower: string): RegExpExecArray | null {
+  let nearest: { months: RegExpExecArray; distance: number } | null = null;
+  for (const clause of lower.split(/[.;!?]/)) {
+    const savings = [...clause.matchAll(SAVINGS)];
+    for (const months of clause.matchAll(MONTHS)) {
+      const distance = Math.min(...savings.map((word) => gap(months, word)));
+      if (distance < (nearest?.distance ?? Infinity)) nearest = { months, distance };
+    }
+  }
+  return nearest?.months ?? null;
+}
+
 function emergencyFundFact(lower: string): ExtractedFact | null {
-  const months = /(\d{1,2})\s*(mois|months?)/.exec(lower);
-  if (!months || !/(urgence|emergency|coussin|cushion|précaution|precaution|côté|aside|épargne|savings)/.test(lower)) return null;
-  const value = Number(months[1]);
+  const months = savedMonths(lower);
+  if (!months) return null;
+  const [, digits, word = ""] = months;
+  const value = Number(digits ?? NUMBER_WORDS[word]);
   return {
     field: "risk_capacity.emergency_fund",
     value,
@@ -111,34 +146,40 @@ function purposeFact(message: string, lower: string): ExtractedFact | null {
 
 type ChoicePattern = [pattern: RegExp, choice: string];
 
+/**
+ * Read on the investor's text, not lowered: "AI" counts in capitals only, since a lower-case
+ * « ai » is the French verb (j'ai, j'en ai, ai-je), and so is "AI" after an apostrophe (J'AI).
+ */
 const THEME_PATTERNS: ChoicePattern[] = [
-  [/(tech|technolog|\bia\b|\bai\b|intelligence artificielle|artificial intelligence)/, "technology"],
-  [/(énergie propre|energie propre|clean energy|renouvelable|renewable)/, "clean_energy"],
-  [/(dividende|dividend)/, "dividends"],
-  [/(santé|sante|health)/, "health"],
+  [/(\btechs?\b|technolog|\bia\b|intelligence artificielle|artificial intelligence)/i, "technology"],
+  [/(?<!')\bAI\b/, "technology"],
+  [/(énergie propre|energie propre|clean energy|renouvelable|renewable)/i, "clean_energy"],
+  [/(dividende|dividend)/i, "dividends"],
+  // « santé », not the end of « suffisante » or « intéressante ».
+  [/(\bsant[ée]|health)/i, "health"],
 ];
 
 const EXCLUSION_PATTERNS: ChoicePattern[] = [
   [/(tabac|tobacco)/, "tobacco"],
-  [/(armes?\b|armement|weapons?)/, "weapons"],
+  [/(\barmes?\b|armement|weapons?)/, "weapons"],
   [/(pétrol|petrol|fossile|fossil|\boil\b)/, "fossil_fuels"],
   [/(crypto)/, "crypto"],
 ];
 
 /** The choices already made plus those the text mentions, or null when it mentions no new one. */
-function withMentionedChoices(current: unknown, lower: string, patterns: ChoicePattern[]): string[] | null {
+function withMentionedChoices(current: unknown, text: string, patterns: ChoicePattern[]): string[] | null {
   const choices = new Set<string>(Array.isArray(current) ? (current as string[]) : []);
   const before = choices.size;
   for (const [pattern, choice] of patterns) {
-    if (pattern.test(lower)) choices.add(choice);
+    if (pattern.test(text)) choices.add(choice);
   }
   if (choices.size === before) return null;
   choices.delete("none");
   return [...choices];
 }
 
-function themesFact(lower: string, current: Map<string, unknown>): ExtractedFact | null {
-  const themes = withMentionedChoices(current.get("preferences.themes"), lower, THEME_PATTERNS);
+function themesFact(text: string, current: Map<string, unknown>): ExtractedFact | null {
+  const themes = withMentionedChoices(current.get("preferences.themes"), text, THEME_PATTERNS);
   if (!themes) return null;
   return { field: "preferences.themes", value: themes, note: { fr: "vos thèmes d'intérêt", en: "your themes of interest" } };
 }
@@ -152,14 +193,16 @@ function exclusionsFact(lower: string, current: Map<string, unknown>): Extracted
 
 /** Rule-based reading of a free-text message (what A1's update-KB tool would store). */
 export function extractFacts(message: string, current: Map<string, unknown>): ExtractedFact[] {
-  const lower = message.toLowerCase();
+  // The patterns use the straight apostrophe; keyboards often type the typographic one (j’ai).
+  const text = message.replace(/’/g, "'");
+  const lower = text.toLowerCase();
   const facts = [
     emergencyFundFact(lower),
     debtFact(lower),
     liquidityFact(lower),
     withdrawalFact(lower),
     purposeFact(message, lower),
-    themesFact(lower, current),
+    themesFact(text, current),
     exclusionsFact(lower, current),
   ];
   return facts.filter((fact) => fact !== null);

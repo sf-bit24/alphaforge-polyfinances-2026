@@ -94,3 +94,16 @@ def test_tool_spans_are_exported_with_hashes(tmp_path, monkeypatch):
     assert tool["parent_id"] == parent["span_id"] and tool["trace_id"] == parent["trace_id"]
     assert len(tool["attributes"]["alphaforge.input.sha256"]) == 64
     assert tool["attributes"]["alphaforge.result"] == 5
+
+
+def test_concurrent_writers_keep_one_chain(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    def write(i):
+        d = _decision("CVaR de 3,4 %.", ["cvar"]).model_copy(update={"decision_id": f"c{i}"})
+        return record_decision(d, str(tmp_path))["seq"]
+
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        seqs = list(ex.map(write, range(12)))
+    assert sorted(seqs) == list(range(12))
+    assert verify_chain(str(tmp_path), "p1") == (True, None)

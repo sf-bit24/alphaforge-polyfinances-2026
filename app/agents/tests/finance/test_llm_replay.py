@@ -122,3 +122,47 @@ def test_strands_replay_model_records_and_replays(tmp_path, monkeypatch):
         asyncio.run(collect("replay", rnd=2))          # autre tour = autre clé
     with pytest.raises(ValueError, match="temperature"):
         ReplayModel(node_id="x", store=store, model_id="m", temperature=0.0)
+
+
+def test_filestore_publishes_atomically(tmp_path):
+    s = FileStore(tmp_path)
+    assert s.put_once("cd" * 32, {"x": 1})
+    files = [p.name for p in tmp_path.rglob("*")]
+    assert not any(n.endswith(".tmp") for n in files) and s.get("cd" * 32) == {"x": 1}
+
+
+def test_index_metadata_for_both_record_formats():
+    from alphaforge.finance.llm.core import _meta
+    assert _meta({"request": {"model_id": "m", "node_id": "n"}}, "model_id") == "m"
+    assert _meta({"request": {"config": {"model_id": "m2"}, "node_id": "n2"}}, "model_id") == "m2"
+    assert _meta({"request": {}}, "node_id") == "inconnu"
+
+
+def test_replay_model_concurrent_miss_yields_stored_winner(monkeypatch):
+    import asyncio
+
+    from strands.models.bedrock import BedrockModel
+
+    from alphaforge.finance.llm.strands_replay import ReplayModel
+
+    async def fake_stream(self, messages, *a, **k):
+        yield {"contentBlockDelta": {"delta": {"text": "moi"}}}
+    monkeypatch.setattr(BedrockModel, "stream", fake_stream)
+
+    class RacingStore:                       # un autre appel a publié entre notre lecture et notre écriture
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, key):
+            self.calls += 1
+            return None if self.calls == 1 else {"events": [{"contentBlockDelta": {"delta": {"text": "gagnant"}}}]}
+
+        def put_once(self, key, record):
+            return False
+
+    m = ReplayModel(node_id="n", store=RacingStore(), mode="record", model_id="us.anthropic.claude-haiku-5-5")
+
+    async def collect():
+        return [ev async for ev in m.stream([{"role": "user", "content": [{"text": "q"}]}])]
+    evs = asyncio.run(collect())
+    assert evs == [{"contentBlockDelta": {"delta": {"text": "gagnant"}}}] and m.last_replayed

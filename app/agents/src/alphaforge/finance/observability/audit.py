@@ -7,14 +7,17 @@ Supports : JSONL local (toujours) ; S3 ``decisions/`` (Object Lock du bucket) et
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import os
+from contextlib import contextmanager
 from datetime import UTC, datetime
 
 from ..contracts import Decision
 from .telemetry import canonical_hash, current_ids, log_event, span
 
 GENESIS = "0" * 64
+TABLE = "alphaforge-decisions"
 
 
 def _local_path(root: str, profile_id: str) -> str:
@@ -30,35 +33,79 @@ def _last(root: str, profile_id: str) -> dict | None:
     return json.loads(lines[-1]) if lines else None
 
 
-def record_decision(decision: Decision, root: str, aws: dict | None = None) -> dict:
+@contextmanager
+def _profile_lock(root: str, profile_id: str):
+    """Verrou exclusif par profil : lire la tête et ajouter le maillon forment une seule opération."""
+    os.makedirs(root, exist_ok=True)
+    with open(os.path.join(root, f".{profile_id}.lock"), "w") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+def _aws_head(ddb, profile_id: str) -> tuple[str, int]:
+    item = ddb.get_item(TableName=TABLE, Key={"pk": {"S": f"head#{profile_id}"}}, ConsistentRead=True).get("Item")
+    if not item:
+        return GENESIS, -1
+    return item["record_hash"]["S"], int(item["seq"]["N"])
+
+
+def record_decision(decision: Decision, root: str, aws: dict | None = None, max_retries: int = 3) -> dict:
+    """Ajoute la décision à la chaîne de son profil.
+
+    Local : verrou par profil autour de « lire la tête + ajouter ». AWS : la tête du profil vit dans
+    DynamoDB (``head#<profil>``) et n'avance que par une transaction qui insère aussi la décision,
+    à condition que la tête n'ait pas bougé. En cas de conflit, on relit et on réessaie.
+    Quand AWS est actif, sa tête fait foi ; le journal local en est le miroir.
+    """
     payload = decision.model_dump(mode="json")
     d_hash = canonical_hash(payload)
-    prev = _last(root, decision.profile_id)
-    prev_hash = prev["record_hash"] if prev else GENESIS
     tid, sid = current_ids()
-    entry = {"decision_id": decision.decision_id, "profile_id": decision.profile_id,
-             "seq": (prev["seq"] + 1) if prev else 0, "recorded_utc": datetime.now(UTC).isoformat(),
-             "decision_hash": d_hash, "prev_hash": prev_hash,
-             "record_hash": canonical_hash({"prev": prev_hash, "decision": d_hash}),
-             "otel_trace_id": tid, "otel_span_id": sid, "kind": decision.kind}
-    with span("audit.record_decision", decision_id=decision.decision_id, record_hash=entry["record_hash"]):
-        os.makedirs(root, exist_ok=True)
-        with open(_local_path(root, decision.profile_id), "a", encoding="utf-8") as f:
-            f.write(json.dumps({**entry, "decision": payload}, ensure_ascii=False, sort_keys=True) + "\n")
+    with span("audit.record_decision", decision_id=decision.decision_id), _profile_lock(root, decision.profile_id):
+        ddb = s3 = None
         if aws:
             import boto3
-            s3 = boto3.client("s3", region_name=aws["region"])
             ddb = boto3.client("dynamodb", region_name=aws["region"])
+            s3 = boto3.client("s3", region_name=aws["region"])
+        for attempt in range(max_retries):
+            if ddb is not None:
+                prev_hash, prev_seq = _aws_head(ddb, decision.profile_id)
+            else:
+                prev = _last(root, decision.profile_id)
+                prev_hash, prev_seq = (prev["record_hash"], prev["seq"]) if prev else (GENESIS, -1)
+            entry = {"decision_id": decision.decision_id, "profile_id": decision.profile_id, "seq": prev_seq + 1,
+                     "recorded_utc": datetime.now(UTC).isoformat(), "decision_hash": d_hash, "prev_hash": prev_hash,
+                     "record_hash": canonical_hash({"prev": prev_hash, "decision": d_hash}),
+                     "otel_trace_id": tid, "otel_span_id": sid, "kind": decision.kind}
+            if ddb is None:
+                break
             key = f"decisions/{decision.profile_id}/{entry['seq']:06d}-{decision.decision_id}.json"
             put = s3.put_object(Bucket=aws["bucket"], Key=key, ContentType="application/json",
                                 Body=json.dumps({**entry, "decision": payload}, ensure_ascii=False).encode())
-            ddb.put_item(TableName="alphaforge-decisions", ConditionExpression="attribute_not_exists(pk)",
-                         Item={"pk": {"S": decision.decision_id}, "profile_id": {"S": decision.profile_id},
-                               "seq": {"N": str(entry["seq"])}, "record_hash": {"S": entry["record_hash"]},
-                               "prev_hash": {"S": prev_hash}, "s3_key": {"S": key},
-                               "s3_version": {"S": put.get("VersionId", "null")},
-                               "recorded_utc": {"S": entry["recorded_utc"]}, "kind": {"S": decision.kind}})
-            entry["s3_key"] = key
+            head_cond = ("attribute_not_exists(pk)" if prev_seq < 0 else "record_hash = :prev")
+            head_vals = {} if prev_seq < 0 else {":prev": {"S": prev_hash}}
+            try:
+                ddb.transact_write_items(TransactItems=[
+                    {"Put": {"TableName": TABLE, "ConditionExpression": "attribute_not_exists(pk)", "Item": {
+                        "pk": {"S": decision.decision_id}, "profile_id": {"S": decision.profile_id},
+                        "seq": {"N": str(entry["seq"])}, "record_hash": {"S": entry["record_hash"]},
+                        "prev_hash": {"S": prev_hash}, "s3_key": {"S": key},
+                        "s3_version": {"S": put.get("VersionId", "null")},
+                        "recorded_utc": {"S": entry["recorded_utc"]}, "kind": {"S": decision.kind}}}},
+                    {"Put": {"TableName": TABLE, "ConditionExpression": head_cond,
+                             **({"ExpressionAttributeValues": head_vals} if head_vals else {}),
+                             "Item": {"pk": {"S": f"head#{decision.profile_id}"},
+                                      "record_hash": {"S": entry["record_hash"]}, "seq": {"N": str(entry["seq"])},
+                                      "decision_id": {"S": decision.decision_id}}}}])
+                entry["s3_key"] = key
+                break
+            except ddb.exceptions.TransactionCanceledException:
+                if attempt == max_retries - 1:
+                    raise
+        with open(_local_path(root, decision.profile_id), "a", encoding="utf-8") as f:
+            f.write(json.dumps({**entry, "decision": payload}, ensure_ascii=False, sort_keys=True) + "\n")
         log_event("audit.decision_recorded", **{k: entry[k] for k in ("decision_id", "seq", "record_hash", "kind")})
     return entry
 

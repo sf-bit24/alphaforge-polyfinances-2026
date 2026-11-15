@@ -312,6 +312,9 @@ def test_a6_market_signal_keeps_rules_and_quality_tier(store, fake_http):
     text = store.get_text(result["written"][0]).text
     assert "Règles de résolution, telles quelles" in text and "type: Market Signal" in text
     assert "pas un signal d'achat" in text
+    # Compagnon de la Knowledge Base écrit avec le document (CONTRACTS.md 5.1).
+    meta = store.get_json(result["written"][0] + ".metadata.json")
+    assert meta["metadataAttributes"]["type"]["value"] == {"type": "STRING", "stringValue": "Market Signal"}
 
 
 # ----------------------------------------------------------------------------- A0

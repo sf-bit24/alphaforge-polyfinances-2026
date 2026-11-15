@@ -344,7 +344,7 @@ data: {}                          # données structurées lues par le code (prof
 
 ### 5.1 Métadonnées de la Knowledge Base
 
-À côté de chaque document `general/donnees/*` et `general/actualites/*` qu'il écrit, A6 écrit d'abord `<clé du document>.metadata.json` (règle de nommage de Bedrock : `2026-11-12.md.metadata.json`), puis le document (`okf.kb_metadata`). Format S3 de Bedrock Knowledge Bases, attributs filtrables et hors embedding (`includeForEmbedding: false`) :
+À côté de chaque document qu'il écrit (`general/actualites/`, `general/donnees/`, et ceux de la recherche de la section 11 : `general/faits/`, `general/signaux/`, `general/depots/`, `general/recherches/`), A6 écrit d'abord `<clé du document>.metadata.json` (règle de nommage de Bedrock : `2026-11-12.md.metadata.json`), puis le document (`okf.kb_metadata`). Format S3 de Bedrock Knowledge Bases, attributs filtrables et hors embedding (`includeForEmbedding: false`) :
 
 ```json
 { "metadataAttributes": {

@@ -32,7 +32,7 @@ interface MockExecution {
   cause: string | null;
 }
 
-const iso = (ms: number) => new Date(ms).toISOString();
+const iso = (timeMs: number) => new Date(timeMs).toISOString();
 
 function marker(role: "press" | "data", runId: string, startedAt: number, items: number) {
   return {
@@ -47,7 +47,14 @@ function marker(role: "press" | "data", runId: string, startedAt: number, items:
   };
 }
 
-function successOutput(runId: string, startedAt: number, written: string[], rejected: Array<{ key: string; reason: string }>, dataFailed = false) {
+/** What A6 did with the collected items: the documents it wrote, and the items it rejected. */
+interface Curation {
+  written: string[];
+  rejected: Array<{ key: string; reason: string }>;
+}
+
+/** Output of a run that succeeded; with `dataFailed`, A5 missed its marker and its branch ended in error. */
+function successOutput(runId: string, startedAt: number, { written, rejected }: Curation, { dataFailed = false } = {}) {
   return {
     run_id: runId,
     collected: {
@@ -128,9 +135,11 @@ export class MockCollector {
       output: successOutput(
         scheduled,
         scheduledAt,
-        ["general/donnees/usdcad/usdcad-2026-11.md", "general/donnees/taux-directeur/banque-du-canada-2026-11.md"],
-        [{ key: `staging/${scheduled}/press/item-02.json`, reason: "publié après sa date de récupération" }],
-        true,
+        {
+          written: ["general/donnees/usdcad/usdcad-2026-11.md", "general/donnees/taux-directeur/banque-du-canada-2026-11.md"],
+          rejected: [{ key: `staging/${scheduled}/press/item-02.json`, reason: "publié après sa date de récupération" }],
+        },
+        { dataFailed: true },
       ),
       docs: [],
       applied: true,
@@ -164,9 +173,10 @@ export class MockCollector {
       durationMs: RUN_DURATION_MS,
       input: { ...request },
       status: "SUCCEEDED",
-      output: successOutput(name, startedAt, [doc.key], [
-        { key: `staging/${name}/press/item-03.json`, reason: "doublon d'un document existant" },
-      ]),
+      output: successOutput(name, startedAt, {
+        written: [doc.key],
+        rejected: [{ key: `staging/${name}/press/item-03.json`, reason: "doublon d'un document existant" }],
+      }),
       docs: [doc],
       applied: false,
       error: null,

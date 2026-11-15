@@ -6,6 +6,7 @@
 import type {
   Completeness,
   Dimension,
+  DimensionStatus,
   DimensionView,
   KnowledgeLevel,
   Locale,
@@ -15,11 +16,14 @@ import type {
   RiskDetail,
   RiskLevel,
 } from "@/lib/contract/schemas";
-import { PROFILE_DIMENSIONS, RISK_LEVELS } from "@/lib/contract/schemas";
+import { KNOWLEDGE_LEVELS, PROFILE_DIMENSIONS, RISK_LEVELS } from "@/lib/contract/schemas";
 import { optionLabel, tr, type L } from "./questions";
 
 export const THRESHOLD = 0.7;
 export const CAP = 0.95;
+
+/** A2's draft is journaled as a fact, but it is working data: the profile shown to the investor leaves it out. */
+export const PORTFOLIO_DRAFT_FIELD = "context.portfolio_draft";
 
 export interface StoredFact {
   field: string;
@@ -38,6 +42,8 @@ interface FieldDef {
   weight: number;
   label: L;
 }
+
+const TOTAL_WEIGHT = 10_000;
 
 export const REQUIRED_FIELDS: FieldDef[] = [
   { field: "knowledge.level", dimension: "knowledge", weight: 500, label: { fr: "Niveau de connaissances", en: "Knowledge level" } },
@@ -70,40 +76,49 @@ export function fieldLabel(field: string, locale: Locale): string {
 
 const shortName = (field: string) => field.slice(field.indexOf(".") + 1);
 
+const valueOf = (values: FieldValues, field: string) => values.get(field)?.value;
+
+const INVEST_FREQUENCY_POINTS: Record<string, number> = { never: 0, few: 1, yearly: 2, monthly: 3 };
+const NEWS_FOLLOW_POINTS: Record<string, number> = { rarely: 0, monthly: 1, weekly: 2, daily: 3 };
+const SELF_ASSESSMENT_LEVELS: Record<string, number> = { beginner: 0, intermediate: 1, advanced: 2 };
+
+/** Observed experience on 0..2, from the 0..6 points of the two experience answers. */
+function experienceLevel(points: number): number {
+  if (points <= 1) return 0;
+  return points <= 4 ? 1 : 2;
+}
+
 /** Knowledge level from the three knowledge answers, or the settings override. */
 export function knowledgeLevel(values: FieldValues): { level: KnowledgeLevel | null; reason: string } {
   const override = values.get("knowledge.level");
   if (override && typeof override.value === "string") {
     return { level: override.value as KnowledgeLevel, reason: "settings" };
   }
-  const frequency = values.get("knowledge.invest_frequency")?.value;
-  const news = values.get("knowledge.news_follow")?.value;
-  const self = values.get("knowledge.self_assessment")?.value;
-  if (typeof frequency !== "string" || typeof news !== "string" || typeof self !== "string") {
+  const frequency = valueOf(values, "knowledge.invest_frequency");
+  const news = valueOf(values, "knowledge.news_follow");
+  const selfAssessment = valueOf(values, "knowledge.self_assessment");
+  if (typeof frequency !== "string" || typeof news !== "string" || typeof selfAssessment !== "string") {
     return { level: null, reason: "incomplete" };
   }
-  const frequencyPoints = { never: 0, few: 1, yearly: 2, monthly: 3 }[frequency] ?? 0;
-  const newsPoints = { rarely: 0, monthly: 1, weekly: 2, daily: 3 }[news] ?? 0;
-  const experience = frequencyPoints + newsPoints;
-  const experienceLevel = experience <= 1 ? 0 : experience <= 4 ? 1 : 2;
-  const selfLevel = { beginner: 0, intermediate: 1, advanced: 2 }[self] ?? 0;
+  const experience = (INVEST_FREQUENCY_POINTS[frequency] ?? 0) + (NEWS_FOLLOW_POINTS[news] ?? 0);
+  const selfLevel = SELF_ASSESSMENT_LEVELS[selfAssessment] ?? 0;
   // The self-assessment weighs twice the observed experience.
-  const level = Math.round((2 * selfLevel + experienceLevel) / 3);
-  const levels: KnowledgeLevel[] = ["beginner", "intermediate", "advanced"];
+  const level = Math.round((2 * selfLevel + experienceLevel(experience)) / 3);
   return {
-    level: levels[level] ?? "beginner",
-    reason: `self=${self}, experience=${experience}/6`,
+    level: KNOWLEDGE_LEVELS[level] ?? "beginner",
+    reason: `self=${selfAssessment}, experience=${experience}/6`,
   };
 }
 
 const riskAt = (index: number): RiskLevel => RISK_LEVELS[Math.max(0, Math.min(4, index - 1))] ?? "medium";
 
+const DRAWDOWN_REACTION_LEVELS: Record<string, number> = { sell_all: 1, sell_some: 2, hold: 3, buy_more: 5 };
+
 /** Risk tolerance on 1..5 from the declared reaction and the 1..10 scale. */
 export function riskTolerance(values: FieldValues): number | null {
-  const reaction = values.get("risk_tolerance.drawdown_reaction")?.value;
-  const scale = values.get("risk_tolerance.risk_scale")?.value;
-  const reactionLevel =
-    typeof reaction === "string" ? ({ sell_all: 1, sell_some: 2, hold: 3, buy_more: 5 }[reaction] ?? null) : null;
+  const reaction = valueOf(values, "risk_tolerance.drawdown_reaction");
+  const scale = valueOf(values, "risk_tolerance.risk_scale");
+  const reactionLevel = typeof reaction === "string" ? (DRAWDOWN_REACTION_LEVELS[reaction] ?? null) : null;
   const scaleLevel = typeof scale === "number" ? Math.max(1, Math.min(5, Math.ceil(scale / 2))) : null;
   if (reactionLevel === null && scaleLevel === null) return null;
   if (reactionLevel === null) return scaleLevel;
@@ -112,28 +127,44 @@ export function riskTolerance(values: FieldValues): number | null {
   return Math.min(reactionLevel + 1, Math.round((reactionLevel + scaleLevel) / 2));
 }
 
+const HORIZON_CAPACITY: Record<string, number> = { lt3: 1, "3to10": 3, gt10: 5 };
+const INCOME_STABILITY_CAPACITY: Record<string, number> = { very_stable: 5, stable: 4, variable: 2, none: 1 };
+const UNLISTED_CAPACITY = 3;
+/** A high-interest debt or a liquidity need holds the capacity at this level. */
+const BURDENED_CAPACITY = 2;
+
+function savingsShareCapacity(sharePct: number): number {
+  if (sharePct <= 25) return 5;
+  if (sharePct <= 50) return 4;
+  return sharePct <= 75 ? 2 : 1;
+}
+
+function emergencyFundCapacity(months: number): number {
+  if (months >= 6) return 5;
+  return months >= 3 ? 3 : 1;
+}
+
+/** Situational factors of risk capacity: each gives a level on 1..5, or null while it is unknown. */
+const CAPACITY_FACTORS: Array<{ field: string; level: (value: unknown) => number | null }> = [
+  { field: "horizon.horizon_band", level: (value) => (typeof value === "string" ? (HORIZON_CAPACITY[value] ?? UNLISTED_CAPACITY) : null) },
+  {
+    field: "risk_capacity.income_stability",
+    level: (value) => (typeof value === "string" ? (INCOME_STABILITY_CAPACITY[value] ?? UNLISTED_CAPACITY) : null),
+  },
+  { field: "risk_capacity.savings_share", level: (value) => (typeof value === "number" ? savingsShareCapacity(value) : null) },
+  { field: "risk_capacity.emergency_fund", level: (value) => (typeof value === "number" ? emergencyFundCapacity(value) : null) },
+  { field: "risk_capacity.high_interest_debt", level: (value) => (value === true ? BURDENED_CAPACITY : null) },
+  { field: "constraints.liquidity_need", level: (value) => (value === true ? BURDENED_CAPACITY : null) },
+];
+
 /** Risk capacity on 1..5: the weakest of the known situational factors. */
 export function riskCapacity(values: FieldValues): { level: number; limitedBy: string } | null {
-  const factors: Array<[string, number]> = [];
-  const horizon = values.get("horizon.horizon_band")?.value;
-  if (typeof horizon === "string") factors.push(["horizon.horizon_band", { lt3: 1, "3to10": 3, gt10: 5 }[horizon] ?? 3]);
-  const income = values.get("risk_capacity.income_stability")?.value;
-  if (typeof income === "string") {
-    factors.push(["risk_capacity.income_stability", { very_stable: 5, stable: 4, variable: 2, none: 1 }[income] ?? 3]);
+  let weakest: { level: number; limitedBy: string } | null = null;
+  for (const factor of CAPACITY_FACTORS) {
+    const level = factor.level(valueOf(values, factor.field));
+    if (level !== null && (weakest === null || level < weakest.level)) weakest = { level, limitedBy: factor.field };
   }
-  const share = values.get("risk_capacity.savings_share")?.value;
-  if (typeof share === "number") {
-    factors.push(["risk_capacity.savings_share", share <= 25 ? 5 : share <= 50 ? 4 : share <= 75 ? 2 : 1]);
-  }
-  const fund = values.get("risk_capacity.emergency_fund")?.value;
-  if (typeof fund === "number") factors.push(["risk_capacity.emergency_fund", fund >= 6 ? 5 : fund >= 3 ? 3 : 1]);
-  const debt = values.get("risk_capacity.high_interest_debt")?.value;
-  if (debt === true) factors.push(["risk_capacity.high_interest_debt", 2]);
-  const liquidity = values.get("constraints.liquidity_need")?.value;
-  if (liquidity === true) factors.push(["constraints.liquidity_need", 2]);
-  if (factors.length === 0) return null;
-  const weakest = factors.reduce((low, factor) => (factor[1] < low[1] ? factor : low));
-  return { level: weakest[1], limitedBy: weakest[0] };
+  return weakest;
 }
 
 export function effectiveRisk(values: FieldValues): RiskLevel | null {
@@ -154,7 +185,7 @@ export function riskDetail(values: FieldValues): RiskDetail {
   };
 }
 
-function isKnown(values: FieldValues, field: string): boolean {
+export function isFieldKnown(values: FieldValues, field: string): boolean {
   if (field === "knowledge.level") return knowledgeLevel(values).level !== null;
   const fact = values.get(field);
   if (!fact) return false;
@@ -166,11 +197,11 @@ export function completeness(values: FieldValues, locale: Locale): Completeness 
   let points = 0;
   const missing: Array<MissingField & { weight: number }> = [];
   for (const def of REQUIRED_FIELDS) {
-    if (isKnown(values, def.field)) points += def.weight;
+    if (isFieldKnown(values, def.field)) points += def.weight;
     else missing.push({ dimension: def.dimension, field: shortName(def.field), label: tr(def.label, locale), weight: def.weight });
   }
-  const score = points / 10_000;
-  missing.sort((a, b) => b.weight - a.weight);
+  const score = points / TOTAL_WEIGHT;
+  missing.sort((left, right) => right.weight - left.weight);
   return {
     score,
     displayed: Math.min(score, CAP),
@@ -181,16 +212,15 @@ export function completeness(values: FieldValues, locale: Locale): Completeness 
   };
 }
 
-export function isFieldKnown(values: FieldValues, field: string): boolean {
-  return isKnown(values, field);
-}
-
 const LEVEL_WORDS: Record<Locale, string[]> = {
   fr: ["faible", "faible à moyenne", "moyenne", "moyenne à élevée", "élevée"],
   en: ["low", "low to medium", "medium", "medium to high", "high"],
 };
 
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** A 1..5 risk level in words, as the first part of a summary. */
+const levelWords = (level: number, locale: Locale) => capitalize(LEVEL_WORDS[locale][level - 1] ?? "");
 
 export function formatMoney(value: number, locale: Locale, currency = "CAD"): string {
   return new Intl.NumberFormat(locale === "fr" ? "fr-CA" : "en-CA", {
@@ -213,85 +243,115 @@ function listLabels(field: string, value: unknown, locale: Locale): string | nul
   return labels.length > 0 ? labels.join(", ") : null;
 }
 
-function summarize(dimension: ProfileDimensionKey, values: FieldValues, locale: Locale): string | null {
-  const get = (field: string) => values.get(field)?.value;
-  const parts: string[] = [];
+const MAX_PURPOSE_CHARS = 60;
+
+function objectiveParts(values: FieldValues, locale: Locale): string[] {
   const fr = locale === "fr";
-  switch (dimension) {
-    case "objective": {
-      const goal = optionLabel("objective.goal", get("objective.goal"), locale);
-      if (goal) parts.push(goal);
-      const amount = get("objective.amount");
-      if (typeof amount === "number") parts.push(formatMoney(amount, locale));
-      const income = get("objective.income_need");
-      if (typeof income === "number") parts.push(fr ? `revenu visé ${formatMoney(income, locale)}/an` : `target income ${formatMoney(income, locale)}/yr`);
-      const purpose = get("objective.purpose");
-      if (typeof purpose === "string") parts.push(purpose.length > 60 ? `${purpose.slice(0, 57)}…` : purpose);
-      break;
-    }
-    case "horizon": {
-      const band = optionLabel("horizon.horizon_band", get("horizon.horizon_band"), locale);
-      if (band) parts.push(band);
-      const pattern = optionLabel("horizon.withdrawal_pattern", get("horizon.withdrawal_pattern"), locale);
-      if (pattern) parts.push(pattern.toLowerCase());
-      break;
-    }
-    case "risk_tolerance": {
-      const level = riskTolerance(values);
-      if (level === null) break;
-      parts.push(capitalize(LEVEL_WORDS[locale][level - 1] ?? ""));
-      const scale = get("risk_tolerance.risk_scale");
-      if (typeof scale === "number") parts.push(`${scale}/10`);
-      break;
-    }
-    case "risk_capacity": {
-      const capacity = riskCapacity(values);
-      if (capacity === null) break;
-      const limit = fieldLabel(capacity.limitedBy, locale).toLowerCase();
-      parts.push(capitalize(LEVEL_WORDS[locale][capacity.level - 1] ?? ""));
-      parts.push(fr ? `limitée par : ${limit}` : `limited by: ${limit}`);
-      break;
-    }
-    case "constraints": {
-      const accounts = listLabels("constraints.accounts", get("constraints.accounts"), locale);
-      if (accounts) parts.push(accounts);
-      const liquidity = get("constraints.liquidity_need");
-      if (liquidity === true) parts.push(fr ? "liquidité requise" : "liquidity required");
-      if (liquidity === false) parts.push(fr ? "pas de besoin de liquidité" : "no liquidity need");
-      break;
-    }
-    case "preferences": {
-      const exclusions = get("preferences.exclusions");
-      if (Array.isArray(exclusions)) {
-        const kept = exclusions.filter((item) => item !== "none" && item !== "other");
-        const labels = listLabels("preferences.exclusions", kept, locale);
-        parts.push(labels ? (fr ? `Exclut : ${labels.toLowerCase()}` : `Excludes: ${labels.toLowerCase()}`) : fr ? "Aucune exclusion" : "No exclusion");
-      }
-      const other = get("preferences.exclusions_other");
-      if (typeof other === "string") parts.push(other);
-      const themes = get("preferences.themes");
-      if (Array.isArray(themes)) {
-        const kept = themes.filter((item) => item !== "none");
-        const labels = listLabels("preferences.themes", kept, locale);
-        if (labels) parts.push(fr ? `intérêt : ${labels.toLowerCase()}` : `interest: ${labels.toLowerCase()}`);
-      }
-      break;
-    }
+  const parts: string[] = [];
+  const goal = optionLabel("objective.goal", valueOf(values, "objective.goal"), locale);
+  if (goal) parts.push(goal);
+  const amount = valueOf(values, "objective.amount");
+  if (typeof amount === "number") parts.push(formatMoney(amount, locale));
+  const income = valueOf(values, "objective.income_need");
+  if (typeof income === "number") parts.push(fr ? `revenu visé ${formatMoney(income, locale)}/an` : `target income ${formatMoney(income, locale)}/yr`);
+  const purpose = valueOf(values, "objective.purpose");
+  if (typeof purpose === "string") parts.push(purpose.length > MAX_PURPOSE_CHARS ? `${purpose.slice(0, MAX_PURPOSE_CHARS - 3)}…` : purpose);
+  return parts;
+}
+
+function horizonParts(values: FieldValues, locale: Locale): string[] {
+  const parts: string[] = [];
+  const band = optionLabel("horizon.horizon_band", valueOf(values, "horizon.horizon_band"), locale);
+  if (band) parts.push(band);
+  const pattern = optionLabel("horizon.withdrawal_pattern", valueOf(values, "horizon.withdrawal_pattern"), locale);
+  if (pattern) parts.push(pattern.toLowerCase());
+  return parts;
+}
+
+function riskToleranceParts(values: FieldValues, locale: Locale): string[] {
+  const level = riskTolerance(values);
+  if (level === null) return [];
+  const scale = valueOf(values, "risk_tolerance.risk_scale");
+  return typeof scale === "number" ? [levelWords(level, locale), `${scale}/10`] : [levelWords(level, locale)];
+}
+
+function riskCapacityParts(values: FieldValues, locale: Locale): string[] {
+  const capacity = riskCapacity(values);
+  if (capacity === null) return [];
+  const limit = fieldLabel(capacity.limitedBy, locale).toLowerCase();
+  return [levelWords(capacity.level, locale), locale === "fr" ? `limitée par : ${limit}` : `limited by: ${limit}`];
+}
+
+function constraintsParts(values: FieldValues, locale: Locale): string[] {
+  const fr = locale === "fr";
+  const parts: string[] = [];
+  const accounts = listLabels("constraints.accounts", valueOf(values, "constraints.accounts"), locale);
+  if (accounts) parts.push(accounts);
+  const liquidity = valueOf(values, "constraints.liquidity_need");
+  if (liquidity === true) parts.push(fr ? "liquidité requise" : "liquidity required");
+  if (liquidity === false) parts.push(fr ? "pas de besoin de liquidité" : "no liquidity need");
+  return parts;
+}
+
+/** The sectors excluded, without the "none" and "other" choices, which name no sector. */
+function exclusionsPart(exclusions: unknown[], locale: Locale): string {
+  const fr = locale === "fr";
+  const named = exclusions.filter((item) => item !== "none" && item !== "other");
+  const labels = listLabels("preferences.exclusions", named, locale);
+  if (!labels) return fr ? "Aucune exclusion" : "No exclusion";
+  return fr ? `Exclut : ${labels.toLowerCase()}` : `Excludes: ${labels.toLowerCase()}`;
+}
+
+function preferencesParts(values: FieldValues, locale: Locale): string[] {
+  const parts: string[] = [];
+  const exclusions = valueOf(values, "preferences.exclusions");
+  if (Array.isArray(exclusions)) parts.push(exclusionsPart(exclusions, locale));
+  const other = valueOf(values, "preferences.exclusions_other");
+  if (typeof other === "string") parts.push(other);
+  const themes = valueOf(values, "preferences.themes");
+  if (Array.isArray(themes)) {
+    const labels = listLabels("preferences.themes", themes.filter((item) => item !== "none"), locale);
+    if (labels) parts.push(locale === "fr" ? `intérêt : ${labels.toLowerCase()}` : `interest: ${labels.toLowerCase()}`);
   }
+  return parts;
+}
+
+const SUMMARY_PARTS: Record<ProfileDimensionKey, (values: FieldValues, locale: Locale) => string[]> = {
+  objective: objectiveParts,
+  horizon: horizonParts,
+  risk_tolerance: riskToleranceParts,
+  risk_capacity: riskCapacityParts,
+  constraints: constraintsParts,
+  preferences: preferencesParts,
+};
+
+function summarize(dimension: ProfileDimensionKey, values: FieldValues, locale: Locale): string | null {
+  const parts = SUMMARY_PARTS[dimension](values, locale);
   return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/** Values of a dimension's fields, by short name. */
+function dimensionFields(values: FieldValues, dimension: Dimension): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  for (const [field, fact] of values) {
+    if (field.startsWith(`${dimension}.`) && field !== PORTFOLIO_DRAFT_FIELD) fields[shortName(field)] = fact.value;
+  }
+  return fields;
+}
+
+function dimensionStatus(known: number, required: number): DimensionStatus {
+  if (known === 0) return "missing";
+  return known === required ? "known" : "partial";
 }
 
 export function dimensionViews(values: FieldValues, locale: Locale): ProfileView["dimensions"] {
   const views = {} as Record<ProfileDimensionKey, DimensionView>;
   for (const dimension of PROFILE_DIMENSIONS) {
     const required = REQUIRED_FIELDS.filter((def) => def.dimension === dimension);
-    const known = required.filter((def) => isKnown(values, def.field)).length;
-    const fields: Record<string, unknown> = {};
-    for (const [field, fact] of values) {
-      if (field.startsWith(`${dimension}.`)) fields[shortName(field)] = fact.value;
-    }
+    const known = required.filter((def) => isFieldKnown(values, def.field)).length;
+    const fields = dimensionFields(values, dimension);
     views[dimension] = {
-      status: known === 0 ? "missing" : known === required.length ? "known" : "partial",
+      status: dimensionStatus(known, required.length),
       summary: known === 0 && Object.keys(fields).length === 0 ? null : summarize(dimension, values, locale),
       fields,
     };
@@ -299,27 +359,37 @@ export function dimensionViews(values: FieldValues, locale: Locale): ProfileView
   return { ...views, context: contextView(values, locale) };
 }
 
-/** The `context` dimension (existing portfolio), outside the five of the profile. */
-function contextView(values: FieldValues, locale: Locale): DimensionView {
+/** The confirmed portfolio as the profile keeps it: a count and a total, not the positions. */
+interface PortfolioSummary {
+  positions: number;
+  total_value_cad: number;
+}
+
+function isPortfolioSummary(value: unknown): value is PortfolioSummary {
+  return typeof value === "object" && value !== null && "positions" in value && "total_value_cad" in value;
+}
+
+function contextSummary(values: FieldValues, locale: Locale): string | null {
   const fr = locale === "fr";
-  const fields: Record<string, unknown> = {};
-  for (const [field, fact] of values) {
-    if (field.startsWith("context.") && field !== "context.portfolio_draft") fields[shortName(field)] = fact.value;
-  }
-  const existing = values.get("context.existing_portfolio")?.value;
-  let summary: string | null = null;
-  if (existing === "none") summary = fr ? "Aucun portefeuille existant" : "No existing portfolio";
-  else if (existing && typeof existing === "object" && "positions" in existing && "total_value_cad" in existing) {
-    const { positions, total_value_cad } = existing as { positions: number; total_value_cad: number };
-    summary = fr
+  const existing = valueOf(values, "context.existing_portfolio");
+  if (existing === "none") return fr ? "Aucun portefeuille existant" : "No existing portfolio";
+  if (isPortfolioSummary(existing)) {
+    const { positions, total_value_cad } = existing;
+    return fr
       ? `Portefeuille existant : ${positions} ${positions > 1 ? "positions" : "position"}, ${formatMoney(total_value_cad, locale)}`
       : `Existing portfolio: ${positions} ${positions === 1 ? "position" : "positions"}, ${formatMoney(total_value_cad, locale)}`;
-  } else if (values.get("context.has_portfolio")?.value === true) {
-    summary = fr ? "Portefeuille existant à analyser" : "Existing portfolio to analyse";
   }
-  return {
-    status: existing !== undefined ? "known" : Object.keys(fields).length > 0 ? "partial" : "missing",
-    summary,
-    fields,
-  };
+  if (valueOf(values, "context.has_portfolio") === true) return fr ? "Portefeuille existant à analyser" : "Existing portfolio to analyse";
+  return null;
+}
+
+function contextStatus(values: FieldValues, fields: Record<string, unknown>): DimensionStatus {
+  if (valueOf(values, "context.existing_portfolio") !== undefined) return "known";
+  return Object.keys(fields).length > 0 ? "partial" : "missing";
+}
+
+/** The `context` dimension (existing portfolio), outside the five of the profile. */
+function contextView(values: FieldValues, locale: Locale): DimensionView {
+  const fields = dimensionFields(values, "context");
+  return { status: contextStatus(values, fields), summary: contextSummary(values, locale), fields };
 }

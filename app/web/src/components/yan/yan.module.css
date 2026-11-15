@@ -1,65 +1,153 @@
-/* Yan's small life: it blinks, its antenna glows, and in full figure it waves on arrival. */
+/*
+ * Yan's small life, as in the team's demo video: it hovers over its shadow, blinks, and
+ * its gold spark twinkles. Once its pixels have flown in it lands with a squash and a
+ * stretch; `data-cheer` squints with joy (« ^ ^ ») just after; `think` looks around.
+ * In SVG user units: 1px is one pixel of the art.
+ */
 .yan {
   flex: none;
   display: block;
   overflow: visible;
 }
+.yan[data-phase="away"] {
+  visibility: hidden;
+}
+
+.hover {
+  animation: hover 2.4s ease-in-out infinite;
+}
+@keyframes hover {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-0.75px);
+  }
+}
+
+.shadow {
+  fill: #0b2341;
+  opacity: 0.2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: shadow 2.4s ease-in-out infinite;
+}
+@keyframes shadow {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.2;
+  }
+  50% {
+    transform: scaleX(0.82);
+    opacity: 0.12;
+  }
+}
+
+/* The squash of the landing, from the feet. */
+.body {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+.yan[data-phase="landed"] .body {
+  animation: land 0.6s cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+@keyframes land {
+  0% {
+    transform: scale(1.24, 0.7);
+  }
+  35% {
+    transform: scale(0.9, 1.14);
+  }
+  65% {
+    transform: scale(1.05, 0.96);
+  }
+  100% {
+    transform: none;
+  }
+}
 
 .eyes {
   transform-box: fill-box;
-  transform-origin: 50% 50%;
-  animation: blink 5s infinite;
+  transform-origin: center;
+  animation: blink 4.8s infinite;
 }
 @keyframes blink {
   0%,
-  92%,
+  93%,
+  98%,
   100% {
     transform: scaleY(1);
   }
-  95% {
-    transform: scaleY(0.1);
+  95.5% {
+    transform: scaleY(0.15);
   }
 }
 
-.light {
-  animation: glow 2.6s ease-in-out infinite;
+.happy {
+  opacity: 0;
 }
-@keyframes glow {
+.yan[data-mood="happy"] .eyes {
+  opacity: 0;
+}
+.yan[data-mood="happy"] .happy {
+  opacity: 1;
+}
+/* Just landed, with `cheer`: the squint for a moment, then the eyes come back. */
+.yan[data-phase="landed"][data-cheer] .eyes {
+  animation:
+    blink 4.8s infinite,
+    gone 1.7s 0.3s;
+}
+.yan[data-phase="landed"][data-cheer] .happy {
+  animation: there 1.7s 0.3s;
+}
+@keyframes gone {
+  from,
+  to {
+    opacity: 0;
+  }
+}
+@keyframes there {
+  from,
+  to {
+    opacity: 1;
+  }
+}
+
+/* Thinking: the eyes look left, right and up, a pixel at a time, and the spark flickers faster. */
+.yan[data-mood="think"] .eyes {
+  animation: look 2.4s steps(1) infinite;
+}
+@keyframes look {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: translateX(-1px);
+  }
+  45% {
+    transform: translateX(1px);
+  }
+  70% {
+    transform: translateY(-0.5px);
+  }
+}
+
+.spark {
+  animation: spark 2s ease-in-out infinite;
+}
+.yan[data-mood="think"] .spark {
+  animation-duration: 0.7s;
+}
+@keyframes spark {
   0%,
   100% {
     opacity: 1;
   }
   50% {
-    opacity: 0.55;
-  }
-}
-
-.wave {
-  transform-origin: 91px 92px;
-  animation: wave 1.6s var(--ease, ease) 0.4s 1 both;
-}
-@keyframes wave {
-  0%,
-  100% {
-    transform: rotate(0);
-  }
-  20%,
-  60% {
-    transform: rotate(-14deg);
-  }
-  40%,
-  80% {
-    transform: rotate(8deg);
-  }
-}
-
-.curve {
-  stroke-dasharray: 48;
-  stroke-dashoffset: 48;
-  animation: draw 1.2s ease-out 0.3s forwards;
-}
-@keyframes draw {
-  to {
-    stroke-dashoffset: 0;
+    opacity: 0.45;
   }
 }

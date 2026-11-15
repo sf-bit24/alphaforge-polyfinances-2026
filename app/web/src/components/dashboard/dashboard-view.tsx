@@ -77,7 +77,7 @@ export function DashboardView() {
       <section className={styles.assist} aria-labelledby="assistant-title">
         <div className={styles.assistH}>
           <div className={styles.assistNote}>
-            <YanMark size={30} />
+            <YanMark arrive="last" />
             <h2 id="assistant-title">{t.assistant.title}</h2>
             <span className={cn(styles.pill, completeness.ready && styles.pillReady)}>{t.assistant.profilePill(formatPercent(completeness.displayed, locale))}</span>
           </div>

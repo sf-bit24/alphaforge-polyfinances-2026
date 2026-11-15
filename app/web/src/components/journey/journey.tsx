@@ -17,6 +17,7 @@ import { cn } from "@/components/ui/cn";
 import { Drawer } from "@/components/ui/drawer";
 import { ErrorNotice } from "@/components/ui/error-notice";
 import { Spinner } from "@/components/ui/spinner";
+import { YanFigure, YanShown } from "@/components/yan/yan";
 import { Scene, sceneLayout, WORLD, type SceneHandle } from "./scene";
 import { StageCard } from "./stage-card";
 import { AssistantLine } from "./assistant-line";
@@ -229,6 +230,10 @@ function LandingPanel({ shown, resumed, style, onStart, onResume, onRestart, onS
     session.error && (session.errorAction === "session.start" || session.errorAction === "session.resume") ? session.error : null;
   return (
     <section className={cn(styles.panel, styles.landing, !shown && styles.hidden)} style={style} inert={!shown}>
+      {/* As in the demo video: Yan is born from the brand's square and hovers by the title. */}
+      <YanShown value={shown}>
+        <YanFigure height={64} className={styles.landingYan} arrive="home" cheer />
+      </YanShown>
       <h1>{resumed ? t.journey.landing.resumeTitle : t.journey.landing.title}</h1>
       <p>{resumed ? t.journey.landing.resumeLead : t.journey.landing.lead}</p>
       <div className={styles.landingActions}>
@@ -264,7 +269,7 @@ function CardPanel({ shape, visible, style, children }: { shape: CardShape; visi
       inert={!visible}
       aria-live="polite"
     >
-      {children}
+      <YanShown value={visible}>{children}</YanShown>
     </section>
   );
 }

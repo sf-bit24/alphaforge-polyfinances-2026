@@ -18,9 +18,9 @@ from datetime import UTC, datetime
 
 import numpy as np
 
+from ..backtest import metrics as bt_metrics
 from ..contracts import ConstraintCheck, Fact, PolicySpec, Source, TraceEvent
 from ..observability.telemetry import current_ids, traced_tool
-from ._engine import bt_metrics
 from .analysis import cdar_compounded, cvar_rolling, long_history_returns, loss_2022
 from .compile import compile_policy
 from .market import ReturnWindow, returns_window
@@ -45,7 +45,7 @@ class JudgeReport:
 
 
 def _source(win: ReturnWindow, processing: str) -> Source:
-    return Source(dataset="engine:research/backtest (rendements mensuels)", sha256=win.data_version,
+    return Source(dataset="alphaforge.finance.backtest (rendements mensuels, data/long)", sha256=win.data_version,
                   processing=processing)
 
 

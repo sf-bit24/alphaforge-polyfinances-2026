@@ -1,0 +1,113 @@
+# Example profile - GENERIC, NOT one of the personas (Amira / Mateo / Robert are configured by
+# the profile agents). Every field below is optional except id, universe, cash_asset, strategies.
+# Asset ids: see alphaforge/data/long/assets.csv. Simulation only - not financial advice.
+
+id: example
+description: "Generic balanced investor used to demo the engine (USD, 1926+ history)."
+
+currency: USD          # reference currency: USD or CAD. CAD returns exist only from 1971-02 (USDCAD data)
+fx_fill: none          # none | flat. flat = before FX data, use local-currency returns (constant-FX assumption)
+horizon_years: 10      # length of each backtest window
+mode: non_overlapping  # non_overlapping | rolling
+step_months: 12        # rolling step (ignored in non_overlapping mode)
+period:                # optional; the engine shortens it to the dates where ALL universe assets exist
+  start: 1926-07
+  end: null
+
+universe: [US_MKT, US_IND_BUSEQ, US_IND_UTILS, UST_10Y, UST_2Y, GOLD, UST_TBILL]
+cash_asset: UST_TBILL  # used by trend filter / momentum (risk-off) and as risk-free rate for Sharpe
+
+objective:
+  # max_real_return      : annualised real (inflation-adjusted) return of the window
+  # max_sharpe           : annualised Sharpe vs cash_asset
+  # max_return_over_cvar : annualised nominal return / monthly CVaR 5 %
+  # min_shortfall        : score = real return - target_real_return (or final real wealth / target - 1);
+  #                        selection then minimises the share of windows below target
+  type: max_real_return
+  target_real_return: 0.03   # used for "probability of missing the objective" (missed_target column)
+  target_real_wealth: null   # alternative target in start-of-window money (includes flows)
+
+constraints:                 # HARD constraints: every strategy is projected onto this set
+  default_bounds: [0.0, 1.0] # long-only, no leverage
+  asset_bounds:              # per-asset [min, max]
+    GOLD: [0.0, 0.15]
+  class_max_weight: {}       # e.g. {equity_single: 0.07, crypto: 0.05}
+  exclude:                   # weight forced to 0
+    assets: []
+    tags: []                 # e.g. [fossil_fuel]
+    classes: []
+  groups:                    # linear group constraints on a.w (a = exposure / membership vector)
+    - name: tech_lookthrough # "exposure" = look-through: US_MKT uses the KF BusEq market-cap share at
+      exposure: tech         # each decision date; sector/ticker assets tagged tech count 100 %
+      max: 0.35
+    - name: defensive        # membership by tag (any of)
+      tags_any: [defensive]
+      min: 0.20
+    - name: equities         # membership by asset class / explicit list
+      classes: [equity_us, sector_us]
+      max: 0.80
+  exposure_overrides: {}     # e.g. {QQQ: {tech: 0.6}} - document the source of any number you put here!
+
+risk_limits:                 # checked per window (reported as breaches); used as penalties by the ORACLE
+  max_vol: 0.15
+  max_drawdown: 0.35
+  max_cvar_5: 0.08           # monthly CVaR 5 %, positive = loss
+
+flows:
+  initial: 10000             # initial wealth (reference currency)
+  monthly: 0                 # + contribution / - withdrawal at each month end
+  indexed_to_inflation: true
+
+rebalancing:                 # default for all strategies (a strategy may override it)
+  frequency: annual          # monthly | quarterly | annual | bands | never
+  band: 0.05                 # for bands: rebalance when any weight drifts > 5 pts from target
+
+costs_bps: 10                # cost per unit of traded weight (sum |dw|), in basis points
+fallback_weights:            # used by estimation-based strategies until they have enough history
+  US_MKT: 0.6
+  UST_10Y: 0.4
+
+strategies:
+  - name: static_60_40
+    type: sixty_forty
+    params: {equity: [US_MKT], bonds: [UST_10Y], equity_share: 0.6}
+  - name: static_diversified
+    type: static
+    params: {weights: {US_MKT: 0.45, US_IND_UTILS: 0.05, UST_10Y: 0.25, UST_2Y: 0.15, GOLD: 0.05, UST_TBILL: 0.05}}
+    rebalancing: {frequency: bands, band: 0.05}
+  - name: glidepath_80_to_40
+    type: glidepath
+    params:
+      start_weights: {US_MKT: 0.8, UST_10Y: 0.2}
+      end_weights: {US_MKT: 0.4, UST_10Y: 0.4, UST_2Y: 0.2}
+  - name: risk_parity_36m
+    type: risk_parity
+    params: {lookback: 36, method: inverse_vol, exclude: [UST_TBILL]}
+  - name: min_variance_60m
+    type: min_variance
+    params: {lookback: 60}
+  - name: max_sharpe_60m
+    type: max_sharpe
+    params: {lookback: 60, mu_shrink: 0.5}
+  - name: mean_variance_60m
+    type: mean_variance
+    params: {lookback: 60, mu_shrink: 0.5, risk_aversion: 4}
+  - name: trend_10m
+    type: trend_filter
+    params: {ma_months: 10, base_weights: {US_MKT: 0.6, UST_10Y: 0.4}, always_hold: [UST_10Y]}
+    rebalancing: {frequency: monthly}
+  - name: momentum_top2
+    type: momentum
+    params: {lookback: 12, top_k: 2, absolute: true, candidates: [US_MKT, US_IND_UTILS, UST_10Y, GOLD]}
+    rebalancing: {frequency: monthly}
+
+selection:
+  quantile: 0.10             # robust choice = best 10th-percentile score across windows
+  max_breach_rate: null      # e.g. 0.2 -> ignore strategies breaching risk limits in > 20 % of windows
+  min_past_windows: 3        # walk-forward needs at least this many completed past windows
+
+oracle:
+  enabled: true              # hindsight optimum per window (hindsight=True, NON investable)
+  n_starts: 6
+
+seed: 42

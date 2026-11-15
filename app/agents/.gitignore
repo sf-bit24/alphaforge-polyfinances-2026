@@ -17,3 +17,14 @@ dist/
 # Secrets locaux.
 .env
 .env.*
+
+# Moteur de backtest (alphaforge.finance.backtest) : données longues reconstruites, jamais versionnées.
+# Une partie dérive de Yahoo/yfinance (redistribution interdite) et de séries Moody's / OCDE (droit d'auteur) :
+# python -m alphaforge.finance.backtest.build_data. Le catalogue (assets.csv, coverage.csv, qa_overlap.csv,
+# data_version.json) et SOURCES.md restent versionnés. raw/ = téléchargements bruts non fiables.
+src/alphaforge/data/long/*.parquet
+src/alphaforge/data/long/raw/
+# Traces écrites par le moteur hors d'un checkout (défaut ./backtest-results).
+backtest-results/
+*.xls
+*.xlsx

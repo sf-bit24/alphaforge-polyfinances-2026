@@ -489,3 +489,11 @@ def test_researcher_runtime_arn_is_resolved_by_name():
     assert resolve_runtime_arn("x_researcher", "us-east-1", Control()) == "arn:r"
     with pytest.raises(RuntimeError, match="introuvable"):
         resolve_runtime_arn("absent", "us-east-1", type("C", (), {"list_agent_runtimes": lambda self, **k: {}})())
+
+
+def test_quote_documents_are_filed_under_their_symbol(fake_http, store):
+    fake_http.add("https://www.bankofcanada.ca/valet/observations/", VALET_FX)
+    finding = fx_finding(store)
+    quote = {**finding, "kind": "quote", "values": {"value": "1.4257", "symbol": "COAX26"}, "issuers": []}
+    item = items_mod.build_item(quote)
+    assert item["data"]["symbol"] == "COAX26"

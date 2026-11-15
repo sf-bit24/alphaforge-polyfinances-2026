@@ -330,6 +330,8 @@ class ResearcherRun:
         if kind not in FINDING_KINDS:
             raise ResearchError(f"kind doit être parmi {FINDING_KINDS}")
         archived = self.web.get(str(args.get("response_id") or ""))
+        if archived.host in MARKET_HOSTS and kind in ("fact", "quote"):
+            kind = "signal"  # une cote de marché prédictif est toujours un signal, avec ses règles de résolution
         fields_in = args.get("fields") or {}
         if not isinstance(fields_in, dict) or not fields_in or len(fields_in) > 12:
             raise ResearchError("fields doit associer 1 à 12 noms à des localisateurs")

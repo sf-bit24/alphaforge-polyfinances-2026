@@ -261,3 +261,21 @@ def test_full_research_run_with_a_scripted_model(store, fake_http):
     assert result["warnings"] == [] and result["requests"] == {"www.bankofcanada.ca": 1}
     tools = factory.models[0].calls[0]["tools"]
     assert "record_finding" in tools and "propose_host" in tools and "shell" not in tools
+
+
+def test_market_odds_are_always_signals(store, fake_http):
+    fake_http.add("https://external-api.kalshi.com/trade-api/v2/markets/", KALSHI_MARKET)
+    web = make_web(store, packs=("market-implied",))
+    run = make_run(store, web, subject="E6", packs=["market-implied"])
+    archived = web.fetch("https://external-api.kalshi.com/trade-api/v2/markets/KXCBDECISIONCANADA-26DEC-H25")
+    base = {
+        "kind": "quote",
+        "label": "Hausse de 25 pb",
+        "claim": "Offre à 51 cents.",
+        "response_id": archived.response_id,
+        "observation_date": "2026-11-14",
+    }
+    with pytest.raises(researcher_mod.ResearchError, match="resolution_rules"):
+        run.record_finding({**base, "fields": {"value": "market.yes_bid"}})
+    run.record_finding({**base, "fields": {"value": "market.yes_bid", "resolution_rules": "market.rules_primary"}})
+    assert run.findings[-1]["kind"] == "signal"

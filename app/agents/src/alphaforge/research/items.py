@@ -123,7 +123,7 @@ def build_item(finding: dict[str, Any], *, summary: str | None = None, tags: lis
         )
     elif kind == "quote":
         data.update(
-            symbol=(finding.get("issuers") or [finding.get("label")])[0],
+            symbol=values.get("symbol") or (finding.get("issuers") or [finding.get("label")])[0],
             observations=[{"date": (finding.get("observation_date") or "")[:10], "value": values.get("value")}],
         )
     elif kind in ("fact", "signal"):

@@ -76,7 +76,7 @@ export function PortfolioCard({ say, autoFocus, onSkip }: { say: string; autoFoc
     <>
       <div className={s.say}>
         <span className={s.avatar} aria-hidden>
-          A
+          Y
         </span>
         <p>{say}</p>
       </div>

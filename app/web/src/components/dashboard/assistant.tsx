@@ -93,11 +93,11 @@ function Sources({ items, tag }: { items: string[]; tag?: string }) {
   );
 }
 
-function AgentMessage({ children }: { children: ReactNode }) {
+function AgentMessage({ children, asks = false }: { children: ReactNode; asks?: boolean }) {
   return (
-    <div className={s.msg}>
+    <div className={s.msg} data-asks={asks || undefined}>
       <span className={s.avatar} aria-hidden>
-        A
+        Y
       </span>
       <div className={s.body}>{children}</div>
     </div>
@@ -180,14 +180,26 @@ function DemoReply({ demoKey, onAction }: { demoKey: DemoKey; onAction: (action:
 }
 
 /**
- * The assistant of the dashboard draft. Its conversation is A1's (`followup.reply`): it
- * asks the follow-ups that complete the profile, and answers within the profile's scope.
+ * Yan, the assistant of the dashboard draft. Its conversation is A1's (`followup.reply`):
+ * it asks the follow-ups that complete the profile, and answers within the profile's scope.
  * In `mock` mode, the draft's portfolio questions also get their example answers.
+ * At the end of the questionnaire, the journey shows it without the birds' scene
+ * (`intro={false}`) and lets Yan ask its first follow-ups on its own (`autoStart`).
  */
-export function Assistant({ state, sample }: { state: ClientState; sample: boolean }) {
+export function Assistant({
+  state,
+  sample,
+  intro: withIntro = true,
+  autoStart = false,
+}: {
+  state: ClientState;
+  sample: boolean;
+  intro?: boolean;
+  autoStart?: boolean;
+}) {
   const { t, locale } = useI18n();
   const session = useSession();
-  const [intro, setIntro] = useState(() => session.conversation.length === 0);
+  const [intro, setIntro] = useState(() => withIntro && session.conversation.length === 0);
   const [demo, setDemo] = useState<DemoEntry[]>([]);
   const [demoTyping, setDemoTyping] = useState(false);
   const [used, setUsed] = useState<DemoKey[]>([]);
@@ -205,16 +217,30 @@ export function Assistant({ state, sample }: { state: ClientState; sample: boole
   const entries: Entry[] = [...conversation, ...demo].sort((a, b) => a.at.localeCompare(b.at));
   const lastAgent = [...conversation].reverse().find((entry) => entry.role === "agent");
   const askQuestions = followups && state.questions.length > 0 && !replying && lastAgent !== undefined;
+  const readFromStart = askQuestions && !demoTyping && entries.at(-1) === lastAgent;
 
   useEffect(() => {
     const pending = timers.current;
     return () => pending.forEach((id) => window.clearTimeout(id));
   }, []);
 
+  // Yan opens the follow-ups once, when nothing has been said yet (a retry goes through the error notice).
+  const started = useRef(false);
+  const shouldStart = autoStart && followups && conversation.length === 0 && !session.pending;
+  useEffect(() => {
+    if (!shouldStart || started.current) return;
+    started.current = true;
+    void session.reply({});
+  }, [shouldStart, session]);
+
   useEffect(() => {
     const thread = threadRef.current;
-    if (thread) thread.scrollTo({ top: thread.scrollHeight, behavior: "smooth" });
-  }, [entries.length, replying, demoTyping, session.streamText]);
+    if (!thread) return;
+    // A message from Yan with questions is read from its start; the rest follows the bottom.
+    const asking = readFromStart ? thread.querySelector<HTMLElement>("[data-asks]") : null;
+    const top = asking ? asking.offsetTop - 12 : thread.scrollHeight;
+    thread.scrollTo({ top, behavior: "smooth" });
+  }, [entries.length, replying, demoTyping, session.streamText, readFromStart]);
 
   const playDemo = (key: DemoKey) => {
     setUsed((current) => (current.includes(key) ? current : [...current, key]));
@@ -329,7 +355,7 @@ export function Assistant({ state, sample }: { state: ClientState; sample: boole
     const run = entry.runId ? session.runs.find((candidate) => candidate.id === entry.runId) : undefined;
     const isLast = entry === lastAgent;
     return (
-      <AgentMessage key={entry.id}>
+      <AgentMessage key={entry.id} asks={isLast && askQuestions}>
         {entry.message ? <Markdown>{entry.message}</Markdown> : null}
         {isLast && askQuestions ? (
           <div className={s.questions}>

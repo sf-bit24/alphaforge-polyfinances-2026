@@ -181,9 +181,9 @@ const fr = {
   },
   question: {
     deterministic: "Question de base",
-    a1: "Relance d’A1",
+    a1: "Question de Yan",
     fallback: "Question de repli",
-    fallbackHelp: "A1 est indisponible : question préparée par le code.",
+    fallbackHelp: "Yan (A1) est indisponible : question préparée par le code.",
     help: "Pourquoi cette question",
     submit: "Valider",
     sending: "Envoi…",
@@ -750,9 +750,9 @@ const en: Dictionary = {
   },
   question: {
     deterministic: "Base question",
-    a1: "A1 follow-up",
+    a1: "Question from Yan",
     fallback: "Fallback question",
-    fallbackHelp: "A1 is unavailable: a question prepared by code.",
+    fallbackHelp: "Yan (A1) is unavailable: a question prepared by code.",
     help: "Why this question",
     submit: "Submit",
     sending: "Sending…",

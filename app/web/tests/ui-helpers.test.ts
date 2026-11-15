@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { niceTicks } from "@/lib/chart/ticks";
 import { curly, formatCompactMoney, formatSignedPoints, formatTime } from "@/lib/i18n/locale";
 import { NARROW, sceneLayout, stopX, WORLD } from "@/lib/journey/geometry";
-import { withoutLabel } from "@/lib/journey/summary";
 
 const nbsp = (text: string) => text.replace(/[  ]/g, " ");
 
@@ -54,18 +53,6 @@ describe("curly", () => {
   it("turns apostrophes between letters into typographic ones", () => {
     expect(curly("Quel est l'objectif d'un placement ?")).toBe("Quel est l’objectif d’un placement ?");
     expect(curly("don't 'quoted'")).toBe("don’t 'quoted'");
-  });
-});
-
-describe("withoutLabel", () => {
-  it("drops a label the row already shows", () => {
-    expect(withoutLabel("Portefeuille existant", "Portefeuille existant : 7 positions, 68 202 $")).toBe("7 positions, 68 202 $");
-    expect(withoutLabel("Existing portfolio", "Existing portfolio: 3 positions")).toBe("3 positions");
-  });
-
-  it("keeps other summaries as they are", () => {
-    expect(withoutLabel("Préférences", "Exclut : tabac")).toBe("Exclut : tabac");
-    expect(withoutLabel("Capacité", "Faible · limitée par : horizon")).toBe("Faible · limitée par : horizon");
   });
 });
 

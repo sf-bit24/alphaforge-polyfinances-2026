@@ -7,8 +7,10 @@ import type { AnswerValue, ClientState, Dimension } from "@/lib/contract/schemas
 import { useSession } from "@/lib/client/session";
 import { useViewport } from "@/lib/client/use-viewport";
 import type { Dictionary } from "@/lib/i18n/dictionary";
+import { formatPercent } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
 import { itemForStage, plant, resumeLayout, sayFor, START, type PathLayout, type SayKey } from "@/lib/journey/path";
+import { Assistant } from "@/components/dashboard/assistant";
 import { Brand } from "@/components/layout/brand";
 import { LanguageToggle } from "@/components/layout/language-toggle";
 import { PortfolioReviewStep } from "@/components/profile/portfolio-review-step";
@@ -18,13 +20,17 @@ import { cn } from "@/components/ui/cn";
 import { Drawer } from "@/components/ui/drawer";
 import { ErrorNotice } from "@/components/ui/error-notice";
 import { Spinner } from "@/components/ui/spinner";
+import { EndCard } from "./end-card";
 import { PortfolioCard } from "./portfolio-card";
 import { QuestionCard } from "./question-card";
 import { Scene, sceneLayout, WORLD, type SceneHandle } from "./scene";
-import { SummaryCard } from "./summary-card";
 import s from "./journey.module.css";
 
 type Phase = "landing" | "walking" | "ready";
+type DrawerKind = "trace" | "profile" | "chat";
+
+/** Narrower windows keep Yan's conversation in a drawer: beside the card, both would be too cramped. */
+const SIDE_CHAT_MIN_WIDTH = 1100;
 
 function sayText(t: Dictionary, key: SayKey): string {
   switch (key.kind) {
@@ -74,7 +80,8 @@ function TopBar({ state, onOpen }: { state: ClientState | null; onOpen: (drawer:
 /**
  * The profile journey of the approved draft, driven by the real contract: one stop per
  * base question (the runtime decides the next one, branches included), a briefcase stop
- * for an existing portfolio (A2), then the house with the profile's first version.
+ * for an existing portfolio (A2), then the house: the questionnaire ends there and Yan
+ * (A1) asks its personalized follow-ups, in a conversation on the right of the screen.
  */
 export function Journey() {
   const session = useSession();
@@ -90,6 +97,24 @@ export function Journey() {
     );
   }
   return <JourneyFlow initial={session.state} />;
+}
+
+/** Who is talking in the conversation beside the house, and how far the profile is. */
+function YanHeader({ state }: { state: ClientState }) {
+  const { t, locale } = useI18n();
+  const { completeness } = state;
+  return (
+    <div className={s.chatHead}>
+      <span className={s.avatar} aria-hidden>
+        Y
+      </span>
+      <div>
+        <h2 id="yan-title">{t.journey.yan.title}</h2>
+        <p>{t.journey.yan.role}</p>
+      </div>
+      <span className={cn(s.pill, completeness.ready && s.pillReady)}>{t.assistant.profilePill(formatPercent(completeness.displayed, locale))}</span>
+    </div>
+  );
 }
 
 function BootSpinner() {
@@ -112,7 +137,7 @@ function JourneyFlow({ initial }: { initial: ClientState | null }) {
   const [moving, setMoving] = useState(false);
   const [waiting, setWaiting] = useState(false);
   const [interacted, setInteracted] = useState(false);
-  const [drawer, setDrawer] = useState<"trace" | "profile" | null>(null);
+  const [drawer, setDrawer] = useState<DrawerKind | null>(null);
   // The latest layout, for the async flows below (they outlive the render that started them).
   const current = useRef(layout);
   const apply = (next: PathLayout) => {
@@ -176,7 +201,7 @@ function JourneyFlow({ initial }: { initial: ClientState | null }) {
   };
 
   const restart = () => {
-    if (!window.confirm(t.journey.summary.restartConfirm)) return;
+    if (!window.confirm(t.journey.end.restartConfirm)) return;
     setDrawer(null);
     setResumed(false);
     setGreetBack(false);
@@ -201,6 +226,12 @@ function JourneyFlow({ initial }: { initial: ClientState | null }) {
   /** Lowest point a card may reach: above the walker's head on a phone, above the footer elsewhere. */
   const floor = narrow ? geo.manTop - 14 : height - 52;
   const visible = phase === "ready";
+  const atHouse = state !== null && itemForStage(state.stage) === "house";
+  const sideChat = atHouse && !narrow && width >= SIDE_CHAT_MIN_WIDTH;
+  // Yan's conversation, docked right; the end card shares what is left of the walker's side.
+  const chatWidth = Math.min(500, Math.max(400, width * 0.32));
+  const chatTop = 84;
+  const chatStyle: CSSProperties = { right: 24, top: chatTop, width: chatWidth, height: floor - chatTop };
 
   let content: ReactNode = null;
   let wide = false;
@@ -245,7 +276,7 @@ function JourneyFlow({ initial }: { initial: ClientState | null }) {
           <>
             <div className={s.say}>
               <span className={s.avatar} aria-hidden>
-                A
+                Y
               </span>
               <p>{t.journey.say.review}</p>
             </div>
@@ -260,13 +291,14 @@ function JourneyFlow({ initial }: { initial: ClientState | null }) {
         break;
       case "followups":
       case "complete":
-        tall = true;
+        cardWidth = 480;
         content = (
-          <SummaryCard
+          <EndCard
             state={state}
+            side={sideChat}
             autoFocus={visible && interacted}
             busy={Boolean(session.pending)}
-            onOpenProfile={() => setDrawer("profile")}
+            onOpenChat={() => setDrawer("chat")}
             onRestart={restart}
           />
         );
@@ -281,7 +313,12 @@ function JourneyFlow({ initial }: { initial: ClientState | null }) {
         const panelWidth = Math.min(1240, width - 32);
         return { left: (width - panelWidth) / 2, top: narrow ? 80 : 84, width: panelWidth, maxHeight: floor - (narrow ? 80 : 84) };
       })()
-    : { left, top: cardTop, width: narrow ? width - 32 : Math.min(cardWidth, width - left - 40), maxHeight: floor - cardTop };
+    : {
+        left,
+        top: cardTop,
+        width: narrow ? width - 32 : Math.min(cardWidth, (sideChat ? width - 24 - chatWidth - 24 : width - 40) - left),
+        maxHeight: floor - cardTop,
+      };
   // A new panel per stop, so each starts scrolled to its top.
   const panelKey = state ? `${state.stage}:${state.questions[0]?.id ?? ""}` : "none";
   const landingStyle: CSSProperties = narrow
@@ -365,6 +402,18 @@ function JourneyFlow({ initial }: { initial: ClientState | null }) {
         {content}
       </section>
 
+      {sideChat && state ? (
+        <section
+          className={cn(s.panel, s.chat, !visible && s.hidden)}
+          style={chatStyle}
+          inert={!visible}
+          aria-labelledby="yan-title"
+        >
+          <YanHeader state={state} />
+          <Assistant key={state.client_id} state={state} sample={false} intro={false} autoStart />
+        </section>
+      ) : null}
+
       <p className={s.disclaimer}>{t.journey.disclaimer}</p>
       <button
         type="button"
@@ -380,6 +429,14 @@ function JourneyFlow({ initial }: { initial: ClientState | null }) {
       </Drawer>
       <Drawer open={drawer === "profile"} onClose={() => setDrawer(null)} label={t.panel.title}>
         {state ? <ProfilePanel state={state} /> : null}
+      </Drawer>
+      <Drawer open={drawer === "chat" && atHouse && !sideChat} onClose={() => setDrawer(null)} label={t.assistant.conversation}>
+        {state ? (
+          <div className={s.chatDrawer}>
+            <YanHeader state={state} />
+            <Assistant key={state.client_id} state={state} sample={false} intro={false} autoStart />
+          </div>
+        ) : null}
       </Drawer>
     </div>
   );

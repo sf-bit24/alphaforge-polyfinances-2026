@@ -1,0 +1,226 @@
+"use client";
+
+import { ChartBar, Table2, TriangleAlert } from "lucide-react";
+import { useState } from "react";
+import type { Exposures, FxRate, Position, Source } from "@/lib/contract/schemas";
+import { formatDate, formatMoney, formatNumber, formatPercent } from "@/lib/i18n/locale";
+import { useI18n } from "@/lib/i18n/provider";
+import { SourceLine } from "@/components/trace/trace-panel";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/components/ui/cn";
+
+const MAX_ROWS = 6;
+
+interface Row {
+  name: string;
+  share: number;
+}
+
+/** Ranked rows, largest first; a long tail folds into "Other" so no row needs a new colour. */
+function rowsOf(shares: Record<string, number>, label: (name: string) => string, other: string): Row[] {
+  const sorted = Object.entries(shares)
+    .map(([name, share]) => ({ name: label(name), share }))
+    .sort((a, b) => b.share - a.share);
+  if (sorted.length <= MAX_ROWS) return sorted;
+  const head = sorted.slice(0, MAX_ROWS - 1);
+  const tail = sorted.slice(MAX_ROWS - 1).reduce((sum, row) => sum + row.share, 0);
+  return [...head, { name: other, share: tail }];
+}
+
+function BarList({ title, rows, total }: { title: string; rows: Row[]; total: number }) {
+  const { locale } = useI18n();
+  const max = Math.max(...rows.map((row) => row.share), 0.0001);
+  return (
+    <figure className="min-w-0">
+      <figcaption className="mb-2 text-xs font-semibold tracking-wide text-ink-600 uppercase">{title}</figcaption>
+      <ul className="space-y-2">
+        {rows.map((row) => (
+          <li
+            key={row.name}
+            className="group grid grid-cols-[minmax(0,9rem)_1fr_auto] items-center gap-3 text-sm"
+            title={`${row.name} : ${formatPercent(row.share, locale, 1)} · ${formatMoney(row.share * total, locale)}`}
+          >
+            <span className="truncate text-ink-800">{row.name}</span>
+            <span aria-hidden className="relative h-3 rounded-r-[4px]">
+              <span
+                className="absolute inset-y-0 left-0 rounded-r-[4px] bg-brand-500 transition-[width] duration-500 group-hover:bg-brand-600"
+                style={{ width: `${Math.max(1.5, (row.share / max) * 100)}%` }}
+              />
+            </span>
+            <span className="w-12 text-right font-medium text-ink-900 tabular-nums">{formatPercent(row.share, locale)}</span>
+          </li>
+        ))}
+      </ul>
+    </figure>
+  );
+}
+
+function TableView({ groups, total }: { groups: Array<{ title: string; rows: Row[] }>; total: number }) {
+  const { t, locale } = useI18n();
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-ink-200 text-left text-xs text-ink-600">
+            <th scope="col" className="py-2 pr-4 font-semibold">
+              {t.exposures.group}
+            </th>
+            <th scope="col" className="py-2 pr-4 font-semibold">
+              {t.exposures.category}
+            </th>
+            <th scope="col" className="py-2 pr-4 text-right font-semibold">
+              {t.exposures.share}
+            </th>
+            <th scope="col" className="py-2 text-right font-semibold">
+              CAD
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {groups.flatMap((group) =>
+            group.rows.map((row, index) => (
+              <tr key={`${group.title}-${row.name}`} className="border-b border-ink-150">
+                <td className="py-1.5 pr-4 text-ink-600">{index === 0 ? group.title : ""}</td>
+                <td className="py-1.5 pr-4 text-ink-900">{row.name}</td>
+                <td className="py-1.5 pr-4 text-right tabular-nums">{formatPercent(row.share, locale, 1)}</td>
+                <td className="py-1.5 text-right tabular-nums">{formatMoney(row.share * total, locale)}</td>
+              </tr>
+            )),
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function FlagList({ flags }: { flags: string[] }) {
+  const { t } = useI18n();
+  if (flags.length === 0) return <p className="text-sm text-ink-500">{t.exposures.noFlags}</p>;
+  return (
+    <ul className="grid gap-2 sm:grid-cols-2">
+      {flags.map((flag) => {
+        const known = t.flags[flag];
+        const title = known?.title ?? flag.replace(/_/g, " ");
+        return (
+          <li key={flag} className="flex items-start gap-2.5 rounded-lg bg-warning-wash px-3 py-2.5 ring-1 ring-warning/40">
+            <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-warning-ink" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-ink-950">{title}</p>
+              {known ? <p className="mt-0.5 text-[0.8rem] leading-snug text-ink-700">{known.text}</p> : null}
+              <p className="mt-0.5 font-mono text-[0.65rem] text-ink-500">{flag}</p>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+export function SourcesList({ sources }: { sources: Source[] }) {
+  const { t } = useI18n();
+  if (sources.length === 0) return null;
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-semibold tracking-wide text-ink-600 uppercase">{t.common.sources}</p>
+      <ul className="space-y-1.5">
+        {sources.map((source) => (
+          <SourceLine key={source.id} source={source} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** The conversion rate behind the CAD values, with its date and source (`PortfolioView.fx`). */
+export function FxNote({ fx, className }: { fx: FxRate | null | undefined; className?: string }) {
+  const { t, locale } = useI18n();
+  if (!fx) return null;
+  const base = fx.pair.slice(0, 3) || "USD";
+  const quote = fx.pair.slice(3) || "CAD";
+  return (
+    <p className={cn("text-xs text-ink-500", className)}>
+      {t.exposures.fx(`1 ${base} = ${formatNumber(fx.rate, locale, 4)} ${quote}`, formatDate(fx.date, locale))}{" "}
+      <span className="font-mono text-[0.7rem] text-ink-400">{fx.source}</span>
+    </p>
+  );
+}
+
+/** Exposures computed by code (shares of total_value_cad), with flags and sources. */
+export function ExposuresView({
+  exposures,
+  positions,
+  sources,
+  fx,
+  stale = false,
+}: {
+  exposures: Exposures;
+  positions: Position[];
+  sources: Source[];
+  fx?: FxRate | null;
+  stale?: boolean;
+}) {
+  const { t, locale } = useI18n();
+  const [table, setTable] = useState(false);
+  const total = exposures.total_value_cad;
+  const assetLabel = (name: string) => (t.assetClasses as Record<string, string>)[name] ?? name;
+  const groups = [
+    { title: t.exposures.byAssetClass, rows: rowsOf(exposures.by_asset_class, assetLabel, t.assetClasses.other) },
+    { title: t.exposures.byCurrency, rows: rowsOf(exposures.by_currency, (name) => name, t.assetClasses.other) },
+    { title: t.exposures.byMarket, rows: rowsOf(exposures.by_market, (name) => name, t.assetClasses.other) },
+    { title: t.exposures.bySector, rows: rowsOf(exposures.by_sector, (name) => name, t.assetClasses.other) },
+  ];
+  const byId = new Map(positions.map((position) => [position.id, position]));
+  return (
+    <div className={cn("space-y-6 transition-opacity", stale && "opacity-60")}>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-medium text-ink-500">{t.exposures.total}</p>
+          <p className="text-[2rem] leading-tight font-semibold tracking-tight text-ink-950">{formatMoney(total, locale)}</p>
+          <p className="text-xs text-ink-500">{t.exposures.computedByCode}</p>
+          <FxNote fx={fx} className="mt-0.5" />
+        </div>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setTable((value) => !value)}
+          aria-pressed={table}
+          icon={table ? <ChartBar aria-hidden className="size-4" /> : <Table2 aria-hidden className="size-4" />}
+        >
+          {table ? t.exposures.showBars : t.exposures.showTable}
+        </Button>
+      </div>
+      {total <= 0 ? (
+        <p className="text-sm text-ink-500">{t.exposures.empty}</p>
+      ) : table ? (
+        <TableView groups={groups} total={total} />
+      ) : (
+        <div className="grid gap-x-10 gap-y-6 md:grid-cols-2">
+          {groups.map((group) => (
+            <BarList key={group.title} title={group.title} rows={group.rows} total={total} />
+          ))}
+        </div>
+      )}
+      {exposures.top_positions.length > 0 ? (
+        <div>
+          <p className="mb-2 text-xs font-semibold tracking-wide text-ink-600 uppercase">{t.exposures.topPositions}</p>
+          <ul className="flex flex-wrap gap-2">
+            {exposures.top_positions.map((top) => {
+              const position = byId.get(top.id);
+              return (
+                <li key={top.id} className="rounded-lg bg-ink-50 px-3 py-1.5 text-sm ring-1 ring-ink-150">
+                  <span className="font-mono font-medium text-ink-900">{position?.ticker ?? position?.name ?? top.id}</span>
+                  <span className="ml-2 text-ink-600 tabular-nums">{formatPercent(top.weight, locale, 1)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+      <div>
+        <p className="mb-2 text-xs font-semibold tracking-wide text-ink-600 uppercase">{t.exposures.flags}</p>
+        <FlagList flags={exposures.flags} />
+      </div>
+      <SourcesList sources={sources} />
+    </div>
+  );
+}

@@ -1,0 +1,151 @@
+"""Lecture des bases OKF (``kb.list``, ``kb.get``) et recherche dans la base générale (Knowledge Base).
+
+La recherche passe par ``bedrock-agent-runtime`` ``Retrieve`` quand ``ALPHAFORGE_KB_ID`` est posé;
+sinon elle ne renvoie rien (développement local).
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any
+
+import boto3
+from botocore.config import Config
+
+from .. import okf
+from ..config import Settings
+from ..errors import AppError, pick
+from ..store import Store, StoreError, validate_key, validate_prefix
+from .state import is_client_id
+
+logger = logging.getLogger("alphaforge.kb")
+MAX_LIST = 500
+TRACE_JSON = re.compile(r"^clients/[0-9a-f-]{36}/traces/[A-Za-z0-9._-]+\.json$")
+
+
+def check_prefix(prefix: Any, locale: str) -> str:
+    if not isinstance(prefix, str):
+        raise AppError("bad_request", pick(locale, "prefix est requis.", "prefix is required."))
+    try:
+        validate_prefix(prefix)
+    except StoreError as exc:
+        raise AppError("bad_request", pick(locale, "prefix invalide.", "Invalid prefix.")) from exc
+    if prefix.startswith("general/"):
+        return prefix
+    parts = prefix.split("/")
+    if len(parts) >= 3 and parts[0] == "clients" and is_client_id(parts[1]):
+        return prefix
+    raise AppError(
+        "bad_request",
+        pick(
+            locale,
+            "prefix doit commencer par general/ ou clients/<client_id>/.",
+            "prefix must start with general/ or clients/<client_id>/.",
+        ),
+    )
+
+
+def list_documents(store: Store, prefix: str) -> list[dict[str, Any]]:
+    infos = [info for info in store.list(prefix, limit=MAX_LIST * 2) if info.key.endswith(".md")][:MAX_LIST]
+
+    def describe(info: Any) -> dict[str, Any] | None:
+        obj = store.get(info.key)
+        if obj is None:
+            return None
+        try:
+            doc = okf.parse(obj.text)
+        except okf.OkfError:
+            return {"key": info.key, "title": None, "type": None, "description": None, "updated_at": info.last_modified}
+        summary = okf.summary(doc)
+        return {
+            "key": info.key,
+            "title": summary["title"],
+            "type": summary["type"],
+            "description": summary["description"],
+            "updated_at": summary["generated_at"] or info.last_modified,
+        }
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        items = [item for item in pool.map(describe, infos) if item is not None]
+    return sorted(items, key=lambda item: item["key"])
+
+
+def check_key(key: Any, client_id: Any, locale: str) -> str:
+    if not isinstance(key, str):
+        raise AppError("bad_request", pick(locale, "key est requis.", "key is required."))
+    try:
+        validate_key(key)
+    except StoreError as exc:
+        raise AppError("bad_request", pick(locale, "key invalide.", "Invalid key.")) from exc
+    if key.startswith("general/") and key.endswith(".md"):
+        return key
+    if key.startswith("clients/"):
+        owner = key.split("/")[1] if key.count("/") >= 2 else ""
+        if not (key.endswith(".md") or TRACE_JSON.match(key)):
+            raise AppError("bad_request", pick(locale, "Type de document non servi.", "Document type not served."))
+        if not client_id:
+            raise AppError(
+                "bad_request",
+                pick(
+                    locale, "client_id est requis pour une clé clients/.", "client_id is required for a clients/ key."
+                ),
+            )
+        if client_id != owner:
+            raise AppError("not_found", pick(locale, "Document introuvable.", "Document not found."))
+        return key
+    raise AppError(
+        "bad_request",
+        pick(
+            locale, "Seules les clés general/ et clients/ sont servies.", "Only general/ and clients/ keys are served."
+        ),
+    )
+
+
+class KnowledgeSearch:
+    """Recherche dans la base générale indexée par Bedrock Knowledge Bases (``Retrieve``)."""
+
+    def __init__(self, settings: Settings, client: Any | None = None):
+        self.kb_id = settings.kb_id
+        self.region = settings.region
+        self._client = client
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.kb_id)
+
+    def _get_client(self) -> Any:
+        if self._client is None:
+            self._client = boto3.client(
+                "bedrock-agent-runtime",
+                region_name=self.region,
+                config=Config(connect_timeout=5, read_timeout=20, retries={"max_attempts": 2, "mode": "standard"}),
+            )
+        return self._client
+
+    def search(self, query: str, limit: int = 4) -> list[dict[str, Any]]:
+        if not self.enabled or not query.strip():
+            return []
+        try:
+            response = self._get_client().retrieve(
+                knowledgeBaseId=self.kb_id,
+                retrievalQuery={"text": query[:1000]},
+                retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": max(1, min(limit, 8))}},
+            )
+        except Exception as exc:
+            logger.warning("knowledge base retrieve failed: %s", type(exc).__name__)
+            return []
+        results = []
+        for item in response.get("retrievalResults", [])[:limit]:
+            location = item.get("location") or {}
+            uri = (location.get("s3Location") or {}).get("uri") or location.get("type")
+            text = ((item.get("content") or {}).get("text") or "").strip()
+            results.append(
+                {
+                    "source": uri,
+                    "score": round(float(item.get("score") or 0), 3),
+                    "excerpt": text[:700] + ("…" if len(text) > 700 else ""),
+                }
+            )
+        return results

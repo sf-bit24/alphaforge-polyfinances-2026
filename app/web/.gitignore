@@ -1,0 +1,21 @@
+# Dépendances
+node_modules/
+
+# Next.js
+.next/
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
+
+# Tests
+coverage/
+
+# Variables locales (jamais commitées)
+.env*.local
+.env
+!.env.example
+
+# Divers
+.DS_Store
+npm-debug.log*

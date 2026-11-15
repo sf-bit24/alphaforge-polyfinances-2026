@@ -1,0 +1,104 @@
+# AlphaForge AI : infrastructure
+
+Moitié **infrastructure** du mono repo `app/` + `infrastructure/`. Elle reçoit le zip du code des agents construit par `.github/workflows/app.yml` dans le même run GitHub Actions, puis déploie sur AWS via HCP Terraform. Le contrat entre l'interface, les runtimes et cette infra est dans [`app/CONTRACTS.md`](../app/CONTRACTS.md).
+
+## Ce qui est déployé
+
+Compte AWS Workshop Studio du Datathon, `us-east-1`, environnement `sandbox`, préfixe `alphaforge-sandbox`.
+
+| Service | Fichier | Rôle |
+| --- | --- | --- |
+| AgentCore Runtime | `infra/agentcore.tf` | Quatre runtimes tirés d'un seul zip Python : `profile` (questions de base, A1, A2), `press` (A4), `data` (A5), `supervisor` (A6). Un rôle IAM par runtime, limité à ses préfixes S3. |
+| S3 + KMS | `infra/s3.tf` | Bases OKF : `general/`, `clients/<id>/`, `staging/`, `runtime/`. Clé KMS du projet, versionnement, TLS obligatoire, accès public bloqué. |
+| Knowledge Base + Guardrail | `infra/bedrock.tf` | Knowledge Base sur S3 Vectors (Titan Text Embeddings V2) qui n'indexe que `general/`; Guardrail du cadre responsable (pas de transaction réelle, renseignements personnels bloqués ou masqués). |
+| Step Functions | `infra/stepfunctions.tf` | Collecte : A4 et A5 en parallèle, A6, puis ingestion de la Knowledge Base. |
+| EventBridge Scheduler | `infra/scheduler.tf` | Veille : lance la collecte toutes les 6 heures. |
+
+```mermaid
+flowchart LR
+    UI["Interface Next.js locale"] -->|"InvokeAgentRuntime (IAM)"| P["Runtime profile : questions, A1, A2"]
+    UI -->|"StartExecution"| SF["Step Functions : collecte"]
+    SCH["EventBridge Scheduler"] -->|"toutes les 6 h"| SF
+    SF --> A4["Runtime press : A4"]
+    SF --> A5["Runtime data : A5"]
+    A4 -->|"staging/"| S3[("S3 + KMS : bases OKF")]
+    A5 -->|"staging/"| S3
+    SF --> A6["Runtime supervisor : A6"]
+    A6 -->|"general/"| S3
+    SF -->|"StartIngestionJob"| KB["Knowledge Base (S3 Vectors)"]
+    KB -->|"indexe general/"| S3
+    P -->|"clients/"| S3
+    P -->|"Retrieve"| KB
+    P -->|"Converse + Guardrail"| M["Bedrock : Claude Opus 5.5"]
+    A4 --> M
+    A5 --> M
+    A6 --> M
+```
+
+## Pipeline
+
+```mermaid
+flowchart LR
+    C["context : ci-context.sh"] --> T["app.yml : tests agents et web"]
+    T --> Z["package_agents : agents.zip + knowledge/"]
+    T --> R["release_tfvars : release_id = SHA court"]
+    Z --> V["infra.yml : validate"]
+    R --> V
+    V --> U["upload : init.sh + upload-config.sh"]
+    U --> PL["plan"]
+    PL --> AP["apply (push sur master seulement)"]
+    AP --> H["HCP Terraform, OIDC"] --> AWS["AWS us-east-1"]
+```
+
+| Événement | Jobs app | Jobs infra |
+| --- | --- | --- |
+| Push sur `master` | tests, zip, release | validate, upload, plan, apply |
+| PR qui touche `infrastructure/**` | tests, zip, release | validate, upload, plan (pas d'apply) |
+| Autre PR, autre push, `workflow_dispatch` | tests | aucun |
+| Variable de repo `DESTROY_ENV=true` | tests | aucun |
+
+GitHub Actions n'a aucun accès AWS : seul HCP Terraform assume le rôle `alphaforge-tfc-run` par OIDC, et c'est lui qui téléverse le zip dans S3. Le zip porte le SHA du commit (`runtime/agents-<sha>.zip`), donc chaque commit déploie un objet immuable et met les quatre runtimes à jour.
+
+## Layout
+
+```text
+infrastructure/
+  bootstrap/          OIDC HCP Terraform -> AWS et rôle des runs (une fois, état local)
+  infra/              module racine Terraform (le bundle téléversé garde ce dossier)
+    build/            artefact du run : agents.zip, knowledge/ (jamais commité)
+  deploy/
+    envs/sandbox.tfvars   valeurs de l'environnement
+    release.auto.tfvars   artefact du run : release_id (jamais commité)
+  scripts/            ci-context, init, upload-config, plan, apply, destroy, validate, write-release-tfvars
+```
+
+## Mise en place (déjà faite le 2026-11-14, sauf le bootstrap AWS)
+
+1. **Bootstrap AWS**, une seule fois, avec les identifiants du Workshop :
+
+   ```sh
+   terraform -chdir=infrastructure/bootstrap init
+   terraform -chdir=infrastructure/bootstrap apply
+   ```
+
+   Il crée le fournisseur OIDC `app.terraform.io` et le rôle `alphaforge-tfc-run`, assumable seulement par les runs du workspace `larpathon` de l'organisation `larpathon_2026`. Son ARN est déjà dans `deploy/envs/sandbox.tfvars`.
+2. **Workspace HCP Terraform** `larpathon` : sans VCS, répertoire de travail `infra`, auto-apply, Terraform 1.17.2, variables d'environnement `TFC_AWS_PROVIDER_AUTH=true` et `TFC_AWS_RUN_ROLE_ARN`.
+3. **GitHub** : secret `TF_API_TOKEN`, variables `EPHEMERAL_ENVS_ENABLED=false` et `TFC_PROJECT_ID`.
+
+## Vérifier en local
+
+```sh
+cd infrastructure
+sh scripts/validate.sh       # terraform init -backend=false, fmt -check, validate
+GITHUB_EVENT_NAME=push GITHUB_REF_NAME=master DEFAULT_BRANCH=master sh scripts/ci-context.sh
+```
+
+## Pièges
+
+- **Noms AgentCore** : ni tiret ni point, d'où `alphaforge_sandbox_profile`.
+- **Tag mobile** : `write-release-tfvars.sh` et la validation de `release_id` refusent tout ce qui n'est pas un SHA.
+- **Artefacts absents** : `upload-config.sh` s'arrête si `deploy/release.auto.tfvars` ou `infra/build/agents.zip` manque.
+- **Objet absent, réponse 403** : les rôles n'ont `s3:ListBucket` que sous leurs préfixes (condition `s3:prefix`). Pour un objet absent, S3 répond alors `AccessDenied` et non `NoSuchKey`. Step Functions sonde donc les marqueurs par `ListObjectsV2`, et le magasin Python vérifie l'existence par une liste avant de conclure.
+- **Clé KMS du bucket** : elle ne délègue pas à IAM. Tout nouveau rôle qui lit ou écrit le bucket doit figurer dans `local.s3_kms_user_role_arns` (`infra/s3.tf`).
+- **Workspace VCS** : HCP Terraform refuse le téléversement de configuration sur un workspace relié à un VCS; `larpathon` n'en a pas.
+- **Compte supprimé le 2026-11-16** : exporter les bases des clients avant (voir le README racine).

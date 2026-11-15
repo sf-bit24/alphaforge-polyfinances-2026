@@ -1,0 +1,7 @@
+# Force LF line endings on files consumed by Linux CI runners (shell scripts
+# and Terraform tfvars). Without this, Windows clients commit CRLF and the
+# CI parser (grep/sed -> upload-config.sh -> TFC API) sends corrupted
+# values that fail silently.
+*.sh         text eol=lf
+*.tfvars     text eol=lf
+*.tf         text eol=lf

@@ -1,0 +1,19 @@
+# Environnement et caches locaux.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Base de connaissances locale (ALPHAFORGE_STORE=local) : profils de test, jamais versionnés.
+.local-kb/
+
+# Sorties de construction et de package.sh.
+build/
+dist/
+*.egg-info/
+*.zip
+
+# Secrets locaux.
+.env
+.env.*

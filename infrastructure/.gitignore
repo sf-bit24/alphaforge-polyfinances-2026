@@ -1,0 +1,24 @@
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+# tfvars : on commit deploy/envs/*.tfvars (sources de verite par env) mais pas
+# terraform.tfvars / terraform.auto.tfvars (locaux ou generes).
+/terraform.tfvars
+/terraform.auto.tfvars
+/.env
+!deploy/terraform.tfvars.example
+!deploy/envs/*.tfvars
+# Artefacts du run (.github/workflows/app.yml), jamais commit :
+# release.auto.tfvars (job release_tfvars) et infra/build/ (job package_agents :
+# agents.zip et knowledge/).
+/deploy/release.auto.tfvars
+/infra/build/
+config.tar.gz
+workspace.env
+run.env
+.idea/
+.vscode/

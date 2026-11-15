@@ -216,7 +216,8 @@ class ExpertRun:
                 unknown.append(selection.get("finding_id"))
                 continue
             summary = selection.get("summary") or finding.get("claim")
-            missing = documents.grounded(str(summary), items.allowed_numbers(items.build_item(finding)))
+            draft = items.build_item(finding)
+            missing = documents.grounded(str(summary), items.allowed_numbers(draft), items.allowed_dates(draft))
             if missing:
                 unknown.append(f"{finding['finding_id']} : nombres non fondés {missing[:3]}")
                 continue
@@ -238,8 +239,9 @@ class ExpertRun:
             if finding_id not in self.staged:
                 self.stage([{"finding_id": finding_id}])
         cited = [c for c in cited if c in self.staged]
-        allowed = [n for c in cited for n in items.allowed_numbers(self.staged_items[c])]
-        missing = documents.grounded(text, allowed)
+        values = [n for c in cited for n in items.allowed_numbers(self.staged_items[c])]
+        dates = [d for c in cited for d in items.allowed_dates(self.staged_items[c])]
+        missing = documents.grounded(text, values, dates)
         if missing:
             return {"status": "error", "reason": "nombres absents des constats cités : " + ", ".join(missing[:5])}
         document = {

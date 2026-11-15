@@ -258,12 +258,16 @@ def preview(tree: Any, offset: int = 0, lines: int = PREVIEW_LINES) -> dict[str,
 _NUMBER = re.compile(r"(?<![\w.])[-−]?\d{1,3}(?:[   ]\d{3})+(?:[.,]\d+)?|(?<![\w.])[-−]?\d+(?:[.,]\d+)?")
 
 
-def numbers_in(text: str) -> list[tuple[float, int]]:
-    """Nombres d'un texte, avec leur nombre de décimales (« 1 820 », « 4,2 », « -0.462 », « 3,5 % »)."""
+_UNIT = re.compile(r"^\s?(?:%|\$|€|pb\b|bps?\b|pts?\b|points?\b|[MGk]\$?\b|millions?\b|milliards?\b|x\b|×)", re.I)
+
+
+def numbers_in(text: str) -> list[tuple[float, int, bool]]:
+    """Nombres d'un texte, avec leurs décimales et un drapeau « suivi d'une unité » (%, $, pb, M…)."""
     found = []
-    for match in _NUMBER.finditer(text or ""):
+    source = text or ""
+    for match in _NUMBER.finditer(source):
         raw = match.group(0).replace("−", "-")
-        raw = re.sub(r"[   ]", "", raw)
+        raw = re.sub(r"[   ]", "", raw)
         decimals = 0
         if "," in raw or "." in raw:
             sep = "," if "," in raw else "."
@@ -271,23 +275,31 @@ def numbers_in(text: str) -> list[tuple[float, int]]:
             decimals = len(frac)
             raw = f"{whole}.{frac}"
         try:
-            found.append((float(raw), decimals))
+            number = float(raw)
         except ValueError:
             continue
+        found.append((number, decimals, bool(_UNIT.match(source[match.end() : match.end() + 12]))))
     return found
 
 
-def grounded(text: str, allowed_values: list[str]) -> list[str]:
-    """Nombres de ``text`` absents des valeurs permises (arrondi permis à la précision écrite)."""
-    pool: list[float] = []
-    for value in allowed_values:
-        for number, _ in numbers_in(str(value)):
-            pool.append(number)
+def _pool(values: list[str] | tuple[str, ...]) -> list[float]:
+    return [number for value in values for number, _, _ in numbers_in(str(value))]
+
+
+def grounded(text: str, allowed_values: list[str], allowed_dates: list[str] | tuple[str, ...] = ()) -> list[str]:
+    """Nombres de ``text`` absents des valeurs lues (arrondi permis à la précision écrite).
+
+    Un nombre suivi d'une unité (« 12 % », « 25 pb », « 1 820 $ ») doit venir d'une valeur lue; les autres
+    peuvent aussi venir d'une date (année, mois, jour). Une fraction peut s'écrire en pourcentage (0,51 → 51 %).
+    """
+    values = _pool(allowed_values)
+    dates = [abs(n) for n in _pool(allowed_dates)]
     missing = []
-    for number, decimals in numbers_in(text):
+    for number, decimals, with_unit in numbers_in(text):
         tolerance = 0.5 * 10 ** (-decimals) + 1e-9
-        if not any(abs(number - candidate) <= tolerance for candidate in pool):
-            # Un pourcentage peut être écrit à partir d'une fraction (0,51 → 51 %).
-            if not any(abs(number - candidate * 100) <= tolerance for candidate in pool):
-                missing.append(f"{number:g}")
+        if any(abs(number - v) <= tolerance or abs(number - v * 100) <= tolerance for v in values):
+            continue
+        if not with_unit and decimals == 0 and any(abs(abs(number) - d) <= tolerance for d in dates):
+            continue
+        missing.append(f"{number:g}")
     return missing

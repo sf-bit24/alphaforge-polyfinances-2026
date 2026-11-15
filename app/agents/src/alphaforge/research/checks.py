@@ -216,7 +216,9 @@ def validate_research(
         if problem:
             reject(problem)
             continue
-        missing = documents.grounded(f"{item['title']} {item.get('summary') or ''}", items.allowed_numbers(item))
+        missing = documents.grounded(
+            f"{item['title']} {item.get('summary') or ''}", items.allowed_numbers(item), items.allowed_dates(item)
+        )
         if missing:
             reject("nombres non fondés dans le titre ou le résumé : " + ", ".join(missing[:4]))
             continue
@@ -251,8 +253,9 @@ def validate_research(
                 {"key": key, "reason": "synthèse : citations absentes ou non retenues " + ", ".join(missing_ids[:4])}
             )
             continue
-        allowed = [n for c in citations for n in items.allowed_numbers(by_id[c].item)]
-        missing = documents.grounded(f"{item['title']} {data.get('text') or ''}", allowed)
+        values = [n for c in citations for n in items.allowed_numbers(by_id[c].item)]
+        dates = [d for c in citations for d in items.allowed_dates(by_id[c].item)]
+        missing = documents.grounded(f"{item['title']} {data.get('text') or ''}", values, dates)
         if missing:
             rejected.append({"key": key, "reason": "synthèse : nombres non fondés " + ", ".join(missing[:4])})
             continue

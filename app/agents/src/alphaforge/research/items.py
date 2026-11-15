@@ -155,14 +155,19 @@ def build_item(finding: dict[str, Any], *, summary: str | None = None, tags: lis
 
 
 def allowed_numbers(item: dict[str, Any]) -> list[str]:
-    """Valeurs auxquelles un texte fondé sur cet élément peut emprunter des nombres (valeurs lues et dates)."""
+    """Valeurs lues auxquelles un texte fondé sur cet élément peut emprunter des nombres."""
     data = item.get("data") or {}
     out = [str(v) for v in (data.get("values") or {}).values()]
     out += [str(o.get("value")) for o in data.get("observations") or [] if isinstance(o, dict)]
-    out += [str(o.get("date")) for o in data.get("observations") or [] if isinstance(o, dict)]
-    for key in ("observed_at", "published_at"):
-        value = item.get(key)
-        if value:
-            out.append(str(value)[:10])
-            out += [str(int(p)) for p in str(value)[:10].split("-") if p.isdigit()]
     return out
+
+
+def allowed_dates(item: dict[str, Any]) -> list[str]:
+    """Dates de cet élément dont un texte peut citer l'année, le mois ou le jour (bornes d'une série seulement)."""
+    data = item.get("data") or {}
+    observations = [o for o in data.get("observations") or [] if isinstance(o, dict) and o.get("date")]
+    out = [str(o["date"])[:10] for o in observations[:1] + observations[-1:]]
+    for key in ("observed_at", "published_at"):
+        if item.get(key):
+            out.append(str(item[key])[:10])
+    return [d.replace("-", "/") for d in out]

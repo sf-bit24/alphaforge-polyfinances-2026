@@ -214,8 +214,9 @@ class ComposeState:
             cited = [c for c in dict.fromkeys(citations or []) if c in state.items_by_id]
             if not cited:
                 return tool_result({"status": "error", "reason": "citer au moins un élément existant"})
-            allowed = [n for c in cited for n in items.allowed_numbers(state.items_by_id[c])]
-            missing = documents.grounded(f"{title} {text}", allowed)
+            values = [n for c in cited for n in items.allowed_numbers(state.items_by_id[c])]
+            dates = [d for c in cited for d in items.allowed_dates(state.items_by_id[c])]
+            missing = documents.grounded(f"{title} {text}", values, dates)
             if missing:
                 return tool_result(
                     {"status": "error", "reason": "nombres absents des éléments cités : " + ", ".join(missing[:5])}

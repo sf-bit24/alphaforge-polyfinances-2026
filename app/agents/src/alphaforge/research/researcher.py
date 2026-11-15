@@ -211,16 +211,8 @@ def parse_any_date(value: Any) -> str | None:
     return None
 
 
-def _date_parts(iso: str | None) -> list[str]:
-    if not iso:
-        return []
-    parts = re.findall(r"\d+", iso[:10])
-    out = list(parts)
-    if len(parts) >= 2:
-        out.append(str(int(parts[1])))
-    if len(parts) >= 3:
-        out.append(str(int(parts[2])))
-    return out
+def _dates_pool(*values: str | None) -> list[str]:
+    return [str(v)[:10].replace("-", "/") for v in values if v]
 
 
 def _after(a: str, b: str) -> bool:
@@ -300,8 +292,8 @@ class ResearcherRun:
             raise ResearchError(f"publié après as_of ({self.brief.as_of}) : hors du point dans le temps demandé")
         return observation, obs_basis, publication, pub_basis
 
-    def _ground(self, text: str, values: list[str]) -> None:
-        missing = documents.grounded(text, values)
+    def _ground(self, text: str, values: list[str], dates: list[str]) -> None:
+        missing = documents.grounded(text, values, dates)
         if missing:
             raise ResearchError(
                 "nombres absents des valeurs lues : " + ", ".join(missing[:5]) + " (réécrire la phrase sans eux)"
@@ -368,8 +360,7 @@ class ResearcherRun:
         claim = str(args.get("claim") or "")
         if not claim.strip():
             raise ResearchError("claim est requis (une phrase neutre en français)")
-        allowed = [*values.values(), *_date_parts(observation), *_date_parts(publication)]
-        self._ground(f"{label} {claim}", allowed)
+        self._ground(f"{label} {claim}", list(values.values()), _dates_pool(observation, publication))
         finding = self._base(archived, kind, label, claim, args.get("issuers") or self.brief.issuers)
         link = values.get("link") or values.get("url")
         finding.update(
@@ -422,9 +413,11 @@ class ResearcherRun:
         claim = str(args.get("claim") or "")
         if not claim.strip():
             raise ResearchError("claim est requis (une phrase neutre en français)")
-        allowed = [o["value"] for o in observations] + [p for o in observations for p in _date_parts(o["date"])]
-        allowed += _date_parts(publication)
-        self._ground(f"{label} {claim}", allowed)
+        self._ground(
+            f"{label} {claim}",
+            [o["value"] for o in observations],
+            _dates_pool(observations[0]["date"], last["date"], publication),
+        )
         finding = self._base(archived, "series", label, claim, args.get("issuers") or [])
         finding.update(
             series_id=str(args.get("series_id") or label)[:80],

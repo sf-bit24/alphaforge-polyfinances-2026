@@ -22,6 +22,11 @@ DOC_TYPES = (
     "Financial Concept",
     "Company Fundamentals",
     "Index",
+    # Recherche par experts (A0, E1 à E7, CONTRACTS.md section 10).
+    "Fact",
+    "Market Signal",
+    "Regulatory Filing",
+    "Research Brief",
     # Fonctionnalité vidéo tldoole.
     "Concept Gaps",
     "Learning Video",

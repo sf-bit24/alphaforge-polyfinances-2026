@@ -10,6 +10,8 @@ from typing import Any
 
 RUN_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 ITEM_KINDS = ("news", "series", "quote")
+# Types ajoutés par la recherche par experts (CONTRACTS.md, section 10).
+RESEARCH_KINDS = ("fact", "signal", "filing", "brief")
 _TRACKING = re.compile(r"^(utm_|oc$|ncid$|guccounter$|soc_|cmpid$|guce_)")
 
 
@@ -71,7 +73,7 @@ def new_item(
     summary: str,
     data: dict[str, Any],
 ) -> dict[str, Any]:
-    if kind not in ITEM_KINDS:
+    if kind not in ITEM_KINDS + RESEARCH_KINDS:
         raise ValueError(kind)
     return {
         "id": item_id,

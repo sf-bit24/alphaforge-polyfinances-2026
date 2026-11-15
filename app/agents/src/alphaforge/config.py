@@ -11,7 +11,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 # "tldoole" : rôle réservé à la fonctionnalité vidéo (branche tldoole), branché dans server.build_service.
-ROLES = ("profile", "press", "data", "supervisor", "tldoole")
+# "router", "expert", "researcher" : recherche par experts de sujet (alphaforge.research, CONTRACTS.md section 10).
+ROLES = ("profile", "press", "data", "supervisor", "tldoole", "router", "expert", "researcher")
 DEFAULT_MODEL_ID = "us.anthropic.claude-opus-5-5"
 DEFAULT_REGION = "us-east-1"
 
@@ -29,6 +30,10 @@ class Settings:
     kb_id: str | None
     guardrail_id: str | None
     guardrail_version: str | None
+    # Recherche par experts : ARN du runtime researcher (vide en local : les chercheurs tournent dans des fils)
+    # et modèle facultatif des chercheurs (par défaut celui de tous les agents).
+    researcher_arn: str | None = None
+    researcher_model_id: str | None = None
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Settings:
@@ -50,6 +55,8 @@ class Settings:
             kb_id=opt("ALPHAFORGE_KB_ID"),
             guardrail_id=opt("ALPHAFORGE_GUARDRAIL_ID"),
             guardrail_version=opt("ALPHAFORGE_GUARDRAIL_VERSION"),
+            researcher_arn=opt("ALPHAFORGE_RESEARCHER_ARN"),
+            researcher_model_id=opt("ALPHAFORGE_RESEARCHER_MODEL_ID"),
         )
 
     @property

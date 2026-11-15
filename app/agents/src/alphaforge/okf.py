@@ -129,39 +129,43 @@ def render(doc: OkfDoc) -> str:
     return f"---\n{dumped}---\n\n{body}"
 
 
+# Clés à valeur imposée : (clé, valeurs permises, début du message d'écart).
+_ENUM_KEYS = (
+    ("type", DOC_TYPES, "unknown type"),
+    ("status", STATUSES, "invalid status"),
+    ("sensitivity", SENSITIVITIES, "invalid sensitivity"),
+)
+_LIST_KEYS = ("tags", "owners")
+
+
+def _source_problems(sources: Any) -> list[str]:
+    if not isinstance(sources, list):
+        return ["sources must be a list"]
+    return [
+        f"source {index} needs id and title"
+        for index, source in enumerate(sources)
+        if not isinstance(source, dict) or not source.get("id") or not source.get("title")
+    ]
+
+
 def validate(doc: OkfDoc) -> list[str]:
     """Liste les écarts au format (vide si le document est conforme)."""
-    problems = []
     meta = doc.frontmatter
-    for key in REQUIRED_KEYS:
-        if key not in meta:
-            problems.append(f"missing key {key}")
-    if meta.get("type") not in DOC_TYPES:
-        problems.append(f"unknown type {meta.get('type')!r}")
-    if meta.get("status") not in STATUSES:
-        problems.append(f"invalid status {meta.get('status')!r}")
-    if meta.get("sensitivity") not in SENSITIVITIES:
-        problems.append(f"invalid sensitivity {meta.get('sensitivity')!r}")
-    if not isinstance(meta.get("tags"), list):
-        problems.append("tags must be a list")
-    if not isinstance(meta.get("owners"), list):
-        problems.append("owners must be a list")
+    problems = [f"missing key {key}" for key in REQUIRED_KEYS if key not in meta]
+    for key, allowed, message in _ENUM_KEYS:
+        if meta.get(key) not in allowed:
+            problems.append(f"{message} {meta.get(key)!r}")
+    problems += [f"{key} must be a list" for key in _LIST_KEYS if not isinstance(meta.get(key), list)]
     generated = meta.get("generated")
     if not isinstance(generated, dict) or not generated.get("by") or not generated.get("at"):
         problems.append("generated must have by and at")
-    sources = meta.get("sources")
-    if not isinstance(sources, list):
-        problems.append("sources must be a list")
-    else:
-        for index, source in enumerate(sources):
-            if not isinstance(source, dict) or not source.get("id") or not source.get("title"):
-                problems.append(f"source {index} needs id and title")
+    problems += _source_problems(meta.get("sources"))
     if "data" in meta and not isinstance(meta["data"], dict):
         problems.append("data must be a mapping")
     return problems
 
 
-def new_doc(
+def new_doc(  # noqa: PLR0913 - un argument nommé par clé du frontmatter (CONTRACTS.md, section 5), passé par mot-clé
     *,
     type: str,
     title: str,

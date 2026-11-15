@@ -577,7 +577,8 @@ def curate(
     by_id = {c.item["id"]: c for c in candidates}
     briefs = [c for c in candidates if c.item["kind"] == "brief"]
     for brief in briefs:
-        missing = [c for c in (brief.item.get("data") or {}).get("citations") or [] if c not in by_id]
+        refs = getattr(brief, "refs", {})
+        missing = [c for c in (brief.item.get("data") or {}).get("citations") or [] if c not in by_id and c not in refs]
         if missing:
             rejected.append({"key": brief.key, "reason": "synthèse : éléments cités rejetés par la revue"})
             candidates = [c for c in candidates if c is not brief]
@@ -591,7 +592,7 @@ def curate(
         elif kind in ("series", "quote"):
             doc = data_doc(candidate, now)
         elif kind == "brief":
-            doc = research_checks.brief_doc(candidate, now, by_id)
+            doc = research_checks.brief_doc(candidate, now, {**candidate.refs, **by_id})
         else:
             doc = research_checks.research_doc(candidate, now)
         problems = okf.validate(doc)

@@ -253,6 +253,7 @@ Les trois collecteurs acceptent leur tâche aussitôt, travaillent en arrière-p
 ```text
 general/index.md                            écrit par A6 seulement, absent avant la première collecte
 general/methodologie/<slug>.md              seed versionné dans app/knowledge/general/, poussé par Terraform
+general/notions/<slug>.md                   seed versionné : une notion financière par fichier (Financial Concept)
 general/societes/<ticker>.md                seed versionné : chiffres publiés d'une société absente d'EDGAR (ATD, CSU), relevés à la main
 general/actualites/<AAAA>/<MM>/<slug>.md    écrit par A6
 general/donnees/<serie>/<slug>.md           écrit par A6
@@ -269,7 +270,7 @@ runtime/agents-<release>.zip                code des runtimes, poussé par Terra
 Chaque document `.md` est un document OKF : un frontmatter YAML puis un corps Markdown.
 
 ```yaml
-type: Investor Profile            # Investor Profile, Existing Portfolio, Profile Journal, News, Data Series, Methodology, Company Fundamentals, Index
+type: Investor Profile            # Investor Profile, Existing Portfolio, Profile Journal, News, Data Series, Methodology, Financial Concept, Company Fundamentals, Index
 title: Profil investisseur
 description: Profil en cinq dimensions, niveau de connaissances et complétude.
 tags: [profil-investisseur]

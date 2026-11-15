@@ -31,5 +31,5 @@ export function generalGroup(key: string): string {
   const parts = key.split("/");
   if (parts.length === 2 && parts[1] === "index.md") return "index";
   const folder = parts[1] ?? "";
-  return ["methodologie", "societes", "actualites", "donnees"].includes(folder) ? folder : "other";
+  return ["methodologie", "notions", "societes", "actualites", "donnees"].includes(folder) ? folder : "other";
 }

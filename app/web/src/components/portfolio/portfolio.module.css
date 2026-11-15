@@ -493,6 +493,13 @@
   display: grid;
   gap: 12px;
 }
+.auditIds {
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
 .list > li {
   padding: 10px 12px;
   border-radius: 14px;

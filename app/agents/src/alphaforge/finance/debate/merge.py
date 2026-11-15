@@ -25,6 +25,7 @@ from alphaforge.finance.contracts.policy import Limit, PolicySpec, Selector
 from alphaforge.finance.strategy.okf_facts import ESG_FACT_PREFIX, FILING_FACT_PREFIX, NEWS_FACT_PREFIX
 from alphaforge.finance.strategy.rules import clamp_strategy_floors
 
+from .facts import fmt
 from .schemas import LENS_FR, PRIORITY, AppliedAmendment, LensReport
 
 FLOOR_RATIO = 0.6
@@ -33,6 +34,13 @@ ESG_NO_PREFERENCE_FR = "une preuve ESG ne change le mandat que si l'investisseur
 ESG_OTHER_ASSET_FR = "la preuve ESG citée concerne un autre titre que celui à exclure"
 FILING_REJECT_FR = "un dépôt réglementaire est signalé, jamais une preuve de changement du mandat (contenu non lu)"
 _MEASURE_ORDER = {"VARIANCE": 0, "CVAR": 1, "CDAR": 2}  # CDaR = plus prudente (drawdown)
+
+
+def _missing_evidence_fr(n_missing: int) -> str:
+    """Rejet pour preuve absente, sans l'identifiant : il reste dans ``amendment.evidence_fact_ids`` (audit)."""
+    if n_missing == 1:
+        return "preuve inconnue : le fait cité est introuvable dans la décision"
+    return f"preuve inconnue : {n_missing} faits cités sont introuvables dans la décision"
 
 
 def _limit(policy: PolicySpec, rule_id: str) -> Limit | None:
@@ -78,7 +86,7 @@ def apply_amendments(
             continue
         missing = [f for f in a.evidence_fact_ids if f not in known_fact_ids]
         if missing:
-            reject(lens, a, f"preuve inconnue : {missing}")
+            reject(lens, a, _missing_evidence_fr(len(missing)))
             continue
         if a.kind == "flag_only":
             log.append(
@@ -90,20 +98,20 @@ def apply_amendments(
         if a.kind in ("tighten_limit", "cap_group"):
             lim = _limit(new, a.target)
             if lim is None:
-                reject(lens, a, f"limite inconnue : {a.target}")
+                reject(lens, a, "limite inconnue : la limite visée n'est pas dans le mandat")
                 continue
             if a.value is None or lim.max is None or not a.value < lim.max - 1e-12:
                 reject(lens, a, "ne resserre pas la limite (le max doit baisser)")
                 continue
             if a.kind == "cap_group" and lim.kind not in ("group_weight", "exposure", "asset_weight"):
-                reject(lens, a, "cap_group vise une limite de poids ou d'exposition")
+                reject(lens, a, "un plafond de groupe ne vise qu'une limite de poids ou d'exposition")
                 continue
             orig = _limit(original, a.target)
             floor = (
                 (orig.max * floor_ratio) if orig is not None and orig.max is not None and lim.kind == "risk" else 0.0
             )
             if a.value < floor or a.value < 0 or (lim.min is not None and a.value < lim.min):
-                reject(lens, a, f"sous le plancher anti-cliquet ({floor:.4f}) ou sous le min")
+                reject(lens, a, f"sous le plancher anti-cliquet ({fmt(floor, '%')}) ou sous le minimum")
                 continue
             before, after = lim.max, a.value
             lim.max = a.value
@@ -113,7 +121,7 @@ def apply_amendments(
                 reject(lens, a, "un plancher de style (strat.*) ne peut que baisser : le relever ajouterait du risque")
                 continue
             if lim is None or lim.kind != "group_weight":
-                reject(lens, a, f"limite de groupe inconnue : {a.target}")
+                reject(lens, a, "limite de groupe inconnue : la limite visée n'est pas une limite de groupe du mandat")
                 continue
             cur_min = lim.min or 0.0
             if a.value is None or not a.value > cur_min + 1e-12 or (lim.max is not None and a.value > lim.max):

@@ -450,8 +450,8 @@ def build_portfolio(
     if rephrase_explanation if rephrase_explanation is not None else mode == "llm":
         try:
             expl, report = rephrase(book, expl, profile.knowledge_level)
-        except Exception as exc:  # repli : le gabarit reste
-            report = [f"reformulation abandonnée : {type(exc).__name__}"]
+        except Exception:  # repli : le gabarit reste ; l'étape « explainer » de la trace garde l'erreur
+            report = ["Reformulation abandonnée : les gabarits sont conservés."]
     grounding = grounding_check(book, expl, guardrail_id, guardrail_version) if guardrail_id else None
 
     singles = set(strat.shortlist) | {c.ticker for c in strat.candidates} if strat else set()

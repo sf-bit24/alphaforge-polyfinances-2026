@@ -157,6 +157,21 @@ export function rowFacts(row: RankingRow): DecisionFact[] {
 }
 
 /* ------------------------------------------------------------------ */
+/* Decision without an allocation (finance/debate/explain.py, #76)     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The cause of a `protection`, from the facts the engine records: `signals` when the only cause is the profile's
+ * vulnerability status (`protection.profile_status`), `limits` otherwise (dollar rule `protection.l_star`, or
+ * both, or a cause the decision does not record).
+ */
+export function protectionCause(facts: FactIndex): "signals" | "limits" {
+  const signals = facts.has("protection.profile_status");
+  const dollarRule = facts.has("protection.l_star") || facts.has("protection.min_L_plan");
+  return signals && !dollarRule ? "signals" : "limits";
+}
+
+/* ------------------------------------------------------------------ */
 /* Investor request and Judge                                          */
 /* ------------------------------------------------------------------ */
 

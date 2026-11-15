@@ -48,13 +48,51 @@ def allowed_numbers(book: FactBook, fact_ids: list[str]) -> set[str]:
     return out
 
 
-def verify(book: FactBook, st: Statement) -> list[str]:
-    """Liste des problèmes (vide = phrase acceptée)."""
-    problems = [f"fact_id inconnu : {fid}" for fid in st.fact_ids if fid not in book.facts]
+def _unsourced(book: FactBook, st: Statement) -> tuple[list[str], list[str]]:
+    """fact_id cités absents du registre, et nombres du texte qu'aucun Fact cité ne porte (triés)."""
+    unknown = [fid for fid in st.fact_ids if fid not in book.facts]
     extra = numbers(st.text_fr) - allowed_numbers(book, st.fact_ids) - {"1", "2", "3", "4", "12", "95", "2022"}
+    return unknown, sorted(extra)
+
+
+def verify(book: FactBook, st: Statement) -> list[str]:
+    """Liste des problèmes (vide = phrase acceptée), avec les identifiants : pour le code et ses erreurs."""
+    unknown, extra = _unsourced(book, st)
+    problems = [f"fact_id inconnu : {fid}" for fid in unknown]
     if extra:
-        problems.append(f"nombres non sourcés : {sorted(extra)}")
+        problems.append(f"nombres non sourcés : {extra}")
     return problems
+
+
+def verify_fr(book: FactBook, st: Statement) -> list[str]:
+    """Les mêmes problèmes que ``verify`` (vide dans les mêmes cas), rédigés pour l'investisseur : sans identifiant
+    ni liste Python. Les nombres sont écrits à la française (« 12,5 »)."""
+    unknown, extra = _unsourced(book, st)
+    out = []
+    if unknown:
+        n = len(unknown)
+        out.append("fait cité introuvable dans la décision" if n == 1 else f"{n} faits cités introuvables")
+    if extra:
+        nums = ", ".join(x.replace(".", ",") for x in extra)
+        out.append(f"nombre non sourcé : {nums}" if len(extra) == 1 else f"nombres non sourcés : {nums}")
+    return out
+
+
+# Les quatre questions de l'atelier, comme l'interface les titre (app/web/src/lib/i18n/portfolio.ts).
+SECTION_FR = {
+    "data_used": "Quelles données ?",
+    "why": "Pourquoi ce choix ?",
+    "limits": "Quelles limites ?",
+    "what_would_change": "Qu'est-ce qui changerait la réponse ?",
+}
+
+
+def kept_template_fr(section: str, index: int, problems: list[str]) -> str:
+    """Ligne du rapport de reformulation : « 4e énoncé de « Pourquoi ce choix ? » : reformulation écartée
+    (nombre non sourcé : 50), gabarit conservé. » ; ``index`` part de 0."""
+    n = index + 1
+    where = f"{n}{'er' if n == 1 else 'e'} énoncé de « {SECTION_FR.get(section, section)} »"
+    return f"{where} : reformulation écartée ({' ; '.join(problems)}), gabarit conservé."
 
 
 def _s(book: FactBook, text: str, ids: list[str], label="FAIT") -> Statement:
@@ -292,11 +330,11 @@ def rephrase(
             alt = cand[i] if i < len(cand) else None
             if alt is not None:
                 alt = alt.model_copy(update={"fact_ids": st.fact_ids, "label": st.label})
-                probs = verify(book, alt)
+                probs = verify_fr(book, alt)
                 if not probs:
                     kept.append(alt)
                     continue
-                report.append(f"{sec}[{i}] gabarit conservé : {probs}")
+                report.append(kept_template_fr(sec, i, probs))
             kept.append(st)
         out[sec] = kept
     return Explanation(**out), report

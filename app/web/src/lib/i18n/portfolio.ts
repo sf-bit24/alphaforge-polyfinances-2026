@@ -8,6 +8,11 @@ import type { DecisionKind, FactLabel, LensVerdict, Style } from "@/lib/contract
 
 type Fn<A extends unknown[]> = (...args: A) => string;
 
+/** « 0 contrôle », « 1 contrôle », « 2 contrôles » : en français, 0 et 1 prennent le singulier. */
+const frCount = (count: number, one: string, many = `${one}s`) => `${count} ${count > 1 ? many : one}`;
+/** "0 checks", "1 check", "2 checks": in English, only 1 takes the singular. */
+const enCount = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+
 export const portfolioFr = {
   title: "Portefeuille simulé",
   lead: "Le moteur du volet finance construit le portefeuille; cet écran l’affiche tel quel, chaque chiffre relié au fait qui le source.",
@@ -59,8 +64,12 @@ export const portfolioFr = {
     refus_encadre: "La demande ou le portefeuille tel quel dépasse une limite bloquante du profil : le Judge le refuse et propose une version encadrée.",
     position_attente: "Le profil ne permet pas encore une proposition : une position d’attente prudente s’applique.",
     incomplet: "Des informations manquent : aucune allocation n’est calculée tant que le profil n’est pas complété.",
-    protection: "Des signaux de vulnérabilité appellent une protection : aucune allocation n’est proposée.",
+    // Every cause of a protection (dollar rule: acceptable loss, horizon, withdrawals; profile status): the
+    // statement « Pourquoi ce choix ? » below names it.
+    protection: "Aucune allocation ne respecte les limites de votre profil : voyez ci-dessous pourquoi et ce qui changerait la réponse.",
   } satisfies Record<DecisionKind, string>,
+  /** Header of a protection whose only cause is the vulnerability signals of the profile (`protection.profile_status`). */
+  protectionSignals: "Des signaux de vulnérabilité appellent une protection : aucune allocation n’est proposée.",
   labels: { FAIT: "FAIT", HYPOTHESE: "HYPOTHÈSE", FICTION: "FICTION" } satisfies Record<FactLabel, string>,
   labelHelp: {
     FAIT: "Calculé par le code sur des données sourcées.",
@@ -69,7 +78,7 @@ export const portfolioFr = {
   } satisfies Record<FactLabel, string>,
   positions: {
     title: "Positions",
-    count: ((count: number) => `${count} position${count > 1 ? "s" : ""}`) as Fn<[number]>,
+    count: ((count: number) => frCount(count, "position")) as Fn<[number]>,
     asset: "Titre",
     role: "Rôle",
     weight: "Poids",
@@ -140,7 +149,7 @@ export const portfolioFr = {
       what_would_change: "Qu’est-ce qui changerait la réponse ?",
     },
     empty: "Aucun énoncé.",
-    more: ((count: number) => `+ ${count} fait${count > 1 ? "s" : ""}`) as Fn<[number]>,
+    more: ((count: number) => `+ ${frCount(count, "fait")}`) as Fn<[number]>,
     less: "Moins de faits",
   },
   counterfactuals: {
@@ -161,7 +170,8 @@ export const portfolioFr = {
     blocking: "bloquante",
     indicative: "indicative",
     respected: "respectée",
-    summary: ((total: number, active: number, violated: number) => `${total} contrôles · ${active} saturés · ${violated} violés`) as Fn<[number, number, number]>,
+    summary: ((total: number, active: number, violated: number) =>
+      `${frCount(total, "contrôle")} · ${frCount(active, "saturé")} · ${frCount(violated, "violé")}`) as Fn<[number, number, number]>,
     showAll: ((count: number) => `Afficher les ${count} contrôles`) as Fn<[number]>,
     showLess: "Ne montrer que les contrôles saturés ou violés",
     requestCheck: "Contrôle de la demande telle quelle",
@@ -199,11 +209,13 @@ export const portfolioFr = {
     rejected: "rejeté",
     amendments: "Amendements du premier tour",
     noAmendment: "Aucun amendement proposé.",
+    /** Title of the evidence ids an amendment cites that are not in the decision (audit detail). */
+    missingEvidence: "Preuves citées absentes de la décision",
   },
   trace: {
     title: "Trace d’exécution",
-    count: ((count: number) => `${count} étape${count > 1 ? "s" : ""}`) as Fn<[number]>,
-    facts: ((count: number) => `${count} fait${count > 1 ? "s" : ""}`) as Fn<[number]>,
+    count: ((count: number) => frCount(count, "étape")) as Fn<[number]>,
+    facts: ((count: number) => frCount(count, "fait")) as Fn<[number]>,
     status: { ok: "ok", erreur: "erreur", refus: "refus" } as Record<string, string>,
   },
   fact: {
@@ -233,6 +245,8 @@ export const portfolioFr = {
   grounding: {
     title: "Ancrage vérifié par Bedrock Guardrails",
     action: ((action: string) => `Résultat : ${action}`) as Fn<[string]>,
+    /** `ApplyGuardrail` actions of Bedrock; an action not listed is shown as is. */
+    actions: { NONE: "aucune intervention", GUARDRAIL_INTERVENED: "le garde-fou est intervenu" } as Record<string, string>,
   },
   report: "Reformulation par le modèle",
 };
@@ -288,8 +302,9 @@ export const portfolioEn: PortfolioStrings = {
     refus_encadre: "The request or the portfolio as is exceeds a blocking limit of the profile: the Judge refuses it and proposes a framed version.",
     position_attente: "The profile does not allow a proposal yet: a cautious holding position applies.",
     incomplet: "Information is missing: no allocation is computed until the profile is complete.",
-    protection: "Vulnerability signals call for protection: no allocation is proposed.",
+    protection: "No allocation fits the limits of your profile: see below why, and what would change the answer.",
   },
+  protectionSignals: "Vulnerability signals call for protection: no allocation is proposed.",
   labels: { FAIT: "FACT", HYPOTHESE: "ASSUMPTION", FICTION: "FICTION" },
   labelHelp: {
     FAIT: "Computed by code on sourced data.",
@@ -298,7 +313,7 @@ export const portfolioEn: PortfolioStrings = {
   },
   positions: {
     title: "Positions",
-    count: ((count: number) => `${count} position${count > 1 ? "s" : ""}`) as Fn<[number]>,
+    count: ((count: number) => enCount(count, "position")) as Fn<[number]>,
     asset: "Security",
     role: "Role",
     weight: "Weight",
@@ -369,7 +384,7 @@ export const portfolioEn: PortfolioStrings = {
       what_would_change: "What would change the answer?",
     },
     empty: "No statement.",
-    more: ((count: number) => `+ ${count} fact${count > 1 ? "s" : ""}`) as Fn<[number]>,
+    more: ((count: number) => `+ ${enCount(count, "fact")}`) as Fn<[number]>,
     less: "Fewer facts",
   },
   counterfactuals: {
@@ -390,7 +405,7 @@ export const portfolioEn: PortfolioStrings = {
     blocking: "blocking",
     indicative: "indicative",
     respected: "respected",
-    summary: ((total: number, active: number, violated: number) => `${total} checks · ${active} binding · ${violated} violated`) as Fn<[number, number, number]>,
+    summary: ((total: number, active: number, violated: number) => `${enCount(total, "check")} · ${active} binding · ${violated} violated`) as Fn<[number, number, number]>,
     showAll: ((count: number) => `Show the ${count} checks`) as Fn<[number]>,
     showLess: "Only show binding or violated checks",
     requestCheck: "Check of the request as asked",
@@ -423,11 +438,12 @@ export const portfolioEn: PortfolioStrings = {
     rejected: "rejected",
     amendments: "First-round amendments",
     noAmendment: "No amendment proposed.",
+    missingEvidence: "Cited evidence missing from the decision",
   },
   trace: {
     title: "Execution trace",
-    count: ((count: number) => `${count} step${count === 1 ? "" : "s"}`) as Fn<[number]>,
-    facts: ((count: number) => `${count} fact${count > 1 ? "s" : ""}`) as Fn<[number]>,
+    count: ((count: number) => enCount(count, "step")) as Fn<[number]>,
+    facts: ((count: number) => enCount(count, "fact")) as Fn<[number]>,
     status: { ok: "ok", erreur: "error", refus: "refusal" },
   },
   fact: {
@@ -457,6 +473,7 @@ export const portfolioEn: PortfolioStrings = {
   grounding: {
     title: "Grounding checked by Bedrock Guardrails",
     action: ((action: string) => `Outcome: ${action}`) as Fn<[string]>,
+    actions: { NONE: "no intervention", GUARDRAIL_INTERVENED: "the guardrail intervened" },
   },
   report: "Rephrasing by the model",
 };

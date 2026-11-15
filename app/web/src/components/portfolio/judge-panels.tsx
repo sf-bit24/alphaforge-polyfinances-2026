@@ -49,15 +49,25 @@ function Amendments({ amendments }: { amendments: AppliedAmendment[] }) {
         <p className={p.sub}>{v.noAmendment}</p>
       ) : (
         <ul className={p.list}>
-          {amendments.map((item, index) => (
-            <li key={index}>
-              <p>
-                <b>{v.lenses[item.lens] ?? item.lens}</b> · {item.status === "applique" ? v.applied : v.rejected} · {curly(item.amendment.reason_fr)}
-              </p>
-              <p className={p.sub}>{curly(item.why_fr)}</p>
-              <FactChips ids={item.amendment.evidence_fact_ids.filter((id) => facts.has(id))} limit={3} />
-            </li>
-          ))}
+          {amendments.map((item, index) => {
+            // Evidence the lens cited that the decision does not hold (a rule_id instead of a fact_id…): its id
+            // is shown small, for the audit; the reason above says it in words.
+            const missing = item.amendment.evidence_fact_ids.filter((id) => !facts.has(id));
+            return (
+              <li key={index}>
+                <p>
+                  <b>{v.lenses[item.lens] ?? item.lens}</b> · {item.status === "applique" ? v.applied : v.rejected} · {curly(item.amendment.reason_fr)}
+                </p>
+                <p className={p.sub}>{curly(item.why_fr)}</p>
+                {missing.length > 0 ? (
+                  <p className={p.auditIds} title={v.missingEvidence}>
+                    {missing.join(" ; ")}
+                  </p>
+                ) : null}
+                <FactChips ids={item.amendment.evidence_fact_ids.filter((id) => facts.has(id))} limit={3} />
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

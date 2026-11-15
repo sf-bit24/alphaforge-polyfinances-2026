@@ -3,7 +3,7 @@
 import { EXPLANATION_SECTIONS, type Decision, type ExplanationSection, type PortfolioBuildResponse, type Statement } from "@/lib/contract/portfolio";
 import { curly, formatDateTime, formatDate } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
-import { requestFacts } from "@/lib/portfolio/decision";
+import { protectionCause, requestFacts } from "@/lib/portfolio/decision";
 import d from "@/components/details/details.module.css";
 import { cn } from "@/components/ui/cn";
 import { Positions, StylePanel } from "./allocation-panels";
@@ -98,7 +98,9 @@ function SummaryMeta({ response, fixture }: { response: PortfolioBuildResponse; 
 function Summary({ response, fixture }: { response: PortfolioBuildResponse; fixture: boolean }) {
   const { t } = useI18n();
   const v = t.portfolioView;
+  const { facts } = useDecisionLookup();
   const decision = response.decision;
+  const kindText = decision.kind === "protection" && protectionCause(facts) === "signals" ? v.protectionSignals : v.kindText[decision.kind];
   return (
     <section className={cn(d.tile, d.tWide)} aria-label={v.meta.decision}>
       <div className={p.summary}>
@@ -107,7 +109,7 @@ function Summary({ response, fixture }: { response: PortfolioBuildResponse; fixt
             <span className={cn(d.chip, KIND_TONE[decision.kind])}>{v.kinds[decision.kind]}</span>
             <FactChip id="level" />
           </div>
-          <p className={p.kindText}>{v.kindText[decision.kind]}</p>
+          <p className={p.kindText}>{kindText}</p>
           <EngineLanguageNote />
           <RequestCheck decision={decision} />
         </div>
@@ -146,10 +148,14 @@ function ExplanationQuestion({ section, statements }: { section: ExplanationSect
 /** The outcome of the Bedrock Guardrails contextual grounding check, when a guardrail ran. */
 function GroundingNote({ grounding }: { grounding: PortfolioBuildResponse["grounding"] }) {
   const { t } = useI18n();
-  if (!grounding?.action) return null;
+  const v = t.portfolioView.grounding;
+  const action = grounding?.action;
+  if (!action) return null;
+  const named = (Object.hasOwn(v.actions, action) ? v.actions[action] : undefined) ?? action;
+  // The raw action stays in the tooltip, for the audit.
   return (
-    <p className={cn(d.cap, p.block)}>
-      {t.portfolioView.grounding.title} · {t.portfolioView.grounding.action(grounding.action)}
+    <p className={cn(d.cap, p.block)} title={action}>
+      {v.title} · {v.action(named)}
     </p>
   );
 }

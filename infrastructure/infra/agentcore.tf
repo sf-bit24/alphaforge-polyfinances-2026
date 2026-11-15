@@ -154,6 +154,8 @@ locals {
     ALPHAFORGE_MODEL_MAIN      = var.agentcore_model_id
     ALPHAFORGE_MODEL_LENS      = var.agentcore_model_id
     ALPHAFORGE_LLM_STORE       = "/tmp/alphaforge-llm-records"
+    # Chaine d'audit (finance/observability/audit.py) : tete dans DynamoDB, decision dans le bucket de traces.
+    ALPHAFORGE_TRACE_BUCKET = aws_s3_bucket.traces.bucket
   })
 
   # Variables propres a un role, fusionnees apres les variables communes.
@@ -277,8 +279,12 @@ data "aws_iam_policy_document" "agentcore" {
   }
 
   statement {
-    sid       = "Tracing"
-    actions   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords", "xray:GetSamplingRules", "xray:GetSamplingTargets"]
+    sid = "Tracing"
+    # PutSpans / PutSpansForIndexing : endpoint OTLP de X-Ray (Transaction Search), utilise par le volet finance.
+    actions = [
+      "xray:PutTraceSegments", "xray:PutTelemetryRecords", "xray:GetSamplingRules", "xray:GetSamplingTargets",
+      "xray:PutSpans", "xray:PutSpansForIndexing",
+    ]
     resources = ["*"]
   }
 

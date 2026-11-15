@@ -5,7 +5,7 @@
  */
 import type { PositionInput } from "@/lib/contract/requests";
 import type { Exposures, FxRate, Locale, Position, Source, UnresolvedItem } from "@/lib/contract/schemas";
-import { CASH_NAME, readInput, round, type ExtractionInput, type FileReport, type Holding } from "./portfolio-lines";
+import { CASH_NAME, readInput, round, type ExtractionInput, type FileReport, type Holding, type ReadLine } from "./portfolio-lines";
 import { findAssetByTicker, PRICE_DATE, STARTER_SOURCES, USDCAD, type StarterAsset } from "./starter";
 
 export type { ExtractionInput, FileReport } from "./portfolio-lines";
@@ -73,6 +73,10 @@ const UNRESOLVED_REASONS = {
     fr: "titre introuvable dans l'univers du jeu de départ",
     en: "security not found in the starter universe",
   },
+  cash_missing: {
+    fr: "montant de l'encaisse manquant",
+    en: "cash amount missing",
+  },
 } as const;
 
 /** A row of the portfolio as read from a line, or as sent back by the investor. */
@@ -136,7 +140,7 @@ function unresolvedPosition(row: PositionRow, security: { ticker: string | null;
   };
 }
 
-/** Cash (CASH, Encaisse): valued at its amount, like `_resolve_cash` of the Python runtime. */
+/** Cash (CASH, Encaisse): valued at its amount, and unresolved without one, like `_resolve_cash` of the Python runtime. */
 function cashPosition(row: PositionRow, name: string | null, locale: Locale): Position {
   const amount = row.marketValue ?? row.quantity;
   const currency = row.currency ?? "CAD";
@@ -156,7 +160,7 @@ function cashPosition(row: PositionRow, name: string | null, locale: Locale): Po
     price_date: null,
     price_source: null,
     value_cad: valueInCad(null, null, amount, currency),
-    resolved: true,
+    resolved: amount !== null,
     notes: amount === null ? NOTES.cash_missing[locale] : null,
   };
 }
@@ -173,15 +177,22 @@ export function extractPositions(input: ExtractionInput, locale: Locale): Extrac
   for (const { line, asset, symbol, cash, name, ...holding } of holdings) {
     const raw = line.slice(0, MAX_RAW_CHARS);
     const row: PositionRow = { id: `p${positions.length + 1}`, raw, ...holding };
-    if (asset) positions.push(positionFromAsset(row, asset, locale));
-    else if (cash) positions.push(cashPosition(row, name, locale));
-    else {
-      const reason = UNRESOLVED_REASONS.not_in_universe[locale];
-      positions.push(unresolvedPosition(row, { ticker: symbol, name }, reason));
-      unresolved.push({ raw, reason, position_id: row.id });
-    }
+    const { position, reason } = positionOfLine(row, { asset, symbol, cash, name }, locale);
+    positions.push(position);
+    if (reason) unresolved.push({ raw, reason, position_id: row.id });
   }
   return { positions, unresolved, files, lines };
+}
+
+/** The position of a line, and the reason it stays unresolved, if any. */
+function positionOfLine(row: PositionRow, read: Pick<ReadLine, "asset" | "symbol" | "cash" | "name">, locale: Locale) {
+  if (read.asset) return { position: positionFromAsset(row, read.asset, locale), reason: null };
+  if (read.cash) {
+    const position = cashPosition(row, read.name, locale);
+    return { position, reason: position.resolved ? null : UNRESOLVED_REASONS.cash_missing[locale] };
+  }
+  const reason = UNRESOLVED_REASONS.not_in_universe[locale];
+  return { position: unresolvedPosition(row, { ticker: read.symbol, name: read.name }, reason), reason };
 }
 
 function rowOf(input: PositionInput): PositionRow {

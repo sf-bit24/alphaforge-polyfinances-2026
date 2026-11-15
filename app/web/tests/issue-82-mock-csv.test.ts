@@ -138,6 +138,19 @@ describe("issue #82: CASH.TO is an ETF, not cash", () => {
   });
 });
 
+describe("issue #82: cash without an amount", () => {
+  it.each([
+    ["fr", "montant de l'encaisse manquant"],
+    ["en", "cash amount missing"],
+  ] as const)("stays unresolved and is listed, like _resolve_cash (%s)", (locale, reason) => {
+    const csv = "Symbole,Description,Quantité,Valeur marchande,Devise\nRY.TO,Banque Royale,25,,CAD\nCASH,Encaisse,,,CAD";
+    const { positions, unresolved } = extractPositions({ files: [csvFile(csv)] }, locale);
+    expect(positions[1]).toMatchObject({ asset_class: "cash", value_cad: null, resolved: false });
+    expect(unresolved).toEqual([{ raw: "CASH,Encaisse,,,CAD", reason, position_id: positions[1]?.id }]);
+    expect(confirmedUnchanged(positions)[1]).toMatchObject({ asset_class: "cash", resolved: false });
+  });
+});
+
 describe("issue #82: account numbers in the pasted text", () => {
   it("masks usual account numbers, and keeps the SIN masked", () => {
     const screened = screenMessage("Mon CELI chez Disnat, compte 123-45678-9 :");

@@ -23,12 +23,18 @@ locals {
   #             absent d'un refus, S3 repondant 403 a un GetObject d'objet
   #             absent quand ListBucket est conditionne.
   # A6 n'ecrit jamais general/methodologie/, geree par Terraform.
+  # Si scenarios_enabled, profile lit aussi la table precalculee des scenarios
+  # (outil scenario_risk, scenarios.tf ; pas encore branche dans le runtime),
+  # en lecture seule : scenarios/latest.json et scenarios/output/, jamais le
+  # code ni les entrees du job. Sinon, aucun droit sous scenarios/.
+  agentcore_profile_scenarios_keys = var.scenarios_enabled ? ["scenarios/latest.json", "scenarios/output/*"] : []
+
   agentcore_runtimes = {
     profile = {
       description    = "Profil investisseur : questions de base deterministes, relances A1, portefeuille existant A2."
-      s3_read        = ["general/*", "clients/*"]
+      s3_read        = concat(["general/*", "clients/*"], local.agentcore_profile_scenarios_keys)
       s3_write       = ["clients/*"]
-      s3_list        = ["general/*", "clients/*"]
+      s3_list        = concat(["general/*", "clients/*"], local.agentcore_profile_scenarios_keys)
       knowledge_base = true
       guardrail      = true
     }

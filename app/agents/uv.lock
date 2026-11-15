@@ -41,6 +41,12 @@ finance = [
     { name = "requests" },
     { name = "scipy" },
 ]
+scenarios = [
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "pyarrow" },
+    { name = "pyyaml" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -72,6 +78,12 @@ finance = [
     { name = "pydantic", specifier = ">=2.9" },
     { name = "requests", specifier = ">=2.32" },
     { name = "scipy", specifier = ">=1.14" },
+]
+scenarios = [
+    { name = "numpy", specifier = ">=2.1" },
+    { name = "pandas", specifier = ">=2.2" },
+    { name = "pyarrow", specifier = ">=18" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
 ]
 
 [[package]]

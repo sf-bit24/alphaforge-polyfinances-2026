@@ -23,11 +23,21 @@ export interface Screening {
   offTopic: boolean;
 }
 
+/** Personal data masked by the guardrail; amounts, quantities, prices and dates stay as they are. */
 const PII_PATTERNS: RegExp[] = [
+  // Email address.
   /[\w.+-]+@[\w-]+\.[\w.]+/g,
+  // Account numbers, before the phone pattern can take a part of them.
+  // Digit groups joined by dashes: 123-45678-9, transit-institution-account 12345-003-1234567.
+  /\b\d{3,5}-\d{3,5}-\d{1,12}\b/g,
+  // Digits right after an account word: "compte no 123 45678 9", "account #12345"; not an amount ("compte : 25 000 $").
+  /(?<=\b(?:compte|account|acct|folio|transit)\s*(?:n[o°º]\.?|#|num[ée]ro|number)?\s*:?\s*)\d[\d -]{3,}\d(?![\d ,.]*\$)/gi,
+  // Social insurance number (NAS).
   /\b\d{3}[ -]?\d{3}[ -]?\d{3}\b/g,
+  // Phone number.
   /\b\d{3}[ .-]?\d{3}[ .-]?\d{4}\b/g,
-  /\b\d{7,}\b/g,
+  // Any other long number, unless it is an amount ("1500000 $").
+  /(?<!\$\s?)\b\d{7,}\b(?![.,]\d|\s?\$)/g,
 ];
 
 const ADVICE = /(dois-je|devrais-je|est-ce que je (dois|devrais)|faut-il (que j'|acheter|vendre)|recommandez|conseillez|should i|do you recommend|would you recommend|tell me (what|which) to)[^.?!]{0,80}(achet|vend|invest|plac|buy|sell|invest)/i;

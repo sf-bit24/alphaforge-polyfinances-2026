@@ -1,10 +1,15 @@
 /**
  * Issue #82: the simulator's A2 reads a broker CSV with a header by column name, keeps an explicit
- * symbol outside the starter universe unidentified (VFV.TO is not SPY), and reads CASH as cash.
+ * symbol outside the starter universe unidentified (VFV.TO is not SPY), reads CASH as cash, and the
+ * guardrail masks usual account numbers in the pasted text.
  */
 import { describe, expect, it } from "vitest";
-import type { Position } from "@/lib/contract/schemas";
+import type { AgentRequestInput } from "@/lib/contract/requests";
+import { AgentRequest } from "@/lib/contract/requests";
+import { ClientState, type AnswerValue, type Position } from "@/lib/contract/schemas";
+import { screenMessage } from "@/lib/mock/agents";
 import { computeExposures, extractPositions, normalizeConfirmed } from "@/lib/mock/portfolio";
+import { MockRuntime } from "@/lib/mock/runtime";
 import { findAssetByTicker, USDCAD } from "@/lib/mock/starter";
 
 const CSV = [
@@ -55,6 +60,12 @@ describe("issue #82: a broker CSV with a header", () => {
     expect(computeExposures(positions).by_asset_class.cash).toBeCloseTo(1200 / EXPECTED_TOTAL, 3);
   });
 
+  it("reads the same table pasted as text, after an introduction line, without masking its amounts", () => {
+    const screened = screenMessage(`Mon CELI chez Disnat, compte 123-45678-9 :\n${CSV}`);
+    expect(screened.masked).toBe(1);
+    expectIssueCsvRead(extractPositions({ text: screened.text }, "fr").positions);
+  });
+
   it("uses quantity times price when a row has no value, and reads semicolons and quoted cells", () => {
     const csv = 'Symbole;Description;Quantité;Prix;Devise\nVFV.TO;"Vanguard S&P 500; Index ETF";40;152,10;CAD\nRY.TO;Banque Royale;25;182,45;CAD\nTotal;;;;CAD';
     const { positions } = extractPositions({ files: [csvFile(csv)] }, "en");
@@ -74,5 +85,82 @@ describe("issue #82: a broker CSV with a header", () => {
     const { positions } = extractPositions({ files: [csvFile(CSV)] }, "en");
     const cash = byRaw(positions, "CASH");
     expect(cash && normalizeConfirmed(cash, "en")).toMatchObject({ asset_class: "cash", value_cad: 1200, resolved: true, notes: null });
+  });
+});
+
+describe("issue #82: account numbers in the pasted text", () => {
+  it("masks usual account numbers, and keeps the SIN masked", () => {
+    const screened = screenMessage("Mon CELI chez Disnat, compte 123-45678-9 :");
+    expect(screened.text).toBe("Mon CELI chez Disnat, compte [masqué] :");
+    expect(screened.masked).toBe(1);
+    expect(screenMessage("Transit-institution-compte : 12345-003-1234567").text).toBe("Transit-institution-compte : [masqué]");
+    expect(screenMessage("Compte no 123 45678 9 chez BMO").text).toBe("Compte no [masqué] chez BMO");
+    expect(screenMessage("account #12345678").masked).toBe(1);
+    expect(screenMessage("Mon NAS est 123 456 789").text).toBe("Mon NAS est [masqué]");
+  });
+
+  it("does not mask amounts, quantities, prices or dates", () => {
+    const text = [
+      "150 XIU.TO à 38,20 $, valeur 5 730,00 $",
+      "Encaisse : 1 200 $; compte : 25 000 $; compte 1500 actions",
+      "J'ai 1500000 $ dans mon REER, et 2 500 000 $ en tout",
+      "Relevé du 2026-11-12",
+    ].join("\n");
+    const screened = screenMessage(text);
+    expect(screened.text).toBe(text);
+    expect(screened.masked).toBe(0);
+  });
+});
+
+const BASE_ANSWERS: Record<string, AnswerValue> = {
+  q_invest_frequency: "yearly",
+  q_news_follow: "weekly",
+  q_self_assessment: "intermediate",
+  q_goal: "growth",
+  q_income_need: 12000,
+  q_amount: 50000,
+  q_horizon: "gt10",
+  q_liquidity: true,
+  q_drawdown_reaction: "hold",
+  q_risk_scale: 7,
+  q_income_stability: "stable",
+  q_savings_share: 30,
+  q_accounts: ["tfsa", "rrsp"],
+  q_exclusions: ["tobacco"],
+  q_exclusions_other: "Les entreprises de jeux vidéo",
+  q_has_portfolio: true,
+};
+
+async function state(runtime: MockRuntime, request: AgentRequestInput) {
+  return ClientState.parse(await runtime.handle(AgentRequest.parse(request)));
+}
+
+/** A session at the existing-portfolio step, after the base questions. */
+async function atExistingPortfolio(runtime: MockRuntime) {
+  let current = await state(runtime, { action: "session.start", locale: "fr" });
+  while (current.stage === "base_questions") {
+    const question = current.questions[0];
+    const value = question ? BASE_ANSWERS[question.id] : undefined;
+    if (!question || value === undefined) throw new Error(`No answer for ${question?.id}`);
+    current = await state(runtime, { action: "base.answer", client_id: current.client_id, question_id: question.id, value });
+  }
+  expect(current.stage).toBe("existing_portfolio");
+  return current.client_id;
+}
+
+describe("issue #82: portfolio.submit of the e2e run", () => {
+  it("reads the CSV and never repeats the account number of the pasted text", async () => {
+    const runtime = new MockRuntime({ delayScale: 0 });
+    const id = await atExistingPortfolio(runtime);
+    const review = await state(runtime, {
+      action: "portfolio.submit",
+      client_id: id,
+      text: "Mon CELI chez Disnat, compte 123-45678-9 :",
+      files: [csvFile(CSV)],
+    });
+    expectIssueCsvRead(review.portfolio?.positions ?? []);
+    expect(JSON.stringify(review)).not.toContain("123-45678-9");
+    expect(review.trace.find((step) => step.kind === "guardrail")?.outputs).toMatchObject({ masked: 1 });
+    expect(review.message).not.toMatch(/585/);
   });
 });

@@ -7,6 +7,9 @@ import { formatPercent } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
 import { cn } from "@/components/ui/cn";
 
+/** A share (clamped to 0 to 1) as a CSS percentage. */
+export const sharePercent = (value: number) => `${Math.max(0, Math.min(1, value)) * 100}%`;
+
 /**
  * Completeness as a meter: blue fill on a lighter blue track, the 70% threshold
  * as a tick, and the 95% cap zone that the fill never reaches.
@@ -14,7 +17,6 @@ import { cn } from "@/components/ui/cn";
 export function CompletenessMeter({ completeness, compact = false }: { completeness: Completeness; compact?: boolean }) {
   const { t, locale } = useI18n();
   const { displayed, threshold, cap, ready, score } = completeness;
-  const pct = (value: number) => `${Math.max(0, Math.min(1, value)) * 100}%`;
   const gap = Math.max(0, threshold - score);
   return (
     <div>
@@ -34,17 +36,17 @@ export function CompletenessMeter({ completeness, compact = false }: { completen
         className="relative mt-3"
       >
         <div className="relative h-2.5 overflow-hidden rounded-full bg-soft">
-          <div className="absolute inset-y-0 right-0 bg-ink-200" style={{ left: pct(cap) }} />
+          <div className="absolute inset-y-0 right-0 bg-ink-200" style={{ left: sharePercent(cap) }} />
           <div
             className="absolute inset-y-0 left-0 rounded-full bg-brand-500 transition-[width] duration-500 ease-out"
-            style={{ width: pct(displayed) }}
+            style={{ width: sharePercent(displayed) }}
           />
         </div>
-        <span aria-hidden className="absolute -top-1 h-4.5 w-0.5 rounded bg-ink-800" style={{ left: `calc(${pct(threshold)} - 1px)` }} />
-        <span aria-hidden className="absolute -top-1 h-4.5 w-px bg-ink-400" style={{ left: pct(cap) }} />
+        <span aria-hidden className="absolute -top-1 h-4.5 w-0.5 rounded bg-ink-800" style={{ left: `calc(${sharePercent(threshold)} - 1px)` }} />
+        <span aria-hidden className="absolute -top-1 h-4.5 w-px bg-ink-400" style={{ left: sharePercent(cap) }} />
       </div>
       <div aria-hidden className="relative mt-1.5 h-4 text-[0.7rem] text-ink-500">
-        <span className="absolute pr-1 font-medium whitespace-nowrap text-ink-700" style={{ right: `calc(100% - ${pct(threshold)})` }}>
+        <span className="absolute pr-1 font-medium whitespace-nowrap text-ink-700" style={{ right: `calc(100% - ${sharePercent(threshold)})` }}>
           {t.panel.threshold}
         </span>
         <span className="absolute right-0 whitespace-nowrap">{t.panel.cap}</span>

@@ -7,7 +7,9 @@
 #   <out_dir>/agents.zip   main.py et le paquet alphaforge (données de départ et YAML compris, sans les parquets
 #                          ni raw/ de alphaforge/data/long) à la racine,
 #                          à côté des dépendances verrouillées (uv.lock), installées en roues aarch64-manylinux2014.
-#   <out_dir>/knowledge/   les fichiers **/*.md de app/knowledge/general/ (Terraform les envoie sous general/).
+#   <out_dir>/knowledge/   les fichiers **/*.md de app/knowledge/general/ et leurs éventuels fichiers compagnons
+#                          **/*.md.metadata.json de la Knowledge Base (10 Ko au plus, à côté de leur document;
+#                          app/CONTRACTS.md section 5.1). Terraform les envoie sous general/.
 #   <out_dir>/scenarios/   seulement si ALPHAFORGE_PACKAGE_SCENARIOS=1 (désactivé par défaut, donc jamais dans un
 #                          déploiement où scenarios_enabled = false) : bundle du job SageMaker Processing des
 #                          scénarios (image scikit-learn d'AWS, Python 3.12, linux/amd64), que Terraform envoie
@@ -149,22 +151,39 @@ if [ "$zip_bytes" -gt "$MAX_ZIP_BYTES" ]; then
 fi
 file_count=$(find "$stage" -type f | wc -l | tr -d ' ')
 
-# 5. Base générale : seuls les documents Markdown, arborescence conservée.
+# 5. Base générale : les documents Markdown et leurs fichiers compagnons de la Knowledge Base, arborescence
+#    conservée. Un compagnon sans son document, ou de plus de 10 Ko (limite de Bedrock), est une erreur.
+MAX_KB_METADATA_BYTES=10240
 rm -rf -- "$out_dir/knowledge"
 mkdir -p -- "$out_dir/knowledge"
 knowledge_count=0
+metadata_count=0
 set -f
-for rel in $(cd -- "$knowledge_src" && find . -type f -name '*.md' | sed 's|^\./||' | LC_ALL=C sort); do
+for rel in $(cd -- "$knowledge_src" && find . -type f \( -name '*.md' -o -name '*.md.metadata.json' \) |
+    sed 's|^\./||' | LC_ALL=C sort); do
     case "$rel" in
         *[!A-Za-z0-9._/-]*)
             echo "error: unexpected character in knowledge path: $rel" >&2
             exit 1
             ;;
     esac
+    case "$rel" in
+        *.md.metadata.json)
+            if [ ! -f "$knowledge_src/${rel%.metadata.json}" ]; then
+                echo "error: knowledge metadata without its document: $rel" >&2
+                exit 1
+            fi
+            if [ "$(wc -c <"$knowledge_src/$rel" | tr -d ' ')" -gt "$MAX_KB_METADATA_BYTES" ]; then
+                echo "error: knowledge metadata above $MAX_KB_METADATA_BYTES bytes: $rel" >&2
+                exit 1
+            fi
+            metadata_count=$((metadata_count + 1))
+            ;;
+        *) knowledge_count=$((knowledge_count + 1)) ;;
+    esac
     mkdir -p -- "$out_dir/knowledge/$(dirname -- "$rel")"
     cp -- "$knowledge_src/$rel" "$out_dir/knowledge/$rel"
     chmod 644 "$out_dir/knowledge/$rel"
-    knowledge_count=$((knowledge_count + 1))
 done
 set +f
 find "$out_dir/knowledge" -type d -exec chmod 755 {} +
@@ -284,8 +303,8 @@ if [ "$package_scenarios" = 1 ]; then
 fi
 
 awk -v z="$zip_bytes" -v u="$unzipped_bytes" -v n="$file_count" -v k="$knowledge_count" -v p="$zip_path" \
-    -v d="$out_dir/knowledge" 'BEGIN {
+    -v d="$out_dir/knowledge" -v m="$metadata_count" 'BEGIN {
         printf "agents.zip: %s\n  %.1f MB zipped (limit 250 MB), %.1f MB unzipped (limit 750 MB), %d files\n", p, z / 1e6, u / 1e6, n
-        printf "knowledge: %s (%d Markdown files)\n", d, k
+        printf "knowledge: %s (%d Markdown files, %d metadata files)\n", d, k, m
     }'
 echo "$scen_summary"

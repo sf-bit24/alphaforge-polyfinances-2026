@@ -179,14 +179,24 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
 # et copiee dans infra/build/knowledge/ par le job package_agents. Les
 # documents ecrits par A6 vivent sous d'autres prefixes (actualites/,
 # donnees/) et ne sont pas geres par Terraform.
+# Les fichiers compagnons <document>.md.metadata.json (metadonnees
+# filtrables de la Knowledge Base, app/CONTRACTS.md section 5.1) suivent
+# leur document s'ils sont versionnes ; les cles des .md ne changent pas.
+locals {
+  knowledge_seed_files = setunion(
+    fileset("${path.module}/build/knowledge", "**/*.md"),
+    fileset("${path.module}/build/knowledge", "**/*.md.metadata.json"),
+  )
+}
+
 resource "aws_s3_object" "knowledge_seed" {
-  for_each = fileset("${path.module}/build/knowledge", "**/*.md")
+  for_each = local.knowledge_seed_files
 
   bucket       = aws_s3_bucket.this.id
   key          = "general/${each.value}"
   source       = "${path.module}/build/knowledge/${each.value}"
   source_hash  = filemd5("${path.module}/build/knowledge/${each.value}")
-  content_type = "text/markdown; charset=utf-8"
+  content_type = endswith(each.value, ".metadata.json") ? "application/json; charset=utf-8" : "text/markdown; charset=utf-8"
 
   depends_on = [aws_s3_bucket_server_side_encryption_configuration.this]
 }

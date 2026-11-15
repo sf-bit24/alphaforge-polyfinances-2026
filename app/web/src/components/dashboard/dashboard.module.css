@@ -253,7 +253,7 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.v2 {
+.tileText {
   margin-top: 12px;
   font-size: 13px;
   line-height: 1.5;
@@ -717,6 +717,15 @@
   margin-top: 8px;
   font-size: 12px;
   color: var(--ink-3);
+}
+.hints {
+  margin-top: 8px;
+}
+.hints .hint {
+  margin-top: 0;
+}
+.hints .hint + .hint {
+  margin-top: 2px;
 }
 .error {
   margin-top: 4px;

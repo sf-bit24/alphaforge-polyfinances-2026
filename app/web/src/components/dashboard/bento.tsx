@@ -78,7 +78,7 @@ export function SampleBento() {
   );
 }
 
-/** The existing portfolio once confirmed (its five largest asset classes), or what version 2 adds. */
+/** The existing portfolio once confirmed (its five largest asset classes), or the way to the simulated portfolio. */
 function PortfolioTile({ portfolio }: { portfolio: ClientState["portfolio"] }) {
   const { t, locale } = useI18n();
   const confirmed = portfolio && portfolio.status === "confirmed" ? portfolio : null;
@@ -106,16 +106,19 @@ function PortfolioTile({ portfolio }: { portfolio: ClientState["portfolio"] }) {
         </>
       ) : (
         <>
-          <span className={styles.numText}>{t.dash.real.v2Title}</span>
-          <p className={styles.lbl}>{t.dash.real.v2Lead}</p>
-          <p className={styles.v2}>{t.dash.real.v2Text}</p>
+          <span className={styles.numText}>{t.dash.real.simulated.title}</span>
+          <p className={styles.lbl}>{t.dash.real.simulated.lead}</p>
+          <p className={styles.tileText}>{t.dash.real.simulated.text(t.appNav.portfolio, t.portfolioView.personas.self.name)}</p>
+          <Link className={styles.more} href="/portfolio">
+            {t.dash.real.simulated.cta}
+          </Link>
         </>
       )}
     </div>
   );
 }
 
-/** `local` and `aws` modes: what version 1 computes, the profile and the existing portfolio. */
+/** `local` and `aws` modes: what the code computes, the profile and the existing portfolio. */
 export function ProfileBento({ state }: { state: ClientState }) {
   const { t, locale } = useI18n();
   const { profile, completeness, portfolio } = state;

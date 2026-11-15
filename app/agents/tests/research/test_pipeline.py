@@ -471,3 +471,21 @@ def test_agentcore_launcher_invokes_one_session_per_researcher(store):
     assert len(sessions) == 2 and all(len(s) >= 33 for s in sessions)
     assert json.loads(client.calls[0]["payload"])["action"] == "research"
     assert all(r["marker"]["status"] == "ok" for r in results)
+
+
+def test_researcher_runtime_arn_is_resolved_by_name():
+    from alphaforge.research.launcher import resolve_runtime_arn
+
+    class Control:
+        def __init__(self):
+            self.pages = [
+                {"agentRuntimes": [{"agentRuntimeName": "x_profile", "agentRuntimeArn": "arn:p"}], "nextToken": "t"},
+                {"agentRuntimes": [{"agentRuntimeName": "x_researcher", "agentRuntimeArn": "arn:r"}]},
+            ]
+
+        def list_agent_runtimes(self, **kwargs):
+            return self.pages.pop(0)
+
+    assert resolve_runtime_arn("x_researcher", "us-east-1", Control()) == "arn:r"
+    with pytest.raises(RuntimeError, match="introuvable"):
+        resolve_runtime_arn("absent", "us-east-1", type("C", (), {"list_agent_runtimes": lambda self, **k: {}})())

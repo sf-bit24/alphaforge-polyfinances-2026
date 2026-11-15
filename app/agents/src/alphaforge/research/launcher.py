@@ -119,6 +119,23 @@ class AgentCoreLauncher(Launcher):
             raise RuntimeError((answer.get("error") or {}).get("message") or "réponse invalide du chercheur")
 
 
+def resolve_runtime_arn(name: str, region: str, client: Any | None = None) -> str:
+    """ARN d'un runtime AgentCore à partir de son nom (l'ARN porte un suffixe aléatoire, connu après création)."""
+    if client is None:
+        import boto3
+
+        client = boto3.client("bedrock-agentcore-control", region_name=region)
+    token = None
+    while True:
+        page = client.list_agent_runtimes(**({"nextToken": token} if token else {}), maxResults=100)
+        for runtime in page.get("agentRuntimes") or []:
+            if runtime.get("agentRuntimeName") == name:
+                return runtime["agentRuntimeArn"]
+        token = page.get("nextToken")
+        if not token:
+            raise RuntimeError(f"runtime AgentCore introuvable : {name}")
+
+
 class LocalLauncher(Launcher):
     """Exécute chaque mission dans un fil, avec le même service que le runtime ``researcher``."""
 

@@ -1,6 +1,6 @@
 # AlphaForge AI : agents Python (AgentCore Runtime)
 
-Un seul code Python sert les quatre runtimes AgentCore décrits dans `app/CONTRACTS.md`. La variable `AGENT_ROLE`
+Un seul code Python sert tous les runtimes AgentCore décrits dans `app/CONTRACTS.md`. La variable `AGENT_ROLE`
 choisit le point d'entrée :
 
 | `AGENT_ROLE` | Agents | Rôle |
@@ -9,6 +9,9 @@ choisit le point d'entrée :
 | `press` | A4 | Actualités datées (communiqués Newswire.ca et PR Newswire, GDELT) vers `staging/<run_id>/press/`. |
 | `data` | A5 | Séries et cours datés (Banque du Canada Valet, FRED, Yahoo Finance) vers `staging/<run_id>/data/`. |
 | `supervisor` | A6 | Contrôle ce qui est arrivé dans `staging/<run_id>/` et écrit les documents OKF sous `general/`. |
+| `router` | A0 | Recherche par experts : choisit les sujets d'une question, puis rédige la synthèse finale (section 11). |
+| `expert` | E1 à E7 | Expert de sujet : lance lui-même n chercheurs, une session AgentCore chacun, et met en attente leurs constats. |
+| `researcher` | chercheur | Une mission par session : cherche dans les hôtes de ses paquets et consigne des constats par localisateur. |
 
 Principes appliqués partout : le code calcule, le modèle explique, chaque nombre cite sa source. Le cadre est une
 simulation : aucune transaction réelle, aucun conseil personnalisé. Les questions de base viennent d'un questionnaire
@@ -97,6 +100,23 @@ A6 écrit son marqueur avec `status: "ok"` même si A4 ou A5 a échoué ou n'a r
 d'A6 lui-même donne `status: "error"`. `run_id` doit
 respecter `^[A-Za-z0-9_-]{1,64}$`. Une collecte est bornée : 30 actualités, 6 recherches, quelques minutes au plus.
 
+### Recherche par experts en local
+
+Sans `ALPHAFORGE_RESEARCHER_NAME` ni `ALPHAFORGE_RESEARCHER_ARN`, un expert lance ses chercheurs dans des fils du même
+processus, avec le même magasin : toute la chaîne tourne sur un poste.
+
+```sh
+AGENT_ROLE=expert ALPHAFORGE_STORE=local PORT=8084 uv run python main.py
+curl -s 127.0.0.1:8084/invocations -H 'content-type: application/json' \
+  -d '{"action":"research","run_id":"local-2","subject":"E2","mode":"sweep","depth":"quick"}'
+# staging/local-2/experts/E2/_done.json, puis A6 :
+curl -s 127.0.0.1:8083/invocations -H 'content-type: application/json' -d '{"action":"curate","run_id":"local-2"}'
+```
+
+Les paquets de sources, le registre des hôtes et les sujets sont dans `src/alphaforge/research/packs.py`; un hôte
+nouveau n'entre dans un paquet qu'après la lecture humaine de sa licence (les hôtes proposés par les chercheurs
+restent en quarantaine, `staging/<run_id>/supervisor/quarantine.json`).
+
 ## Tests et qualité
 
 ```sh
@@ -125,7 +145,7 @@ Le runtime démarre avec `python main.py` (point d'entrée `["main.py"]`, sans `
 
 | Variable | Défaut | Rôle |
 | --- | --- | --- |
-| `AGENT_ROLE` | `profile` | `profile`, `press`, `data` ou `supervisor`. |
+| `AGENT_ROLE` | `profile` | `profile`, `press`, `data`, `supervisor`, `tldoole`, `router`, `expert` ou `researcher`. |
 | `ALPHAFORGE_ENV` | `local` | Environnement, renvoyé par `health`. |
 | `ALPHAFORGE_RELEASE` | `dev` | SHA court du commit, renvoyé dans chaque réponse. |
 | `ALPHAFORGE_REGION` | `AWS_REGION`, sinon `us-east-1` | Région des appels AWS. |

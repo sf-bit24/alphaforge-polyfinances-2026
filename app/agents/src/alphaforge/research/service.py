@@ -1,4 +1,4 @@
-"""Runtimes ``router`` (A0), ``expert`` (E1 à E7) et ``researcher`` (CONTRACTS.md, section 10).
+"""Runtimes ``router`` (A0), ``expert`` (E1 à E7) et ``researcher`` (CONTRACTS.md, section 11).
 
 Même schéma que les collecteurs (section 4) : la tâche est acceptée aussitôt, exécutée en arrière-plan comme tâche
 asynchrone de ``BedrockAgentCoreApp`` (``/ping`` à ``HealthyBusy``), puis un marqueur est écrit, que la tâche
@@ -24,7 +24,7 @@ from ..trace import Trace
 from . import expert as expert_mod
 from . import researcher as researcher_mod
 from . import router as router_mod
-from .launcher import AgentCoreLauncher, Launcher, LocalLauncher
+from .launcher import AgentCoreLauncher, Launcher, LocalLauncher, resolve_runtime_arn
 from .packs import DEPTH_CAPS, SUBJECTS
 
 logger = logging.getLogger("alphaforge.research")
@@ -133,10 +133,11 @@ class ResearchService:
     # ------------------------------------------------------------------ dépendances
     def launcher(self) -> Launcher:
         if self._launcher is None:
-            if self.settings.researcher_arn:
-                self._launcher = AgentCoreLauncher(
-                    self.store, runtime_arn=self.settings.researcher_arn, region=self.settings.region
-                )
+            arn = self.settings.researcher_arn
+            if not arn and self.settings.researcher_name:
+                arn = resolve_runtime_arn(self.settings.researcher_name, self.settings.region)
+            if arn:
+                self._launcher = AgentCoreLauncher(self.store, runtime_arn=arn, region=self.settings.region)
             else:
                 local_settings = replace(self.settings, role="researcher")
 

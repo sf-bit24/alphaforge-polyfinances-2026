@@ -66,8 +66,8 @@ Les faits et les limites sont les mêmes à tous les niveaux; seuls les mots cha
 
 ## Comment AlphaForge AI le fixe
 
-Le code fixe le style; le modèle l'explique. Le compilateur de mandat fixe d'abord le niveau de risque N0 à N5
-(`risk_levels.yaml`); le code en tire un **style par défaut** :
+Le code fixe le style à l'étape 0 du moteur, désactivée par défaut; le modèle l'explique. Le compilateur de mandat
+fixe d'abord le niveau de risque N0 à N5 (`risk_levels.yaml`); le code en tire un **style par défaut** :
 
 | Niveau | Style par défaut | Repères publics rapprochés par l'équipe |
 | --- | --- | --- |
@@ -80,17 +80,23 @@ Banque Nationale et par l'outil de profil de l'AMF. Ces échelles classent le ri
 définissent pas de style de composition. À valider par l'équipe.
 
 1. Une **préférence** de l'investisseur, par exemple un objectif de croissance, peut déplacer le style d'un cran au
-   plus vers l'offensive. Un pas vers plus de prudence reste toujours possible. Aucun déplacement vers l'offensive
-   n'a lieu quand une règle de contradiction du profil se déclenche, par exemple un horizon court ou une tolérance
-   faible. Seule la composition change.
-2. Le style oriente ensuite la [sélection de titres par règles](selection-par-regles.md) : poids des critères du
-   score, taille visée des satellites sous leur plafond, et parfois un plafond sectoriel plus serré pour le style
-   défensif (voir [Noyau et satellites](noyau-et-satellites.md)).
-3. La trace garde le style par défaut, la préférence, le style retenu et la règle appliquée.
+   plus vers l'offensive. Une descente vers plus de prudence est toujours admise. Seule la composition change.
+2. Aucune montée n'a lieu en présence d'un **blocage** : profil incomplet, niveau N0, signal FOMO, signal d'attention
+   (actualité suivie chaque jour et envie d'un titre médiatisé), faible sang-froid ou aversion aux pertes, capacité
+   qui limite le niveau, ou contradiction du profil (par exemple un horizon de moins de 3 ans ou une tolérance
+   faible avec une préférence offensive).
+3. Pour un débutant ou en cas de faible littératie, le style est plafonné à **dynamique**.
+4. Le style oriente ensuite la [sélection de titres par règles](selection-par-regles.md) : poids des critères du
+   score, bonus de style, taille visée des satellites sous leur plafond (planchers à 50 % de la place disponible en
+   défensive et en dynamique, à 75 % en offensive), et un plafond sectoriel plus serré pour la technologie et
+   l'énergie en défensive (voir [Noyau et satellites](noyau-et-satellites.md)).
+5. La trace garde le style par défaut, la préférence, le style retenu et chaque blocage (Facts `strat.style`,
+   `strat.preference`, `strat.preference_refused.*`).
 
 Le style ne change jamais le niveau, la bande d'actions, la perte acceptable ni les budgets que le Judge contrôle
-(CVaR, [baisse maximale](baisse-maximale.md), stress 2022). Les valeurs de l'étape 0 sont des hypothèses de
-conception, à valider par l'équipe.
+(CVaR, [baisse maximale](baisse-maximale.md), stress 2022). Toutes les limites de l'étape 0 sont non bloquantes. Les
+règles exactes et leurs formules sont dans [Étape 0 : style et score des titres](../methodologie/scoring-par-style.md);
+ce sont des hypothèses de conception, à valider par l'équipe.
 
 ## Limites
 

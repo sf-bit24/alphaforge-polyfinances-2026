@@ -88,7 +88,10 @@ Le biais ne peut pas être supprimé avec ce jeu de données; le code le réduit
 ## Limites
 
 - **Le proxy n'est pas le titre** : raccorder une action à son industrie avant sa cotation décrit l'industrie, pas
-  la société.
+  la société; c'est pourquoi cette baisse longue est marquée HYPOTHÈSE.
+- **Repli sur la fenêtre courte** : si l'historique long manque, l'étape 0 prend la baisse maximale des cinq ans du
+  jeu de départ, marquée HYPOTHÈSE « fenêtre courte »; elle est alors encore plus flattée par la survie (voir
+  [Étape 0 : style et score des titres](../methodologie/scoring-par-style.md)).
 - **Le choix des 31 actifs reste biaisé**, FNB compris : un FNB thématique lancé récemment a lui aussi survécu.
 - **Sans univers « à la date »**, la liste des titres réellement disponibles chaque année, le biais ne peut pas être
   mesuré, seulement signalé.

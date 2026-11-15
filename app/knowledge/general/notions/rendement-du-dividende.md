@@ -85,9 +85,12 @@ Le code calcule le rendement du dividende; le modèle ne l'estime jamais.
 - **Devise** : numérateur et dénominateur sont dans la même devise; aucune conversion n'est nécessaire.
 - **Opérations spéciales** : les lignes `split` ne sont pas des dividendes. Le « fractionnement » de 1,021 de CNQ.TO
   du 2022-08-22, probablement une distribution spéciale, n'entre donc pas dans le calcul (README du jeu de départ).
+- **Fenêtre** : dates ex dans les 365 jours qui précèdent la date de calcul, cette date comprise.
 - **Usage** : c'est un des critères de la [sélection de titres par règles](selection-par-regles.md). Les styles
   défensif et dynamique favorisent un rendement du dividende plus élevé, et un intérêt déclaré pour les dividendes
-  augmente son poids, sans lever aucun plafond. FTSE Russell emploie la même mesure sur 12 mois glissants (§5.8).
+  augmente son poids, sans lever aucun plafond. Comme chez FTSE Russell, qui emploie la même mesure sur 12 mois
+  glissants (§5.8), un titre sans dividende reçoit le rang le plus bas sur ce critère (voir
+  [Étape 0 : style et score des titres](../methodologie/scoring-par-style.md)).
 
 ## Limites
 

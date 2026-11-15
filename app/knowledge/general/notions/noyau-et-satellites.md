@@ -75,9 +75,16 @@ Le code calcule les plafonds; le modèle les explique. Les règles sont dans `ri
 - **Total des titres** : ≤ 0,25 × l* / δ, soit 6,25 % dans le même exemple.
 - **Profils plus fragiles** : pas de titres individuels au niveau N0; plafond de 2 % par titre pour un débutant;
   aucun titre individuel pour un profil incomplet ou en protection.
-- **Étape 0** : un petit nombre de satellites, au plus un par secteur, choisis par des règles publiées (voir
-  [Sélection de titres par règles](selection-par-regles.md)). Le [style](style-de-portefeuille.md) change leur
-  choix et leur taille visée, jamais leur plafond. Un signal d'excès de confiance réduit leur taille visée.
+- **Étape 0** (voir [Étape 0 : style et score des titres](../methodologie/scoring-par-style.md)) :
+  - **nombre de titres K** : 2 par défaut, 3 pour l'approche « titres individuels », et jamais plus que le plafond
+    total divisé par le plafond par titre; K = 0 au niveau N0, pour un profil incomplet, pour un débutant ou en cas
+    de faible littératie, et pour l'approche « fonds indiciels »;
+  - **choix** : au plus un titre par secteur, par des règles publiées (voir
+    [Sélection de titres par règles](selection-par-regles.md)); les titres non retenus sortent de l'univers;
+  - **plancher** de chaque titre retenu : φ × la place disponible (le plus petit du plafond par titre et du plafond
+    total partagé entre les titres retenus), avec φ = 0,5 en défensive et en dynamique, 0,75 en offensive, et au plus
+    3 %. Le [style](style-de-portefeuille.md) change le choix et le plancher, jamais le plafond;
+  - **excès de confiance** : un titre de moins (K − 1) et des planchers divisés par deux.
 - **Contrôle** : le Judge vérifie les plafonds par titre et total (`conc.single_each`, `conc.single_total`) et
   refuse une proposition qui les dépasse (voir [Concentration](concentration.md)).
 

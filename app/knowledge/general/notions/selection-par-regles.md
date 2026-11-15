@@ -48,8 +48,8 @@ Les faits et les limites sont les mêmes à tous les niveaux; seuls les mots cha
 
 - **Débutant** : « On compare les sociétés sur quelques mesures simples de leur passé, comme leurs hauts et leurs bas
   ou les dividendes versés. On ne choisit pas celle qui a le plus monté : ce serait regarder dans le rétroviseur. »
-- **Intermédiaire** : « Chaque titre reçoit un rang sur cinq critères. Le style du portefeuille donne plus de poids à
-  certains critères. On garde au plus un titre par secteur, et tout le classement est affiché. »
+- **Intermédiaire** : « Chaque titre reçoit un rang par critère. Selon le style, trois à cinq critères comptent,
+  chacun avec son poids. On garde au plus un titre par secteur, et tout le classement est affiché. »
 - **Avancé** : « Score = moyenne pondérée de rangs centiles orientés, avec un vecteur d'inclinaisons propre au style,
   inspiré des indices à inclinaisons multiples de FTSE Russell (§6.1). Filtres d'éligibilité, contrainte d'un titre par
   secteur, momentum en analyse de sensibilité seulement. »
@@ -67,34 +67,41 @@ Les faits et les limites sont les mêmes à tous les niveaux; seuls les mots cha
 
 ## Comment AlphaForge AI classe
 
-**Éligibilité** : les actions individuelles du jeu de départ, sauf celles dont la baisse maximale sur le long
-historique dépasse 80 %, le même δ que le plafond des satellites (`risk_levels.yaml`), celles exclues par le profil
-et celles du secteur d'emploi (voir [Capital humain](capital-humain.md)).
-
-**Critères**, chacun converti en rang centile parmi les titres éligibles :
+**Critères** : chaque titre individuel de l'univers reçoit un rang centile par critère, de 0 à 1, calculé parmi
+tous les titres individuels, éligibles ou non; une valeur manquante, ou un dividende nul, vaut 0.
 
 | Critère | Mesure | Repère |
 | --- | --- | --- |
-| [Volatilité](volatilite.md) | Écart-type des rendements hebdomadaires sur cinq ans | FTSE §5.7 |
+| [Volatilité](volatilite.md) | Écart-type des rendements hebdomadaires sur cinq ans, annualisé | FTSE §5.7 |
 | [Bêta](beta.md) | Deux ans de rendements quotidiens contre l'indice local | FTSE §5.9 |
-| [Baisse maximale](baisse-maximale.md) longue | Long historique mensuel | Même δ que les satellites |
+| [Baisse maximale](baisse-maximale.md) longue | Historique long raccordé à un proxy d'industrie | Même δ que les satellites |
 | [Rendement du dividende](rendement-du-dividende.md) | Dividendes des 12 derniers mois / cours | FTSE §5.8 |
-| Corrélation au noyau | Rendements hebdomadaires contre un noyau moitié XIU.TO, moitié SPY | `reference_portfolios` |
+| Corrélation au noyau | Rendements hebdomadaires en CAD contre un noyau moitié XIU.TO, moitié SPY | `reference_portfolios` |
 
-- **Score** : moyenne pondérée des rangs, orientés selon le [style](style-de-portefeuille.md). Le style défensif
-  favorise une faible volatilité, un bêta bas, une baisse longue limitée et un dividende plus élevé; le style
-  dynamique favorise d'abord une faible corrélation au noyau; le style offensif favorise un bêta plus élevé, mais
-  pénalise toujours une baisse longue profonde. Une préférence déclarée ajoute un petit bonus, sans lever aucun
+- **Score** : moyenne des rangs pondérée selon le [style](style-de-portefeuille.md), plus 0,10 par bonus. Le style
+  défensif favorise une faible volatilité, un bêta bas, une baisse longue limitée, un dividende plus élevé et une
+  faible corrélation au noyau; le style dynamique favorise d'abord une faible corrélation au noyau; le style
+  offensif favorise un bêta plus élevé, mais pénalise toujours une baisse longue profonde. Un bonus vient d'un tag
+  lié au style ou d'un intérêt déclaré (sociétés canadiennes, santé, technologie); un intérêt pour les dividendes
+  augmente plutôt le poids du dividende. Une exclusion de simple préférence retire 0,10. Aucun bonus ne lève un
   plafond.
-- **Choix** : les mieux classés, au plus un par secteur, en petit nombre, sous les plafonds des satellites.
+- **Éligibilité** : un titre est écarté, raison à l'appui, si sa baisse maximale longue est inconnue ou dépasse 80 %
+  (le même δ que le plafond des satellites, `risk_levels.yaml`), si sa liquidité est insuffisante, s'il est exclu
+  par le mandat ou par une exclusion de valeurs, s'il s'agit d'un titre de l'employeur ou du secteur d'emploi (voir
+  [Capital humain](capital-humain.md)), si l'investisseur ne veut que du CAD et que le titre est en USD, ou si son
+  secteur est déjà concentré dans le portefeuille existant.
+- **Choix** : les titres éligibles dans l'ordre du score, au plus un par secteur, jusqu'à K titres (2 par défaut,
+  3 pour l'approche « titres individuels », 0 pour un débutant ou l'approche « fonds indiciels »), sous les
+  plafonds des satellites. Les titres non retenus sortent de l'univers investissable.
 - **Momentum** : le rendement cumulé sur 12 mois, hors dernier mois (comme FTSE §5.3), est calculé et affiché comme
   sensibilité : « le classement changerait-il si l'on en tenait compte? ». Elle n'entre jamais dans le score, parce
   que dans un univers choisi en 2026 elle mesure surtout la raison de la présence des titres (voir
   [Biais du survivant](biais-du-survivant.md)).
 
 **Pourquoi des rangs** : FTSE Russell normalise par scores Z sur des milliers de titres. Sur une vingtaine de titres,
-un rang résiste mieux à une valeur extrême, qui ne peut pas écraser les autres critères. Les poids par style sont
-décrits dans la méthodologie du score par style; ce sont des hypothèses de conception, à valider par l'équipe.
+un rang résiste mieux à une valeur extrême, qui ne peut pas écraser les autres critères. Les poids par style, les
+bonus et toutes les formules sont dans [Étape 0 : style et score des titres](../methodologie/scoring-par-style.md);
+ce sont des hypothèses de conception, à valider par l'équipe.
 
 ## Limites
 

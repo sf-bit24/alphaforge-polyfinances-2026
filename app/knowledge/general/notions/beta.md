@@ -64,15 +64,17 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 Le code calcule le bêta; le modèle ne l'estime jamais.
 
 - **Formule** : covariance des rendements quotidiens du titre et de l'indice, divisée par la variance des rendements
-  de l'indice, sur deux ans de données quotidiennes, comme les règles des indices factoriels de FTSE Russell (§5.9).
-- **Indice local** : XIU.TO (FNB du S&P/TSX 60) pour un titre `.TO`, SPY (FNB du S&P 500) pour les autres. Le titre
-  et son indice se négocient sur la même bourse, donc suivent le même calendrier et la même devise : aucune conversion
-  de change n'entre dans le calcul, comme FTSE le prévoit pour un indice d'un seul pays.
+  de l'indice, sur les 504 dernières dates communes au titre et à son indice (environ deux ans), comme les règles des
+  indices factoriels de FTSE Russell (§5.9). Sous 250 dates communes, le bêta reste inconnu plutôt que deviné.
+- **Indice local** : XIU.TO (FNB du S&P/TSX 60) pour un titre coté en CAD, SPY (FNB du S&P 500) pour les autres. Le
+  titre et son indice se négocient dans la même devise : aucune conversion de change n'entre dans le calcul, comme
+  FTSE le prévoit pour un indice d'un seul pays.
 - **Prix** : rendements tirés de la clôture ajustée (`adj_close`), qui tient compte des dividendes et des
   fractionnements; FTSE utilise aussi des rendements totaux.
 - **Usage** : le bêta est un des critères de la [sélection de titres par règles](selection-par-regles.md). Le
-  [style](style-de-portefeuille.md) défensif favorise un bêta bas, le style offensif un bêta plus élevé, toujours
-  sous les mêmes plafonds de satellites et budgets de pertes.
+  [style](style-de-portefeuille.md) défensif favorise un bêta bas (poids 1), le style offensif un bêta plus élevé
+  (poids 2), toujours sous les mêmes plafonds de satellites et budgets de pertes (voir
+  [Étape 0 : style et score des titres](../methodologie/scoring-par-style.md)).
 
 ## Limites
 

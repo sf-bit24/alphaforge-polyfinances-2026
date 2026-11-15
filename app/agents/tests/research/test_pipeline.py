@@ -268,7 +268,7 @@ def test_a6_rejects_tampered_values_quarantine_and_robots(store, fake_http):
         run_id="run1", store=store, trace=Trace("fr"), model_factory=ScriptedFactory(), model_id="scripted"
     )
     reasons = {r["key"].rsplit("/", 1)[-1]: r["reason"] for r in result["rejected"]}
-    assert len(result["written"]) == 1 and result["written"][0].startswith("general/faits/usd-cad/2026-11-13-")
+    assert len(result["written"]) == 1 and result["written"][0].startswith("general/faits/bankofcanada-ca/2026-11-13-")
     assert "différente de l'archive" in reasons["fact-tampered.json"]
     assert "quarantaine" in reasons["fact-quarantined.json"]
     assert "robots" in reasons["fact-norobots.json"]
@@ -308,7 +308,8 @@ def test_a6_market_signal_keeps_rules_and_quality_tier(store, fake_http):
     result = supervisor.curate(
         run_id="run1", store=store, trace=Trace("fr"), model_factory=ScriptedFactory(), model_id="scripted"
     )
-    assert len(result["written"]) == 1 and result["written"][0].startswith("general/signaux/")
+    assert len(result["written"]) == 1
+    assert result["written"][0].startswith("general/signaux/external-api-kalshi-com/2026-11-14-")
     text = store.get_text(result["written"][0]).text
     assert "Règles de résolution, telles quelles" in text and "type: Market Signal" in text
     assert "pas un signal d'achat" in text

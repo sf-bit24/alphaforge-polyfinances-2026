@@ -26,10 +26,23 @@ export function parseOkf(content: string): OkfDocument {
   }
 }
 
-/** Group of a general/ key: methodologie, societes, actualites, donnees, index or other. */
+/** The closed set of general/ folders (CONTRACTS.md, section 5), in display order. */
+export const GENERAL_FOLDERS = [
+  "methodologie",
+  "notions",
+  "societes",
+  "actualites",
+  "donnees",
+  "recherches",
+  "faits",
+  "signaux",
+  "depots",
+] as const;
+
+/** Group of a general/ key: one of GENERAL_FOLDERS, index or other. */
 export function generalGroup(key: string): string {
   const parts = key.split("/");
   if (parts.length === 2 && parts[1] === "index.md") return "index";
   const folder = parts[1] ?? "";
-  return ["methodologie", "notions", "societes", "actualites", "donnees"].includes(folder) ? folder : "other";
+  return (GENERAL_FOLDERS as readonly string[]).includes(folder) ? folder : "other";
 }

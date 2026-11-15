@@ -282,8 +282,8 @@ clients/<client_id>/decisions/<decision_id>.json       Decision complète (Facts
 clients/<client_id>/decisions/<decision_id>.policy.json   mandat (PolicySpec) appliqué
 staging/<run_id>/<role>/<id>.json
 staging/<run_id>/<role>/_done.json
-general/faits/<libellé>/<AAAA-MM-JJ>-<hash>.md        écrit par A6 (section 11)
-general/signaux/<libellé>/<AAAA-MM-JJ>-<hash>.md      écrit par A6
+general/faits/<source>/<AAAA-MM-JJ>-<hash>.md         écrit par A6 (section 11)
+general/signaux/<source>/<AAAA-MM-JJ>-<hash>.md       écrit par A6
 general/depots/<ticker>/<accession>.md                écrit par A6
 general/recherches/<AAAA>/<MM>/<slug>-<hash>.md       écrit par A6 (synthèses d'A0)
 staging/<run_id>/router/plan.json, _routed.json, _composed.json, brief-<hash>.json
@@ -320,6 +320,10 @@ data: {}                          # données structurées lues par le code (prof
   - Une entrée `message` garde le texte libre de l'investisseur (`followup.reply.message`) avec sa provenance `a1:<tour>`, `text` et `locale`. Elle n'est écrite qu'après un tour d'A1 réussi, donc jamais quand le garde-fou bloque.
   - Une requête écrit le journal au plus une fois.
 - La base générale ne contient rien d'un client; une base de client ne recopie pas la base générale.
+- **Arborescence fermée de `general/`.** Un document n'y est écrit que sous l'un de ces neuf dossiers : `methodologie/`, `notions/`, `societes/` (seeds), `actualites/`, `donnees/`, `faits/`, `signaux/`, `depots/` et `recherches/` (A6), plus `index.md`. Le code calcule la clé à partir du type de l'élément et de champs fixés par le code (`research.checks.target`). Ni A6 ni un autre agent ne choisit un dossier ou n'en crée un : le modèle d'A6 décide du résumé, des tags, des liens et du rejet, jamais de l'adresse.
+  - Un dossier correspond à un type de document. Un sous-dossier ne sert qu'à l'identité (série, ticker, source) ou au temps (`AAAA/MM`). Un thème (ESG, logement, taux) est un tag, jamais un dossier.
+  - `<source>` d'un fait ou d'un signal est l'hôte lu, sans `www.`, passé par `staging.slugify` (`www.bankofcanada.ca` donne `bankofcanada-ca`), et `<hash>` vient de l'identifiant de l'élément, lui-même tiré de l'adresse, des localisateurs et de la date d'observation. Les tickers d'un fait ou d'un signal vont dans ses tags. Deux sources qui publient la même valeur donnent deux documents, chacun dans le dossier de sa source.
+  - Pour ajouter un dossier, on le décrit d'abord ici. Puis, dans la même PR : `research.checks.target` (ou `collect.supervisor`), les sections de `write_general_index`, `GENERAL_FOLDERS` (`app/web/src/lib/okf.ts`) et ses libellés, et les préfixes IAM du rôle `supervisor` (section 1).
 - Chaque document d'actualité ou de données garde sa date d'observation et sa date de publication.
 - `Stock Features` (`general/donnees/features/<ticker-slug>/<as_of>.md`, `ticker-slug` = `shop-to` pour `SHOP.TO`) : un document par titre et par date `as_of` (`AAAA-MM-JJ`), jamais réécrit (une seconde écriture donne `conflict`). Les définitions des caractéristiques appartiennent au volet finance; A6 ne calcule rien, il valide et écrit. `data` :
 

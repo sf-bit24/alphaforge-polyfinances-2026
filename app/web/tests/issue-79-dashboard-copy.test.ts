@@ -1,9 +1,23 @@
+import { createElement, type ReactElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { ClientState } from "@/lib/contract/schemas";
+import { ClientState, type Locale } from "@/lib/contract/schemas";
 import { composeHints, introCopy, offersFollowups } from "@/components/dashboard/assistant-offer";
+import { ProfileBento } from "@/components/dashboard/bento";
+import { RealDetails } from "@/components/details/details-view";
 import { dictionaries } from "@/lib/i18n/dictionary";
+import { I18nProvider } from "@/lib/i18n/provider";
+import { screensEn, screensFr } from "@/lib/i18n/screens";
+import { clientState, portfolioView } from "./fixtures/contract-examples";
 
 const nbsp = (text: string) => text.replace(/[  ]/g, " ");
+
+// `children` is required by I18nProvider's props; createElement passes it as an argument.
+const Provider = I18nProvider as (props: { initialLocale: Locale; children?: ReactNode }) => ReactElement;
+
+function render(element: ReactElement, locale: Locale): string {
+  return renderToStaticMarkup(createElement(Provider, { initialLocale: locale }, element));
+}
 
 function completeness(score: number, threshold = 0.7, cap = 0.95): ClientState["completeness"] {
   return { score, displayed: Math.min(score, cap), threshold, cap, ready: score >= threshold, missing: [] };
@@ -69,5 +83,49 @@ describe("follow-ups chip of Yan's assistant (#79)", () => {
       expect(write.lead).not.toMatch(/questions/i);
       expect(introCopy(t, false, false)).toEqual({ heading: t.assistant.introComplete, lead: t.assistant.leadComplete });
     }
+  });
+});
+
+describe("the simulated portfolio, outside the simulator (#79)", () => {
+  const followups = ClientState.parse({ ...clientState, stage: "followups", questions: [] });
+  const withExisting = ClientState.parse({ ...clientState, stage: "followups", questions: [], portfolio: { ...portfolioView, status: "confirmed" } });
+
+  it("is no longer announced for a version 2 on the dashboard or on the details page", () => {
+    for (const screens of [screensFr, screensEn]) {
+      expect(JSON.stringify(screens.dash)).not.toMatch(/version [12]|guidé|guided/i);
+      expect(JSON.stringify(screens.details)).not.toMatch(/version [12]|guidé|guided/i);
+    }
+    for (const locale of ["fr", "en"] as const) {
+      expect(render(createElement(ProfileBento, { state: followups }), locale)).not.toMatch(/version [12]/i);
+      expect(render(createElement(RealDetails, { state: followups }), locale)).not.toMatch(/version [12]/i);
+    }
+  });
+
+  it("is reached from the dashboard tile, which names the tab and the « My profile » choice", () => {
+    for (const locale of ["fr", "en"] as const) {
+      const t = dictionaries[locale];
+      const html = render(createElement(ProfileBento, { state: followups }), locale);
+      expect(html).toContain('href="/portfolio"');
+      expect(html).toContain(t.dash.real.simulated.cta);
+      expect(html).toContain(t.appNav.portfolio);
+      expect(html).toContain(t.portfolioView.personas.self.name);
+    }
+  });
+
+  it("is reached from the details page, next to the existing portfolio", () => {
+    for (const locale of ["fr", "en"] as const) {
+      const t = dictionaries[locale];
+      const html = render(createElement(RealDetails, { state: followups }), locale);
+      expect(html).toContain('href="/portfolio"');
+      expect(html).toContain(t.details.simulated.cta);
+      expect(html).toContain(t.appNav.portfolio);
+      expect(html).toContain(t.details.existing.none);
+    }
+  });
+
+  it("leaves the tile to the confirmed existing portfolio when there is one", () => {
+    const html = render(createElement(ProfileBento, { state: withExisting }), "fr");
+    expect(html).toContain(dictionaries.fr.dash.real.portfolioMore);
+    expect(html).not.toContain('href="/portfolio"');
   });
 });

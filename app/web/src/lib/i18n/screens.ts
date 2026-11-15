@@ -88,7 +88,7 @@ export const screensFr = {
     bento: "Indicateurs clés",
     hello: "Bonjour",
     leadSample: "Un exemple de portefeuille simulé, en un coup d'œil. Retraite prévue en 2030.",
-    leadReal: "Votre profil en un coup d'œil. Le portefeuille guidé arrive en version 2.",
+    leadReal: "Votre profil en un coup d'œil, la base de votre portefeuille simulé.",
     allDetails: "Voir tous les détails",
     exampleChip: "Valeurs d’exemple",
     sample: {
@@ -113,10 +113,13 @@ export const screensFr = {
       portfolio: "Votre portefeuille existant, lu par A2 et valorisé par le code",
       portfolioAria: "Répartition de votre portefeuille existant par classe d’actifs",
       portfolioMore: "Voir les expositions",
-      v2Title: "Portefeuille guidé",
-      v2Lead: "Il arrive en version 2.",
-      v2Text:
-        "Les propositions, la gouvernance du Judge et le stress test 2022 viendront avec le moteur du volet finance. En attendant, rien n’est inventé : cette page ne montre que ce que le code calcule.",
+      simulated: {
+        title: "Portefeuille simulé",
+        lead: "Construit à partir de votre profil",
+        text: (tab: string, persona: string) =>
+          `Dans l’onglet « ${tab} », choisissez « ${persona} » : le moteur du volet finance y construit un portefeuille sous les limites de votre profil, contrôlé par le Judge. Aucun chiffre n’est inventé : chacun renvoie au fait qui le source.`,
+        cta: "Construire mon portefeuille simulé",
+      },
       horizon: "Horizon de placement",
       knowledge: "Niveau de connaissances",
       knowledgeSub: "Les explications s’adaptent à ce niveau",
@@ -160,7 +163,7 @@ export const screensFr = {
   details: {
     title: "Détails du portefeuille",
     lead: "Tout ce qui soutient le portefeuille simulé, du rendement quotidien aux décisions des agents.",
-    realLead: "Ce que la version 1 sait déjà de votre portefeuille, et ce qui arrive ensuite.",
+    realLead: "Où construire votre portefeuille simulé, et votre portefeuille existant tel que le code l’a valorisé.",
     back: "Retour au tableau de bord",
     today: "Aujourd’hui",
     date: "Date",
@@ -245,16 +248,18 @@ export const screensFr = {
       value: "Valeur",
       vol: "Volatilité 1 an",
     },
-    v2: {
-      title: "Le portefeuille guidé arrive en version 2",
-      text: "La version 1 construit votre profil et la base générale. Le volet finance prépare la suite, construite sur ces deux bases :",
+    simulated: {
+      title: "Votre portefeuille simulé",
+      text: (tab: string, persona: string) =>
+        `Il se construit dans l’onglet « ${tab} », en choisissant « ${persona} ». Le moteur du volet finance part de votre profil et, s’il y a lieu, de votre portefeuille existant :`,
       items: [
         "une proposition de portefeuille optimisée sous les limites de votre profil;",
         "un débat entre l’agent du portefeuille et quatre lentilles (horizon, risque, diversité et préférences, contraintes);",
         "le contrôle du Judge, par le code, sans dérogation possible;",
-        "le stress test 2022, l’historique long et une explication dont chaque chiffre est vérifié.",
+        "une explication dont chaque chiffre renvoie au fait qui le source, et la trace de la construction.",
       ],
-      honest: "D’ici là, cette page ne montre aucun chiffre inventé.",
+      honest: "Cette page ne montre aucun chiffre inventé : seulement ce que le code a calculé pour votre profil.",
+      cta: "Ouvrir le portefeuille simulé",
     },
     existing: {
       title: "Votre portefeuille existant",
@@ -348,7 +353,7 @@ export const screensEn: Screens = {
     bento: "Key indicators",
     hello: "Hello",
     leadSample: "An example simulated portfolio, at a glance. Retirement planned in 2030.",
-    leadReal: "Your profile at a glance. The guided portfolio comes in version 2.",
+    leadReal: "Your profile at a glance, the basis of your simulated portfolio.",
     allDetails: "See all details",
     exampleChip: "Example values",
     sample: {
@@ -373,10 +378,13 @@ export const screensEn: Screens = {
       portfolio: "Your existing portfolio, read by A2 and valued by code",
       portfolioAria: "Allocation of your existing portfolio by asset class",
       portfolioMore: "See the exposures",
-      v2Title: "Guided portfolio",
-      v2Lead: "It comes in version 2.",
-      v2Text:
-        "Proposals, the Judge’s governance and the 2022 stress test will come with the finance engine. Until then, nothing is made up: this page only shows what the code computes.",
+      simulated: {
+        title: "Simulated portfolio",
+        lead: "Built from your profile",
+        text: (tab: string, persona: string) =>
+          `In the “${tab}” tab, pick “${persona}”: the finance engine builds a portfolio there under your profile’s limits, checked by the Judge. No number is made up: each one links to the fact that sources it.`,
+        cta: "Build my simulated portfolio",
+      },
       horizon: "Investment horizon",
       knowledge: "Knowledge level",
       knowledgeSub: "Explanations adapt to this level",
@@ -419,7 +427,7 @@ export const screensEn: Screens = {
   details: {
     title: "Portfolio details",
     lead: "Everything behind the simulated portfolio, from daily returns to the agents' decisions.",
-    realLead: "What version 1 already knows about your portfolio, and what comes next.",
+    realLead: "Where to build your simulated portfolio, and your existing portfolio as valued by code.",
     back: "Back to the dashboard",
     today: "Today",
     date: "Date",
@@ -504,16 +512,18 @@ export const screensEn: Screens = {
       value: "Value",
       vol: "1-year volatility",
     },
-    v2: {
-      title: "The guided portfolio comes in version 2",
-      text: "Version 1 builds your profile and the general knowledge base. The finance team is preparing what comes next, on top of these two bases:",
+    simulated: {
+      title: "Your simulated portfolio",
+      text: (tab: string, persona: string) =>
+        `It is built in the “${tab}” tab, by picking “${persona}”. The finance engine starts from your profile and, if any, your existing portfolio:`,
       items: [
         "a portfolio proposal optimized under your profile’s limits;",
         "a debate between the portfolio agent and four lenses (horizon, risk, diversity and preferences, constraints);",
         "the Judge’s check, by code, with no possible override;",
-        "the 2022 stress test, long history and an explanation where every number is verified.",
+        "an explanation where every number links to the fact that sources it, and the trace of the build.",
       ],
-      honest: "Until then, this page shows no made-up number.",
+      honest: "This page shows no made-up number: only what the code computed for your profile.",
+      cta: "Open the simulated portfolio",
     },
     existing: {
       title: "Your existing portfolio",

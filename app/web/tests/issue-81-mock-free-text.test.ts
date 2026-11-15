@@ -117,6 +117,8 @@ describe("issue #81: emergency fund in words", () => {
     ["An emergency fund of nine months.", 9],
     ["J'ai 6 mois de côté.", 6],
     ["18 months of savings.", 18],
+    ["A six-month emergency fund.", 6],
+    ["A 6-month cushion.", 6],
   ])("reads « %s » as a %i-month fund", (message, months) => {
     expect(facts(message)["risk_capacity.emergency_fund"]).toBe(months);
   });

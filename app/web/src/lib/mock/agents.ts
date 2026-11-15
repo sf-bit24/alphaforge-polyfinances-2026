@@ -68,8 +68,8 @@ const NUMBER_WORDS: Record<string, number> = Object.fromEntries(
   ].flatMap((words) => words.map((word, index) => [word, index + 1])),
 );
 
-/** A number of months, in digits or in words; « dix-huit » or "twenty-four" is not read as « huit » or "four". */
-const MONTHS = new RegExp(`(?:\\b(\\d{1,2})|(?<![\\w-])(${Object.keys(NUMBER_WORDS).join("|")}))\\s*(?:mois|months?)\\b`, "g");
+/** A number of months, in digits or in words ("six-month" too); « dix-huit » or "twenty-four" is not read as « huit » or "four". */
+const MONTHS = new RegExp(`(?:\\b(\\d{1,2})|(?<![\\w-])(${Object.keys(NUMBER_WORDS).join("|")}))[\\s-]*(?:mois|months?)\\b`, "g");
 
 /** Words that tie a number of months to money set aside. */
 const SAVINGS = /urgence|emergency|coussin|cushion|précaution|precaution|côté|aside|épargne|savings/g;

@@ -62,7 +62,7 @@ Pour viser les runtimes déployés : `AGENT_MODE=aws` dans `app/web/.env.local`.
 
 ## Déployer
 
-Un push sur `master` lance les tests, construit le zip des runtimes, puis HCP Terraform (organisation `larpathon_2026`, workspace `larpathon`) planifie et applique sur le compte AWS. GitHub Actions n'a aucun identifiant AWS : HCP Terraform assume un rôle par OIDC. La mise en place unique (bootstrap AWS, workspace, secrets GitHub) est décrite dans [`infrastructure/README.md`](infrastructure/README.md).
+Un push sur `master` lance les tests, construit le zip des runtimes et l'image de l'interface (poussée dans ECR), puis HCP Terraform (organisation `larpathon_2026`, workspace `larpathon`) planifie et applique sur le compte AWS. GitHub Actions n'a aucune clé AWS : HCP Terraform assume un rôle par OIDC, et le job de l'image un rôle limité au push ECR. L'interface déployée (ECS Fargate derrière CloudFront) est à l'URL de l'output Terraform `web_url`. La mise en place unique (bootstrap AWS, workspace, secrets GitHub) est décrite dans [`infrastructure/README.md`](infrastructure/README.md).
 
 ## Données
 

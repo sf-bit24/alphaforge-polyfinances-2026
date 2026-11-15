@@ -152,3 +152,21 @@ def test_excluded_sources_are_not_reachable():
 def test_describe_packs_lists_hosts_endpoints_and_traps():
     text = describe_packs(["market-implied"])
     assert "external-api.kalshi.com" in text and "resolution rules" in text and "endpoint:" in text
+
+
+def test_robots_redirects_are_followed_only_to_robots_paths():
+    from alphaforge.collect import http
+    from alphaforge.collect.http import FetchError
+
+    handler = http._RobotsRedirects()
+    request = __import__("urllib.request").request.Request("https://data-api.ecb.europa.eu/robots.txt")
+    assert handler.redirect_request(request, None, 301, "Moved", {}, "https://data.ecb.europa.eu/robots.txt")
+    for bad in (
+        "https://data.ecb.europa.eu/admin",
+        "http://data.ecb.europa.eu/robots.txt",
+        "https://169.254.169.254/robots.txt",
+    ):
+        with pytest.raises(FetchError):
+            handler.redirect_request(request, None, 301, "Moved", {}, bad)
+    with pytest.raises(FetchError):
+        http.get_robots("https://data.ecb.europa.eu/service/data")

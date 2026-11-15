@@ -47,6 +47,9 @@ class FakeHttp:
     def get(self, url: str, *, allowed_hosts=None, **_: Any) -> http.HttpResponse:
         return self._answer(url, "GET", allowed_hosts)
 
+    def robots_get(self, url: str, **_: Any) -> http.HttpResponse:
+        return self._answer(url, "GET", None)
+
     def post(self, url: str, payload: Any, *, allowed_hosts=None, **_: Any) -> http.HttpResponse:
         return self._answer(url, "POST", allowed_hosts)
 
@@ -56,6 +59,7 @@ def fake_http(monkeypatch):
     fake = FakeHttp()
     monkeypatch.setattr(http, "http_get", fake.get)
     monkeypatch.setattr(http, "post_json", fake.post)
+    monkeypatch.setattr(http, "get_robots", fake.robots_get)
     return fake
 
 

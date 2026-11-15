@@ -116,6 +116,34 @@ class _AllowlistRedirects(urllib.request.HTTPRedirectHandler):
 _OPENER = urllib.request.build_opener(_AllowlistRedirects())
 
 
+class _RobotsRedirects(urllib.request.HTTPRedirectHandler):
+    """robots.txt : jusqu'à cinq redirections suivies, vers tout hôte HTTPS nommé, chemin /robots.txt seulement
+    (RFC 9309, section 2.3.1.2)."""
+
+    max_redirections = 5
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        parsed = urllib.parse.urlsplit(newurl)
+        host = parsed.hostname or ""
+        if parsed.scheme != "https" or parsed.path != "/robots.txt" or not host or host.replace(".", "").isdigit():
+            raise FetchError(f"robots.txt redirect not allowed: {newurl}", url=newurl)
+        if ":" in host:
+            raise FetchError("robots.txt redirect to an IP address", url=newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_ROBOTS_OPENER = urllib.request.build_opener(_RobotsRedirects())
+
+
+def get_robots(url: str, *, timeout: float = 8.0, max_bytes: int = 500_000) -> HttpResponse:
+    """Lit le robots.txt d'un hôte permis par l'appelant, en suivant ses redirections (RFC 9309)."""
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme != "https" or parsed.path != "/robots.txt" or not parsed.hostname:
+        raise FetchError("not a robots.txt URL", url=url)
+    _respect_interval(parsed.hostname)
+    return _send(_ROBOTS_OPENER, url, USER_AGENT, timeout, max_bytes)
+
+
 def _opener(allowed: Iterable[str] | None) -> urllib.request.OpenerDirector:
     return _OPENER if allowed is None else urllib.request.build_opener(_AllowlistRedirects(allowed))
 

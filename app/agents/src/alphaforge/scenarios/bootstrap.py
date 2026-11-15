@@ -21,19 +21,48 @@ def stationary_indices(n_hist: int, n_paths: int, n_months: int, mean_block: flo
     """
     if n_hist < 2:
         raise ValueError("historique trop court")
-    p = 1.0 / max(float(mean_block), 1.0)
-    new_block = rng.random((n_paths, n_months)) < p
+    restart_probability = 1.0 / max(float(mean_block), 1.0)
+    new_block = rng.random((n_paths, n_months)) < restart_probability
     new_block[:, 0] = True
     starts = rng.integers(0, n_hist, size=(n_paths, n_months))
-    t = np.arange(n_months)
-    last_start = np.maximum.accumulate(np.where(new_block, t, 0), axis=1)
+    months = np.arange(n_months)
+    last_start = np.maximum.accumulate(np.where(new_block, months, 0), axis=1)
     origin = np.take_along_axis(starts, last_start, axis=1)
-    return ((origin + (t - last_start)) % n_hist).astype(np.int32)
+    return ((origin + (months - last_start)) % n_hist).astype(np.int32)
 
 
 def _flat_top(x: np.ndarray) -> np.ndarray:
-    ax = np.abs(x)
-    return np.where(ax <= 0.5, 1.0, np.where(ax <= 1.0, 2.0 * (1.0 - ax), 0.0))
+    magnitude = np.abs(x)
+    return np.where(magnitude <= 0.5, 1.0, np.where(magnitude <= 1.0, 2.0 * (1.0 - magnitude), 0.0))
+
+
+# c de Politis et White : une autocorrélation est significative au-delà de c·sqrt(log10(n)/n).
+_SIGNIFICANCE_FACTOR = 2.0
+
+
+def _cutoff_lag(acov: np.ndarray, n: int, k_n: int, m_max: int) -> int:
+    """Étape (1) : plus petit décalage ``m`` suivi de ``K_N`` autocorrélations consécutives non significatives."""
+    rho = acov / acov[0]
+    threshold = _SIGNIFICANCE_FACTOR * math.sqrt(math.log10(n) / n)
+    insignificant = np.abs(rho[1:]) < threshold
+    for lag in range(m_max + 1):
+        if insignificant[lag : lag + k_n].all():
+            return lag
+    # Aucune coupure trouvée : on prend le plus grand décalage significatif (repli de PPW 2009).
+    significant = np.flatnonzero(~insignificant[:m_max])
+    return int(significant.max()) + 1 if significant.size else 1
+
+
+def _kernel_block_length(acov: np.ndarray, big_m: int, n: int) -> float | None:
+    """Étapes (3)-(4) : ``b`` par le noyau plat de largeur ``M`` ; ``None`` si ``G`` est nul ou ``D`` <= 0."""
+    k = np.arange(-big_m, big_m + 1)
+    kernel = _flat_top(k / big_m)  # λ(k/M)
+    autocov = acov[np.abs(k)]  # γ(k)
+    g_hat = float(np.sum(kernel * np.abs(k) * autocov))
+    d_sb = 2.0 * float(np.sum(kernel * autocov)) ** 2
+    if d_sb <= 0 or g_hat == 0:
+        return None
+    return (2.0 * g_hat**2 / d_sb) ** (1.0 / 3.0) * n ** (1.0 / 3.0)
 
 
 def politis_white(x: np.ndarray) -> float:
@@ -49,43 +78,25 @@ def politis_white(x: np.ndarray) -> float:
     n = len(x)
     if n < 12:
         raise ValueError("série trop courte pour Politis-White")
-    xc = x - x.mean()
+    centered = x - x.mean()
     k_n = max(5, int(math.ceil(math.sqrt(math.log10(n)))))
     m_max = int(math.ceil(math.sqrt(n))) + k_n
     b_max = math.ceil(min(3.0 * math.sqrt(n), n / 3.0))
-    c = 2.0
-    var = float(xc @ xc) / n
-    if var <= 0:
+    variance = float(centered @ centered) / n
+    if variance <= 0:
         return 1.0
-    acov = np.array([float(xc[: n - k] @ xc[k:]) / n for k in range(m_max + k_n + 1)])
-    rho = acov / acov[0]
-    threshold = c * math.sqrt(math.log10(n) / n)
-    insignificant = np.abs(rho[1:]) < threshold
-    m_hat = None
-    for m in range(0, m_max + 1):
-        if insignificant[m : m + k_n].all():
-            m_hat = m
-            break
-    if m_hat is None:
-        # Aucune coupure trouvée : on prend le plus grand décalage significatif (repli de PPW 2009).
-        significant = np.flatnonzero(~insignificant[:m_max])
-        m_hat = int(significant.max()) + 1 if significant.size else 1
-    big_m = min(2 * max(m_hat, 1), m_max)
-    k = np.arange(-big_m, big_m + 1)
-    lam = _flat_top(k / big_m)
-    g = acov[np.abs(k)]
-    g_hat = float(np.sum(lam * np.abs(k) * g))
-    d_sb = 2.0 * float(np.sum(lam * g)) ** 2
-    if d_sb <= 0 or g_hat == 0:
+    acov = np.array([float(centered[: n - k] @ centered[k:]) / n for k in range(m_max + k_n + 1)])
+    big_m = min(2 * max(_cutoff_lag(acov, n, k_n, m_max), 1), m_max)
+    block_length = _kernel_block_length(acov, big_m, n)
+    if block_length is None:
         return 1.0
-    b = (2.0 * g_hat**2 / d_sb) ** (1.0 / 3.0) * n ** (1.0 / 3.0)
-    return float(min(max(b, 1.0), b_max))
+    return float(min(max(block_length, 1.0), b_max))
 
 
-def auto_block_length(R: np.ndarray, columns: list[int], rule: str = "max") -> tuple[float, list[float]]:
+def auto_block_length(returns: np.ndarray, columns: list[int], rule: str = "max") -> tuple[float, list[float]]:
     """Longueur commune pour le bootstrap joint : Politis-White sur chaque colonne retenue, puis agrégée
     (``max`` par défaut, pour ne casser la dépendance d'aucune des séries retenues ; ou ``median``)."""
-    values = [politis_white(R[:, j]) for j in columns]
+    values = [politis_white(returns[:, j]) for j in columns]
     if rule == "max":
         return float(max(values)), values
     if rule == "median":

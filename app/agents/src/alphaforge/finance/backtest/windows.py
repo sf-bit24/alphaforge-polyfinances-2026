@@ -1,4 +1,5 @@
 """Backtest windows over a monthly calendar."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,7 +12,7 @@ from .data import to_month_end
 @dataclass(frozen=True)
 class Window:
     start: pd.Timestamp  # first month whose return is included (month-end date)
-    end: pd.Timestamp    # last month included (month-end date)
+    end: pd.Timestamp  # last month included (month-end date)
     n_months: int
 
     @property
@@ -19,8 +20,14 @@ class Window:
         return f"{self.start:%Y-%m}..{self.end:%Y-%m}"
 
 
-def windows(horizon_years: float, start, end, mode: str = "non_overlapping", step_months: int = 12,
-            index: pd.DatetimeIndex | None = None) -> list[Window]:
+def windows(  # noqa: PLR0913 - frozen public signature (calibration scripts, README, run.py)
+    horizon_years: float,
+    start,
+    end,
+    mode: str = "non_overlapping",
+    step_months: int = 12,
+    index: pd.DatetimeIndex | None = None,
+) -> list[Window]:
     """Split [start, end] (inclusive month-ends) into windows of `horizon_years`.
 
     mode="non_overlapping": consecutive windows, step = horizon (e.g. 3y on 1926-07..2026-09 -> 33 windows).
@@ -37,12 +44,12 @@ def windows(horizon_years: float, start, end, mode: str = "non_overlapping", ste
     if step <= 0:
         raise ValueError("step_months must be positive")
     if index is None:
-        cal = pd.date_range(to_month_end(start), to_month_end(end), freq="ME")
+        calendar = pd.date_range(to_month_end(start), to_month_end(end), freq="ME")
     else:
-        cal = index[(index >= to_month_end(start)) & (index <= to_month_end(end))]
-    out = []
+        calendar = index[(index >= to_month_end(start)) & (index <= to_month_end(end))]
+    result = []
     i = 0
-    while i + n <= len(cal):
-        out.append(Window(cal[i], cal[i + n - 1], n))
+    while i + n <= len(calendar):
+        result.append(Window(calendar[i], calendar[i + n - 1], n))
         i += step
-    return out
+    return result

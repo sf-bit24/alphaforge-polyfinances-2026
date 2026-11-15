@@ -17,6 +17,7 @@ Simulation seulement : aucune transaction, aucun conseil personnalisé.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import re
@@ -31,6 +32,9 @@ from .errors import AppError, error_response, ok_response, pick
 from .store import ConflictError, Store
 
 logger = logging.getLogger("alphaforge.portfolio")
+
+# Évolution du portefeuille dans le temps (finance/evolution/actions.py, machine Step Functions evolution.tf)
+EVOLUTION_ACTIONS = ("evolution.tick", "evolution.replay", "evolution.replay_summary")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MODES = ("llm", "rules")
 LOCALES = ("fr", "en")
@@ -118,6 +122,7 @@ class PortfolioService:
         self.app = app
         self._engine = engine or FinanceEngine(store).load
         self._questionnaire: Any | None = None
+        self._evolution_threads: dict[str, threading.Thread] = {}
 
     def handle(self, payload: Any) -> dict[str, Any]:
         release = self.settings.release
@@ -130,11 +135,13 @@ class PortfolioService:
                 raise AppError("bad_request", pick(locale, "action est requise.", "action is required."))
             if action == "health":
                 return ok_response(release, role=self.settings.role, env=self.settings.env)
+            if action in EVOLUTION_ACTIONS:
+                return self._evolution(action, payload, release)
             if action != "build":
                 raise AppError(
                     "unknown_action",
                     pick(locale, f"Action inconnue : {action}.", f"Unknown action: {action}."),
-                    {"action": action, "expected": ["build", "health"]},
+                    {"action": action, "expected": ["build", "health", *EVOLUTION_ACTIONS]},
                 )
             return ok_response(release, **self.build(payload, locale))
         except AppError as exc:
@@ -163,6 +170,56 @@ class PortfolioService:
                     ),
                 )
             return error_response(release, AppError("internal", pick(locale, "Erreur interne.", "Internal error.")))
+
+    # ------------------------------------------------------------------ évolution dans le temps
+    def _evolution(self, action: str, payload: dict[str, Any], release: str) -> dict[str, Any]:
+        """Actions ``evolution.*`` (``finance/evolution/actions.py``), appelées par la machine ``<prefix>-evolution``.
+
+        ``replay_summary`` répond tout de suite. ``tick`` et ``replay`` (plusieurs minutes) sont acceptés aussitôt,
+        puis exécutés en tâche asynchrone de ``BedrockAgentCoreApp`` (``/ping`` à ``HealthyBusy``) ; leur résultat
+        est le marqueur ``staging/<run_id>/evolution/.../_done.json`` que la machine sonde (même modèle que la
+        collecte). Le moteur et les données longues sont chargés avant, dans la tâche.
+        """
+        if action == "evolution.replay_summary":
+            from .finance.evolution import actions
+
+            return {"release": release, **actions.handle_replay_summary(payload, store=self.store)}
+        run_id = payload.get("run_id")
+        if not isinstance(run_id, str) or not run_id:
+            raise AppError("bad_request", "run_id est requis.", {"field": "run_id"})
+        task_id = self.app.add_async_task(f"portfolio:{action}:{run_id}", {"run_id": run_id}) if self.app else None
+        thread = threading.Thread(target=self._evolution_job, args=(action, dict(payload), task_id),
+                                  name=f"evolution-{run_id}", daemon=True)
+        thread.start()
+        self._evolution_threads[run_id] = thread
+        return ok_response(release, accepted=True, action=action, run_id=run_id, simulation_only=True)
+
+    def _evolution_job(self, action: str, payload: dict[str, Any], task_id: int | None) -> None:
+        try:
+            self._engine()      # dépendances finance et données longues (ALPHAFORGE_BT_DATA) avant le moteur
+            from .finance.evolution import actions
+
+            handler = actions.handle_tick if action == "evolution.tick" else actions.handle_replay
+            out = handler(payload, store=self.store)
+            if not out.get("ok"):
+                logger.warning("evolution %s %s : %s", action, payload.get("run_id"), out.get("error"))
+        except Exception:  # noqa: BLE001 - la tâche de fond ne doit jamais tuer le runtime ; le marqueur dit l'échec
+            logger.exception("evolution %s failed", action)
+            try:
+                from .finance.evolution import actions
+
+                actions.write_error_marker(payload, self.store, "internal", "échec de la tâche d'évolution")
+            except Exception:  # noqa: BLE001
+                logger.exception("evolution error marker failed")
+        finally:
+            if task_id is not None and self.app is not None:
+                self.app.complete_async_task(task_id)
+
+    def wait_evolution(self, run_id: str, timeout: float | None = None) -> None:
+        """Attend la fin d'une tâche d'évolution (tests)."""
+        thread = self._evolution_threads.get(run_id)
+        if thread is not None:
+            thread.join(timeout)
 
     # ------------------------------------------------------------------ build
     def _parse(self, payload: dict[str, Any], locale: str) -> dict[str, Any]:
@@ -265,34 +322,39 @@ class PortfolioService:
             if args["strategy"]:
                 style_inputs = engine["style_inputs_from_view"](client_store.view(args["client_id"])[0])
         as_of = args["as_of"] or pipeline.DEFAULT_AS_OF
+        telemetry = engine.get("telemetry")
         try:
-            result = pipeline.build_portfolio(
-                profile,
-                as_of,
-                request=pipeline.Request(**args["request"]) if args["request"] else None,
-                mode=args["mode"],
-                evidence_fn=market_store.evidence,
-                guardrail_id=self.settings.guardrail_id,
-                guardrail_version=self.settings.guardrail_version,
-                strategy=args["strategy"],
-                style_preference=args["style"],
-                style_inputs=style_inputs,
-            )
+            # Span racine : les outils du moteur (optimize, judge.check, strategy.select…) et l'audit
+            # partagent une seule trace X-Ray, que la décision enregistrée cite (audit.otel_trace_id).
+            with self._root_span(telemetry, profile_id=args["client_id"], persona=args["persona"], mode=args["mode"]):
+                trace_id = self._trace_id(telemetry)
+                result = pipeline.build_portfolio(
+                    profile,
+                    as_of,
+                    request=pipeline.Request(**args["request"]) if args["request"] else None,
+                    mode=args["mode"],
+                    evidence_fn=market_store.evidence,
+                    guardrail_id=self.settings.guardrail_id,
+                    guardrail_version=self.settings.guardrail_version,
+                    strategy=args["strategy"],
+                    style_preference=args["style"],
+                    style_inputs=style_inputs,
+                )
+                decision_key = client_store.save_decision(result.decision, result.policy)
+                audit = self._audit(result.decision)
         finally:
-            telemetry = engine.get("telemetry")
             if telemetry is not None:
                 try:
-                    telemetry.flush()
+                    telemetry.flush()  # après la fermeture du span racine, pour qu'il soit exporté
                 except Exception:
                     logger.exception("telemetry flush failed")
-        decision_key = client_store.save_decision(result.decision, result.policy)
-        audit = self._audit(result.decision)
         return {
             "client_id": args["client_id"],
             "persona": args["persona"],
             "persona_label": persona_label,
             "fiction": bool(args["persona"]),
             "audit": audit,
+            "xray_trace_id": xray_trace_id(trace_id),
             "as_of": as_of.isoformat(),
             "mode": args["mode"],
             "simulation_only": True,
@@ -311,6 +373,22 @@ class PortfolioService:
             "strategy": result.strategy.summary() if result.strategy is not None else None,
         }
 
+    @staticmethod
+    def _root_span(telemetry: Any, **attrs: Any) -> contextlib.AbstractContextManager[Any]:
+        span = getattr(telemetry, "span", None)
+        if span is None:
+            return contextlib.nullcontext()
+        try:
+            return span("portfolio.build", **attrs)
+        except Exception:  # la télémétrie ne doit jamais empêcher une simulation
+            logger.exception("root span failed")
+            return contextlib.nullcontext()
+
+    @staticmethod
+    def _trace_id(telemetry: Any) -> str | None:
+        current_ids = getattr(telemetry, "current_ids", None)
+        return current_ids()[0] if current_ids is not None else None
+
     def _audit(self, decision: Any) -> dict[str, Any] | None:
         """Chaîne d'audit (finance/observability/audit.py) : tête dans DynamoDB, décision dans le bucket de traces.
         Seulement si Terraform a posé la table et le bucket ; un échec est rapporté sans annuler la simulation."""
@@ -327,7 +405,15 @@ class PortfolioService:
                 root,
                 aws={"region": self.settings.region, "bucket": bucket, "decisions_table": table},
             )
-            return {k: entry.get(k) for k in ("seq", "record_hash", "prev_hash", "s3_key", "otel_trace_id")}
+            kept = {k: entry.get(k) for k in ("seq", "record_hash", "prev_hash", "s3_key", "otel_trace_id")}
+            return {**kept, "xray_trace_id": xray_trace_id(kept["otel_trace_id"])}
         except Exception as exc:
             logger.exception("audit record failed")
             return {"error": type(exc).__name__}
+
+
+def xray_trace_id(otel_trace_id: str | None) -> str | None:
+    """Identifiant OpenTelemetry (32 hex) vers le format X-Ray ``1-<8 hex>-<24 hex>`` (console, get-trace-summaries)."""
+    if not otel_trace_id or not re.fullmatch(r"[0-9a-f]{32}", otel_trace_id):
+        return None
+    return f"1-{otel_trace_id[:8]}-{otel_trace_id[8:]}"

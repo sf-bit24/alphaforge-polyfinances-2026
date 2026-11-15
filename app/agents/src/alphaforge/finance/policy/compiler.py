@@ -12,40 +12,55 @@ import hashlib
 import json
 import math
 import unicodedata
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import yaml
 
 from alphaforge.finance.contracts import ExposureOverride, HistoryProxy, Limit, PolicySpec, Selector
-from alphaforge.finance.contracts.profile import InvestorProfile, ProfileStatus, Score
+from alphaforge.finance.contracts.profile import Debt, Goal, InvestorProfile, ProfileStatus, Score
 
-from . import envelope as ENV
+from . import envelope
 from .adapter import QuestionnaireScores, apply_questionnaire
 from .emphasis import compute_emphasis
-from .models import CompileResult, RequestView, SpecificRequest
+from .models import CompileResult, DecisionKind, RequestView, SpecificRequest
 
-LV = ["N0", "N1", "N2", "N3", "N4", "N5"]
+LV = ["N0", "N1", "N2", "N3", "N4", "N5"]  # niveaux du mandat, du plus prudent au plus risque
 DEFAULT_YAML = Path(__file__).with_name("risk_levels.yaml")
-EPS = 1e-12
+EPSILON = 1e-12  # marge des comparaisons entre flottants
+DAYS_PER_YEAR = 365.25
 
 # Constantes absentes du YAML sous forme de cle (presentes dans le texte du YAML) : tracees comme telles.
 MU_RECOVERY = 0.04  # risk_levels.yaml#dollar_rule.l_cap : « mu_recovery 0.04 (HYPOTHESE) »
-CONCENTRATION_SHARE = 0.10  # signal d'emphase seulement (pas une limite)
+CAPACITY_COMPONENT_FLOOR = 0.05  # risk_levels.yaml#capacity : « C = 100 * prod_k max(c_k, 0.05)^a_k »
+RETIRED_INCOME_FLOOR = 0.3  # risk_levels.yaml#capacity.income_stability.retired : « 0.3 + 0.7*pi »
+RETIRED_PENSION_WEIGHT = 0.7
+NEUTRAL_DEBT_CAPACITY = 0.5  # cL sans revenu connu mais avec des dettes (persona.py)
+SENIOR_AGE = 55  # risk_levels.yaml#capacity.emergency_req_months.retraite_ou_55plus
+UNDERFUNDED_NEED_HORIZON_YEARS = 5  # un besoin sous-finance est a 5 ans ou moins (README, ecart 7)
+UNKNOWN_HORIZON_YEARS = 99  # horizon_years absent ou nul : l'objectif ne compte pas comme « a 5 ans ou moins »
+WITHDRAWAL_RESERVE_HORIZON_YEARS = 5  # risk_levels.yaml#buckets : retraits « debutant dans <= 5 ans -> seau N1 »
+WITHDRAWAL_RESERVE_LEVEL = "N1"
+# Formules de risk_levels.yaml#composition, que le YAML donne en texte.
+ETF_EQUITY_EACH_FLOOR = 0.10  # etf_equity_each_max : « max(0.10, 0.6 * e_cap) »
+ETF_EQUITY_EACH_SHARE = 0.6
+ETF_BOND_EACH_SHARE = 0.65  # etf_bond_each_max : « ceil_5%(0.65 * (1 - e_min)) »
+ETF_BOND_EACH_STEP = 0.05
+CASH_LIKE_SHARE = 0.5  # cash_like_max : « N0: 1.0 ; sinon 0.5 * (1 - e_min) »
 
 # Classes d'actifs du starter (copie de assets.csv du moteur alphaforge.finance.backtest, colonne asset_class),
 # utilisees seulement pour classer une SpecificRequest ; surchargeables via ``asset_classes``.
 STARTER_ASSET_CLASSES = {
-    **{t: "etf_equity" for t in ("XIU.TO", "SPY", "QQQ", "ESGV")},
-    **{t: "etf_bond" for t in ("XBB.TO", "ZST.TO", "AGG", "TLT")},
+    **dict.fromkeys(("XIU.TO", "SPY", "QQQ", "ESGV"), "etf_equity"),
+    **dict.fromkeys(("XBB.TO", "ZST.TO", "AGG", "TLT"), "etf_bond"),
     "GLD": "commodity",
     "BTC-USD": "crypto",
     "ETH-USD": "crypto",
-    **{
-        t: "equity_single"
-        for t in (
+    **dict.fromkeys(
+        (
             "RY.TO",
             "TD.TO",
             "MFC.TO",
@@ -66,67 +81,77 @@ STARTER_ASSET_CLASSES = {
             "JNJ",
             "PG",
             "XOM",
-        )
-    },
+        ),
+        "equity_single",
+    ),
 }
 CRYPTO_ETF_CLASSES = {"etf_crypto"}  # aucun dans le starter -> crypto « etf_only » = 0 pour un debutant
 CRYPTO_TILT_WORDS = ("crypto", "bitcoin", "btc", "ether", "eth")
+MORTGAGE_WORDS = ("hypoth", "mortgage")  # une hypotheque est reconnue a son libelle (README, ecart 7)
+# Budget de risque d'un niveau -> colonne de l'enveloppe ENV(e) qui le mesure.
+BUDGET_ENVELOPE_COLUMNS = {"vol": "vol", "cvar_m": "cvar95_m", "cvar_12m": "cvar95_12m", "mdd": "mdd", "s2022": "y2022"}
 
 
 # --------------------------------------------------------------------------- utilitaires
 
 
-def _clip(x: float, a: float = 0.0, b: float = 1.0) -> float:
-    return max(a, min(b, x))
+def _clip(x: float, low: float = 0.0, high: float = 1.0) -> float:
+    return max(low, min(high, x))
 
 
 def floor_step(x: float, s: float = 0.0025) -> float:
+    """Arrondi inferieur de x au multiple du pas s."""
     return round(math.floor(round(x / s, 9)) * s, 6)
 
 
 def ceil_step(x: float, s: float) -> float:
+    """Arrondi superieur de x au multiple du pas s."""
     return round(math.ceil(round(x / s, 9)) * s, 6)
 
 
-def _norm(s: str) -> str:
-    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
-    return s.replace("-", "_").replace(" ", "_")
+def _normalize_label(label: str) -> str:
+    """Minuscules sans accents ; tirets et espaces deviennent des tirets bas."""
+    ascii_label = unicodedata.normalize("NFKD", label).encode("ascii", "ignore").decode().lower()
+    return ascii_label.replace("-", "_").replace(" ", "_")
 
 
 def _bias_key(label: str) -> str | None:
-    s = _norm(label)
-    if "fomo" in s:
+    normalized = _normalize_label(label)
+    if "fomo" in normalized:
         return "FOMO"
-    if "surconf" in s or "overconf" in s:
+    if "surconf" in normalized or "overconf" in normalized:
         return "surconfiance"
-    if "aversion" in s or "loss_aver" in s:
+    if "aversion" in normalized or "loss_aver" in normalized:
         return "aversion_perte"
-    if "familiar" in s or "home_bias" in s:
+    if "familiar" in normalized or "home_bias" in normalized:
         return "familiarite"
     return None
 
 
 @lru_cache(maxsize=8)
 def _load_yaml(path: str) -> dict:
-    with open(path, encoding="utf-8") as fh:
-        return yaml.safe_load(fh)
+    with open(path, encoding="utf-8") as stream:
+        return yaml.safe_load(stream)
 
 
-def _lvl_idx(L: str) -> int:
-    return LV.index(L)
+def _level_index(level: str) -> int:
+    return LV.index(level)
 
 
-class _Ctx:
-    def __init__(self, Y: dict):
-        self.Y = Y
-        self.ver = str(Y["version"])
+class _CompileContext:
+    """Regles de risk_levels.yaml et journal d'une compilation : regles appliquees, valeurs prudentes retenues."""
+
+    def __init__(self, risk_levels: dict):
+        self.risk_levels = risk_levels
+        self.version = str(risk_levels["version"])
         self.trace: list[dict[str, Any]] = []
-        self.missing: list[str] = []
+        self.missing_defaults: list[str] = []
 
-    def src(self, path: str) -> str:
-        return f"risk_levels.yaml@{self.ver}#{path}"
+    def source(self, path: str) -> str:
+        return f"risk_levels.yaml@{self.version}#{path}"
 
-    def t(self, rule: str, inputs: dict, output: Any, path: str) -> Any:
+    def record(self, rule: str, inputs: dict, output: Any, path: str) -> None:
+        """Inscrit une regle appliquee dans la trace ; un ``path`` sans nom de fichier vise risk_levels.yaml."""
         self.trace.append(
             {
                 "rule": rule,
@@ -134,407 +159,1631 @@ class _Ctx:
                 "output": output,
                 "yaml_path": path
                 if path.startswith(("risk_levels", "envelope", "emphasis", "profile", "questionnaire"))
-                else self.src(path),
+                else self.source(path),
             }
         )
-        return output
 
-    def default(self, field: str, value: Any, why: str) -> Any:
-        self.missing.append(f"{field} absent -> {value!r} ({why})")
+    def use_default(self, field: str, value: Any, reason: str) -> Any:
+        """Note la valeur prudente retenue pour un champ absent du profil, et la rend."""
+        self.missing_defaults.append(f"{field} absent -> {value!r} ({reason})")
         return value
 
 
 # --------------------------------------------------------------------------- faits du profil
 
 
-def _goal_horizon(g, as_of: date) -> float:
-    hs = []
-    if g.horizon_years is not None:
-        hs.append(float(g.horizon_years))
-    if g.target_date is not None:
-        hs.append(max(0.0, (g.target_date - as_of).days / 365.25))
-    return min(hs)
+def _goal_horizon(goal: Goal, as_of: date) -> float:
+    horizons = []
+    if goal.horizon_years is not None:
+        horizons.append(float(goal.horizon_years))
+    if goal.target_date is not None:
+        horizons.append(max(0.0, (goal.target_date - as_of).days / DAYS_PER_YEAR))
+    return min(horizons)
 
 
-def _is_retired(p: InvestorProfile) -> bool:
-    no_income = p.income is None or not p.income.annual_amount
-    return no_income and bool(p.pensions)
+def _is_retired(profile: InvestorProfile) -> bool:
+    has_no_income = profile.income is None or not profile.income.annual_amount
+    return has_no_income and bool(profile.pensions)
 
 
-def _horizon_and_buckets(p: InvestorProfile, as_of: date, c: _Ctx, opts: dict) -> tuple[float, str | None, list[dict]]:
-    """T du seau risque, plafond de niveau impose par les seaux (si tous les objectifs sont « seau »)."""
-    rules = c.Y["buckets"]["rules"]
-    reserve_years = c.Y["buckets"]["withdrawal_reserve_years"]
-    buckets, risk_h, caps = [], [], []
-    covered = opts.get("covered_goal_ids") or set()
-    seq = opts.get("sequence_reserve_years")
-    if opts.get("liquid_pocket_cad"):
-        buckets.append(
-            {
-                "goal_id": "poche_liquide",
-                "level_cap": opts["bucket_level"],
-                "amount": opts["liquid_pocket_cad"],
-                "covers": sorted(covered),
-                "kind": "poche_liquide",
-                "source": "questionnaire_adapter.yaml#liquid_pocket",
-            }
+def _covered_goal_ids(options: dict) -> set[str]:
+    """Objectifs finances par la poche liquide du questionnaire : hors du seau risque (un seul chemin)."""
+    return options.get("covered_goal_ids") or set()
+
+
+class _GoalPlacement(NamedTuple):
+    """Place d'un objectif : son seau prudent eventuel, et son horizon s'il reste dans le seau risque."""
+
+    bucket: dict[str, Any] | None
+    risk_horizon_years: float | None
+
+
+def _liquid_pocket_bucket(options: dict) -> dict[str, Any]:
+    return {
+        "goal_id": "poche_liquide",
+        "level_cap": options["bucket_level"],
+        "amount": options["liquid_pocket_cad"],
+        "covers": sorted(_covered_goal_ids(options)),
+        "kind": "poche_liquide",
+        "source": "questionnaire_adapter.yaml#liquid_pocket",
+    }
+
+
+def _prudent_bucket(goal: Goal, horizon_years: float, context: _CompileContext) -> dict[str, Any] | None:
+    """Seau de l'objectif selon buckets.rules (la regle au plafond le plus strict), ou None si aucune ne le vise."""
+    matches = [
+        (index, rule)
+        for index, rule in enumerate(context.risk_levels["buckets"]["rules"])
+        if rule["priority"] == goal.priority.value and horizon_years <= rule["T_max"]
+    ]
+    if not matches:
+        return None
+    index, rule = min(matches, key=lambda match: _level_index(match[1]["level_cap"]))
+    bucket = {
+        "goal_id": goal.goal_id,
+        "horizon_years": round(horizon_years, 4),
+        "level_cap": rule["level_cap"],
+        "amount": goal.amount,
+        "source": context.source(f"buckets.rules[{index}]"),
+    }
+    context.record(
+        "buckets.goal",
+        {"goal_id": goal.goal_id, "priority": goal.priority.value, "horizon_years": horizon_years},
+        rule["level_cap"],
+        f"buckets.rules[{index}]",
+    )
+    return bucket
+
+
+def _withdrawal_reserve(goal: Goal, horizon_years: float, context: _CompileContext) -> _GoalPlacement:
+    """Reserve N1 de quelques annees de retraits ; l'horizon de l'objectif dans le seau risque recule d'autant."""
+    reserve_years = context.risk_levels["buckets"]["withdrawal_reserve_years"]
+    bucket = {
+        "goal_id": goal.goal_id,
+        "horizon_years": round(horizon_years, 4),
+        "level_cap": WITHDRAWAL_RESERVE_LEVEL,
+        "amount": reserve_years * goal.recurring_withdrawal,
+        "kind": "reserve_retraits",
+        "source": context.source("buckets.withdrawal_reserve_years"),
+    }
+    risk_horizon_years = horizon_years + reserve_years
+    context.record(
+        "buckets.withdrawal_reserve",
+        {"goal_id": goal.goal_id, "recurring_withdrawal": goal.recurring_withdrawal},
+        {"reserve_cad": reserve_years * goal.recurring_withdrawal, "risk_horizon_years": risk_horizon_years},
+        "buckets.withdrawal_reserve_years",
+    )
+    return _GoalPlacement(bucket, risk_horizon_years)
+
+
+def _place_goal(goal: Goal, as_of: date, context: _CompileContext, options: dict) -> _GoalPlacement:
+    """Range l'objectif dans un seau prudent ou dans le seau risque (une reserve de retraits en repousse l'horizon)."""
+    horizon_years = _goal_horizon(goal, as_of)
+    bucket = _prudent_bucket(goal, horizon_years, context)
+    if bucket is not None:
+        return _GoalPlacement(bucket, None)
+    pocket_reserve_years = options.get("sequence_reserve_years")
+    if goal.recurring_withdrawal and pocket_reserve_years:  # reserve deja dans la poche liquide du questionnaire
+        risk_horizon_years = horizon_years + pocket_reserve_years
+        context.record(
+            "buckets.withdrawal_reserve",
+            {"goal_id": goal.goal_id, "sequence_reserve_years": pocket_reserve_years},
+            {"risk_horizon_years": risk_horizon_years},
+            "questionnaire_adapter.yaml#liquid_pocket",
         )
-    for g in p.goals:
-        h = _goal_horizon(g, as_of)
-        if g.goal_id in covered:  # finance par la poche liquide : hors du seau risque (un seul chemin)
-            continue
-        match = [(i, r) for i, r in enumerate(rules) if r["priority"] == g.priority.value and h <= r["T_max"]]
-        if match:
-            i, r = min(match, key=lambda m: _lvl_idx(m[1]["level_cap"]))
-            buckets.append(
-                {
-                    "goal_id": g.goal_id,
-                    "horizon_years": round(h, 4),
-                    "level_cap": r["level_cap"],
-                    "amount": g.amount,
-                    "source": c.src(f"buckets.rules[{i}]"),
-                }
-            )
-            caps.append(r["level_cap"])
-            c.t(
-                "buckets.goal",
-                {"goal_id": g.goal_id, "priority": g.priority.value, "horizon_years": h},
-                r["level_cap"],
-                f"buckets.rules[{i}]",
-            )
-            continue
-        if g.recurring_withdrawal and seq:  # reserve deja dans la poche liquide du questionnaire
-            h = h + seq
-            c.t(
-                "buckets.withdrawal_reserve",
-                {"goal_id": g.goal_id, "sequence_reserve_years": seq},
-                {"risk_horizon_years": h},
-                "questionnaire_adapter.yaml#liquid_pocket",
-            )
-        elif g.recurring_withdrawal and h <= 5:
-            buckets.append(
-                {
-                    "goal_id": g.goal_id,
-                    "horizon_years": round(h, 4),
-                    "level_cap": "N1",
-                    "amount": reserve_years * g.recurring_withdrawal,
-                    "kind": "reserve_retraits",
-                    "source": c.src("buckets.withdrawal_reserve_years"),
-                }
-            )
-            h = h + reserve_years
-            c.t(
-                "buckets.withdrawal_reserve",
-                {"goal_id": g.goal_id, "recurring_withdrawal": g.recurring_withdrawal},
-                {"reserve_cad": reserve_years * g.recurring_withdrawal, "risk_horizon_years": h},
-                "buckets.withdrawal_reserve_years",
-            )
-        risk_h.append(h)
-    if risk_h:
-        T = min(risk_h)
-        cap = None
+        return _GoalPlacement(None, risk_horizon_years)
+    if goal.recurring_withdrawal and horizon_years <= WITHDRAWAL_RESERVE_HORIZON_YEARS:
+        return _withdrawal_reserve(goal, horizon_years, context)
+    return _GoalPlacement(None, horizon_years)
+
+
+def _horizon_and_buckets(
+    profile: InvestorProfile, as_of: date, context: _CompileContext, options: dict
+) -> tuple[float, str | None, list[dict[str, Any]]]:
+    """T du seau risque, plafond de niveau impose par les seaux (si tous les objectifs sont « seau »)."""
+    covered = _covered_goal_ids(options)
+    placements = [_place_goal(goal, as_of, context, options) for goal in profile.goals if goal.goal_id not in covered]
+    buckets = [_liquid_pocket_bucket(options)] if options.get("liquid_pocket_cad") else []
+    buckets += [placement.bucket for placement in placements if placement.bucket is not None]
+    risk_horizons = [
+        placement.risk_horizon_years for placement in placements if placement.risk_horizon_years is not None
+    ]
+    if risk_horizons:
+        risk_horizon_years = min(risk_horizons)
+        level_cap = None
     else:  # tous les objectifs sont des seaux prudents : le mandat entier suit le plus strict
-        T = min(_goal_horizon(g, as_of) for g in p.goals if g.goal_id not in covered)
-        cap = min(caps, key=_lvl_idx)
-    c.t(
+        risk_horizon_years = min(_goal_horizon(goal, as_of) for goal in profile.goals if goal.goal_id not in covered)
+        level_cap = min((placement.bucket["level_cap"] for placement in placements), key=_level_index)
+    context.record(
         "horizon.T_risk",
-        {"goal_horizons": {g.goal_id: round(_goal_horizon(g, as_of), 4) for g in p.goals}},
-        round(T, 4),
+        {"goal_horizons": {goal.goal_id: round(_goal_horizon(goal, as_of), 4) for goal in profile.goals}},
+        round(risk_horizon_years, 4),
         "horizon_cap",
     )
-    return T, cap, buckets
+    return risk_horizon_years, level_cap, buckets
 
 
 # --------------------------------------------------------------------------- capacite
 
 
-def _capacity(p: InvestorProfile, T: float, W: float | None, c: _Ctx, opts: dict) -> tuple[dict, float]:
-    Y = c.Y["capacity"]
-    w = Y["weights"]
-    # H : horizon
-    hz = Y["horizon"]
-    cH = _clip(math.log(T / hz["T_zero"]) / math.log(hz["T_full"] / hz["T_zero"])) if T > 0 else 0.0
-    c.t("capacity.H", {"T": T}, cH, "capacity.horizon")
-    # E : reserve d'urgence
-    retired = _is_retired(p)
-    req = Y["emergency_req_months"]
-    var = p.income.variability if p.income else None
-    if retired:
-        Ereq = req["retraite_ou_55plus"]
-    elif var is None:
-        Ereq = c.default("income.variability", max(req.values()), "capacity.emergency_req_months : plus exigeant")
+def _horizon_capacity(horizon_years: float, context: _CompileContext) -> float:
+    """Composante H : nulle a T_zero, pleine a T_full, logarithmique entre les deux."""
+    bounds = context.risk_levels["capacity"]["horizon"]
+    capacity = (
+        _clip(math.log(horizon_years / bounds["T_zero"]) / math.log(bounds["T_full"] / bounds["T_zero"]))
+        if horizon_years > 0
+        else 0.0
+    )
+    context.record("capacity.H", {"T": horizon_years}, capacity, "capacity.horizon")
+    return capacity
+
+
+def _income_variability(profile: InvestorProfile) -> str | None:
+    return profile.income.variability if profile.income else None
+
+
+def _required_emergency_months(profile: InvestorProfile, context: _CompileContext, *, is_retired: bool) -> float:
+    """Ereq : mois de reserve exiges selon la variabilite du revenu, la retraite et l'age (55 ans et plus)."""
+    required = context.risk_levels["capacity"]["emergency_req_months"]
+    variability = _income_variability(profile)
+    if is_retired:
+        months = required["retraite_ou_55plus"]
+    elif variability is None:
+        months = context.use_default(
+            "income.variability", max(required.values()), "capacity.emergency_req_months : plus exigeant"
+        )
     else:
-        Ereq = req[var]
-    if p.age is not None and p.age >= 55:
-        Ereq = max(Ereq, req["retraite_ou_55plus"])
-    E = p.emergency_fund_months
-    if E is None:
-        E = c.default("emergency_fund_months", 0.0, "prudent : aucune reserve supposee")
-    cE = _clip(E / Ereq)
-    c.t(
+        months = required[variability]
+    if profile.age is not None and profile.age >= SENIOR_AGE:
+        months = max(months, required["retraite_ou_55plus"])
+    return months
+
+
+def _emergency_capacity(
+    profile: InvestorProfile, required_months: float, context: _CompileContext, *, is_retired: bool
+) -> tuple[float, float]:
+    """Mois de reserve d'urgence retenus (E, nul si le profil n'en dit rien) et composante E."""
+    months = profile.emergency_fund_months
+    if months is None:
+        months = context.use_default("emergency_fund_months", 0.0, "prudent : aucune reserve supposee")
+    capacity = _clip(months / required_months)
+    context.record(
         "capacity.E",
-        {"emergency_fund_months": E, "required_months": Ereq, "retired": retired},
-        cE,
+        {"emergency_fund_months": months, "required_months": required_months, "retired": is_retired},
+        capacity,
         "capacity.emergency_req_months",
     )
-    # D : retraits
-    wd = Y["withdrawal"]
-    covered = opts.get("covered_goal_ids") or set()
-    withdrawals = sum(g.recurring_withdrawal or 0.0 for g in p.goals if g.goal_id not in covered)
-    if withdrawals and not W:
-        q = c.default("investable_wealth (taux de retrait)", wd["q_max"], "q = q_max, prudent")
+    return months, capacity
+
+
+def _withdrawal_capacity(
+    profile: InvestorProfile, wealth: float | None, context: _CompileContext, options: dict
+) -> tuple[float, float]:
+    """Taux de retrait q des objectifs du seau risque et composante D."""
+    rules = context.risk_levels["capacity"]["withdrawal"]
+    covered = _covered_goal_ids(options)
+    annual_withdrawals = sum(goal.recurring_withdrawal or 0.0 for goal in profile.goals if goal.goal_id not in covered)
+    if annual_withdrawals and not wealth:
+        rate = context.use_default("investable_wealth (taux de retrait)", rules["q_max"], "q = q_max, prudent")
     else:
-        q = withdrawals / W if W else 0.0
-    cD = _clip(1 - wd["phi_dep"] * q / wd["q_max"])
-    c.t("capacity.D", {"annual_withdrawals": withdrawals, "W": W, "q": q}, cD, "capacity.withdrawal")
-    # A : absorption (l_cap)
-    l_cap = max(0.0, min(1 - q / wd["q_max"], 1 - (1 + MU_RECOVERY) ** (-T)))
-    c.t(
+        rate = annual_withdrawals / wealth if wealth else 0.0
+    capacity = _clip(1 - rules["phi_dep"] * rate / rules["q_max"])
+    context.record(
+        "capacity.D",
+        {"annual_withdrawals": annual_withdrawals, "W": wealth, "q": rate},
+        capacity,
+        "capacity.withdrawal",
+    )
+    return rate, capacity
+
+
+def _loss_capacity(withdrawal_rate: float, horizon_years: float, context: _CompileContext) -> float:
+    """l_cap : perte absorbable, bornee par le taux de retrait et par le temps de recuperation."""
+    q_max = context.risk_levels["capacity"]["withdrawal"]["q_max"]
+    loss_capacity = max(0.0, min(1 - withdrawal_rate / q_max, 1 - (1 + MU_RECOVERY) ** (-horizon_years)))
+    context.record(
         "dollar_rule.l_cap",
-        {"q": q, "q_max": wd["q_max"], "T": T, "mu_recovery": MU_RECOVERY},
-        l_cap,
+        {"q": withdrawal_rate, "q_max": q_max, "T": horizon_years, "mu_recovery": MU_RECOVERY},
+        loss_capacity,
         "dollar_rule.l_cap",
     )
-    cA = _clip(l_cap / Y["absorption_full"])
-    c.t("capacity.A", {"l_cap": l_cap}, cA, "capacity.absorption_full")
-    # I : stabilite du revenu
-    st = Y["income_stability"]
-    if retired:
-        pension_m = sum(x.monthly_amount or 0.0 for x in p.pensions)
-        M = p.monthly_expenses
-        pi = _clip(pension_m / M) if M else c.default("monthly_expenses (couverture des rentes)", 0.0, "pi = 0")
-        cI = 0.3 + 0.7 * pi
-        c.t(
-            "capacity.I.retired",
-            {"pension_monthly": pension_m, "monthly_expenses": M, "pi": pi},
-            cI,
-            "capacity.income_stability.retired",
-        )
-    elif var is None:
-        cI = st["missing"]
-        c.t("capacity.I", {"variability": None}, cI, "capacity.income_stability.missing")
+    return loss_capacity
+
+
+def _absorption_capacity(loss_capacity: float, context: _CompileContext) -> float:
+    capacity = _clip(loss_capacity / context.risk_levels["capacity"]["absorption_full"])
+    context.record("capacity.A", {"l_cap": loss_capacity}, capacity, "capacity.absorption_full")
+    return capacity
+
+
+def _retired_income_capacity(profile: InvestorProfile, context: _CompileContext) -> float:
+    """Stabilite du revenu d'un retraite : 0.3 + 0.7 * pi, ou pi est la part des depenses que couvrent les rentes."""
+    monthly_pensions = sum(pension.monthly_amount or 0.0 for pension in profile.pensions)
+    monthly_expenses = profile.monthly_expenses
+    if monthly_expenses:
+        pension_coverage = _clip(monthly_pensions / monthly_expenses)
     else:
-        cI = st[var]
-        c.t("capacity.I", {"variability": var}, cI, f"capacity.income_stability.{var}")
-    if p.employer_equity:
-        cI *= Y["employer_equity_haircut"]
-        c.t(
+        pension_coverage = context.use_default("monthly_expenses (couverture des rentes)", 0.0, "pi = 0")
+    capacity = RETIRED_INCOME_FLOOR + RETIRED_PENSION_WEIGHT * pension_coverage
+    context.record(
+        "capacity.I.retired",
+        {"pension_monthly": monthly_pensions, "monthly_expenses": monthly_expenses, "pi": pension_coverage},
+        capacity,
+        "capacity.income_stability.retired",
+    )
+    return capacity
+
+
+def _income_capacity(profile: InvestorProfile, context: _CompileContext, *, is_retired: bool) -> float:
+    """Composante I : stabilite du revenu, reduite quand l'investisseur detient des titres de son employeur."""
+    rules = context.risk_levels["capacity"]
+    variability = _income_variability(profile)
+    if is_retired:
+        capacity = _retired_income_capacity(profile, context)
+    elif variability is None:
+        capacity = rules["income_stability"]["missing"]
+        context.record("capacity.I", {"variability": None}, capacity, "capacity.income_stability.missing")
+    else:
+        capacity = rules["income_stability"][variability]
+        context.record("capacity.I", {"variability": variability}, capacity, f"capacity.income_stability.{variability}")
+    if profile.employer_equity:
+        capacity *= rules["employer_equity_haircut"]
+        context.record(
             "capacity.I.employer_haircut",
-            {"employer_equity": len(p.employer_equity)},
-            cI,
+            {"employer_equity": len(profile.employer_equity)},
+            capacity,
             "capacity.employer_equity_haircut",
         )
-    # L : dette hors hypotheque / revenu
-    nm_debt = sum(d.balance for d in p.debts if not any(k in _norm(d.label) for k in ("hypoth", "mortgage")))
-    inc = (p.income.annual_amount if p.income and p.income.annual_amount else 0.0) or 12 * sum(
-        x.monthly_amount or 0.0 for x in p.pensions
-    )
-    if inc:
-        cL = _clip(1 - nm_debt / inc)
-    else:
-        cL = c.default("income.annual_amount", 0.5, "capacity : cL neutre 0.5 (persona.py)") if nm_debt else 1.0
-    c.t("capacity.L", {"non_mortgage_debt": nm_debt, "annual_income": inc}, cL, "capacity.weights.L")
+    return capacity
 
-    comps = {"H": cH, "A": cA, "E": cE, "D": cD, "I": cI, "L": cL}
-    C_raw = 100 * math.prod(max(comps[k], 0.05) ** w[k] for k in w)
-    c.t("capacity.C", {"components": comps, "weights": w}, C_raw, "capacity.weights")
-    C, applied = C_raw, []
-    hc = Y["hard_caps"]
-    if E < 1:
-        C = min(C, hc["emergency_lt_1_month"])
-        applied.append("emergency_lt_1_month")
-        c.t("capacity.hard_cap", {"emergency_fund_months": E}, C, "capacity.hard_caps.emergency_lt_1_month")
-    high = [d.label for d in p.debts if d.annual_rate >= Y["debt"]["high_cost_rate"] and d.balance > 0]
-    if high:
-        C = min(C, Y["debt"]["high_cost_cap"])
-        applied.append("high_cost_debt")
-        c.t("capacity.hard_cap", {"high_cost_debts": high}, C, "capacity.debt.high_cost_cap")
-    under = [
-        g.goal_id
-        for g in p.goals
-        if g.priority.value == "besoin" and g.amount and W is not None and g.amount > W and (g.horizon_years or 99) <= 5
-    ]
-    if under:
-        C = min(C, hc["besoin_underfunded"])
-        applied.append("besoin_underfunded")
-        c.t(
-            "capacity.hard_cap", {"underfunded_besoin_goals": under, "W": W}, C, "capacity.hard_caps.besoin_underfunded"
+
+def _is_mortgage(debt: Debt) -> bool:
+    return any(word in _normalize_label(debt.label) for word in MORTGAGE_WORDS)
+
+
+def _debt_capacity(profile: InvestorProfile, context: _CompileContext) -> float:
+    """Composante L : dette hors hypotheque rapportee au revenu annuel (les rentes, a defaut de revenu)."""
+    non_mortgage_debt = sum(debt.balance for debt in profile.debts if not _is_mortgage(debt))
+    annual_income = (
+        profile.income.annual_amount if profile.income and profile.income.annual_amount else 0.0
+    ) or 12 * sum(pension.monthly_amount or 0.0 for pension in profile.pensions)
+    if annual_income:
+        capacity = _clip(1 - non_mortgage_debt / annual_income)
+    elif non_mortgage_debt:
+        capacity = context.use_default(
+            "income.annual_amount", NEUTRAL_DEBT_CAPACITY, "capacity : cL neutre 0.5 (persona.py)"
         )
-    if p.capacity_assessed is not None and Y.get("never_exceed_capacity_assessed", True):
-        if p.capacity_assessed.value < C:
+    else:
+        capacity = 1.0
+    context.record(
+        "capacity.L",
+        {"non_mortgage_debt": non_mortgage_debt, "annual_income": annual_income},
+        capacity,
+        "capacity.weights.L",
+    )
+    return capacity
+
+
+class _HardCap(NamedTuple):
+    """Plafond dur que le profil declenche : son nom, sa valeur, les faits traces et son chemin YAML."""
+
+    name: str
+    cap: float
+    inputs: dict[str, Any]
+    yaml_path: str
+
+
+def _is_underfunded_need(goal: Goal, wealth: float | None) -> bool:
+    """Besoin a 5 ans ou moins (selon horizon_years) dont le montant depasse W."""
+    return bool(
+        goal.priority.value == "besoin"
+        and goal.amount
+        and wealth is not None
+        and goal.amount > wealth
+        and (goal.horizon_years or UNKNOWN_HORIZON_YEARS) <= UNDERFUNDED_NEED_HORIZON_YEARS
+    )
+
+
+def _triggered_hard_caps(
+    profile: InvestorProfile, wealth: float | None, emergency_months: float, context: _CompileContext
+) -> list[_HardCap]:
+    """Plafonds durs de la capacite que le profil declenche, dans l'ordre ou ils s'appliquent."""
+    rules = context.risk_levels["capacity"]
+    hard_caps = rules["hard_caps"]
+    triggered = []
+    if emergency_months < 1:
+        triggered.append(
+            _HardCap(
+                "emergency_lt_1_month",
+                hard_caps["emergency_lt_1_month"],
+                {"emergency_fund_months": emergency_months},
+                "capacity.hard_caps.emergency_lt_1_month",
+            )
+        )
+    high_cost_debts = [
+        debt.label for debt in profile.debts if debt.annual_rate >= rules["debt"]["high_cost_rate"] and debt.balance > 0
+    ]
+    if high_cost_debts:
+        triggered.append(
+            _HardCap(
+                "high_cost_debt",
+                rules["debt"]["high_cost_cap"],
+                {"high_cost_debts": high_cost_debts},
+                "capacity.debt.high_cost_cap",
+            )
+        )
+    underfunded = [goal.goal_id for goal in profile.goals if _is_underfunded_need(goal, wealth)]
+    if underfunded:
+        triggered.append(
+            _HardCap(
+                "besoin_underfunded",
+                hard_caps["besoin_underfunded"],
+                {"underfunded_besoin_goals": underfunded, "W": wealth},
+                "capacity.hard_caps.besoin_underfunded",
+            )
+        )
+    return triggered
+
+
+def _capped_capacity(
+    raw_capacity: float, hard_caps: list[_HardCap], profile: InvestorProfile, context: _CompileContext
+) -> tuple[float, list[str]]:
+    """C apres les plafonds durs, puis apres la capacite evaluee, qui ne peut que la baisser."""
+    capacity = raw_capacity
+    applied = []
+    for hard_cap in hard_caps:
+        capacity = min(capacity, hard_cap.cap)
+        applied.append(hard_cap.name)
+        context.record("capacity.hard_cap", hard_cap.inputs, capacity, hard_cap.yaml_path)
+    assessed = profile.capacity_assessed
+    if assessed is not None and context.risk_levels["capacity"].get("never_exceed_capacity_assessed", True):
+        if assessed.value < capacity:
             applied.append("capacity_assessed")
-        C = min(C, p.capacity_assessed.value)
-        c.t(
+        capacity = min(capacity, assessed.value)
+        context.record(
             "capacity.assessed",
-            {"capacity_assessed": p.capacity_assessed.value},
-            C,
+            {"capacity_assessed": assessed.value},
+            capacity,
             "capacity.never_exceed_capacity_assessed",
         )
-    out = {
-        "C": C,
-        "C_raw": C_raw,
-        "components": comps,
-        "hard_caps_applied": applied,
-        "emergency_required_months": Ereq,
-        "q": q,
-        "l_cap": l_cap,
-        "retired": retired,
+    return capacity, applied
+
+
+def _capacity(
+    profile: InvestorProfile, horizon_years: float, wealth: float | None, context: _CompileContext, options: dict
+) -> dict[str, Any]:
+    """Capacite C (0-100) : produit pondere des composantes H, A, E, D, I et L, puis plafonds durs."""
+    weights = context.risk_levels["capacity"]["weights"]
+    horizon_capacity = _horizon_capacity(horizon_years, context)  # cH
+    is_retired = _is_retired(profile)
+    required_months = _required_emergency_months(profile, context, is_retired=is_retired)  # Ereq
+    emergency_months, emergency_capacity = _emergency_capacity(  # E, cE
+        profile, required_months, context, is_retired=is_retired
+    )
+    withdrawal_rate, withdrawal_capacity = _withdrawal_capacity(profile, wealth, context, options)  # q, cD
+    loss_capacity = _loss_capacity(withdrawal_rate, horizon_years, context)  # l_cap
+    absorption_capacity = _absorption_capacity(loss_capacity, context)  # cA
+    income_capacity = _income_capacity(profile, context, is_retired=is_retired)  # cI
+    debt_capacity = _debt_capacity(profile, context)  # cL
+    components = {
+        "H": horizon_capacity,
+        "A": absorption_capacity,
+        "E": emergency_capacity,
+        "D": withdrawal_capacity,
+        "I": income_capacity,
+        "L": debt_capacity,
     }
-    return out, l_cap
+    raw_capacity = 100 * math.prod(  # C_raw
+        max(components[component], CAPACITY_COMPONENT_FLOOR) ** weights[component] for component in weights
+    )
+    context.record("capacity.C", {"components": components, "weights": weights}, raw_capacity, "capacity.weights")
+    hard_caps = _triggered_hard_caps(profile, wealth, emergency_months, context)
+    capacity, applied_caps = _capped_capacity(raw_capacity, hard_caps, profile, context)
+    return {
+        "C": capacity,
+        "C_raw": raw_capacity,
+        "components": components,
+        "hard_caps_applied": applied_caps,
+        "emergency_required_months": required_months,
+        "q": withdrawal_rate,
+        "l_cap": loss_capacity,
+        "retired": is_retired,
+    }
 
 
 # --------------------------------------------------------------------------- tolerance
 
 
-def _tol_one(
-    declared: Score | None, tested: Score | None, composure: Score | None, c: _Ctx, overconfident: bool, who: str
-) -> dict:
-    Y = c.Y["tolerance"]
-    dc = Y["default_confidence"]
-    wD, wX = Y["w_declared"], Y["w_tested"]
-    mult = 1.0
+@dataclass(frozen=True)
+class _ToleranceScores:
+    """Scores de tolerance d'un decideur : l'investisseur ou un membre du menage."""
+
+    declared: Score | None
+    tested: Score | None = None
+    composure: Score | None = None
+
+
+class _WeightedScore(NamedTuple):
+    value: float
+    weight: float
+    confidence: float
+
+
+def _own_scores(profile: InvestorProfile) -> _ToleranceScores:
+    return _ToleranceScores(profile.tolerance_declared, profile.tolerance_tested, profile.composure)
+
+
+def _weighted_scores(
+    scores: _ToleranceScores, context: _CompileContext, *, overconfident: bool
+) -> list[_WeightedScore]:
+    """Scores declare puis teste, s'ils existent, avec leur poids et leur confiance (celles du YAML par defaut).
+
+    Le biais de surconfiance donne plus de poids au test et moins de confiance a la declaration.
+    """
+    rules = context.risk_levels["tolerance"]
+    default_confidence = rules["default_confidence"]
+    declared_weight, tested_weight = rules["w_declared"], rules["w_tested"]
+    declared_confidence_mult = 1.0
     if overconfident:
-        b = c.Y["biases"]["surconfiance"]
-        wX, mult = b["w_tested"], b["declared_confidence_mult"]
-    T0 = Y["conservative_prior"]
-    parts = []
+        bias = context.risk_levels["biases"]["surconfiance"]
+        tested_weight, declared_confidence_mult = bias["w_tested"], bias["declared_confidence_mult"]
+    weighted = []
+    declared, tested = scores.declared, scores.tested
     if declared is not None:
-        kD = (declared.confidence if declared.confidence is not None else dc["declared"]) * mult
-        parts.append(("declared", declared.value, wD, kD))
+        confidence = declared.confidence if declared.confidence is not None else default_confidence["declared"]
+        weighted.append(_WeightedScore(declared.value, declared_weight, confidence * declared_confidence_mult))
     if tested is not None:
-        kX = tested.confidence if tested.confidence is not None else dc["tested"]
-        parts.append(("tested", tested.value, wX, kX))
-    if not parts:
-        return {"T": float(T0), "steps": {"prior": T0}, "who": who, "missing": True}
-    Tb = sum(w * k * v for _, v, w, k in parts) / sum(w * k for _, v, w, k in parts)
-    if len(parts) == 2:
-        dis = Y["disagreement"]
-        D, X = parts[0][1], parts[1][1]
-        beta = _clip((abs(D - X) - dis["free"]) / (dis["full"] - dis["free"]))
-        T1 = (1 - beta) * Tb + beta * min(D, X)
+        confidence = tested.confidence if tested.confidence is not None else default_confidence["tested"]
+        weighted.append(_WeightedScore(tested.value, tested_weight, confidence))
+    return weighted
+
+
+def _apply_composure(tolerance: float, composure: Score | None, context: _CompileContext) -> float:
+    """Rabat la part de la tolerance qui depasse la composure et sa marge ; penalite fixe si la composure manque."""
+    rules = context.risk_levels["tolerance"]["composure"]
+    if composure is None:
+        return tolerance - rules["missing_penalty"]
+    return tolerance - rules["slope"] * max(0.0, tolerance - (composure.value + rules["slack"]))
+
+
+def _individual_tolerance(
+    scores: _ToleranceScores, context: _CompileContext, *, who: str, overconfident: bool = False
+) -> dict[str, Any]:
+    """Tolerance d'un decideur (formule PhD1) avec ses etapes : moyenne ponderee par la confiance, desaccord,
+    retrecissement vers l'a priori prudent, composure."""
+    rules = context.risk_levels["tolerance"]
+    prior = rules["conservative_prior"]  # T0
+    weighted = _weighted_scores(scores, context, overconfident=overconfident)
+    if not weighted:
+        return {"T": float(prior), "steps": {"prior": prior}, "who": who, "missing": True}
+    weighted_mean = sum(score.weight * score.confidence * score.value for score in weighted) / sum(  # Tb
+        score.weight * score.confidence for score in weighted
+    )
+    if len(weighted) == 2:
+        declared_value, tested_value = weighted[0].value, weighted[1].value
+        disagreement = rules["disagreement"]
+        disagreement_weight = _clip(  # beta
+            (abs(declared_value - tested_value) - disagreement["free"]) / (disagreement["full"] - disagreement["free"])
+        )
+        blended = (1 - disagreement_weight) * weighted_mean + disagreement_weight * min(  # T1
+            declared_value, tested_value
+        )
     else:
-        beta, T1 = 0.0, Tb
-    k = 1 - math.prod(1 - kk for *_, kk in parts)
-    T2 = T1 - (1 - k) * max(0.0, T1 - T0)
-    cp = Y["composure"]
-    if composure is not None:
-        T3 = T2 - cp["slope"] * max(0.0, T2 - (composure.value + cp["slack"]))
-    else:
-        T3 = T2 - cp["missing_penalty"]
+        disagreement_weight, blended = 0.0, weighted_mean
+    confidence = 1 - math.prod(1 - score.confidence for score in weighted)  # k
+    shrunk = blended - (1 - confidence) * max(0.0, blended - prior)  # T2
+    tolerance = _apply_composure(shrunk, scores.composure, context)  # T3
     return {
-        "T": T3,
+        "T": tolerance,
         "who": who,
         "missing": False,
         "overconfident": overconfident,
-        "steps": {"Tb": Tb, "beta": beta, "T1": T1, "k": k, "T2": T2, "T3": T3},
+        "steps": {
+            "Tb": weighted_mean,
+            "beta": disagreement_weight,
+            "T1": blended,
+            "k": confidence,
+            "T2": shrunk,
+            "T3": tolerance,
+        },
     }
 
 
-def _tolerance(p: InvestorProfile, biases: set[str], c: _Ctx) -> dict:
-    base = _tol_one(p.tolerance_declared, p.tolerance_tested, p.composure, c, False, "personne")
-    c.t(
+def _person_tolerance(profile: InvestorProfile, context: _CompileContext) -> dict[str, Any]:
+    """Tolerance de l'investisseur lui-meme ; note les valeurs prudentes prises pour ses scores absents."""
+    person = _individual_tolerance(_own_scores(profile), context, who="personne")
+    context.record(
         "tolerance.person",
         {
-            "declared": p.tolerance_declared and p.tolerance_declared.value,
-            "tested": p.tolerance_tested and p.tolerance_tested.value,
-            "composure": p.composure and p.composure.value,
+            "declared": profile.tolerance_declared and profile.tolerance_declared.value,
+            "tested": profile.tolerance_tested and profile.tolerance_tested.value,
+            "composure": profile.composure and profile.composure.value,
         },
-        base["steps"],
+        person["steps"],
         "tolerance",
     )
-    if base["missing"]:
-        c.default("tolerance_declared/tolerance_tested", base["T"], "tolerance.conservative_prior")
-    if p.composure is None:
-        c.default("composure", -c.Y["tolerance"]["composure"]["missing_penalty"], "tolerance.composure.missing_penalty")
-    T, cands = base["T"], [base]
+    if person["missing"]:
+        context.use_default("tolerance_declared/tolerance_tested", person["T"], "tolerance.conservative_prior")
+    if profile.composure is None:
+        context.use_default(
+            "composure",
+            -context.risk_levels["tolerance"]["composure"]["missing_penalty"],
+            "tolerance.composure.missing_penalty",
+        )
+    return person
+
+
+def _overconfident_tolerance(
+    profile: InvestorProfile, person_tolerance: float, context: _CompileContext
+) -> dict[str, Any]:
+    overconfident = _individual_tolerance(
+        _own_scores(profile), context, who="personne+surconfiance", overconfident=True
+    )
+    context.record(
+        "biases.surconfiance",
+        {"T_without": person_tolerance, "T_with": overconfident["T"]},
+        min(person_tolerance, overconfident["T"]),
+        "biases.surconfiance",
+    )
+    return overconfident
+
+
+def _household_tolerances(profile: InvestorProfile, context: _CompileContext) -> list[dict[str, Any]]:
+    """Tolerance de chaque membre du menage qui en declare une."""
+    rule = profile.household_rule or "min_tolerance"
+    tolerances = []
+    for member in profile.household:
+        if member.tolerance is None:
+            continue
+        member_tolerance = _individual_tolerance(_ToleranceScores(member.tolerance), context, who=member.role)
+        context.record(
+            "household.member",
+            {"role": member.role, "tolerance": member.tolerance.value, "rule": rule},
+            member_tolerance["T"],
+            "household.min_tolerance",
+        )
+        tolerances.append(member_tolerance)
+    return tolerances
+
+
+def _tolerance(profile: InvestorProfile, biases: set[str], context: _CompileContext) -> dict[str, Any]:
+    """Tolerance T retenue : la plus basse de celles de la personne, de sa variante surconfiante et du menage."""
+    person = _person_tolerance(profile, context)
+    candidates = [person]
     if "surconfiance" in biases:  # les biais ne font que resserrer : min(sans, avec)
-        oc = _tol_one(p.tolerance_declared, p.tolerance_tested, p.composure, c, True, "personne+surconfiance")
-        c.t("biases.surconfiance", {"T_without": T, "T_with": oc["T"]}, min(T, oc["T"]), "biases.surconfiance")
-        T = min(T, oc["T"])
-        cands.append(oc)
-    members = [m for m in p.household if m.tolerance is not None]
-    if members:
-        rule = p.household_rule or "min_tolerance"
-        for m in members:
-            mt = _tol_one(m.tolerance, None, None, c, False, m.role)
-            c.t(
-                "household.member",
-                {"role": m.role, "tolerance": m.tolerance.value, "rule": rule},
-                mt["T"],
-                "household.min_tolerance",
-            )
-            T = min(T, mt["T"])
-            cands.append(mt)
-    c.t("tolerance.T", {"candidates": [x["T"] for x in cands]}, T, "household.min_tolerance")
-    return {"T": T, "person": base, "candidates": cands}
+        candidates.append(_overconfident_tolerance(profile, person["T"], context))
+    candidates.extend(_household_tolerances(profile, context))
+    tolerance = min(candidate["T"] for candidate in candidates)
+    context.record(
+        "tolerance.T",
+        {"candidates": [candidate["T"] for candidate in candidates]},
+        tolerance,
+        "household.min_tolerance",
+    )
+    return {"T": tolerance, "person": person, "candidates": candidates}
 
 
 # --------------------------------------------------------------------------- niveau
 
 
-def _level_of_R(R: float, cut: list[float]) -> int:
-    return sum(R >= x for x in cut)
+def _risk_level_index(risk_score: float, cutoffs: list[float]) -> int:
+    return sum(risk_score >= cutoff for cutoff in cutoffs)
 
 
-def _horizon_cap(T: float, c: _Ctx) -> str:
-    for i, r in enumerate(c.Y["horizon_cap"]):
-        if r["T_lt"] is None or T < r["T_lt"]:
-            c.t("horizon_cap", {"T": T}, r["level_max"], f"horizon_cap[{i}]")
-            return r["level_max"]
+def _horizon_level_cap(horizon_years: float, context: _CompileContext) -> str:
+    for index, row in enumerate(context.risk_levels["horizon_cap"]):
+        if row["T_lt"] is None or horizon_years < row["T_lt"]:
+            context.record("horizon_cap", {"T": horizon_years}, row["level_max"], f"horizon_cap[{index}]")
+            return row["level_max"]
     raise ValueError("horizon_cap sans ligne terminale")
 
 
-def _band(L: str, c: _Ctx) -> tuple[int, int]:
-    a, b = c.Y["levels"][L]["equity"]
-    return int(round(a * 100)), int(round(b * 100))
+def _equity_band_pct(level: str, context: _CompileContext) -> tuple[int, int]:
+    """Bande d'actions (e_min, e_max) du niveau, en points de pourcentage."""
+    low, high = context.risk_levels["levels"][level]["equity"]
+    return int(round(low * 100)), int(round(high * 100))
 
 
-def _budgets(L: str, e_cap: int, c: _Ctx) -> dict[str, tuple[float, str]]:
+class _SourcedValue(NamedTuple):
+    """Un plafond et la source YAML qui le justifie."""
+
+    value: float
+    source: str
+
+
+def _budgets(level: str, equity_cap_pct: int, context: _CompileContext) -> dict[str, _SourcedValue]:
     """Budgets de risque du niveau ; si e_cap < e_max : arrondi_sup(ENV(e_cap)) (budgets_when_capped)."""
-    lev = c.Y["levels"][L]
-    keys = {"vol": "vol", "cvar_m": "cvar95_m", "cvar_12m": "cvar95_12m", "mdd": "mdd", "s2022": "y2022"}
-    if e_cap >= _band(L, c)[1]:
-        return {k: (float(lev[k]), c.src(f"levels.{L}.{k}")) for k in keys}
-    rnd = c.Y["measurement"]["rounding"]
-    out = {}
-    for k, col in keys.items():
+    level_budgets = context.risk_levels["levels"][level]
+    if equity_cap_pct >= _equity_band_pct(level, context)[1]:
+        return {
+            name: _SourcedValue(float(level_budgets[name]), context.source(f"levels.{level}.{name}"))
+            for name in BUDGET_ENVELOPE_COLUMNS
+        }
+    rounding = context.risk_levels["measurement"]["rounding"]
+    budgets = {}
+    for name, column in BUDGET_ENVELOPE_COLUMNS.items():
+        envelope_value = envelope.env(equity_cap_pct, column)
         # Garde de monotonie (ecart au YAML) : ENV n'est pas monotone sous e = 10 % (obligations seules
         # plus dures que le melange demi-cash) ; un budget plafonne ne depasse jamais celui du niveau.
-        v = min(ceil_step(ENV.env(e_cap, col), rnd[k]), float(lev[k]))
-        out[k] = (v, f"{c.src('levels.budgets_when_capped')} ; envelope_v02.yaml#equity_pct.{e_cap}.{col}")
-        c.t(
-            f"budget.{k}",
-            {"e_cap_pct": e_cap, "env": ENV.env(e_cap, col), "step": rnd[k], "level_budget": lev[k]},
-            v,
-            c.src("levels.budgets_when_capped"),
+        budget = min(ceil_step(envelope_value, rounding[name]), float(level_budgets[name]))
+        budgets[name] = _SourcedValue(
+            budget,
+            f"{context.source('levels.budgets_when_capped')} ; envelope_v02.yaml#equity_pct.{equity_cap_pct}.{column}",
         )
-    return out
+        context.record(
+            f"budget.{name}",
+            {
+                "e_cap_pct": equity_cap_pct,
+                "env": envelope_value,
+                "step": rounding[name],
+                "level_budget": level_budgets[name],
+            },
+            budget,
+            context.source("levels.budgets_when_capped"),
+        )
+    return budgets
 
 
 # --------------------------------------------------------------------------- compilateur
 
 
-def _universe(Y: dict) -> list[str]:
-    return list(Y["history_proxies"]) + [a for a in Y.get("no_proxy") or [] if a not in Y["history_proxies"]]
+def _default_universe(risk_levels: dict) -> list[str]:
+    proxies = risk_levels["history_proxies"]
+    return list(proxies) + [asset for asset in risk_levels.get("no_proxy") or [] if asset not in proxies]
 
 
-def _signature(profile: InvestorProfile, as_of: date, request, Y: dict, universe: list[str], questionnaire=None) -> str:
-    blob = json.dumps(
+@dataclass(frozen=True)
+class _CompileInputs:
+    """Entrees d'une compilation, une fois le questionnaire applique au profil."""
+
+    profile: InvestorProfile
+    as_of: date
+    options: dict[str, Any]  # options de l'adaptateur du questionnaire ; vide sans questionnaire
+    universe: list[str]
+    asset_classes: dict[str, str]
+    biases: set[str]  # cles de risk_levels.yaml#biases reconnues dans les biais du profil
+    knowledge: str  # niveau de connaissances ; la valeur prudente du YAML si le profil n'en donne pas
+
+    @property
+    def wealth(self) -> float | None:
+        """W : patrimoine investissable du seau risque."""
+        return self.profile.investable_wealth
+
+
+def _signature(
+    inputs: _CompileInputs,
+    request: SpecificRequest | None,
+    questionnaire: QuestionnaireScores | None,
+    context: _CompileContext,
+) -> str:
+    serialized = json.dumps(
         {
-            "profile": profile.model_dump(mode="json"),
-            "as_of": as_of.isoformat(),
+            "profile": inputs.profile.model_dump(mode="json"),
+            "as_of": inputs.as_of.isoformat(),
             "questionnaire": questionnaire.model_dump(mode="json") if questionnaire else None,
             "request": request.model_dump(mode="json") if request else None,
-            "yaml_version": Y["version"],
-            "universe": universe,
+            "yaml_version": context.risk_levels["version"],
+            "universe": inputs.universe,
         },
         sort_keys=True,
         default=str,
     )
-    return hashlib.sha256(blob.encode()).hexdigest()[:16]
+    return hashlib.sha256(serialized.encode()).hexdigest()[:16]
 
 
-def compile_profile(
+def _questionnaire_adapted(
+    profile: InvestorProfile, questionnaire: QuestionnaireScores | None, context: _CompileContext
+) -> tuple[InvestorProfile, dict[str, Any]]:
+    """Profil apres l'adaptateur du questionnaire et options de celui-ci (vides sans questionnaire)."""
+    if questionnaire is None:
+        return profile, {}
+    adapted, options, questionnaire_trace = apply_questionnaire(profile, questionnaire)
+    context.trace.extend(questionnaire_trace)
+    context.missing_defaults.extend(options["notes"])
+    return adapted, options
+
+
+def _knowledge_level(profile: InvestorProfile, context: _CompileContext) -> str:
+    if profile.knowledge_level:
+        return profile.knowledge_level.value
+    return context.use_default("knowledge_level", context.risk_levels["knowledge"]["missing"], "knowledge.missing")
+
+
+def _knowledge_caps(knowledge: str, context: _CompileContext) -> dict[str, Any]:
+    """Plafonds propres au niveau de connaissances (risk_levels.yaml#knowledge) ; vide s'il n'en impose pas."""
+    return context.risk_levels["knowledge"].get(knowledge) or {}
+
+
+def _missing_must_have(profile: InvestorProfile, context: _CompileContext) -> list[str]:
+    """Champs de status.must_have absents du profil ; seul investable_wealth est verifie ici."""
+    must_have = context.risk_levels["status"]["must_have"]
+    return [name for name in must_have if name == "investable_wealth" and profile.investable_wealth is None]
+
+
+def _profile_status(profile: InvestorProfile, missing_must_have: list[str], context: _CompileContext) -> str:
+    """Statut retenu : un profil COMPLETE devient INCOMPLETE s'il manque un champ obligatoire ou de la confiance."""
+    status = profile.status.value
+    if status == "COMPLETE" and (
+        missing_must_have
+        or (profile.confidence is not None and profile.confidence < context.risk_levels["status"]["completeness_min"])
+    ):
+        status = "INCOMPLETE"
+    context.record(
+        "status",
+        {
+            "profile_status": profile.status.value,
+            "must_have_missing": missing_must_have,
+            "confidence": profile.confidence,
+        },
+        status,
+        "status",
+    )
+    if profile.investable_wealth is None:
+        context.use_default("investable_wealth", None, "status.must_have : aucun calcul en dollars")
+    return status
+
+
+def _risk_score(tolerance: float, capacity: float, flags: list[str], context: _CompileContext) -> float:
+    """R = min(T, C) moins la penalite des drapeaux d'incoherence, plafonnee."""
+    penalty_rules = context.risk_levels["tolerance"]["flag_penalty"]
+    penalty = min(penalty_rules["max"], penalty_rules["per_flag"] * len(flags))
+    risk_score = min(tolerance, capacity) - penalty
+    context.record("R", {"T": tolerance, "C": capacity, "flag_penalty": penalty, "flags": list(flags)}, risk_score, "R")
+    return risk_score
+
+
+@dataclass(frozen=True)
+class _RiskAssessment:
+    """Lecture du profil avant le choix du niveau : statut, horizon, capacite, tolerance et score R."""
+
+    status: str  # COMPLETE | INCOMPLETE | PROTECTION, avant la regle des dollars
+    missing_must_have: list[str]
+    horizon_years: float  # T du seau risque
+    bucket_level_cap: str | None  # plafond de niveau quand tous les objectifs sont des seaux prudents
+    buckets: list[dict[str, Any]]
+    capacity: dict[str, Any]
+    tolerance: dict[str, Any]
+    risk_score: float  # R
+    risk_level_index: int  # niveau(R)
+    near_cutoff: bool
+
+
+def _assess_risk(inputs: _CompileInputs, context: _CompileContext) -> _RiskAssessment:
+    profile = inputs.profile
+    missing_must_have = _missing_must_have(profile, context)
+    status = _profile_status(profile, missing_must_have, context)
+    horizon_years, bucket_level_cap, buckets = _horizon_and_buckets(profile, inputs.as_of, context, inputs.options)
+    capacity = _capacity(profile, horizon_years, inputs.wealth, context, inputs.options)
+    tolerance = _tolerance(profile, inputs.biases, context)
+    risk_score = _risk_score(tolerance["T"], capacity["C"], profile.consistency_flags, context)
+    cutoffs = context.risk_levels["levels"]["R_cutoffs"]
+    risk_level_index = _risk_level_index(risk_score, cutoffs)
+    context.record("level.R", {"R": risk_score, "cutoffs": cutoffs}, LV[risk_level_index], "levels.R_cutoffs")
+    hysteresis = context.risk_levels["levels"]["hysteresis"]
+    return _RiskAssessment(
+        status=status,
+        missing_must_have=missing_must_have,
+        horizon_years=horizon_years,
+        bucket_level_cap=bucket_level_cap,
+        buckets=buckets,
+        capacity=capacity,
+        tolerance=tolerance,
+        risk_score=risk_score,
+        risk_level_index=risk_level_index,
+        near_cutoff=min(abs(risk_score - cutoff) for cutoff in cutoffs) < hysteresis,
+    )
+
+
+def _capped_level_index(assessment: _RiskAssessment, context: _CompileContext) -> int:
+    """Niveau L0 avant la regle des dollars : le min de niveau(R) et des plafonds d'horizon, de seaux et de statut."""
+    caps = {
+        "R": assessment.risk_level_index,
+        "horizon": _level_index(_horizon_level_cap(assessment.horizon_years, context)),
+    }
+    if assessment.bucket_level_cap:
+        caps["buckets"] = _level_index(assessment.bucket_level_cap)
+    if assessment.status == "INCOMPLETE":
+        incomplete_cap = context.risk_levels["status"]["INCOMPLETE"]["level_cap"]
+        caps["status"] = _level_index(incomplete_cap)
+        context.record("status.INCOMPLETE.level_cap", {}, incomplete_cap, "status.INCOMPLETE.level_cap")
+    capped_index = min(caps.values())
+    context.record("level.L0", caps, LV[capped_index], "R")
+    return capped_index
+
+
+def _planning_loss(equity_pct: int, context: _CompileContext) -> float:
+    """L_plan(e) : perte sommet-creux de planification, soit ENV(e, mdd) plus la marge quotidienne."""
+    return envelope.env(equity_pct, "mdd") + context.risk_levels["dollar_rule"]["daily_buffer"]
+
+
+def _declared_loss(profile: InvestorProfile, context: _CompileContext) -> float | None:
+    """l_declared : la plus basse des pertes maximales declarees (en % et en $ rapportes a W), ou None."""
+    wealth = profile.investable_wealth
+    declared = []
+    if profile.max_acceptable_loss_pct is not None:
+        declared.append(profile.max_acceptable_loss_pct)
+    if profile.max_acceptable_loss_cad is not None and wealth:
+        declared.append(profile.max_acceptable_loss_cad / wealth)
+    declared_loss = min(declared) if declared else None
+    context.record(
+        "dollar_rule.l_declared",
+        {"pct": profile.max_acceptable_loss_pct, "cad": profile.max_acceptable_loss_cad, "W": wealth},
+        declared_loss,
+        "dollar_rule.l_declared",
+    )
+    return declared_loss
+
+
+def _loss_budget(
+    max_equity_pct: int, declared_loss: float | None, loss_capacity: float, context: _CompileContext
+) -> float:
+    """l* : la plus basse de L_plan(e_max), de la perte declaree et de la perte absorbable."""
+    planning_loss = _planning_loss(max_equity_pct, context)
+    loss_budget = min(loss for loss in (planning_loss, declared_loss, loss_capacity) if loss is not None)
+    context.record(
+        "dollar_rule.l_star",
+        {
+            "L_plan_emax": planning_loss,
+            "l_declared": declared_loss,
+            "l_cap": loss_capacity,
+            "e_max_pct": max_equity_pct,
+            "daily_buffer": context.risk_levels["dollar_rule"]["daily_buffer"],
+            "envelope": f"envelope_v02.yaml#equity_pct.{max_equity_pct}.mdd",
+        },
+        loss_budget,
+        "dollar_rule.l_star",
+    )
+    return loss_budget
+
+
+def _admissible_equity_cap(max_equity_pct: int, loss_budget: float, context: _CompileContext) -> int | None:
+    """e_cap : plus grande part d'actions de la grille dont L_plan tient dans l* ; None si aucune ne tient."""
+    admissible = [
+        equity_pct
+        for equity_pct in envelope.grid()
+        if equity_pct <= max_equity_pct and _planning_loss(equity_pct, context) <= loss_budget + EPSILON
+    ]
+    if not admissible:
+        context.record(
+            "dollar_rule.protection",
+            {
+                "l_star": loss_budget,
+                "min_L_plan": min(_planning_loss(equity_pct, context) for equity_pct in envelope.grid()),
+            },
+            "PROTECTION",
+            "dollar_rule.protection",
+        )
+        return None
+    equity_cap_pct = max(admissible)
+    context.record(
+        "dollar_rule.e_cap",
+        {
+            "l_star": loss_budget,
+            "e_max_pct": max_equity_pct,
+            "L_plan_e_cap": _planning_loss(equity_cap_pct, context),
+        },
+        equity_cap_pct,
+        "dollar_rule.e_cap",
+    )
+    return equity_cap_pct
+
+
+def _level_index_holding(equity_cap_pct: int, context: _CompileContext) -> int:
+    """Niveau dont la bande contient e_cap (e_min < e_cap <= e_max ; e_cap = 0 -> N0)."""
+    if equity_cap_pct == 0:
+        return 0
+    return next(
+        index
+        for index, level in enumerate(LV)
+        if _equity_band_pct(level, context)[0] < equity_cap_pct <= _equity_band_pct(level, context)[1]
+    )
+
+
+@dataclass(frozen=True)
+class _LevelDecision:
+    """Niveau final du mandat, une fois appliques les plafonds de niveau et la regle des dollars."""
+
+    level: str
+    status: str  # PROTECTION si le profil l'impose ou si aucune part d'actions ne tient dans l*
+    declared_loss: float | None  # l_declared
+    loss_budget: float  # l*
+    equity_cap_pct: int  # e_cap, sur la grille de 5 %
+    equity_min_pct: int  # e_min de la bande du niveau
+    is_protection: bool
+
+    @property
+    def level_index(self) -> int:
+        return _level_index(self.level)
+
+    @property
+    def equity_cap(self) -> float:
+        """e_cap en fraction du portefeuille."""
+        return self.equity_cap_pct / 100
+
+
+def _decide_level(profile: InvestorProfile, assessment: _RiskAssessment, context: _CompileContext) -> _LevelDecision:
+    """Plafonds de niveau, puis regle des dollars : l*, e_cap, niveau dont la bande contient e_cap, protection."""
+    capped_index = _capped_level_index(assessment, context)
+    max_equity_pct = _equity_band_pct(LV[capped_index], context)[1]  # e_max
+    declared_loss = _declared_loss(profile, context)
+    loss_budget = _loss_budget(max_equity_pct, declared_loss, assessment.capacity["l_cap"], context)
+    admissible_cap = _admissible_equity_cap(max_equity_pct, loss_budget, context)
+    is_protection = profile.status is ProfileStatus.PROTECTION or admissible_cap is None
+    equity_cap_pct = admissible_cap or 0
+    level_index = min(_level_index_holding(equity_cap_pct, context), capped_index)
+    if is_protection:
+        level_index = _level_index(context.risk_levels["status"]["PROTECTION"]["level"])
+        equity_cap_pct = min(equity_cap_pct, _equity_band_pct(LV[level_index], context)[1])
+    level = LV[level_index]
+    context.record(
+        "level.final",
+        {"e_cap_pct": equity_cap_pct, "L0": LV[capped_index], "protection": is_protection},
+        level,
+        "dollar_rule.level_after",
+    )
+    return _LevelDecision(
+        level=level,
+        status="PROTECTION" if is_protection else assessment.status,
+        declared_loss=declared_loss,
+        loss_budget=loss_budget,
+        equity_cap_pct=equity_cap_pct,
+        equity_min_pct=_equity_band_pct(level, context)[0],
+        is_protection=is_protection,
+    )
+
+
+def _status_overrides(status: str, context: _CompileContext) -> dict[str, Any]:
+    """Regles du statut INCOMPLETE ou PROTECTION (satellites mis a zero) ; vide pour un profil COMPLETE."""
+    if status in ("INCOMPLETE", "PROTECTION"):
+        return context.risk_levels["status"].get(status, {})
+    return {}
+
+
+class _SingleNameCaps(NamedTuple):
+    each: float
+    total: float
+    source: str
+
+
+def _single_name_caps(inputs: _CompileInputs, decision: _LevelDecision, context: _CompileContext) -> _SingleNameCaps:
+    """Plafonds des titres individuels (chacun, et leur somme) ; nuls sous min_level ou si le statut les interdit."""
+    rules = context.risk_levels["satellites"]["single_name"]
+    status_overrides = _status_overrides(decision.status, context)
+    if decision.level_index < _level_index(rules["min_level"]) or status_overrides.get("single_name") == 0:
+        each = total = 0.0
+        source = (
+            context.source(f"status.{decision.status}.single_name")
+            if status_overrides
+            else context.source("satellites.single_name.min_level")
+        )
+    else:
+        each = min(rules["cap_abs"], floor_step(rules["phi"] * decision.loss_budget / rules["delta"]))
+        total = floor_step(rules["total_phi"] * decision.loss_budget / rules["delta"])
+        source = context.source("satellites.single_name")
+        knowledge_caps = _knowledge_caps(inputs.knowledge, context)
+        if "single_name_cap" in knowledge_caps:
+            each = min(each, knowledge_caps["single_name_cap"])
+            source += f" ; {context.source(f'knowledge.{inputs.knowledge}.single_name_cap')}"
+    context.record(
+        "satellites.single_name",
+        {
+            "level": decision.level,
+            "l_star": decision.loss_budget,
+            "knowledge": inputs.knowledge,
+            "status": decision.status,
+        },
+        {"each": each, "total": total},
+        source.split(" ; ")[0],
+    )
+    return _SingleNameCaps(each, total, source)
+
+
+def _has_crypto_tilt(profile: InvestorProfile) -> bool:
+    return any(any(word in _normalize_label(tilt) for word in CRYPTO_TILT_WORDS) for tilt in profile.preferences.tilts)
+
+
+def _has_crypto_etf(inputs: _CompileInputs) -> bool:
+    return any(inputs.asset_classes.get(asset) in CRYPTO_ETF_CLASSES for asset in inputs.universe)
+
+
+def _knowledge_limited_crypto(cap: _SourcedValue, inputs: _CompileInputs, context: _CompileContext) -> _SourcedValue:
+    """Plafond crypto resserre par les connaissances : crypto_mult, puis FNB seulement (crypto_vehicle)."""
+    knowledge_caps = _knowledge_caps(inputs.knowledge, context)
+    weight, source = cap
+    if "crypto_mult" in knowledge_caps:
+        weight = floor_step(weight * knowledge_caps["crypto_mult"])
+        source += f" ; {context.source(f'knowledge.{inputs.knowledge}.crypto_mult')}"
+    if knowledge_caps.get("crypto_vehicle") == "etf_only" and not _has_crypto_etf(inputs):
+        weight = 0.0
+        source += (
+            f" ; {context.source(f'knowledge.{inputs.knowledge}.crypto_vehicle')} (aucun FNB crypto dans l'univers)"
+        )
+    return _SourcedValue(weight, source)
+
+
+def _crypto_cap(inputs: _CompileInputs, decision: _LevelDecision, context: _CompileContext) -> _SourcedValue:
+    """Plafond crypto ; nul sous min_level, sans preference pour la crypto ou si le statut l'interdit."""
+    rules = context.risk_levels["satellites"]["crypto"]
+    has_tilt = _has_crypto_tilt(inputs.profile)
+    cap = _SourcedValue(0.0, context.source("satellites.crypto"))
+    is_allowed = not (
+        decision.level_index < _level_index(rules["min_level"])
+        or (rules["requires_tilt"] and not has_tilt)
+        or _status_overrides(decision.status, context).get("crypto") == 0
+    )
+    if is_allowed:
+        weight = min(rules["cap_abs"][decision.level], floor_step(rules["phi"] * decision.loss_budget / rules["delta"]))
+        cap = _knowledge_limited_crypto(_SourcedValue(weight, cap.source), inputs, context)
+    context.record(
+        "satellites.crypto",
+        {"level": decision.level, "tilt": has_tilt, "l_star": decision.loss_budget, "knowledge": inputs.knowledge},
+        cap.value,
+        cap.source.split(" ; ")[0],
+    )
+    return cap
+
+
+def _sandbox_cap(inputs: _CompileInputs, decision: _LevelDecision, context: _CompileContext) -> float:
+    """Plafond du bac a sable ; nul sous min_level, si le statut l'interdit ou sans patrimoine connu."""
+    rules = context.risk_levels["satellites"]["sandbox"]
+    wealth = inputs.wealth
+    monthly_expenses = inputs.profile.monthly_expenses
+    if (
+        decision.level_index < _level_index(rules["min_level"])
+        or _status_overrides(decision.status, context).get("sandbox") == 0
+        or not wealth
+    ):
+        cap = 0.0
+    else:
+        if monthly_expenses is None:
+            monthly_expenses = context.use_default(
+                "monthly_expenses", 0.0, "satellites.sandbox.months_cap : bac a sable nul"
+            )
+        cap = min(
+            rules["cap_abs"],
+            floor_step(rules["months_cap"] * monthly_expenses / wealth),
+            floor_step(rules["phi"] * decision.loss_budget / rules["delta"]),
+        )
+        knowledge_caps = _knowledge_caps(inputs.knowledge, context)
+        if "sandbox_mult" in knowledge_caps:
+            cap = floor_step(cap * knowledge_caps["sandbox_mult"])
+    context.record(
+        "satellites.sandbox",
+        {
+            "level": decision.level,
+            "W": wealth,
+            "M": monthly_expenses,
+            "l_star": decision.loss_budget,
+            "knowledge": inputs.knowledge,
+        },
+        cap,
+        "satellites.sandbox",
+    )
+    return cap
+
+
+def _tech_cap(biases: set[str], decision: _LevelDecision, context: _CompileContext) -> float:
+    """Plafond d'exposition au theme tech ; le biais de familiarite reduit la part de l* qui lui revient."""
+    rules = context.risk_levels["satellites"]["theme_tech"]
+    loss_share = (  # phi
+        context.risk_levels["biases"]["familiarite"]["theme_phi"] if "familiarite" in biases else rules["phi"]
+    )
+    cap = floor_step(
+        decision.equity_cap_pct / 100 * rules["s_ref"] + loss_share * decision.loss_budget / rules["delta"]
+    )
+    context.record(
+        "satellites.theme_tech",
+        {
+            "e_cap_pct": decision.equity_cap_pct,
+            "s_ref": rules["s_ref"],
+            "phi": loss_share,
+            "l_star": decision.loss_budget,
+        },
+        cap,
+        "satellites.theme_tech",
+    )
+    return cap
+
+
+@dataclass(frozen=True)
+class _SatelliteCaps:
+    """Plafonds des satellites : titres individuels, crypto, bac a sable et theme tech."""
+
+    single_name: _SingleNameCaps
+    crypto: _SourcedValue
+    sandbox: float
+    tech: float
+
+
+def _satellite_caps(inputs: _CompileInputs, decision: _LevelDecision, context: _CompileContext) -> _SatelliteCaps:
+    single_name = _single_name_caps(inputs, decision, context)
+    crypto = _crypto_cap(inputs, decision, context)
+    sandbox = _sandbox_cap(inputs, decision, context)
+    tech = _tech_cap(inputs.biases, decision, context)
+    return _SatelliteCaps(single_name, crypto, sandbox, tech)
+
+
+class _Composition(NamedTuple):
+    """Plafonds de composition du niveau (anti-concentration), selon risk_levels.yaml#composition."""
+
+    etf_equity_each_max: float
+    etf_bond_each_max: float
+    cash_like_max: float
+    cash_like_min: float | None
+
+
+def _composition(decision: _LevelDecision, context: _CompileContext) -> _Composition:
+    rules = context.risk_levels["composition"]
+    level = decision.level
+    defensive_share = 1 - decision.equity_min_pct / 100
+    composition = _Composition(
+        etf_equity_each_max=round(max(ETF_EQUITY_EACH_FLOOR, ETF_EQUITY_EACH_SHARE * decision.equity_cap), 4),
+        etf_bond_each_max=round(ceil_step(ETF_BOND_EACH_SHARE * defensive_share, ETF_BOND_EACH_STEP), 4),
+        cash_like_max=1.0 if level == "N0" else round(CASH_LIKE_SHARE * defensive_share, 4),
+        cash_like_min=context.risk_levels["levels"][level].get("cash_like_min"),
+    )
+    context.record(
+        "composition",
+        {"level": level, "e_cap_pct": decision.equity_cap_pct, "e_min_pct": decision.equity_min_pct},
+        {
+            "etf_equity_each_max": composition.etf_equity_each_max,
+            "etf_bond_each_max": composition.etf_bond_each_max,
+            "cash_like_max": composition.cash_like_max,
+            "cash_like_min": composition.cash_like_min,
+            "long_duration_max": rules["long_duration_max"][level],
+            "gold_max": rules["gold_max"][level],
+        },
+        "composition",
+    )
+    return composition
+
+
+class _Bounds(NamedTuple):
+    """Bornes et source d'une Limit du gabarit limits_template."""
+
+    minimum: float | None
+    maximum: float | None
+    source: str
+
+
+def _allocation_bounds(
+    decision: _LevelDecision, composition: _Composition, crypto: _SourcedValue, context: _CompileContext
+) -> dict[str, _Bounds]:
+    level = decision.level
+    rules = context.risk_levels["composition"]
+    return {
+        "alloc.growth": _Bounds(
+            decision.equity_min_pct / 100,
+            decision.equity_cap,
+            f"{context.source(f'levels.{level}.equity')} ; {context.source('dollar_rule.e_cap')}",
+        ),
+        "alloc.cash_like": _Bounds(
+            composition.cash_like_min,
+            composition.cash_like_max,
+            context.source("composition.cash_like_max")
+            + (f" ; {context.source('levels.N0.cash_like_min')}" if composition.cash_like_min else ""),
+        ),
+        "alloc.long_duration": _Bounds(
+            None, rules["long_duration_max"][level], context.source(f"composition.long_duration_max.{level}")
+        ),
+        "alloc.gold": _Bounds(None, rules["gold_max"][level], context.source(f"composition.gold_max.{level}")),
+        "alloc.crypto": _Bounds(None, crypto.value, crypto.source),
+    }
+
+
+def _concentration_bounds(
+    composition: _Composition, satellites: _SatelliteCaps, biases: set[str], context: _CompileContext
+) -> dict[str, _Bounds]:
+    single_name = satellites.single_name
+    return {
+        "conc.etf_equity_each": _Bounds(
+            None, composition.etf_equity_each_max, context.source("composition.etf_equity_each_max")
+        ),
+        "conc.etf_bond_each": _Bounds(
+            None, composition.etf_bond_each_max, context.source("composition.etf_bond_each_max")
+        ),
+        "conc.single_each": _Bounds(None, single_name.each, single_name.source),
+        "conc.single_total": _Bounds(
+            None,
+            single_name.total,
+            context.source("satellites.single_name.total_phi")
+            if single_name.total
+            else single_name.source.split(" ; ")[0],
+        ),
+        "exp.tech": _Bounds(
+            None,
+            satellites.tech,
+            context.source("satellites.theme_tech")
+            + (f" ; {context.source('biases.familiarite.theme_phi')}" if "familiarite" in biases else ""),
+        ),
+    }
+
+
+def _risk_bounds(
+    budgets: dict[str, _SourcedValue], crypto: _SourcedValue, context: _CompileContext
+) -> dict[str, _Bounds]:
+    """Budgets de risque ; la CVaR mensuelle est reduite de la part que la crypto, sans proxy, peut perdre."""
+    cvar_m = budgets["cvar_m"]
+    crypto_cvar_m_proxy = context.risk_levels["satellites"]["crypto"]["cvar_m_proxy"]
+    return {
+        "risk.cvar_m": _Bounds(
+            None,
+            round(cvar_m.value - crypto.value * crypto_cvar_m_proxy, 6),
+            cvar_m.source + (f" ; {context.source('satellites.crypto.cvar_m_proxy')}" if crypto.value else ""),
+        ),
+        "risk.cvar_12m": _Bounds(None, budgets["cvar_12m"].value, budgets["cvar_12m"].source),
+        "risk.mdd": _Bounds(None, budgets["mdd"].value, budgets["mdd"].source),
+        "risk.vol": _Bounds(None, budgets["vol"].value, budgets["vol"].source),
+        "risk.cdar_m": _Bounds(None, cvar_m.value, f"{context.source('biases.aversion_perte')} ; {cvar_m.source}"),
+        "risk.stress_2022": _Bounds(None, budgets["s2022"].value, budgets["s2022"].source),
+    }
+
+
+def _needs_cdar_limit(inputs: _CompileInputs, context: _CompileContext) -> bool:
+    """risk.cdar_m n'est emise que pour une aversion aux pertes ou une composure sous le seuil du YAML."""
+    composure = inputs.profile.composure
+    return "aversion_perte" in inputs.biases or (
+        composure is not None and composure.value < context.risk_levels["tolerance"]["low_composure_cdar"]["threshold"]
+    )
+
+
+def _derived_from(template: dict[str, Any], biases: set[str]) -> str:
+    derived_from = template["derived_from"]
+    if template["rule_id"] == "risk.cdar_m":
+        derived_from = "profile.biases[aversion_perte]" if "aversion_perte" in biases else "profile.composure<40"
+    return derived_from
+
+
+def _template_limits(
+    bounds: dict[str, _Bounds], inputs: _CompileInputs, level: str, context: _CompileContext
+) -> list[Limit]:
+    """Une Limit par entree de limits_template, sauf sat.sandbox et la CDaR quand rien ne la declenche."""
+    needs_cdar = _needs_cdar_limit(inputs, context)
+    limits: list[Limit] = []
+    for template in context.risk_levels["limits_template"]:
+        rule_id = template["rule_id"]
+        if rule_id == "sat.sandbox":
+            continue  # emise seulement avec une demande (RequestView.limits)
+        if rule_id == "risk.cdar_m" and not needs_cdar:
+            continue
+        minimum, maximum, source = bounds[rule_id]
+        limits.append(
+            Limit(
+                rule_id=rule_id,
+                kind=template["kind"],
+                selector=Selector(**template["selector"]),
+                min=minimum,
+                max=maximum,
+                blocking=template.get("blocking", True),
+                derived_from=_derived_from(template, inputs.biases),
+                source=source,
+                description_fr=f"{rule_id} niveau {level}",
+            )
+        )
+        context.record(f"limit.{rule_id}", {"level": level}, {"min": minimum, "max": maximum}, source.split(" ; ")[0])
+    return limits
+
+
+def _employer_tickers(profile: InvestorProfile, universe: list[str]) -> list[str]:
+    """Titres de l'employeur (titres detenus, employeur du revenu) presents dans l'univers, tries."""
+    tickers = {equity.ticker for equity in profile.employer_equity if equity.ticker}
+    if profile.income and profile.income.employer_ticker:
+        tickers.add(profile.income.employer_ticker)
+    return [ticker for ticker in sorted(tickers) if ticker in universe]
+
+
+def _employer_limit(inputs: _CompileInputs, single_name: _SingleNameCaps, context: _CompileContext) -> Limit | None:
+    """Biais de familiarite : le titre de l'employeur n'a droit qu'a une fraction du plafond d'un titre individuel."""
+    if "familiarite" not in inputs.biases:
+        return None
+    tickers = _employer_tickers(inputs.profile, inputs.universe)
+    if not tickers:
+        return None
+    multiplier = context.risk_levels["biases"]["familiarite"]["employer_ticker_cap_mult"]
+    cap = floor_step(single_name.each * multiplier)
+    limit = Limit(
+        rule_id="bias.familiarite.employer",
+        kind="asset_weight",
+        selector=Selector(assets=tickers),
+        max=cap,
+        derived_from="profile.biases[familiarite] ; profile.employer_equity",
+        source=f"{context.source('biases.familiarite.employer_ticker_cap_mult')} ; {single_name.source}",
+        description_fr="titre de l'employeur plafonne",
+    )
+    context.record(
+        "biases.familiarite.employer",
+        {"tickers": tickers, "w_single": single_name.each, "mult": multiplier},
+        cap,
+        "biases.familiarite.employer_ticker_cap_mult",
+    )
+    return limit
+
+
+def _mandate_limits(
+    inputs: _CompileInputs, decision: _LevelDecision, satellites: _SatelliteCaps, context: _CompileContext
+) -> list[Limit]:
+    """Limites du mandat (1:1 avec limits_template), puis celle du titre de l'employeur."""
+    composition = _composition(decision, context)
+    budgets = _budgets(decision.level, decision.equity_cap_pct, context)
+    bounds = {
+        **_allocation_bounds(decision, composition, satellites.crypto, context),
+        **_concentration_bounds(composition, satellites, inputs.biases, context),
+        **_risk_bounds(budgets, satellites.crypto, context),
+    }
+    limits = _template_limits(bounds, inputs, decision.level, context)
+    employer_limit = _employer_limit(inputs, satellites.single_name, context)
+    if employer_limit is not None:
+        limits.append(employer_limit)
+    return limits
+
+
+def _excluded_assets(profile: InvestorProfile, universe: list[str], context: _CompileContext) -> dict[str, str]:
+    """Actifs de l'univers exclus par une contrainte legale bloquante ou par un filtre de valeurs, avec la raison."""
+    excluded: dict[str, str] = {}
+    for constraint in profile.legal_constraints:
+        if not constraint.blocking:
+            continue
+        for asset in constraint.tickers:
+            if asset in universe:
+                excluded[asset] = f"profile.legal_constraints[{constraint.kind}]"
+    for value_filter in profile.preferences.value_filters:
+        for asset, verdict in sorted(value_filter.per_ticker.items()):
+            is_excluding = verdict == "exclu" or (verdict == "zone_grise" and value_filter.decided_utc is None)
+            if asset in universe and is_excluding:
+                excluded.setdefault(asset, f"profile.preferences.value_filters[{value_filter.rule}]={verdict}")
+    if excluded:
+        context.record("universe.excluded", {}, dict(sorted(excluded.items())), "profile")
+    return excluded
+
+
+def _outside_policy_reasons(
+    excluded_reason: str | None, requested_weight: float | None, applicable_max: float, *, in_universe: bool
+) -> list[str]:
+    reasons = []
+    if not in_universe:
+        reasons.append("ticker hors univers du mandat")
+    if excluded_reason is not None:
+        reasons.append(f"ticker exclu : {excluded_reason}")
+    if requested_weight is None:
+        reasons.append("poids de la demande inconnu (investable_wealth absent)")
+    elif requested_weight > applicable_max + EPSILON:
+        reasons.append(f"poids demande {requested_weight:.4f} > plafond applicable {applicable_max:.4f}")
+    return reasons
+
+
+def _sandbox_limit(ticker: str, sandbox_cap: float, context: _CompileContext, *, has_fomo: bool) -> Limit:
+    return Limit(
+        rule_id="sat.sandbox",
+        kind="group_weight",
+        selector=Selector(assets=[ticker]),
+        max=sandbox_cap,
+        derived_from="profile.requests" + (" ; profile.biases[FOMO]" if has_fomo else ""),
+        source=context.source("satellites.sandbox"),
+        description_fr=f"bac a sable {ticker}",
+    )
+
+
+def _cooldown_days(context: _CompileContext, *, has_fomo: bool) -> int:
+    """Delai de reflexion du bac a sable ; celui du biais FOMO s'il est plus long."""
+    sandbox_cooldown_days = context.risk_levels["satellites"]["sandbox"]["cooldown_days"]
+    fomo_cooldown_days = context.risk_levels["biases"]["FOMO"]["cooldown_days"] if has_fomo else 0
+    return max(sandbox_cooldown_days, fomo_cooldown_days)
+
+
+def _request_view(
+    request: SpecificRequest,
+    inputs: _CompileInputs,
+    satellites: _SatelliteCaps,
+    excluded: dict[str, str],
+    context: _CompileContext,
+) -> RequestView:
+    """Plafonds qui visent la demande (bac a sable, titre individuel, crypto) ; F1 ne l'approuve jamais."""
+    ticker, wealth = request.ticker, inputs.wealth
+    asset_class = inputs.asset_classes.get(ticker)
+    in_universe = ticker in inputs.universe
+    is_investable = in_universe and ticker not in excluded
+    requested_weight = (
+        request.weight if request.weight is not None else (request.amount_cad / wealth if wealth else None)
+    )
+    single_name_max = satellites.single_name.each if asset_class == "equity_single" else None
+    crypto_max = satellites.crypto.value if asset_class == "crypto" else None
+    caps = [cap for cap in (satellites.sandbox, single_name_max, crypto_max) if cap is not None]
+    applicable_max = min(caps) if is_investable else 0.0
+    reasons = _outside_policy_reasons(excluded.get(ticker), requested_weight, applicable_max, in_universe=in_universe)
+    has_fomo = "FOMO" in inputs.biases
+    limits = [_sandbox_limit(ticker, satellites.sandbox, context, has_fomo=has_fomo)] if is_investable else []
+    context.record(
+        "request",
+        {"ticker": ticker, "class": asset_class, "requested_weight": requested_weight},
+        {"applicable_max": applicable_max, "outside_policy": bool(reasons)},
+        "satellites.sandbox",
+    )
+    return RequestView(
+        ticker=ticker,
+        asset_class=asset_class,
+        in_universe=in_universe,
+        excluded_reason=excluded.get(ticker),
+        requested_weight=requested_weight,
+        requested_cad=request.amount_cad
+        if request.amount_cad is not None
+        else (request.weight * wealth if wealth else None),
+        sandbox_max=satellites.sandbox,
+        sandbox_max_cad=round(satellites.sandbox * wealth, 2) if wealth else None,
+        single_name_max=single_name_max,
+        crypto_max=crypto_max,
+        applicable_max=applicable_max,
+        applicable_max_cad=round(applicable_max * wealth, 2) if wealth else None,
+        outside_policy=bool(reasons),
+        reasons=reasons,
+        sandbox_only=has_fomo,
+        cooldown_days=_cooldown_days(context, has_fomo=has_fomo),
+        limits=limits,
+    )
+
+
+def _emphasis_signals(
+    inputs: _CompileInputs, assessment: _RiskAssessment, decision: _LevelDecision, request_view: RequestView | None
+) -> dict[str, Any]:
+    """Signaux que lisent les regles d'emphasis.yaml."""
+    profile, wealth = inputs.profile, inputs.wealth
+    goal_horizons = [_goal_horizon(goal, inputs.as_of) for goal in profile.goals]
+    need_horizons = [_goal_horizon(goal, inputs.as_of) for goal in profile.goals if goal.priority.value == "besoin"]
+    positions = [holding.market_value for holding in profile.holdings] + [
+        equity.value or 0.0 for equity in profile.employer_equity
+    ]
+    return {
+        "min_goal_horizon_years": min(goal_horizons),
+        "has_recurring_withdrawal": any(goal.recurring_withdrawal for goal in profile.goals),
+        "min_besoin_horizon_years": min(need_horizons) if need_horizons else None,
+        "tolerance_gt_capacity": assessment.tolerance["T"] > assessment.capacity["C"]
+        or any("tolerance>capacit" in _normalize_label(flag) for flag in profile.consistency_flags),
+        "max_loss_declared": decision.declared_loss is not None,
+        "has_debt": bool(profile.debts),
+        "emergency_short": (profile.emergency_fund_months or 0.0) < assessment.capacity["emergency_required_months"],
+        "emotional_bias": bool(inputs.biases & {"FOMO", "aversion_perte"})
+        or any(bias.kind.value == "emotionnel" for bias in profile.biases),
+        "esg_required": profile.preferences.esg_required,
+        "has_value_filters": bool(profile.preferences.value_filters),
+        "has_tilts": bool(profile.preferences.tilts),
+        "max_position_share": (max(positions) / wealth) if positions and wealth else None,
+        "has_legal_constraints": bool(profile.legal_constraints),
+        "has_employer_equity": bool(profile.employer_equity),
+        "has_user_rules": bool(profile.user_rules),
+        "request_outside_policy": request_view.outside_policy if request_view else False,
+    }
+
+
+def _decision_kind(
+    decision: _LevelDecision, missing_must_have: list[str], context: _CompileContext
+) -> DecisionKind | None:
+    if decision.is_protection:
+        kind = "protection"
+    elif missing_must_have:
+        kind = "incomplet"
+    elif decision.status == "INCOMPLETE":
+        kind = "position_attente"
+    else:
+        kind = None
+    context.record(
+        "decision_kind",
+        {"status": decision.status, "protection": decision.is_protection, "must_have_missing": missing_must_have},
+        kind,
+        "status",
+    )
+    return kind
+
+
+def _exposure_overrides(risk_levels: dict, universe: list[str]) -> dict[str, dict[str, ExposureOverride]]:
+    return {
+        asset: {
+            tag: ExposureOverride(
+                value=override["value"], source=override["source"], status=override.get("status", "HYPOTHESE")
+            )
+            for tag, override in tags.items()
+        }
+        for asset, tags in (risk_levels.get("exposure_overrides") or {}).items()
+        if asset in universe
+    }
+
+
+def _history_proxies(risk_levels: dict, universe: list[str]) -> dict[str, HistoryProxy]:
+    return {
+        asset: HistoryProxy(proxy=proxy["proxy"], source=proxy["source"])
+        for asset, proxy in (risk_levels.get("history_proxies") or {}).items()
+        if asset in universe
+    }
+
+
+def _policy_spec(
+    inputs: _CompileInputs, signature: str, limits: list[Limit], excluded: dict[str, str], context: _CompileContext
+) -> PolicySpec:
+    """Mandat PolicySpec : limites, exclusions et champs copies du YAML, restreints a l'univers."""
+    risk_levels, profile, universe = context.risk_levels, inputs.profile, inputs.universe
+    defaults = risk_levels.get("policy_defaults") or {}
+    exposure_overrides = _exposure_overrides(risk_levels, universe)
+    history_proxies = _history_proxies(risk_levels, universe)
+    loss_bounds = {
+        asset: float(bound) for asset, bound in (risk_levels.get("loss_bounds") or {}).items() if asset in universe
+    }
+    return PolicySpec(
+        policy_id=f"f1-{profile.profile_id}-v{profile.version}-{inputs.as_of.isoformat()}-{signature}",
+        profile_id=profile.profile_id,
+        profile_version=profile.version,
+        created_utc=datetime.combine(inputs.as_of, time(0), tzinfo=UTC),
+        currency="CAD",
+        universe=universe,
+        excluded=dict(sorted(excluded.items())),
+        objective=defaults.get("objective", "min_risk"),
+        risk_measure=defaults.get("risk_measure", "CVAR"),
+        cvar_beta=defaults.get("cvar_beta", 0.95),
+        lookback_months=defaults.get("lookback_months", 120),
+        limits=limits,
+        exposure_overrides=exposure_overrides,
+        history_proxies=history_proxies,
+        loss_bounds=loss_bounds,
+        loss_bounds_source=(
+            f"{context.source('loss_bounds')} : {risk_levels.get('loss_bounds_source')}" if loss_bounds else None
+        ),
+        missing_defaults=list(context.missing_defaults),
+    )
+
+
+def _tolerance_summary(tolerance: dict[str, Any]) -> dict[str, Any]:
+    """Tolerance telle que la publie CompileResult : T, etapes de la personne, candidats au min."""
+    return {
+        "T": tolerance["T"],
+        "person": tolerance["person"]["steps"],
+        "candidates": [{"who": candidate["who"], "T": candidate["T"]} for candidate in tolerance["candidates"]],
+    }
+
+
+def _compile_mandate(
+    inputs: _CompileInputs,
+    context: _CompileContext,
+    *,
+    request: SpecificRequest | None,
+    questionnaire: QuestionnaireScores | None,
+    emphasis_path: str | Path | None,
+) -> CompileResult:
+    """Enchaine les etapes de risk_levels.yaml : lecture du profil, niveau, satellites, limites, demande, mandat."""
+    assessment = _assess_risk(inputs, context)
+    decision = _decide_level(inputs.profile, assessment, context)
+    satellites = _satellite_caps(inputs, decision, context)
+    limits = _mandate_limits(inputs, decision, satellites, context)
+    excluded = _excluded_assets(inputs.profile, inputs.universe, context)
+    request_view = _request_view(request, inputs, satellites, excluded, context) if request else None
+    signals = _emphasis_signals(inputs, assessment, decision, request_view)
+    emphasis, fired_rules, emphasis_trace = compute_emphasis(signals, emphasis_path)
+    context.trace.extend(emphasis_trace)
+    kind = _decision_kind(decision, assessment.missing_must_have, context)
+    signature = _signature(inputs, request, questionnaire, context)
+    policy = None
+    if kind not in ("protection", "incomplet"):
+        policy = _policy_spec(inputs, signature, limits, excluded, context)
+    return CompileResult(
+        policy=policy,
+        level=decision.level,
+        R=assessment.risk_score,
+        capacity=assessment.capacity,
+        tolerance=_tolerance_summary(assessment.tolerance),
+        decision_kind=kind,
+        emphasis=emphasis,
+        trace=context.trace,
+        missing_defaults=list(context.missing_defaults),
+        status=decision.status,
+        level_from_R=LV[assessment.risk_level_index],
+        horizon_years=assessment.horizon_years,
+        l_star=decision.loss_budget,
+        e_cap=decision.equity_cap,
+        limits=limits,
+        buckets=assessment.buckets,
+        emphasis_rules=fired_rules,
+        request=request_view,
+        near_cutoff=assessment.near_cutoff,
+    )
+
+
+def compile_profile(  # noqa: PLR0913 (signature publique figee : les appelants passent ces options par mot-cle)
     profile: InvestorProfile,
     as_of: date,
     *,
@@ -546,500 +1795,15 @@ def compile_profile(
     questionnaire: QuestionnaireScores | None = None,
 ) -> CompileResult:
     """Compile un profil en mandat PolicySpec. Deterministe : memes entrees -> meme JSON."""
-    Y = _load_yaml(str(yaml_path or DEFAULT_YAML))
-    c = _Ctx(Y)
-    p = profile
-    opts: dict = {}
-    if questionnaire is not None:
-        p, opts, qtrace = apply_questionnaire(p, questionnaire)
-        c.trace.extend(qtrace)
-        c.missing.extend(opts["notes"])
-    classes = {**STARTER_ASSET_CLASSES, **(asset_classes or {})}
-    uni = list(universe) if universe is not None else _universe(Y)
-
-    biases = {k for k in (_bias_key(b.kind_label) for b in p.biases) if k}
-    knowledge = p.knowledge_level.value if p.knowledge_level else None
-    if knowledge is None:
-        knowledge = c.default("knowledge_level", Y["knowledge"]["missing"], "knowledge.missing")
-    kn = Y["knowledge"].get(knowledge) or {}
-
-    # ---- statut
-    W = p.investable_wealth
-    must_missing = [f for f in Y["status"]["must_have"] if f == "investable_wealth" and W is None]
-    status = p.status.value
-    if status == "COMPLETE" and (
-        must_missing or (p.confidence is not None and p.confidence < Y["status"]["completeness_min"])
-    ):
-        status = "INCOMPLETE"
-    c.t(
-        "status",
-        {"profile_status": p.status.value, "must_have_missing": must_missing, "confidence": p.confidence},
-        status,
-        "status",
+    context = _CompileContext(_load_yaml(str(yaml_path or DEFAULT_YAML)))
+    adapted, options = _questionnaire_adapted(profile, questionnaire, context)
+    inputs = _CompileInputs(
+        profile=adapted,
+        as_of=as_of,
+        options=options,
+        universe=list(universe) if universe is not None else _default_universe(context.risk_levels),
+        asset_classes={**STARTER_ASSET_CLASSES, **(asset_classes or {})},
+        biases={key for key in (_bias_key(bias.kind_label) for bias in adapted.biases) if key},
+        knowledge=_knowledge_level(adapted, context),
     )
-    if W is None:
-        c.default("investable_wealth", None, "status.must_have : aucun calcul en dollars")
-
-    # ---- horizon, capacite, tolerance, R
-    T, bucket_cap, buckets = _horizon_and_buckets(p, as_of, c, opts)
-    cap, l_cap = _capacity(p, T, W, c, opts)
-    C = cap["C"]
-    tol = _tolerance(p, biases, c)
-    Tval = tol["T"]
-    fp = Y["tolerance"]["flag_penalty"]
-    penalty = min(fp["max"], fp["per_flag"] * len(p.consistency_flags))
-    R = min(Tval, C) - penalty
-    c.t("R", {"T": Tval, "C": C, "flag_penalty": penalty, "flags": list(p.consistency_flags)}, R, "R")
-    cut = Y["levels"]["R_cutoffs"]
-    iR = _level_of_R(R, cut)
-    c.t("level.R", {"R": R, "cutoffs": cut}, LV[iR], "levels.R_cutoffs")
-    near = min(abs(R - x) for x in cut) < Y["levels"]["hysteresis"]
-
-    # ---- plafonds : horizon, seaux, statut
-    caps = {"R": iR, "horizon": _lvl_idx(_horizon_cap(T, c))}
-    if bucket_cap:
-        caps["buckets"] = _lvl_idx(bucket_cap)
-    if status == "INCOMPLETE":
-        caps["status"] = _lvl_idx(Y["status"]["INCOMPLETE"]["level_cap"])
-        c.t("status.INCOMPLETE.level_cap", {}, Y["status"]["INCOMPLETE"]["level_cap"], "status.INCOMPLETE.level_cap")
-    i0 = min(caps.values())
-    c.t("level.L0", caps, LV[i0], "R")
-
-    # ---- regle des dollars
-    buf = Y["dollar_rule"]["daily_buffer"]
-    Lp = lambda e: ENV.env(e, "mdd") + buf  # noqa: E731
-    emax = _band(LV[i0], c)[1]
-    l_decl_parts = []
-    if p.max_acceptable_loss_pct is not None:
-        l_decl_parts.append(p.max_acceptable_loss_pct)
-    if p.max_acceptable_loss_cad is not None and W:
-        l_decl_parts.append(p.max_acceptable_loss_cad / W)
-    l_decl = min(l_decl_parts) if l_decl_parts else None
-    c.t(
-        "dollar_rule.l_declared",
-        {"pct": p.max_acceptable_loss_pct, "cad": p.max_acceptable_loss_cad, "W": W},
-        l_decl,
-        "dollar_rule.l_declared",
-    )
-    l_star = min(x for x in (Lp(emax), l_decl, l_cap) if x is not None)
-    c.t(
-        "dollar_rule.l_star",
-        {
-            "L_plan_emax": Lp(emax),
-            "l_declared": l_decl,
-            "l_cap": l_cap,
-            "e_max_pct": emax,
-            "daily_buffer": buf,
-            "envelope": f"envelope_v02.yaml#equity_pct.{emax}.mdd",
-        },
-        l_star,
-        "dollar_rule.l_star",
-    )
-    ok = [e for e in ENV.grid() if e <= emax and Lp(e) <= l_star + EPS]
-    protection = p.status is ProfileStatus.PROTECTION or not ok
-    if not ok:
-        c.t(
-            "dollar_rule.protection",
-            {"l_star": l_star, "min_L_plan": min(Lp(e) for e in ENV.grid())},
-            "PROTECTION",
-            "dollar_rule.protection",
-        )
-        e_cap = 0
-    else:
-        e_cap = max(ok)
-        c.t(
-            "dollar_rule.e_cap",
-            {"l_star": l_star, "e_max_pct": emax, "L_plan_e_cap": Lp(e_cap)},
-            e_cap,
-            "dollar_rule.e_cap",
-        )
-    if e_cap == 0:
-        i = 0
-    else:
-        i = next(k for k, L in enumerate(LV) if _band(L, c)[0] < e_cap <= _band(L, c)[1])
-    i = min(i, i0)
-    if protection:
-        i = _lvl_idx(Y["status"]["PROTECTION"]["level"])
-        e_cap = min(e_cap, _band(LV[i], c)[1]) if ok else 0
-        status = "PROTECTION"
-    L = LV[i]
-    c.t("level.final", {"e_cap_pct": e_cap, "L0": LV[i0], "protection": protection}, L, "dollar_rule.level_after")
-    e_min = _band(L, c)[0]
-
-    # ---- satellites
-    S = Y["satellites"]
-    status_zero = Y["status"].get(status, {}) if status in ("INCOMPLETE", "PROTECTION") else {}
-    sn = S["single_name"]
-    if i < _lvl_idx(sn["min_level"]) or status_zero.get("single_name") == 0:
-        w_single = w_single_total = 0.0
-        single_src = c.src(f"status.{status}.single_name") if status_zero else c.src("satellites.single_name.min_level")
-    else:
-        w_single = min(sn["cap_abs"], floor_step(sn["phi"] * l_star / sn["delta"]))
-        w_single_total = floor_step(sn["total_phi"] * l_star / sn["delta"])
-        single_src = c.src("satellites.single_name")
-        if "single_name_cap" in kn:
-            w_single = min(w_single, kn["single_name_cap"])
-            single_src += f" ; {c.src(f'knowledge.{knowledge}.single_name_cap')}"
-    c.t(
-        "satellites.single_name",
-        {"level": L, "l_star": l_star, "knowledge": knowledge, "status": status},
-        {"each": w_single, "total": w_single_total},
-        single_src.split(" ; ")[0],
-    )
-
-    cr = S["crypto"]
-    tilt = any(any(wd in _norm(t) for wd in CRYPTO_TILT_WORDS) for t in p.preferences.tilts)
-    crypto_src = c.src("satellites.crypto")
-    if i < _lvl_idx(cr["min_level"]) or (cr["requires_tilt"] and not tilt) or status_zero.get("crypto") == 0:
-        w_crypto = 0.0
-    else:
-        w_crypto = min(cr["cap_abs"][L], floor_step(cr["phi"] * l_star / cr["delta"]))
-        if "crypto_mult" in kn:
-            w_crypto = floor_step(w_crypto * kn["crypto_mult"])
-            crypto_src += f" ; {c.src(f'knowledge.{knowledge}.crypto_mult')}"
-        if kn.get("crypto_vehicle") == "etf_only" and not any(classes.get(a) in CRYPTO_ETF_CLASSES for a in uni):
-            w_crypto = 0.0
-            crypto_src += f" ; {c.src(f'knowledge.{knowledge}.crypto_vehicle')} (aucun FNB crypto dans l'univers)"
-    c.t(
-        "satellites.crypto",
-        {"level": L, "tilt": tilt, "l_star": l_star, "knowledge": knowledge},
-        w_crypto,
-        crypto_src.split(" ; ")[0],
-    )
-
-    sb = S["sandbox"]
-    M = p.monthly_expenses
-    if i < _lvl_idx(sb["min_level"]) or status_zero.get("sandbox") == 0 or not W:
-        w_sandbox = 0.0
-    else:
-        if M is None:
-            M = c.default("monthly_expenses", 0.0, "satellites.sandbox.months_cap : bac a sable nul")
-        w_sandbox = min(
-            sb["cap_abs"], floor_step(sb["months_cap"] * M / W), floor_step(sb["phi"] * l_star / sb["delta"])
-        )
-        if "sandbox_mult" in kn:
-            w_sandbox = floor_step(w_sandbox * kn["sandbox_mult"])
-    c.t(
-        "satellites.sandbox",
-        {"level": L, "W": W, "M": M, "l_star": l_star, "knowledge": knowledge},
-        w_sandbox,
-        "satellites.sandbox",
-    )
-
-    th = S["theme_tech"]
-    phi_t = Y["biases"]["familiarite"]["theme_phi"] if "familiarite" in biases else th["phi"]
-    tech = floor_step(e_cap / 100 * th["s_ref"] + phi_t * l_star / th["delta"])
-    c.t(
-        "satellites.theme_tech",
-        {"e_cap_pct": e_cap, "s_ref": th["s_ref"], "phi": phi_t, "l_star": l_star},
-        tech,
-        "satellites.theme_tech",
-    )
-
-    # ---- composition
-    Cm = Y["composition"]
-    e_cap_f = e_cap / 100
-    etf_eq = round(max(0.10, 0.6 * e_cap_f), 4)
-    etf_bd = round(ceil_step(0.65 * (1 - e_min / 100), 0.05), 4)
-    cash_max = 1.0 if L == "N0" else round(0.5 * (1 - e_min / 100), 4)
-    cash_min = Y["levels"][L].get("cash_like_min")
-    c.t(
-        "composition",
-        {"level": L, "e_cap_pct": e_cap, "e_min_pct": e_min},
-        {
-            "etf_equity_each_max": etf_eq,
-            "etf_bond_each_max": etf_bd,
-            "cash_like_max": cash_max,
-            "cash_like_min": cash_min,
-            "long_duration_max": Cm["long_duration_max"][L],
-            "gold_max": Cm["gold_max"][L],
-        },
-        "composition",
-    )
-    bud = _budgets(L, e_cap, c)
-    cdar_on = "aversion_perte" in biases or (
-        p.composure is not None and p.composure.value < Y["tolerance"]["low_composure_cdar"]["threshold"]
-    )
-
-    # ---- limites (1:1 avec limits_template)
-    values: dict[str, tuple[float | None, float | None, str]] = {
-        "alloc.growth": (e_min / 100, e_cap_f, f"{c.src(f'levels.{L}.equity')} ; {c.src('dollar_rule.e_cap')}"),
-        "alloc.cash_like": (
-            cash_min,
-            cash_max,
-            c.src("composition.cash_like_max") + (f" ; {c.src('levels.N0.cash_like_min')}" if cash_min else ""),
-        ),
-        "alloc.long_duration": (None, Cm["long_duration_max"][L], c.src(f"composition.long_duration_max.{L}")),
-        "alloc.gold": (None, Cm["gold_max"][L], c.src(f"composition.gold_max.{L}")),
-        "alloc.crypto": (None, w_crypto, crypto_src),
-        "conc.etf_equity_each": (None, etf_eq, c.src("composition.etf_equity_each_max")),
-        "conc.etf_bond_each": (None, etf_bd, c.src("composition.etf_bond_each_max")),
-        "conc.single_each": (None, w_single, single_src),
-        "conc.single_total": (
-            None,
-            w_single_total,
-            c.src("satellites.single_name.total_phi") if w_single_total else single_src.split(" ; ")[0],
-        ),
-        "exp.tech": (
-            None,
-            tech,
-            c.src("satellites.theme_tech")
-            + (f" ; {c.src('biases.familiarite.theme_phi')}" if "familiarite" in biases else ""),
-        ),
-        "risk.cvar_m": (
-            None,
-            round(bud["cvar_m"][0] - w_crypto * cr["cvar_m_proxy"], 6),
-            bud["cvar_m"][1] + (f" ; {c.src('satellites.crypto.cvar_m_proxy')}" if w_crypto else ""),
-        ),
-        "risk.cvar_12m": (None, bud["cvar_12m"][0], bud["cvar_12m"][1]),
-        "risk.mdd": (None, bud["mdd"][0], bud["mdd"][1]),
-        "risk.vol": (None, bud["vol"][0], bud["vol"][1]),
-        "risk.cdar_m": (None, bud["cvar_m"][0], f"{c.src('biases.aversion_perte')} ; {bud['cvar_m'][1]}"),
-        "risk.stress_2022": (None, bud["s2022"][0], bud["s2022"][1]),
-    }
-    limits: list[Limit] = []
-    for t in Y["limits_template"]:
-        rid = t["rule_id"]
-        if rid == "sat.sandbox":
-            continue  # emise seulement avec une demande (RequestView.limits)
-        if rid == "risk.cdar_m" and not cdar_on:
-            continue
-        lo, hi, src = values[rid]
-        derived = t["derived_from"]
-        if rid == "risk.cdar_m":
-            derived = "profile.biases[aversion_perte]" if "aversion_perte" in biases else "profile.composure<40"
-        lim = Limit(
-            rule_id=rid,
-            kind=t["kind"],
-            selector=Selector(**t["selector"]),
-            min=lo,
-            max=hi,
-            blocking=t.get("blocking", True),
-            derived_from=derived,
-            source=src,
-            description_fr=f"{rid} niveau {L}",
-        )
-        limits.append(lim)
-        c.t(f"limit.{rid}", {"level": L}, {"min": lo, "max": hi}, src.split(" ; ")[0])
-
-    # biais de familiarite : titre de l'employeur
-    if "familiarite" in biases:
-        emp = sorted(
-            {e.ticker for e in p.employer_equity if e.ticker}
-            | ({p.income.employer_ticker} if p.income and p.income.employer_ticker else set())
-        )
-        emp = [a for a in emp if a in uni]
-        if emp:
-            mult = Y["biases"]["familiarite"]["employer_ticker_cap_mult"]
-            v = floor_step(w_single * mult)
-            limits.append(
-                Limit(
-                    rule_id="bias.familiarite.employer",
-                    kind="asset_weight",
-                    selector=Selector(assets=emp),
-                    max=v,
-                    derived_from="profile.biases[familiarite] ; profile.employer_equity",
-                    source=f"{c.src('biases.familiarite.employer_ticker_cap_mult')} ; {single_src}",
-                    description_fr="titre de l'employeur plafonne",
-                )
-            )
-            c.t(
-                "biases.familiarite.employer",
-                {"tickers": emp, "w_single": w_single, "mult": mult},
-                v,
-                "biases.familiarite.employer_ticker_cap_mult",
-            )
-
-    # ---- exclusions (contraintes legales bloquantes, filtres de valeurs)
-    excluded: dict[str, str] = {}
-    for lc in p.legal_constraints:
-        if lc.blocking:
-            for a in lc.tickers:
-                if a in uni:
-                    excluded[a] = f"profile.legal_constraints[{lc.kind}]"
-    for vf in p.preferences.value_filters:
-        for a, verdict in sorted(vf.per_ticker.items()):
-            if a in uni and (verdict == "exclu" or (verdict == "zone_grise" and vf.decided_utc is None)):
-                excluded.setdefault(a, f"profile.preferences.value_filters[{vf.rule}]={verdict}")
-    if excluded:
-        c.t("universe.excluded", {}, dict(sorted(excluded.items())), "profile")
-
-    # ---- demande specifique
-    rv = (
-        _request_view(request, p, uni, excluded, classes, W, w_sandbox, w_single, w_crypto, biases, c)
-        if request
-        else None
-    )
-    if rv is not None:
-        _request_limits = rv.limits
-
-    # ---- emphase
-    goals_h = [_goal_horizon(g, as_of) for g in p.goals]
-    besoin_h = [_goal_horizon(g, as_of) for g in p.goals if g.priority.value == "besoin"]
-    pos = [h.market_value for h in p.holdings] + [e.value or 0.0 for e in p.employer_equity]
-    signals = {
-        "min_goal_horizon_years": min(goals_h),
-        "has_recurring_withdrawal": any(g.recurring_withdrawal for g in p.goals),
-        "min_besoin_horizon_years": min(besoin_h) if besoin_h else None,
-        "tolerance_gt_capacity": Tval > C or any("tolerance>capacit" in _norm(f) for f in p.consistency_flags),
-        "max_loss_declared": l_decl is not None,
-        "has_debt": bool(p.debts),
-        "emergency_short": (p.emergency_fund_months or 0.0) < cap["emergency_required_months"],
-        "emotional_bias": bool(biases & {"FOMO", "aversion_perte"})
-        or any(b.kind.value == "emotionnel" for b in p.biases),
-        "esg_required": p.preferences.esg_required,
-        "has_value_filters": bool(p.preferences.value_filters),
-        "has_tilts": bool(p.preferences.tilts),
-        "max_position_share": (max(pos) / W) if pos and W else None,
-        "has_legal_constraints": bool(p.legal_constraints),
-        "has_employer_equity": bool(p.employer_equity),
-        "has_user_rules": bool(p.user_rules),
-        "request_outside_policy": rv.outside_policy if rv else False,
-    }
-    emphasis, fired, etrace = compute_emphasis(signals, emphasis_path)
-    c.trace.extend(etrace)
-
-    # ---- decision et PolicySpec
-    if protection:
-        kind = "protection"
-    elif must_missing:
-        kind = "incomplet"
-    elif status == "INCOMPLETE":
-        kind = "position_attente"
-    else:
-        kind = None
-    c.t(
-        "decision_kind", {"status": status, "protection": protection, "must_have_missing": must_missing}, kind, "status"
-    )
-
-    sig = _signature(p, as_of, request, Y, uni, questionnaire)
-    policy = None
-    if kind not in ("protection", "incomplet"):
-        d = Y.get("policy_defaults") or {}
-        ov = {
-            a: {
-                tag: ExposureOverride(value=v["value"], source=v["source"], status=v.get("status", "HYPOTHESE"))
-                for tag, v in tags.items()
-            }
-            for a, tags in (Y.get("exposure_overrides") or {}).items()
-            if a in uni
-        }
-        hp = {
-            a: HistoryProxy(proxy=v["proxy"], source=v["source"])
-            for a, v in (Y.get("history_proxies") or {}).items()
-            if a in uni
-        }
-        lb = {a: float(v) for a, v in (Y.get("loss_bounds") or {}).items() if a in uni}
-        policy = PolicySpec(
-            policy_id=f"f1-{p.profile_id}-v{p.version}-{as_of.isoformat()}-{sig}",
-            profile_id=p.profile_id,
-            profile_version=p.version,
-            created_utc=datetime.combine(as_of, time(0), tzinfo=UTC),
-            currency="CAD",
-            universe=uni,
-            excluded=dict(sorted(excluded.items())),
-            objective=d.get("objective", "min_risk"),
-            risk_measure=d.get("risk_measure", "CVAR"),
-            cvar_beta=d.get("cvar_beta", 0.95),
-            lookback_months=d.get("lookback_months", 120),
-            limits=limits,
-            exposure_overrides=ov,
-            history_proxies=hp,
-            loss_bounds=lb,
-            loss_bounds_source=(f"{c.src('loss_bounds')} : {Y.get('loss_bounds_source')}" if lb else None),
-            missing_defaults=list(c.missing),
-        )
-
-    return CompileResult(
-        policy=policy,
-        level=L,
-        R=R,
-        capacity=cap,
-        tolerance={
-            "T": Tval,
-            "person": tol["person"]["steps"],
-            "candidates": [{"who": x["who"], "T": x["T"]} for x in tol["candidates"]],
-        },
-        decision_kind=kind,
-        emphasis=emphasis,
-        trace=c.trace,
-        missing_defaults=list(c.missing),
-        status=status,
-        level_from_R=LV[iR],
-        horizon_years=T,
-        l_star=l_star,
-        e_cap=e_cap_f,
-        limits=limits,
-        buckets=buckets,
-        emphasis_rules=fired,
-        request=rv,
-        near_cutoff=near,
-    )
-
-
-def _request_view(
-    req: SpecificRequest, p: InvestorProfile, uni, excluded, classes, W, w_sandbox, w_single, w_crypto, biases, c: _Ctx
-) -> RequestView:
-    a = req.ticker
-    cls = classes.get(a)
-    in_uni = a in uni
-    req_w = req.weight if req.weight is not None else (req.amount_cad / W if W else None)
-    req_cad = req.amount_cad if req.amount_cad is not None else (req.weight * W if W else None)
-    caps = [w_sandbox]
-    reasons = []
-    single = w_single if cls == "equity_single" else None
-    crypto = w_crypto if cls == "crypto" else None
-    if single is not None:
-        caps.append(single)
-    if crypto is not None:
-        caps.append(crypto)
-    applicable = min(caps) if in_uni and a not in excluded else 0.0
-    if not in_uni:
-        reasons.append("ticker hors univers du mandat")
-    if a in excluded:
-        reasons.append(f"ticker exclu : {excluded[a]}")
-    if req_w is None:
-        reasons.append("poids de la demande inconnu (investable_wealth absent)")
-    elif req_w > applicable + EPS:
-        reasons.append(f"poids demande {req_w:.4f} > plafond applicable {applicable:.4f}")
-    sb = c.Y["satellites"]["sandbox"]
-    fomo = "FOMO" in biases
-    cooldown = max(sb["cooldown_days"], c.Y["biases"]["FOMO"]["cooldown_days"] if fomo else 0)
-    lims = []
-    if in_uni and a not in excluded:
-        lims.append(
-            Limit(
-                rule_id="sat.sandbox",
-                kind="group_weight",
-                selector=Selector(assets=[a]),
-                max=w_sandbox,
-                derived_from="profile.requests" + (" ; profile.biases[FOMO]" if fomo else ""),
-                source=c.src("satellites.sandbox"),
-                description_fr=f"bac a sable {a}",
-            )
-        )
-    c.t(
-        "request",
-        {"ticker": a, "class": cls, "requested_weight": req_w},
-        {"applicable_max": applicable, "outside_policy": bool(reasons)},
-        "satellites.sandbox",
-    )
-    return RequestView(
-        ticker=a,
-        asset_class=cls,
-        in_universe=in_uni,
-        excluded_reason=excluded.get(a),
-        requested_weight=req_w,
-        requested_cad=req_cad,
-        sandbox_max=w_sandbox,
-        sandbox_max_cad=round(w_sandbox * W, 2) if W else None,
-        single_name_max=single,
-        crypto_max=crypto,
-        applicable_max=applicable,
-        applicable_max_cad=round(applicable * W, 2) if W else None,
-        outside_policy=bool(reasons),
-        reasons=reasons,
-        sandbox_only=fomo,
-        cooldown_days=cooldown,
-        limits=lims,
-    )
+    return _compile_mandate(inputs, context, request=request, questionnaire=questionnaire, emphasis_path=emphasis_path)

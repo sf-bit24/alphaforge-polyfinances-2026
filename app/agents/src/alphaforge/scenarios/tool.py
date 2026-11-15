@@ -31,10 +31,11 @@ import json
 import math
 import threading
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from .. import clock
-from . import tool_facts as tf
+from . import tool_facts
 from .tool_render import render_fr
 from .tool_table import (
     BLOCKS,
@@ -70,7 +71,7 @@ DISCLAIMER_FR = (
 )
 
 
-class Refusal(Exception):
+class RefusalError(Exception):
     def __init__(self, code: str, message: str, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.code = code
@@ -84,20 +85,20 @@ class Refusal(Exception):
 def normalize_weights(weights: Mapping[str, Any]) -> tuple[dict[str, float], list[str]]:
     """Valide et renormalise les poids; renvoie (poids des six blocs, signalements)."""
     if not isinstance(weights, Mapping) or not weights:
-        raise Refusal("bad_weights", "poids absents : un dictionnaire bloc -> poids est attendu")
+        raise RefusalError("bad_weights", "poids absents : un dictionnaire bloc -> poids est attendu")
     out = dict.fromkeys(BLOCKS, 0.0)
     flags: list[str] = []
     for raw_key, raw_value in weights.items():
         key = str(raw_key).strip()
         block = key.upper() if key.upper() in BLOCKS else CODES.get(key.lower())
         if block is None:
-            raise Refusal("bad_weights", f"bloc inconnu {raw_key!r}; blocs admis : {', '.join(BLOCKS)}")
+            raise RefusalError("bad_weights", f"bloc inconnu {raw_key!r}; blocs admis : {', '.join(BLOCKS)}")
         try:
             value = float(raw_value)
         except (TypeError, ValueError) as exc:
-            raise Refusal("bad_weights", f"poids illisible pour {block} : {raw_value!r}") from exc
+            raise RefusalError("bad_weights", f"poids illisible pour {block} : {raw_value!r}") from exc
         if not math.isfinite(value) or value < 0:
-            raise Refusal("bad_weights", f"poids négatif ou non fini pour {block} : {raw_value!r}")
+            raise RefusalError("bad_weights", f"poids négatif ou non fini pour {block} : {raw_value!r}")
         out[block] += value
     total = sum(out.values())
     if abs(total - 1.0) <= SUM_TOLERANCE:
@@ -106,33 +107,33 @@ def normalize_weights(weights: Mapping[str, Any]) -> tuple[dict[str, float], lis
         scale = total
         flags.append("poids lus en pourcentages")
     else:
-        raise Refusal(
+        raise RefusalError(
             "bad_weights",
             f"la somme des poids vaut {total:g} : attendu 1 (fractions) ou 100 (pourcentages), à 2 % près",
         )
     if abs(total - 1.0) > 1e-9 and abs(total - 100.0) > 1e-9:
         flags.append(f"poids renormalisés (somme {total:g})")
-    return {b: v / scale for b, v in out.items()}, flags
+    return {block: weight / scale for block, weight in out.items()}, flags
 
 
 def _risky_weight(weights: Mapping[str, float]) -> float:
-    return sum(v for b, v in weights.items() if b not in DEFENSIVE_BLOCKS)
+    return sum(weight for block, weight in weights.items() if block not in DEFENSIVE_BLOCKS)
 
 
 def snap_mix(weights: Mapping[str, float], candidates: list[str], max_l1: float = MAX_L1_DISTANCE) -> dict[str, Any]:
     """Mélange de la grille le plus proche en L1; refus au-delà de ``max_l1`` (jamais d'extrapolation)."""
     if not candidates:
-        raise Refusal("no_grid", "aucun mélange dans la table pour ce modèle, cette famille et cette base")
+        raise RefusalError("no_grid", "aucun mélange dans la table pour ce modèle, cette famille et cette base")
     scored = []
     for mix in candidates:
         grid = parse_mix_id(mix)
-        distance = round(sum(abs(weights.get(b, 0.0) - grid[b]) for b in BLOCKS), 10)
+        distance = round(sum(abs(weights.get(block, 0.0) - grid[block]) for block in BLOCKS), 10)
         scored.append((distance, -_risky_weight(grid), mix, grid))
     scored.sort(key=lambda item: (item[0], item[1], item[2]))
     best = scored[0]
     ties = [item[2] for item in scored[1:] if abs(item[0] - best[0]) <= 1e-9]
     if best[0] > max_l1 + 1e-9:
-        raise Refusal(
+        raise RefusalError(
             "out_of_grid",
             f"mélange trop éloigné de la grille : distance L1 {best[0]:.2f} > tolérance {max_l1:.2f}; "
             "aucune extrapolation. Rapprocher le mélange d'un point de la grille.",
@@ -150,17 +151,17 @@ def snap_mix(weights: Mapping[str, float], candidates: list[str], max_l1: float 
 
 def pick_horizon(requested: int, available: list[int]) -> dict[str, Any]:
     if not available:
-        raise Refusal("no_grid", "aucun horizon disponible pour ce mélange")
+        raise RefusalError("no_grid", "aucun horizon disponible pour ce mélange")
     if requested in available:
         return {"requested": requested, "used": requested, "exact": True, "upper": None, "available": available}
     if requested < available[0] or requested > available[-1]:
-        raise Refusal(
+        raise RefusalError(
             "out_of_grid",
             f"horizon {requested} ans hors de la grille ({available[0]}–{available[-1]} ans); aucune extrapolation",
             {"available_horizons": available},
         )
-    lower = max(h for h in available if h < requested)
-    upper = min(h for h in available if h > requested)
+    lower = max(horizon for horizon in available if horizon < requested)
+    upper = min(horizon for horizon in available if horizon > requested)
     return {"requested": requested, "used": lower, "exact": False, "upper": upper, "available": available}
 
 
@@ -171,31 +172,33 @@ def pick_loss_bucket(
     if loss_threshold_cad is None:
         return None
     if amount_cad is None:
-        raise Refusal(
+        raise RefusalError(
             "bad_threshold", "un seuil en dollars demande amount_cad (montant investi) pour le convertir en %"
         )
     try:
         threshold, amount = float(loss_threshold_cad), float(amount_cad)
     except (TypeError, ValueError) as exc:
-        raise Refusal("bad_threshold", "seuil ou montant illisible") from exc
+        raise RefusalError("bad_threshold", "seuil ou montant illisible") from exc
     if not (math.isfinite(threshold) and math.isfinite(amount)) or amount <= 0 or threshold <= 0:
-        raise Refusal("bad_threshold", "seuil et montant doivent être des nombres positifs")
-    pct = threshold / amount * 100
-    if pct > 100 + 1e-9:
-        raise Refusal("bad_threshold", f"seuil de perte ({pct:.1f} % du montant) supérieur au montant investi")
+        raise RefusalError("bad_threshold", "seuil et montant doivent être des nombres positifs")
+    threshold_pct = threshold / amount * 100
+    if threshold_pct > 100 + 1e-9:
+        raise RefusalError(
+            "bad_threshold", f"seuil de perte ({threshold_pct:.1f} % du montant) supérieur au montant investi"
+        )
     if not levels:
-        raise Refusal("no_grid", "aucun palier p_loss_gt_XX dans la table")
-    below = [lv for lv in levels if lv <= pct + 1e-9]
+        raise RefusalError("no_grid", "aucun palier p_loss_gt_XX dans la table")
+    below = [candidate for candidate in levels if candidate <= threshold_pct + 1e-9]
     lower_bound = not below
     level = max(below) if below else min(levels)
     return {
         "loss_threshold_cad": threshold,
         "amount_cad": amount,
-        "requested_pct": pct / 100,
+        "requested_pct": threshold_pct / 100,
         "bucket_metric": f"p_loss_gt_{level:02d}",
         "bucket_pct": level / 100,
         "bucket_cad": amount * level / 100,
-        "exact": abs(level - pct) <= 1e-9,
+        "exact": abs(level - threshold_pct) <= 1e-9,
         "is_lower_bound": lower_bound,
         "rule": (
             "seuil sous le plus petit palier : la probabilité du plus petit palier est un minorant (« au moins »)"
@@ -208,29 +211,27 @@ def pick_loss_bucket(
 # --------------------------------------------------------------------------- calcul
 
 
-def _metric_view(row: Row, fid: bool = True) -> dict[str, Any]:
-    out = {
+def _metric_view(row: Row) -> dict[str, Any]:
+    return {
         "value": row.value,
         "ci_lo": row.ci_lo,
         "ci_hi": row.ci_hi,
         "hypothese": row.hypothese,
         "n_paths": row.n_paths,  # borne « < 1/n_paths » d'une probabilité nulle (tool_render.prob)
+        "fact_id": tool_facts.fact_id(row),
     }
-    if fid:
-        out["fact_id"] = tf.fact_id(row)
-    return out
 
 
 def _wanted_metrics(available: dict[str, Row], bucket: dict[str, Any] | None) -> list[str]:
-    loss_metrics = sorted((m for m in available if loss_level(m) is not None), key=loss_level)
-    wanted = [m for m in KEY_METRICS if m in available]
+    loss_metrics = sorted((metric for metric in available if loss_level(metric) is not None), key=loss_level)
+    wanted = [metric for metric in KEY_METRICS if metric in available]
     if bucket is None:
         return wanted + loss_metrics
     index = loss_metrics.index(bucket["bucket_metric"])
     return wanted + loss_metrics[max(0, index - 1) : index + 2]  # palier retenu et ses voisins
 
 
-def compute_scenario_risk(
+def compute_scenario_risk(  # noqa: PLR0913 - signature publique, appelée par mot-clé (outil Strands, tests)
     table: ScenarioTable,
     weights: Mapping[str, Any],
     horizon_years: int,
@@ -239,7 +240,7 @@ def compute_scenario_risk(
     family: str = "CAD77",
     model_id: str | None = None,
     basis: str = "nominal",
-    include_sensitivity: bool = False,
+    include_sensitivity: bool = False,  # noqa: FBT001, FBT002 - signature publique (paramètre de l'outil Strands)
     *,
     max_l1: float = MAX_L1_DISTANCE,
 ) -> dict[str, Any]:
@@ -255,193 +256,234 @@ def compute_scenario_risk(
         "basis": basis,
         "include_sensitivity": bool(include_sensitivity),
     }
-    trace_id = tf.trace_id_for(request, table.run_id)
+    trace_id = tool_facts.trace_id_for(request, table.run_id)
     try:
         return _compute(table, request, trace_id, started, max_l1)
-    except Refusal as refusal:
+    except RefusalError as refusal:
         return _refusal(table, request, trace_id, started, refusal)
 
 
-def _compute(
-    table: ScenarioTable, request: dict[str, Any], trace_id: str, started: str, max_l1: float
-) -> dict[str, Any]:
-    family, basis = request["family"], request["basis"]
+@dataclass(frozen=True)
+class _GridPoint:
+    """Demande rattachée à la grille : modèle principal, mélange et horizon retenus, lignes de la table à ce point."""
+
+    table: ScenarioTable
+    model_id: str
+    family: str
+    basis: str
+    weights: dict[str, float]
+    weight_flags: list[str]
+    grid: dict[str, Any]
+    horizon: dict[str, Any]
+    bucket: dict[str, Any] | None
+    rows: dict[str, Row]
+    wanted: list[str]
+
+    @property
+    def head_row(self) -> Row:
+        return self.rows[self.wanted[0]]
+
+    @property
+    def currency(self) -> str | None:
+        return tool_facts.currency_of(self.table, self.head_row)
+
+    @property
+    def hypothese(self) -> bool:
+        return any(row.hypothese for row in self.rows.values()) or any(
+            self.weights[block] > 0 for block in SHORT_HISTORY_BLOCKS
+        )
+
+    def metrics(self, model_id: str, horizon_years: int) -> dict[str, Row]:
+        return self.table.metrics(model_id, self.family, self.grid["mix_id"], horizon_years, self.basis)
+
+
+def _check_family(table: ScenarioTable, family: str) -> None:
     if family not in table.families():
-        raise Refusal("no_grid", f"famille {family!r} absente; familles disponibles : {table.families()}")
+        raise RefusalError("no_grid", f"famille {family!r} absente; familles disponibles : {table.families()}")
+
+
+def _primary_model(table: ScenarioTable, request: dict[str, Any]) -> str:
     primary = request["model_id"] or table.default_model
-    visible = [m for m in table.models if table.display(m) != "hidden"]
+    visible = [model for model in table.models if table.display(model) != "hidden"]
     if primary not in visible:
-        raise Refusal("no_grid", f"modèle {primary!r} absent ou masqué; modèles disponibles : {visible}")
+        raise RefusalError("no_grid", f"modèle {primary!r} absent ou masqué; modèles disponibles : {visible}")
     if table.display(primary) == "sensitivity_only" and not request["include_sensitivity"]:
-        raise Refusal(
+        raise RefusalError(
             "sensitivity_only",
             f"modèle {primary!r} réservé à l'analyse de sensibilité : le demander avec include_sensitivity = true",
         )
-    raw_horizon = request["horizon_years"]
-    if isinstance(raw_horizon, bool) or not isinstance(raw_horizon, int | float) or raw_horizon != int(raw_horizon):
-        raise Refusal("bad_horizon", "horizon_years doit être un nombre entier d'années")
-    horizon_requested = int(raw_horizon)
+    return primary
 
+
+def _whole_years(raw_horizon: Any) -> int:
+    if isinstance(raw_horizon, bool) or not isinstance(raw_horizon, int | float) or raw_horizon != int(raw_horizon):
+        raise RefusalError("bad_horizon", "horizon_years doit être un nombre entier d'années")
+    return int(raw_horizon)
+
+
+def _locate(table: ScenarioTable, request: dict[str, Any], max_l1: float) -> _GridPoint:
+    """Valide la demande et la rattache à la grille; refus si elle en sort (aucune extrapolation)."""
+    family, basis = request["family"], request["basis"]
+    _check_family(table, family)
+    primary = _primary_model(table, request)
+    horizon_requested = _whole_years(request["horizon_years"])
     weights, weight_flags = normalize_weights(request["weights"])
     grid = snap_mix(weights, table.mixes(primary, family, basis), max_l1)
     horizon = pick_horizon(horizon_requested, table.horizons(primary, family, grid["mix_id"], basis))
     rows = table.metrics(primary, family, grid["mix_id"], horizon["used"], basis)
-    levels = sorted(lv for lv in (loss_level(m) for m in rows) if lv is not None)
+    levels = sorted(level for level in (loss_level(metric) for metric in rows) if level is not None)
     bucket = pick_loss_bucket(request["loss_threshold_cad"], request["amount_cad"], levels)
     wanted = _wanted_metrics(rows, bucket)
     if not wanted:
-        raise Refusal("no_grid", "aucune métrique pour ce point de la grille")
-
-    facts: list[dict[str, Any]] = []
-    primary_metrics: dict[str, Any] = {}
-    for metric in wanted:
-        primary_metrics[metric] = _metric_view(rows[metric])
-        facts += tf.row_facts(table, rows[metric], trace_id)
-
-    head_row = rows[wanted[0]]
-    currency = tf.currency_of(table, head_row)
-    hypothese = any(r.hypothese for r in rows.values()) or any(weights[b] > 0 for b in SHORT_HISTORY_BLOCKS)
-
-    l1_fid = f"scn.tool.{trace_id}.l1_distance"
-    facts.append(
-        tf.simple_fact(
-            l1_fid,
-            "distance L1 entre le mélange demandé et le mélange de la grille",
-            grid["l1_distance"],
-            "ratio",
-            trace_id,
-            table,
-        )
+        raise RefusalError("no_grid", "aucune métrique pour ce point de la grille")
+    return _GridPoint(
+        table=table,
+        model_id=primary,
+        family=family,
+        basis=basis,
+        weights=weights,
+        weight_flags=weight_flags,
+        grid=grid,
+        horizon=horizon,
+        bucket=bucket,
+        rows=rows,
+        wanted=wanted,
     )
-    grid["l1_fact_id"] = l1_fid
 
-    wealth_cad = None
-    if request["amount_cad"] and "wealth_p10" in rows:
-        try:
-            amount = float(request["amount_cad"])
-        except (TypeError, ValueError):
-            amount = None
-        if amount and amount > 0:
-            row = rows["wealth_p10"]
-            wid = f"scn.tool.{trace_id}.wealth_p10_amount"
-            wealth_cad = {
-                "value": row.value * amount,
-                "ci_lo": row.ci_lo * amount,
-                "ci_hi": row.ci_hi * amount,
-                "fact_id": wid,
-            }
-            facts.append(
-                tf.simple_fact(
-                    wid,
-                    f"patrimoine final au 10e centile pour {amount:.0f} investis ({row.family})",
-                    row.value * amount,
-                    currency or "CAD",
-                    trace_id,
-                    table,
-                    status="HYPOTHESE" if row.hypothese else "FAIT",
-                    currency=currency,
-                )
-            )
 
-    upper = None
-    focus = bucket["bucket_metric"] if bucket else None
-    if not horizon["exact"] and focus:
-        upper_rows = table.metrics(primary, family, grid["mix_id"], horizon["upper"], basis)
-        if focus in upper_rows:
-            upper = {"horizon_years": horizon["upper"], "metric": focus, **_metric_view(upper_rows[focus])}
-            facts += tf.row_facts(table, upper_rows[focus], trace_id)
-
-    # Tous les modèles, côte à côte, sur le même point de grille : leur désaccord est une incertitude à montrer.
-    compare = [m for m in (focus, "ret_ann_p10", "ret_ann_p50", "mdd_p90", "cvar95_12m") if m and m in rows]
+def _listed_models(table: ScenarioTable, primary: str, *, include_sensitivity: bool) -> list[str]:
     # Affichage (volet C) : default et compare toujours; sensitivity_only sur demande; hidden jamais.
-    shown = {"default", "compare"} | ({"sensitivity_only"} if request["include_sensitivity"] else set())
-    listed = [m for m in table.models if table.display(m) in shown or m == primary]
-    all_models = []
-    for other in listed:
-        other_rows = table.metrics(other, family, grid["mix_id"], horizon["used"], basis)
-        entry: dict[str, Any] = {
-            "model_id": other,
-            "name": table.model_info(other).get("name") or other,
-            "display": table.display(other),
-            "available": bool(other_rows),
-            "fitted_through": next(iter(other_rows.values())).fitted_through if other_rows else None,
-            "metrics": {},
-        }
-        for metric in compare:
-            if metric in other_rows:
-                entry["metrics"][metric] = _metric_view(other_rows[metric])
-                if other != primary:
-                    facts += tf.row_facts(table, other_rows[metric], trace_id)
-        all_models.append(entry)
+    shown = {"default", "compare"} | ({"sensitivity_only"} if include_sensitivity else set())
+    return [model for model in table.models if table.display(model) in shown or model == primary]
+
+
+def _model_spread(all_models: list[dict[str, Any]], compare: list[str]) -> dict[str, Any]:
     spread = {}
     for metric in compare:
-        values = [(e["model_id"], e["metrics"][metric]["value"]) for e in all_models if metric in e["metrics"]]
+        values = [
+            (entry["model_id"], entry["metrics"][metric]["value"]) for entry in all_models if metric in entry["metrics"]
+        ]
         if len(values) >= 2:
-            low, high = min(values, key=lambda v: v[1]), max(values, key=lambda v: v[1])
+            low, high = min(values, key=lambda pair: pair[1]), max(values, key=lambda pair: pair[1])
             spread[metric] = {"min": low[1], "min_model": low[0], "max": high[1], "max_model": high[0]}
+    return spread
 
-    result: dict[str, Any] = {
-        "status": "ok",
-        "tool": tf.TOOL_NAME,
+
+class _Figures:
+    """Nombres cités pour un point de grille. ``facts`` garde l'ordre de citation : métriques principales, distance
+    L1, montant en dollars, horizon supérieur, puis les autres modèles."""
+
+    def __init__(self, point: _GridPoint, request: dict[str, Any], trace_id: str):
+        self.point = point
+        self.trace_id = trace_id
+        self.facts: list[dict[str, Any]] = []
+        self.primary = {metric: self._cite(point.rows[metric]) for metric in point.wanted}
+        self.l1_fact_id = self._cite_l1_distance()
+        self.wealth_cad = self._wealth_in_cad(request["amount_cad"])
+        focus = point.bucket["bucket_metric"] if point.bucket else None
+        self.upper = self._upper_horizon(focus)
+        # Tous les modèles, côte à côte, sur le même point de grille : leur désaccord est une incertitude à montrer.
+        compare = [
+            metric
+            for metric in (focus, "ret_ann_p10", "ret_ann_p50", "mdd_p90", "cvar95_12m")
+            if metric and metric in point.rows
+        ]
+        self.listed = _listed_models(point.table, point.model_id, include_sensitivity=request["include_sensitivity"])
+        self.all_models = [self._model_entry(model_id, compare) for model_id in self.listed]
+        self.spread = _model_spread(self.all_models, compare)
+
+    def _cite(self, row: Row) -> dict[str, Any]:
+        """Vue de la ligne pour le modèle; ses trois Facts (valeur, bornes de l'IC) rejoignent ``facts``."""
+        self.facts += tool_facts.row_facts(self.point.table, row, self.trace_id)
+        return _metric_view(row)
+
+    def _cite_l1_distance(self) -> str:
+        fact_id = f"scn.tool.{self.trace_id}.l1_distance"
+        self.facts.append(
+            tool_facts.simple_fact(
+                fact_id,
+                "distance L1 entre le mélange demandé et le mélange de la grille",
+                self.point.grid["l1_distance"],
+                "ratio",
+                self.trace_id,
+                self.point.table,
+            )
+        )
+        return fact_id
+
+    def _wealth_in_cad(self, amount_cad: Any) -> dict[str, Any] | None:
+        rows = self.point.rows
+        if not amount_cad or "wealth_p10" not in rows:
+            return None
+        try:
+            amount = float(amount_cad)
+        except (TypeError, ValueError):
+            return None
+        if not amount > 0:  # écarte aussi NaN
+            return None
+        row, currency = rows["wealth_p10"], self.point.currency
+        fact_id = f"scn.tool.{self.trace_id}.wealth_p10_amount"
+        self.facts.append(
+            tool_facts.simple_fact(
+                fact_id,
+                f"patrimoine final au 10e centile pour {amount:.0f} investis ({row.family})",
+                row.value * amount,
+                currency or "CAD",
+                self.trace_id,
+                self.point.table,
+                status="HYPOTHESE" if row.hypothese else "FAIT",
+                currency=currency,
+            )
+        )
+        return {
+            "value": row.value * amount,
+            "ci_lo": row.ci_lo * amount,
+            "ci_hi": row.ci_hi * amount,
+            "fact_id": fact_id,
+        }
+
+    def _upper_horizon(self, focus: str | None) -> dict[str, Any] | None:
+        horizon = self.point.horizon
+        if horizon["exact"] or not focus:
+            return None
+        upper_rows = self.point.metrics(self.point.model_id, horizon["upper"])
+        if focus not in upper_rows:
+            return None
+        return {"horizon_years": horizon["upper"], "metric": focus, **self._cite(upper_rows[focus])}
+
+    def _model_entry(self, model_id: str, compare: list[str]) -> dict[str, Any]:
+        table = self.point.table
+        rows = self.point.metrics(model_id, self.point.horizon["used"])
+        # Les Facts du modèle principal sont déjà cités avec ses métriques principales.
+        view = _metric_view if model_id == self.point.model_id else self._cite
+        return {
+            "model_id": model_id,
+            "name": table.model_info(model_id).get("name") or model_id,
+            "display": table.display(model_id),
+            "available": bool(rows),
+            "fitted_through": next(iter(rows.values())).fitted_through if rows else None,
+            "metrics": {metric: view(rows[metric]) for metric in compare if metric in rows},
+        }
+
+
+def _envelope(status: str, request: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": status,
+        "tool": tool_facts.TOOL_NAME,
         "simulation_only": True,
         "disclaimer_fr": DISCLAIMER_FR,
         "request": request,
-        "model_id": primary,
-        "model_name": table.model_info(primary).get("name") or primary,
-        "family": family,
-        "basis": basis,
-        "currency": currency,
-        "fitted_through": head_row.fitted_through,
-        "window_start": head_row.window_start or table.family_info(family).get("window_start"),
-        "n_paths": head_row.n_paths,
-        "seed": head_row.seed,
-        "hypothese": hypothese,
-        "run": {
-            "run_id": table.run_id,
-            "table_key": table.table_key,
-            "table_sha256": table.table_sha256,
-            "code_sha": table.code_sha,
-            "data_sha256": table.data_sha256(family),
-        },
-        "data_sha256": table.data_sha256(family),
-        "code_sha": table.code_sha,
-        "weights_normalized": weights,
-        "weight_flags": weight_flags,
-        "grid": grid,
-        "horizon": horizon,
-        "threshold": bucket,
-        "primary": primary_metrics,
-        "wealth_p10_amount": wealth_cad,
-        "upper_horizon": upper,
-        "all_models": all_models,
-        "model_spread": spread,
-        "model_assumptions": table.model_info(primary).get("assumptions") or [],
-        "validation": table.model_info(primary).get("validation"),
-        "validation_by_model": {m: table.model_info(m).get("validation") for m in listed},
-        "display": table.display(primary),
-        **_validation_flags(table, primary, horizon["used"], basis, grid["mix_weights"]),
-        "integrity": {k: v for k, v in table.integrity.items() if k != "units"},
-        "table_warnings": list(table.warnings),
-        "facts": facts,
     }
-    explanation = render_fr(result)
-    result["explanation"] = explanation
-    result["explanation_facts"] = [
-        s for key in ("data_used", "why", "limits", "what_would_change") for s in explanation[key]
-    ]
-    result["trace_event"] = tf.trace_event(
-        trace_id=trace_id,
-        inputs=request,
-        started_utc=started,
-        ended_utc=clock.iso(ms=True),
-        status="ok",
-        output_summary=explanation["headline"],
-        fact_ids=[f["fact_id"] for f in facts],
-        table=table,
-        family=family,
-        seed=head_row.seed,
-    )
-    return result
+
+
+def _run_info(table: ScenarioTable, family: str) -> dict[str, Any]:
+    return {
+        "run_id": table.run_id,
+        "table_key": table.table_key,
+        "table_sha256": table.table_sha256,
+        "code_sha": table.code_sha,
+        "data_sha256": table.data_sha256(family),
+    }
 
 
 def _validation_flags(
@@ -455,7 +497,7 @@ def _validation_flags(
         reasons.append(f"horizon {horizon} ans hors des horizons validés {horizons}")
     if basis not in VALIDATED_BASES:
         reasons.append(f"base {basis} non validée")
-    untested = [b for b in UNVALIDATED_BLOCKS if mix_weights.get(b, 0.0) > 0]
+    untested = [block for block in UNVALIDATED_BLOCKS if mix_weights.get(block, 0.0) > 0]
     if untested:
         reasons.append(f"mélange avec {', '.join(untested)} : blocs non testés hors échantillon")
     return {
@@ -467,16 +509,80 @@ def _validation_flags(
     }
 
 
+def _ok_result(point: _GridPoint, request: dict[str, Any], figures: _Figures) -> dict[str, Any]:
+    table, family, head_row = point.table, point.family, point.head_row
+    model_info = table.model_info(point.model_id)
+    return {
+        **_envelope("ok", request),
+        "model_id": point.model_id,
+        "model_name": model_info.get("name") or point.model_id,
+        "family": family,
+        "basis": point.basis,
+        "currency": point.currency,
+        "fitted_through": head_row.fitted_through,
+        "window_start": head_row.window_start or table.family_info(family).get("window_start"),
+        "n_paths": head_row.n_paths,
+        "seed": head_row.seed,
+        "hypothese": point.hypothese,
+        "run": _run_info(table, family),
+        "data_sha256": table.data_sha256(family),
+        "code_sha": table.code_sha,
+        "weights_normalized": point.weights,
+        "weight_flags": point.weight_flags,
+        "grid": {**point.grid, "l1_fact_id": figures.l1_fact_id},
+        "horizon": point.horizon,
+        "threshold": point.bucket,
+        "primary": figures.primary,
+        "wealth_p10_amount": figures.wealth_cad,
+        "upper_horizon": figures.upper,
+        "all_models": figures.all_models,
+        "model_spread": figures.spread,
+        "model_assumptions": model_info.get("assumptions") or [],
+        "validation": model_info.get("validation"),
+        "validation_by_model": {model: table.model_info(model).get("validation") for model in figures.listed},
+        "display": table.display(point.model_id),
+        **_validation_flags(table, point.model_id, point.horizon["used"], point.basis, point.grid["mix_weights"]),
+        "integrity": {key: value for key, value in table.integrity.items() if key != "units"},
+        "table_warnings": list(table.warnings),
+        "facts": figures.facts,
+    }
+
+
+def _add_explanation(result: dict[str, Any], table: ScenarioTable, trace_id: str, started: str) -> None:
+    explanation = render_fr(result)
+    result["explanation"] = explanation
+    result["explanation_facts"] = [
+        statement for key in ("data_used", "why", "limits", "what_would_change") for statement in explanation[key]
+    ]
+    result["trace_event"] = tool_facts.trace_event(
+        trace_id=trace_id,
+        inputs=result["request"],
+        started_utc=started,
+        ended_utc=clock.iso(ms=True),
+        status="ok",
+        output_summary=explanation["headline"],
+        fact_ids=[fact["fact_id"] for fact in result["facts"]],
+        table=table,
+        family=result["family"],
+        seed=result["seed"],
+    )
+
+
+def _compute(
+    table: ScenarioTable, request: dict[str, Any], trace_id: str, started: str, max_l1: float
+) -> dict[str, Any]:
+    point = _locate(table, request, max_l1)
+    result = _ok_result(point, request, _Figures(point, request, trace_id))
+    _add_explanation(result, table, trace_id, started)
+    return result
+
+
 def _refusal(
-    table: ScenarioTable | None, request: dict[str, Any], trace_id: str, started: str, refusal: Refusal
+    table: ScenarioTable | None, request: dict[str, Any], trace_id: str, started: str, refusal: RefusalError
 ) -> dict[str, Any]:
     family = request.get("family")
     return {
-        "status": "refus",
-        "tool": tf.TOOL_NAME,
-        "simulation_only": True,
-        "disclaimer_fr": DISCLAIMER_FR,
-        "request": request,
+        **_envelope("refus", request),
         "error": {"code": refusal.code, "message": refusal.message, "details": refusal.details},
         "run": (
             {"run_id": table.run_id, "table_sha256": table.table_sha256, "code_sha": table.code_sha}
@@ -485,7 +591,7 @@ def _refusal(
         ),
         "facts": [],
         "explanation_facts": [],
-        "trace_event": tf.trace_event(
+        "trace_event": tool_facts.trace_event(
             trace_id=trace_id,
             inputs=request,
             started_utc=started,
@@ -501,46 +607,52 @@ def _refusal(
     }
 
 
+_COMPACT_KEYS = (
+    "status",
+    "tool",
+    "simulation_only",
+    "disclaimer_fr",
+    "model_id",
+    "model_name",
+    "family",
+    "basis",
+    "currency",
+    "fitted_through",
+    "window_start",
+    "data_sha256",
+    "code_sha",
+    "hypothese",
+    "integrity",
+    "display",
+    "validated",
+    "validation_reasons",
+    "degraded_calibration",
+    "weight_flags",
+    "grid",
+    "horizon",
+    "threshold",
+    "primary",
+    "wealth_p10_amount",
+    "upper_horizon",
+    "all_models",
+    "model_spread",
+)
+
+
 def compact_for_model(result: dict[str, Any]) -> dict[str, Any]:
     """Ce que le LLM reçoit : nombres et fact_id, sans la liste complète des Facts (gardée dans le registre)."""
     if result["status"] != "ok":
-        return {k: result[k] for k in ("status", "tool", "error", "disclaimer_fr")} | {
+        return {key: result[key] for key in ("status", "tool", "error", "disclaimer_fr")} | {
             "trace_id": result["trace_event"]["trace_id"]
         }
-    keep = (
-        "status",
-        "tool",
-        "simulation_only",
-        "disclaimer_fr",
-        "model_id",
-        "model_name",
-        "family",
-        "basis",
-        "currency",
-        "fitted_through",
-        "window_start",
-        "data_sha256",
-        "code_sha",
-        "hypothese",
-        "integrity",
-        "display",
-        "validated",
-        "validation_reasons",
-        "degraded_calibration",
-        "weight_flags",
-        "grid",
-        "horizon",
-        "threshold",
-        "primary",
-        "wealth_p10_amount",
-        "upper_horizon",
-        "all_models",
-        "model_spread",
-    )
-    out = {k: result[k] for k in keep}
+    out = {key: result[key] for key in _COMPACT_KEYS}
     out["run_id"] = result["run"]["run_id"]
     out["trace_id"] = result["trace_event"]["trace_id"]
-    out["explanation"] = {k: [s["text_fr"] for s in v] for k, v in result["explanation"].items() if isinstance(v, list)}
+    out["explanation"] = {
+        key: [statement["text_fr"] for statement in statements]
+        for key, statements in result["explanation"].items()
+        if isinstance(statements, list)
+    }
     out["headline"] = result["explanation"]["headline"]
     return out
 
@@ -619,8 +731,8 @@ class ScenarioRiskTool:
             table = self.loader.load()
         except ScenarioTableError as exc:
             request = {
-                k: kwargs.get(k)
-                for k in (
+                key: kwargs.get(key)
+                for key in (
                     "weights",
                     "horizon_years",
                     "loss_threshold_cad",
@@ -634,9 +746,9 @@ class ScenarioRiskTool:
             result = _refusal(
                 None,
                 request,
-                tf.trace_id_for(request, None),
+                tool_facts.trace_id_for(request, None),
                 clock.iso(ms=True),
-                Refusal("table_unavailable", f"table de scénarios indisponible : {exc}"),
+                RefusalError("table_unavailable", f"table de scénarios indisponible : {exc}"),
             )
         else:
             result = compute_scenario_risk(table, max_l1=self.max_l1, **kwargs)
@@ -645,10 +757,10 @@ class ScenarioRiskTool:
         return result
 
     def facts(self) -> list[dict[str, Any]]:
-        return [f for r in self.ledger for f in r["facts"]]
+        return [fact for result in self.ledger for fact in result["facts"]]
 
     def trace_events(self) -> list[dict[str, Any]]:
-        return [r["trace_event"] for r in self.ledger]
+        return [result["trace_event"] for result in self.ledger]
 
     def tool(self) -> Any:
         from strands import tool
@@ -656,7 +768,7 @@ class ScenarioRiskTool:
         owner = self
 
         @tool(name="scenario_risk", description=TOOL_DESCRIPTION, inputSchema=INPUT_SCHEMA)
-        def scenario_risk(
+        def scenario_risk(  # noqa: PLR0913 - signature imposée par @tool (paramètres de l'outil, noms figés)
             weights: dict,
             horizon_years: int,
             loss_threshold_cad: float | None = None,
@@ -664,7 +776,7 @@ class ScenarioRiskTool:
             family: str = "CAD77",
             model_id: str | None = None,
             basis: str = "nominal",
-            include_sensitivity: bool = False,
+            include_sensitivity: bool = False,  # noqa: FBT001, FBT002 - signature imposée par @tool
         ) -> str:
             result = owner.run(
                 weights=weights,

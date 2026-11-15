@@ -9,7 +9,7 @@ from alphaforge.profile.questionnaire import (
     KINDS,
     TYPE_TO_KIND,
     YAML_PATH,
-    InvalidValue,
+    InvalidValueError,
     Questionnaire,
     default_questionnaire,
     evaluate,
@@ -26,7 +26,7 @@ def q() -> Questionnaire:
 def test_yaml_is_versioned_and_marked_for_review(q):
     text = open("src/alphaforge/profile/questionnaire.yaml", encoding="utf-8").read()
     assert text.startswith("# À RELIRE PAR LE VOLET FINANCE DE L'ÉQUIPE LARPATHON")
-    assert q.version == "2026-11-14.2"
+    assert q.version == "2026-11-15.1"
     assert q.threshold == 0.70 and q.cap == 0.95
 
 
@@ -68,14 +68,18 @@ BASE = {
     "q_kn_invest_freq": "never",
     "q_kn_news": "rarely",
     "q_kn_products": ["none"],
+    "q_kn_quiz_diversification": "dont_know",
+    "q_kn_quiz_bond_rates": "dont_know",
     "q_kn_self": "beginner",
     "q_goal": "growth",
     "q_project_type": "home",
     "q_horizon": "3to10",
     "q_drop_reaction": "sell_some",
     "q_risk_attitude": "small",
+    "q_sell_threshold": "10to20",
     "q_emergency_fund": "1to3",
     "q_income_stability": "stable",
+    "q_employment_sector": "industry",
     "q_loss_impact": "some",
     "q_liquidity": "none",
     "q_withdrawal_pct": "10to25",
@@ -83,7 +87,12 @@ BASE = {
     "q_currency": "cad_only",
     "q_esg": 1,
     "q_exclusions": ["none"],
+    "q_exclusion_strictness": "absolute",
     "q_interests": ["none"],
+    "q_crypto_place": "small",
+    "q_crypto_max": "lt2",
+    "q_hype_reaction": "no_change",
+    "q_hype_share": "lt2",
     "q_amount": "lt10k",
     "q_existing_portfolio": True,
 }
@@ -229,7 +238,7 @@ def test_tranche_numbers_are_the_prudent_bound(q, question_id, option, number):
     question = q.question(question_id)
     assert q.validate_answer(question, option) == option
     assert question.option_number(option) == number
-    with pytest.raises(InvalidValue):
+    with pytest.raises(InvalidValueError):
         q.validate_answer(question, number)  # le nombre n'est pas une réponse : seul l'identifiant l'est
 
 
@@ -312,7 +321,7 @@ def test_validation_accepts_typed_values(kind, value, kwargs, expected):
     ],
 )
 def test_validation_rejects_wrong_values(kind, value, kwargs, reason):
-    with pytest.raises(InvalidValue) as exc:
+    with pytest.raises(InvalidValueError) as exc:
         validate_value(kind, value, **kwargs)
     assert exc.value.reason == reason
 
@@ -331,3 +340,138 @@ def test_conditions():
     assert evaluate({"all": [{"field": "a.n", "gt": 1}, {"not": {"field": "a.x", "eq": "growth"}}]}, values)
     assert not evaluate({"field": "missing.field", "in": ["x"]}, values)
     assert evaluate(None, values)
+
+
+# ---------------------------------------------------------------------- profil court lu par l'étape 0 (finance)
+SHORT_PROFILE_CODES = {
+    "knowledge.quiz_diversification": ["single_stock", "etf", "same", "dont_know"],
+    "knowledge.quiz_bond_rates": ["rises", "falls", "same", "no_link", "dont_know"],
+    "risk_tolerance.sell_threshold_pct": ["none", "lt5", "5to10", "10to20", "20to30", "gte30", "dont_know"],
+    "risk_capacity.employment_sector": [
+        "technology",
+        "finance",
+        "energy",
+        "healthcare",
+        "public",
+        "industry",
+        "retail",
+        "unemployed",
+        "prefer_not",
+    ],
+    "preferences.exclusion_strictness": ["absolute", "small_share_in_fund", "preference", "dont_know"],
+    "preferences.crypto_place": ["none", "small", "larger", "let_system_decide", "dont_know"],
+    "preferences.crypto_max_pct": ["lt2", "2to5", "5to10", "gt10", "propose_limit"],
+    "behavior.hype_reaction": ["buy_a_lot", "buy_some", "wait", "no_change", "dont_know"],
+    "behavior.hype_position_share": ["lt2", "2to5", "5to10", "gt10", "dont_know"],
+}
+
+
+def test_short_profile_fields_carry_the_engine_codes(q):
+    from alphaforge.finance.strategy.config import load_strategy
+
+    for field_id, codes in SHORT_PROFILE_CODES.items():
+        spec = q.fields[field_id]
+        assert spec.type == "enum" and list(spec.value_ids) == codes, field_id
+        assert spec.weight == 0 and not spec.summary, field_id  # hors complétude et hors résumés
+        assert q.question_for_field(field_id) is not None, field_id
+    # Les quiz ne s'écrivent que par un clic; le reste peut aussi venir d'un texte libre confirmé (A1).
+    assert q.fields["knowledge.quiz_bond_rates"].writable_by == ("base",)
+    assert "a1" in q.fields["behavior.hype_reaction"].writable_by
+    # Chaque code comparé par strategy.yaml existe dans le champ que lit style_inputs_from_view.
+    cfg = load_strategy()
+    pc = cfg.profile_codes
+    values = {field_id: set(codes) for field_id, codes in SHORT_PROFILE_CODES.items()}
+    assert set(pc["fomo_hype_reaction"]) | set(pc["attention_hype_reaction"]) <= values["behavior.hype_reaction"]
+    assert set(pc["fomo_hype_share"]) <= values["behavior.hype_position_share"]
+    assert set(pc["low_composure_sell_threshold"]) <= values["risk_tolerance.sell_threshold_pct"]
+    for quiz, correct in pc["quiz_correct"].items():
+        assert correct in values[f"knowledge.{quiz}"]
+    assert set(pc["exclusion_strictness"].values()) <= values["preferences.exclusion_strictness"]
+    assert set(cfg.sectors.employment_to_tag) <= values["risk_capacity.employment_sector"]
+
+
+def test_short_profile_questions_follow_their_conditions(q):
+    plain = _walk(q, BASE)
+    for question_id in ("q_kn_quiz_diversification", "q_kn_quiz_bond_rates"):
+        assert plain.index(question_id) < plain.index("q_kn_self")  # questions rapides, puis l'auto-évaluation
+    assert plain.index("q_sell_threshold") == plain.index("q_risk_attitude") + 1
+    assert plain.index("q_employment_sector") == plain.index("q_income_stability") + 1
+    assert plain.index("q_hype_reaction") == plain.index("q_interests") + 1
+    for question_id in ("q_exclusion_strictness", "q_crypto_place", "q_crypto_max", "q_hype_share"):
+        assert question_id not in plain
+    branched = _walk(
+        q,
+        {
+            **BASE,
+            "q_esg": 4,
+            "q_exclusions": ["fossil_fuels", "tobacco"],
+            "q_interests": ["technology", "crypto"],
+            "q_crypto_place": "larger",
+            "q_hype_reaction": "buy_some",
+        },
+    )
+    assert branched.index("q_exclusion_strictness") == branched.index("q_exclusions") + 1
+    assert branched.index("q_crypto_place") == branched.index("q_interests") + 1
+    assert branched.index("q_crypto_max") == branched.index("q_crypto_place") + 1
+    assert branched.index("q_hype_share") == branched.index("q_hype_reaction") + 1
+    # Aucune exclusion, aucune envie de cryptoactifs, aucun achat : pas de relance.
+    quiet = _walk(
+        q,
+        {
+            **BASE,
+            "q_esg": 4,
+            "q_exclusions": ["none"],
+            "q_interests": ["crypto"],
+            "q_crypto_place": "let_system_decide",
+            "q_hype_reaction": "wait",
+        },
+    )
+    assert "q_crypto_place" in quiet
+    for question_id in ("q_exclusion_strictness", "q_crypto_max", "q_hype_share"):
+        assert question_id not in quiet
+    strictness = q.fields["preferences.exclusion_strictness"]
+    assert not q.applicable(strictness.when, {"preferences.exclusions": []})
+    assert not q.applicable(strictness.when, {})
+
+
+@pytest.mark.parametrize(
+    ("question_id", "accepted", "rejected"),
+    [
+        ("q_kn_quiz_diversification", "single_stock", "stock"),
+        ("q_kn_quiz_bond_rates", "falls", "down"),
+        ("q_sell_threshold", "5to10", "5-10"),
+        ("q_employment_sector", "prefer_not", "tech"),
+        ("q_exclusion_strictness", "small_share_in_fund", "fund_tolerated"),
+        ("q_crypto_place", "let_system_decide", "some"),
+        ("q_crypto_max", "propose_limit", "dont_know"),
+        ("q_hype_reaction", "buy_a_lot", "buy"),
+        ("q_hype_share", "gt10", "10plus"),
+    ],
+)
+def test_short_profile_answers_are_checked_against_the_codes(q, question_id, accepted, rejected):
+    question = q.question(question_id)
+    assert q.validate_answer(question, accepted) == accepted
+    assert q.validate_field_value(question.field.id, accepted) == accepted
+    with pytest.raises(InvalidValueError) as exc:
+        q.validate_answer(question, rejected)
+    assert exc.value.reason == "not_in_options"
+    rendered = q.render(question, "fr")
+    assert rendered["kind"] == "single_choice" and rendered["field"] == question.field.id
+    assert [o["value"] for o in rendered["options"]] == SHORT_PROFILE_CODES[question.field.id]
+
+
+def test_short_profile_fields_leave_completeness_unchanged(q):
+    branches = {"q_esg": 4, "q_exclusions": ["tobacco"], "q_interests": ["crypto"], "q_hype_reaction": "buy_a_lot"}
+    answers = {**BASE, **branches}
+    values = {}
+    for question_id in _walk(q, answers):
+        question = q.question(question_id)
+        value = q.validate_answer(question, answers[question_id])
+        values[question.field.id] = question.option_number(value) if question.numeric_choice else value
+    core = {field_id: value for field_id, value in values.items() if field_id not in SHORT_PROFILE_CODES}
+    assert set(values) - set(core) == set(SHORT_PROFILE_CODES)  # toutes posées dans ce parcours
+    before, after = rules.completeness(q, core, "fr"), rules.completeness(q, values, "fr")
+    assert before["score"] == after["score"] < q.threshold == 0.70
+    assert before["missing"] == after["missing"]
+    assert not set(rules.missing_fields(q, {})) & set(SHORT_PROFILE_CODES)  # jamais dans les champs manquants d'A1
+    assert q.render(q.question("q_hype_reaction"), "en")["dimension"] == "behavior"

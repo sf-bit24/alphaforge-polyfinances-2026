@@ -14,7 +14,7 @@ def q():
 
 
 def build(q, raw, **kwargs):
-    return a1.build_question(q, raw, turn=2, index=1, locale="fr", values=VALUES, **kwargs)
+    return a1.build_question(a1.TurnFrame(q, VALUES, locale="fr", turn=2), raw, index=1, **kwargs)
 
 
 def loss(options=None, kind="single_choice"):
@@ -70,7 +70,7 @@ def test_horizon_tranches_stay_inside_the_known_band(q):
     )
     assert outside is None and "not a tranche" in error
     for t in numeric_choices(q, "horizon.horizon_years", VALUES, "fr"):
-        assert a1.consistency_warnings(q, VALUES, "horizon.horizon_years", t["number"]) == []
+        assert a1.consistency_warnings(VALUES, "horizon.horizon_years", t["number"]) == []
 
 
 def test_open_questions_are_the_exception(q):
@@ -96,7 +96,7 @@ def test_open_fields_come_from_the_yaml(q):
 
 def test_fallback_questions_offer_tranches(q):
     values = {**VALUES, "objective.goal": "growth"}
-    questions = a1.fallback_questions(q, values, turn=3, locale="fr")
+    questions = a1.fallback_questions(a1.TurnFrame(q, values, locale="fr", turn=3))
     assert [(x["id"], x["field"], x["kind"]) for x in questions] == [
         ("fb_3_1", "objective.goal_detail", "text"),
         ("fb_3_2", "horizon.horizon_years", "single_choice"),
@@ -105,7 +105,8 @@ def test_fallback_questions_offer_tranches(q):
     computed = numeric_choices(q, "risk_capacity.max_loss_cad", values, "fr")
     assert questions[2]["options"] == [{"value": t["value"], "label": t["label"]} for t in computed]
     # Plus de question ouverte possible : le secours passe au champ suivant; limit et skip sont respectés.
-    closed = a1.fallback_questions(q, values, turn=3, locale="fr", open_left=0, limit=2, skip={"horizon.horizon_years"})
+    frame = a1.TurnFrame(q, values, locale="fr", turn=3)
+    closed = a1.fallback_questions(frame, open_left=0, limit=2, skip={"horizon.horizon_years"})
     assert [x["field"] for x in closed] == ["risk_capacity.max_loss_cad", "horizon.withdrawal_pattern"]
 
 
@@ -120,17 +121,11 @@ def session_with(q, facts=None):
 
 
 def a1_turn(q, session, texts):
-    from alphaforge.trace import Trace
-
-    return a1.A1Turn(
-        q, session, locale="fr", turn=3, trace=Trace("fr", None), emitter=None, kb_search=None, investor_texts=texts
-    )
+    return a1.A1Turn(q, session, locale="fr", turn=3, investor_texts=texts)
 
 
 def update(turn, field, value, evidence):
-    import json
-
-    return json.loads(turn._update_profile([{"field": field, "value": value, "evidence": evidence}]))["results"][0]
+    return turn._update_profile([{"field": field, "value": value, "evidence": evidence}])["results"][0]
 
 
 MONTHLY = "constraints.monthly_contribution_cad"
@@ -261,6 +256,9 @@ def test_confirmation_questions_are_built_by_the_code(q):
 
 
 # ---------------------------------------------------------------------- contexte de A1
+EMPTY_TURN = a1.TurnInput(turn=3, locale="fr", investor_message=None, new_answers=[], journal=[], portfolio=None)
+
+
 def test_context_shows_choices_values_to_confirm_contradictions_and_budget(q):
     session = session_with(
         q,
@@ -274,7 +272,7 @@ def test_context_shows_choices_values_to_confirm_contradictions_and_budget(q):
     )
     session.set_fact(MONTHLY, 3000, "a1:2", confirmed=False)
     session.data["followup_counts"] = {"generated": 5, "open": 2}
-    context = a1.build_context(q, session, locale="fr", turn=3, journal=[], new_answers=[], portfolio=None)
+    context = a1.build_context(q, session, EMPTY_TURN)
     assert [item["field"] for item in context["to_confirm"]] == [MONTHLY]
     assert context["to_confirm"][0]["shown_as"] == "3 000 $"
     assert MONTHLY not in {item["field"] for item in context["known_fields"]}
@@ -292,7 +290,7 @@ def test_context_shows_choices_values_to_confirm_contradictions_and_budget(q):
     assert goal["open_field"] is True
     # Un champ numérique manquant porte ses tranches, calculées par le code.
     session.set_fact("risk_capacity.max_loss_cad", None, "settings")
-    context = a1.build_context(q, session, locale="fr", turn=3, journal=[], new_answers=[], portfolio=None)
+    context = a1.build_context(q, session, EMPTY_TURN)
     loss = next(item for item in context["missing_fields"] if item["field"] == "risk_capacity.max_loss_cad")
     assert loss["choices"][0] == {"value": "lt2_5pct", "label": "Moins de 500 $ (2,5 % du montant)"}
     assert "min" not in loss and "max" not in loss
@@ -335,7 +333,7 @@ def test_a_replaced_confirmed_value_stays_until_confirmation(q):
     session.set_fact(attitude, "moderate", "a1:2", confirmed=False)
     assert session.values()[attitude] == "large"  # la valeur confirmée reste en vigueur
     assert list(session.unconfirmed()) == [attitude]
-    context = a1.build_context(q, session, locale="fr", turn=3, journal=[], new_answers=[], portfolio=None)
+    context = a1.build_context(q, session, EMPTY_TURN)
     assert context["to_confirm"][0]["replaces"] == "Accepter de fortes variations"
     session.reject_fact(attitude, "a1:3", question_id="cf_3_1")
     assert session.facts[attitude] == {**session.facts[attitude], "value": "large", "provenance": "settings"}

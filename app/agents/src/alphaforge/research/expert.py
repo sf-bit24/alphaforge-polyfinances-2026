@@ -75,6 +75,80 @@ BRIEF_STEP = """5. Call stage_subject_brief once: a French synthesis of your par
 citing the finding ids it rests on, with its limits (lags, vintages, licences) and gaps. Every number must appear \
 in a cited finding."""
 
+# Outils de l'expert : textes et schémas lus par le modèle (les paquets du sujet entrent dans le schéma des missions).
+SEARCH_GENERAL_KNOWLEDGE_DESCRIPTION = "Search the shared general knowledge base (what AlphaForge already knows)."
+SEARCH_GENERAL_KNOWLEDGE_SCHEMA = {
+    "json": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}
+}
+SPAWN_RESEARCHERS_DESCRIPTION = (
+    "Spawn research sub-agents, one isolated session each; waits for them and returns findings."
+)
+STAGE_ITEMS_DESCRIPTION = "Stage selected findings for the supervisor, each with a neutral French summary."
+STAGE_ITEMS_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {
+            "selections": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "finding_id": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "tags": {"type": "array", "items": {"type": "string"}, "maxItems": 3},
+                    },
+                    "required": ["finding_id"],
+                },
+            }
+        },
+        "required": ["selections"],
+    }
+}
+STAGE_SUBJECT_BRIEF_DESCRIPTION = "Question mode only: stage the French synthesis of your part, citing finding ids."
+STAGE_SUBJECT_BRIEF_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {
+            "text": {"type": "string"},
+            "citations": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["text", "citations"],
+    }
+}
+FINISH_DESCRIPTION = "End the expert run with a short French note and the remaining gaps."
+FINISH_SCHEMA = {
+    "json": {
+        "type": "object",
+        "properties": {"note": {"type": "string"}, "gaps": {"type": "array", "items": {"type": "string"}}},
+    }
+}
+TOOL_SUMMARIES = {
+    "spawn_researchers": lambda tool_input: {"missions": len(tool_input.get("missions") or [])},
+    "stage_items": lambda tool_input: {"selections": len(tool_input.get("selections") or [])},
+    "stage_subject_brief": lambda tool_input: {"citations": len(tool_input.get("citations") or [])},
+}
+
+
+def _spawn_researchers_schema(packs: tuple[str, ...]) -> dict[str, Any]:
+    mission = {
+        "type": "object",
+        "properties": {
+            "objective": {"type": "string"},
+            "evidence_wanted": {"type": "array", "items": {"type": "string"}},
+            "packs": {"type": "array", "items": {"type": "string", "enum": list(packs)}},
+            "issuers": {"type": "array", "items": {"type": "string"}},
+            "themes": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["objective", "packs"],
+    }
+    return {
+        "json": {
+            "type": "object",
+            "properties": {"missions": {"type": "array", "items": mission}},
+            "required": ["missions"],
+        }
+    }
+
 
 @dataclass
 class ExpertJob:
@@ -93,6 +167,39 @@ class ExpertJob:
     @property
     def prefix(self) -> str:
         return f"staging/{self.run_id}/experts/{self.subject.code}/"
+
+
+def _researcher_report(result: dict[str, Any]) -> dict[str, Any]:
+    """Compte rendu d'un chercheur : statut, erreur, résumé, lacunes, hôtes bloqués, quarantaine, nombre de constats."""
+    marker = result.get("marker") or {}
+    brief = result["brief"]
+    return {
+        "researcher": brief["researcher"],
+        "objective": brief["objective"],
+        "status": marker.get("status") or ("error" if result.get("error") else "unknown"),
+        "error": result.get("error") or marker.get("error"),
+        "summary": marker.get("summary"),
+        "gaps": marker.get("gaps") or [],
+        "blocked_hosts": marker.get("blocked_hosts") or {},
+        "quarantine": marker.get("quarantine") or [],
+        "findings": len(result.get("findings") or []),
+    }
+
+
+def _compact_finding(finding: dict[str, Any]) -> dict[str, Any]:
+    """Constat abrégé rendu à l'expert (six valeurs au plus, tronquées)."""
+    return {
+        "finding_id": finding["finding_id"],
+        "kind": finding.get("kind"),
+        "label": finding.get("label"),
+        "claim": finding.get("claim"),
+        "values": {name: str(value)[:120] for name, value in list((finding.get("values") or {}).items())[:6]},
+        "observation_date": finding.get("observation_date"),
+        "publication_date": finding.get("publication_date"),
+        "publication_basis": finding.get("publication_basis"),
+        "host": finding.get("host"),
+        "host_status": finding.get("host_status"),
+    }
 
 
 @dataclass
@@ -117,6 +224,51 @@ class ExpertRun:
     def remaining(self) -> int:
         return max(0, self.job.max_researchers - self.spawned)
 
+    def _researcher_brief(self, mission: dict[str, Any], objective: str, packs: list[str]) -> dict[str, Any]:
+        return {
+            "run_id": self.job.run_id,
+            "subject": self.job.subject.code,
+            "researcher": f"r{self.spawned}",
+            "objective": objective,
+            "evidence_wanted": [str(evidence)[:200] for evidence in (mission.get("evidence_wanted") or [])][:8],
+            "packs": packs,
+            "issuers": [str(issuer).upper()[:20] for issuer in (mission.get("issuers") or self.job.issuers)][:12],
+            "themes": [str(theme)[:40] for theme in (mission.get("themes") or self.job.themes)][:8],
+            "since": self.job.since,
+            "as_of": self.job.as_of,
+            "budget_s": RESEARCHER_BUDGET_S,
+            "max_tool_calls": RESEARCHER_MAX_TOOL_CALLS,
+        }
+
+    def _accept_missions(self, missions: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Missions valides → missions des chercheurs, numérotés dans l'ordre; les autres, refusées avec leur raison."""
+        accepted, refused = [], []
+        for mission in missions:
+            packs = [pack for pack in (mission.get("packs") or []) if pack in self.job.subject.packs]
+            objective = " ".join(str(mission.get("objective") or "").split())[:500]
+            if not packs or not objective:
+                refused.append({"objective": objective, "reason": "objectif ou paquets du sujet manquants"})
+                continue
+            self.spawned += 1
+            accepted.append(self._researcher_brief(mission, objective, packs))
+        return accepted, refused
+
+    def _collect(self, results: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Compte rendu de chaque chercheur et constats nouveaux, gardés par identifiant."""
+        report, new_findings = [], []
+        for result in results:
+            entry = _researcher_report(result)
+            report.append(entry)
+            brief = result["brief"]
+            self.researchers.append(
+                {**entry, "session_id": session_id(brief["run_id"], brief["subject"], brief["researcher"])}
+            )
+            for finding in result.get("findings") or []:
+                if isinstance(finding, dict) and finding.get("finding_id"):
+                    self.findings[finding["finding_id"]] = finding
+                    new_findings.append(finding)
+        return report, new_findings
+
     def spawn(self, missions: list[dict[str, Any]]) -> dict[str, Any]:
         if self.rounds >= MAX_ROUNDS:
             return {"status": "error", "reason": f"au plus {MAX_ROUNDS} tours de lancement"}
@@ -125,83 +277,22 @@ class ExpertRun:
         cap = min(DEPTH_CAPS[self.job.depth], self.remaining())
         if cap <= 0:
             return {"status": "error", "reason": "plafond de chercheurs atteint pour ce sujet"}
-        accepted, refused = [], []
-        for mission in missions[:cap]:
-            packs = [p for p in (mission.get("packs") or []) if p in self.job.subject.packs]
-            objective = " ".join(str(mission.get("objective") or "").split())[:500]
-            if not packs or not objective:
-                refused.append({"objective": objective, "reason": "objectif ou paquets du sujet manquants"})
-                continue
-            self.spawned += 1
-            accepted.append(
-                {
-                    "run_id": self.job.run_id,
-                    "subject": self.job.subject.code,
-                    "researcher": f"r{self.spawned}",
-                    "objective": objective,
-                    "evidence_wanted": [str(e)[:200] for e in (mission.get("evidence_wanted") or [])][:8],
-                    "packs": packs,
-                    "issuers": [str(i).upper()[:20] for i in (mission.get("issuers") or self.job.issuers)][:12],
-                    "themes": [str(t)[:40] for t in (mission.get("themes") or self.job.themes)][:8],
-                    "since": self.job.since,
-                    "as_of": self.job.as_of,
-                    "budget_s": RESEARCHER_BUDGET_S,
-                    "max_tool_calls": RESEARCHER_MAX_TOOL_CALLS,
-                }
-            )
+        accepted, refused = self._accept_missions(missions[:cap])
         if len(missions) > cap:
             refused += [
-                {"objective": str(m.get("objective"))[:120], "reason": "au-delà du plafond"} for m in missions[cap:]
+                {"objective": str(mission.get("objective"))[:120], "reason": "au-delà du plafond"}
+                for mission in missions[cap:]
             ]
         if not accepted:
             return {"status": "error", "reason": "aucune mission valide", "refused": refused}
         self.rounds += 1
         timeout = max(60.0, min(RESEARCHER_BUDGET_S + 150, self.deadline - time.monotonic()))
-        results = self.launcher.run(accepted, timeout)
-        report = []
-        new_findings = []
-        for result in results:
-            marker = result.get("marker") or {}
-            brief = result["brief"]
-            entry = {
-                "researcher": brief["researcher"],
-                "objective": brief["objective"],
-                "status": marker.get("status") or ("error" if result.get("error") else "unknown"),
-                "error": result.get("error") or marker.get("error"),
-                "summary": marker.get("summary"),
-                "gaps": marker.get("gaps") or [],
-                "blocked_hosts": marker.get("blocked_hosts") or {},
-                "quarantine": marker.get("quarantine") or [],
-                "findings": len(result.get("findings") or []),
-            }
-            report.append(entry)
-            self.researchers.append(
-                {**entry, "session_id": session_id(brief["run_id"], brief["subject"], brief["researcher"])}
-            )
-            for finding in result.get("findings") or []:
-                if isinstance(finding, dict) and finding.get("finding_id"):
-                    self.findings[finding["finding_id"]] = finding
-                    new_findings.append(finding)
-        compact = [
-            {
-                "finding_id": f["finding_id"],
-                "kind": f.get("kind"),
-                "label": f.get("label"),
-                "claim": f.get("claim"),
-                "values": {k: str(v)[:120] for k, v in list((f.get("values") or {}).items())[:6]},
-                "observation_date": f.get("observation_date"),
-                "publication_date": f.get("publication_date"),
-                "publication_basis": f.get("publication_basis"),
-                "host": f.get("host"),
-                "host_status": f.get("host_status"),
-            }
-            for f in new_findings
-        ]
+        report, new_findings = self._collect(self.launcher.run(accepted, timeout))
         return {
             "status": "ok",
             "round": self.rounds,
             "researchers": report,
-            "findings": compact,
+            "findings": [_compact_finding(finding) for finding in new_findings],
             "refused": refused,
             "researchers_left": self.remaining(),
         }
@@ -232,15 +323,15 @@ class ExpertRun:
     def stage_brief(self, text: str, citations: list[str]) -> dict[str, Any]:
         if self.job.mode != "question":
             return {"status": "error", "reason": "la synthèse ne sert qu'en mode question"}
-        cited = [c for c in citations or [] if c in self.findings]
+        cited = [finding_id for finding_id in citations or [] if finding_id in self.findings]
         if not cited:
             return {"status": "error", "reason": "citer au moins un constat existant"}
         for finding_id in cited:
             if finding_id not in self.staged:
                 self.stage([{"finding_id": finding_id}])
-        cited = [c for c in cited if c in self.staged]
-        values = [n for c in cited for n in items.allowed_numbers(self.staged_items[c])]
-        dates = [d for c in cited for d in items.allowed_dates(self.staged_items[c])]
+        cited = [finding_id for finding_id in cited if finding_id in self.staged]
+        values = [number for finding_id in cited for number in items.allowed_numbers(self.staged_items[finding_id])]
+        dates = [day for finding_id in cited for day in items.allowed_dates(self.staged_items[finding_id])]
         missing = documents.grounded(text, values, dates)
         if missing:
             return {"status": "error", "reason": "nombres absents des constats cités : " + ", ".join(missing[:5])}
@@ -249,7 +340,9 @@ class ExpertRun:
             "question": self.job.question,
             "sub_question": self.job.sub_question,
             "text": " ".join(str(text).split())[:4000],
-            "citations": [{"finding_id": c, "item_id": self.staged_items[c]["id"]} for c in cited],
+            "citations": [
+                {"finding_id": finding_id, "item_id": self.staged_items[finding_id]["id"]} for finding_id in cited
+            ],
             "gaps": self.gaps,
             "as_of": self.job.as_of,
             "written_at": clock.iso(),
@@ -258,113 +351,55 @@ class ExpertRun:
         self.store.put_json(self.brief_key, document)
         return {"status": "ok", "brief_key": self.brief_key, "citations": len(cited)}
 
+    def _search_knowledge(self, query: str) -> dict[str, Any]:
+        results = self.knowledge.search(str(query)[:500]) if self.knowledge is not None else []
+        return {"status": "ok", "results": results, "enabled": bool(results) or self.knowledge is not None}
+
+    def _finish(self, tool_context: Any, note: str, gaps: list[str] | None) -> str:
+        self.finished = True
+        self.note = " ".join(str(note).split())[:600]
+        self.gaps = [" ".join(str(gap).split())[:300] for gap in (gaps or [])][:10]
+        if self.brief_key:
+            document = self.store.get_json(self.brief_key) or {}
+            document["gaps"] = self.gaps
+            self.store.put_json(self.brief_key, document)
+        tool_context.agent.cancel(after_current_tools=True)
+        return tool_result({"status": "ok"})
+
     def tools(self) -> list[Any]:
         run = self
 
         @tool(
             name="search_general_knowledge",
-            description="Search the shared general knowledge base (what AlphaForge already knows).",
-            inputSchema={
-                "json": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}
-            },
+            description=SEARCH_GENERAL_KNOWLEDGE_DESCRIPTION,
+            inputSchema=SEARCH_GENERAL_KNOWLEDGE_SCHEMA,
         )
         def search_general_knowledge(query: str) -> str:
-            results = run.knowledge.search(str(query)[:500]) if run.knowledge is not None else []
-            return tool_result(
-                {"status": "ok", "results": results, "enabled": bool(results) or run.knowledge is not None}
-            )
-
-        mission_schema = {
-            "type": "object",
-            "properties": {
-                "objective": {"type": "string"},
-                "evidence_wanted": {"type": "array", "items": {"type": "string"}},
-                "packs": {"type": "array", "items": {"type": "string", "enum": list(run.job.subject.packs)}},
-                "issuers": {"type": "array", "items": {"type": "string"}},
-                "themes": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["objective", "packs"],
-        }
+            return tool_result(run._search_knowledge(query))
 
         @tool(
             name="spawn_researchers",
-            description="Spawn research sub-agents, one isolated session each; waits for them and returns findings.",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {"missions": {"type": "array", "items": mission_schema}},
-                    "required": ["missions"],
-                }
-            },
+            description=SPAWN_RESEARCHERS_DESCRIPTION,
+            inputSchema=_spawn_researchers_schema(run.job.subject.packs),
         )
         def spawn_researchers(missions: list[dict[str, Any]]) -> str:
             return tool_result(run.spawn(missions))
 
-        @tool(
-            name="stage_items",
-            description="Stage selected findings for the supervisor, each with a neutral French summary.",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "selections": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "finding_id": {"type": "string"},
-                                    "summary": {"type": "string"},
-                                    "tags": {"type": "array", "items": {"type": "string"}, "maxItems": 3},
-                                },
-                                "required": ["finding_id"],
-                            },
-                        }
-                    },
-                    "required": ["selections"],
-                }
-            },
-        )
+        @tool(name="stage_items", description=STAGE_ITEMS_DESCRIPTION, inputSchema=STAGE_ITEMS_SCHEMA)
         def stage_items(selections: list[dict[str, Any]]) -> str:
             return tool_result(run.stage(selections))
 
         @tool(
             name="stage_subject_brief",
-            description="Question mode only: stage the French synthesis of your part, citing finding ids.",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {
-                        "text": {"type": "string"},
-                        "citations": {"type": "array", "items": {"type": "string"}},
-                    },
-                    "required": ["text", "citations"],
-                }
-            },
+            description=STAGE_SUBJECT_BRIEF_DESCRIPTION,
+            inputSchema=STAGE_SUBJECT_BRIEF_SCHEMA,
         )
         def stage_subject_brief(text: str, citations: list[str]) -> str:
             return tool_result(run.stage_brief(text, citations))
 
-        @tool(
-            name="finish",
-            description="End the expert run with a short French note and the remaining gaps.",
-            inputSchema={
-                "json": {
-                    "type": "object",
-                    "properties": {"note": {"type": "string"}, "gaps": {"type": "array", "items": {"type": "string"}}},
-                }
-            },
-            context=True,
-        )
+        @tool(name="finish", description=FINISH_DESCRIPTION, inputSchema=FINISH_SCHEMA, context=True)
         def finish(tool_context, note: str = "", gaps: list[str] | None = None) -> str:
-            run.finished = True
-            run.note = " ".join(str(note).split())[:600]
-            run.gaps = [" ".join(str(g).split())[:300] for g in (gaps or [])][:10]
-            if run.brief_key:
-                document = run.store.get_json(run.brief_key) or {}
-                document["gaps"] = run.gaps
-                run.store.put_json(run.brief_key, document)
-            tool_context.agent.cancel(after_current_tools=True)
-            return tool_result({"status": "ok"})
+            return run._finish(tool_context, note, gaps)
 
         tools = [search_general_knowledge, spawn_researchers, stage_items]
         if run.job.mode == "question":
@@ -382,35 +417,27 @@ def _pack_lines(subject: Subject) -> str:
     return "\n".join(lines)
 
 
-def run_expert(
-    *,
-    job: ExpertJob,
-    store: Store,
-    trace: Trace,
-    model_factory: ModelFactory,
-    model_id: str,
-    launcher: Launcher,
-    knowledge: Any = None,
-    budget_seconds: float = 1500,
-) -> dict[str, Any]:
-    run = ExpertRun(
-        job=job, store=store, launcher=launcher, knowledge=knowledge, deadline=time.monotonic() + budget_seconds
+def _mode_block(job: ExpertJob) -> str:
+    if job.mode == "sweep":
+        plan = "\n".join(
+            f"- {mission['objective']} (packs: {', '.join(mission['packs'])})" for mission in job.subject.sweep
+        )
+        return SWEEP_BLOCK.format(since=job.since, issuers=", ".join(job.issuers) or "none", plan=plan)
+    return QUESTION_BLOCK.format(
+        question=job.question,
+        sub_question=job.sub_question or job.question,
+        issuers=", ".join(job.issuers) or "none",
+        themes=", ".join(job.themes) or "none",
+        since=job.since,
+        as_of_line=f"Point in time: only evidence published on or before {job.as_of}." if job.as_of else "",
     )
+
+
+def _system_prompt(job: ExpertJob) -> str:
     subject = job.subject
     cap = min(DEPTH_CAPS[job.depth], job.max_researchers)
-    if job.mode == "sweep":
-        plan = "\n".join(f"- {b['objective']} (packs: {', '.join(b['packs'])})" for b in subject.sweep)
-        mode_block = SWEEP_BLOCK.format(since=job.since, issuers=", ".join(job.issuers) or "none", plan=plan)
-    else:
-        mode_block = QUESTION_BLOCK.format(
-            question=job.question,
-            sub_question=job.sub_question or job.question,
-            issuers=", ".join(job.issuers) or "none",
-            themes=", ".join(job.themes) or "none",
-            since=job.since,
-            as_of_line=f"Point in time: only evidence published on or before {job.as_of}." if job.as_of else "",
-        )
-    prompt = SYSTEM_PROMPT.format(
+    mode_block = _mode_block(job)
+    return SYSTEM_PROMPT.format(
         code=subject.code,
         name=subject.name,
         scope=subject.scope,
@@ -420,19 +447,19 @@ def run_expert(
         rounds_left=MAX_ROUNDS,
         brief_step=BRIEF_STEP if job.mode == "question" else "5. (No brief in sweep mode.)",
     )
+
+
+def run_expert(run: ExpertRun, *, trace: Trace, model_factory: ModelFactory, model_id: str) -> dict[str, Any]:
+    subject = run.job.subject
     spec = AgentSpec(
         actor=subject.code,
         name=f"Expert {subject.code} {subject.name}",
         effort="high",
-        system_prompt=prompt,
+        system_prompt=_system_prompt(run.job),
         tools=run.tools(),
         max_turns=12,
         max_tokens=16000,
-        tool_summaries={
-            "spawn_researchers": lambda i: {"missions": len(i.get("missions") or [])},
-            "stage_items": lambda i: {"selections": len(i.get("selections") or [])},
-            "stage_subject_brief": lambda i: {"citations": len(i.get("citations") or [])},
-        },
+        tool_summaries=TOOL_SUMMARIES,
     )
     error = None
     try:
@@ -443,7 +470,7 @@ def run_expert(
         raise AppError("model_error", error)
     return {
         "subject": subject.code,
-        "mode": job.mode,
+        "mode": run.job.mode,
         "rounds": run.rounds,
         "researchers": run.researchers,
         "spawned": run.spawned,

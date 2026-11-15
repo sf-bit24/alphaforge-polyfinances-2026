@@ -77,7 +77,7 @@ stateDiagram-v2
     complete --> followups: "followup.reply"
 ```
 
-- `base_questions` : questions déterministes, sans modèle. D'abord le niveau de connaissances, puis les cinq dimensions du profil, puis « avez-vous un portefeuille existant ? ».
+- `base_questions` : questions déterministes, sans modèle. D'abord le niveau de connaissances (dont un mini-quiz), puis les cinq dimensions du profil et une mise en situation de comportement, puis « avez-vous un portefeuille existant ? ».
 - `existing_portfolio` : l'investisseur fournit son portefeuille sous n'importe quelle forme (texte collé, CSV, tableur, PDF, image, JSON).
 - `portfolio_review` : A2 propose des positions normalisées que l'investisseur corrige puis confirme.
 - `followups` : A1 relance sur ce qui manque, sans s'écarter du sujet.
@@ -146,7 +146,7 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
 - `source` : `deterministic` ou `a1`.
 - `field` : champ du profil que la réponse renseigne, sous la même forme que `facts[].field` (`<dimension>.<nom>`), ou `null` (facultatif).
 - `id` : `q_<nom>` pour une question de base (`questionnaire.yaml`), `a1_<tour>_<n>` pour une relance d'A1. Si A1 est indisponible, le code pose des questions de repli `fb_<tour>_<n>`, avec `source: deterministic`. `cf_<tour>_<n>` est une question de confirmation posée par le code quand A1 a tiré une valeur d'un texte libre (`source: deterministic`, `kind: boolean`, `field: null`) : « oui » garde la valeur, « non » la retire. Au plus deux par tour, comptées dans les trois questions du tour.
-- `dimension` : `knowledge`, `objective`, `horizon`, `risk_tolerance`, `risk_capacity`, `constraints`, `preferences`, `context`.
+- `dimension` : `knowledge`, `objective`, `horizon`, `risk_tolerance`, `risk_capacity`, `constraints`, `preferences`, `behavior`, `context`. `behavior` (réaction à un titre très médiatisé) n'a pas d'entrée dans `ProfileView.dimensions` : ses réponses sont dans `facts`.
 - `kind` et type de `value` attendu : `single_choice` (chaîne parmi `options[].value`), `multi_choice` (liste de chaînes), `boolean` (booléen), `number` (nombre, borné par `min` et `max`), `money` (nombre, `unit` = devise, `CAD` par défaut), `percent` (nombre de 0 à 100), `scale` (entier de `min` à `max`), `text` (chaîne de 1 à 2 000 caractères).
 - Les textes (`prompt`, `help`, `label`) sont déjà dans la langue de `locale`; l'interface n'en traduit aucun.
 
@@ -157,6 +157,7 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
 ```
 
 - `score` : part pondérée des champs requis connus, calculée par le code (de 0 à 1). `displayed` = `min(score, cap)`. `ready` = `score >= threshold`.
+- Un champ de poids nul dans `questionnaire.yaml` n'y compte pas et n'est jamais dans `missing`. C'est le cas des variables du profil court que lit l'étape 0 du volet finance (section 9) : `knowledge.quiz_diversification`, `knowledge.quiz_bond_rates`, `risk_tolerance.sell_threshold_pct`, `risk_capacity.employment_sector`, `preferences.exclusion_strictness`, `preferences.crypto_place`, `preferences.crypto_max_pct`, `behavior.hype_reaction` et `behavior.hype_position_share`. Elles sont posées parmi les questions de base, certaines seulement après une réponse qui les déclenche, et leurs codes sont ceux que compare `finance/strategy/strategy.yaml` (`profile_codes`).
 
 `ProfileView` :
 
@@ -281,8 +282,8 @@ clients/<client_id>/decisions/<decision_id>.json       Decision complète (Facts
 clients/<client_id>/decisions/<decision_id>.policy.json   mandat (PolicySpec) appliqué
 staging/<run_id>/<role>/<id>.json
 staging/<run_id>/<role>/_done.json
-general/faits/<libellé>/<AAAA-MM-JJ>-<hash>.md        écrit par A6 (section 11)
-general/signaux/<libellé>/<AAAA-MM-JJ>-<hash>.md      écrit par A6
+general/faits/<source>/<AAAA-MM-JJ>-<hash>.md         écrit par A6 (section 11)
+general/signaux/<source>/<AAAA-MM-JJ>-<hash>.md       écrit par A6
 general/depots/<ticker>/<accession>.md                écrit par A6
 general/recherches/<AAAA>/<MM>/<slug>-<hash>.md       écrit par A6 (synthèses d'A0)
 staging/<run_id>/router/plan.json, _routed.json, _composed.json, brief-<hash>.json
@@ -319,6 +320,10 @@ data: {}                          # données structurées lues par le code (prof
   - Une entrée `message` garde le texte libre de l'investisseur (`followup.reply.message`) avec sa provenance `a1:<tour>`, `text` et `locale`. Elle n'est écrite qu'après un tour d'A1 réussi, donc jamais quand le garde-fou bloque.
   - Une requête écrit le journal au plus une fois.
 - La base générale ne contient rien d'un client; une base de client ne recopie pas la base générale.
+- **Arborescence fermée de `general/`.** Un document n'y est écrit que sous l'un de ces neuf dossiers : `methodologie/`, `notions/`, `societes/` (seeds), `actualites/`, `donnees/`, `faits/`, `signaux/`, `depots/` et `recherches/` (A6), plus `index.md`. Le code calcule la clé à partir du type de l'élément et de champs fixés par le code (`research.checks.target`). Ni A6 ni un autre agent ne choisit un dossier ou n'en crée un : le modèle d'A6 décide du résumé, des tags, des liens et du rejet, jamais de l'adresse.
+  - Un dossier correspond à un type de document. Un sous-dossier ne sert qu'à l'identité (série, ticker, source) ou au temps (`AAAA/MM`). Un thème (ESG, logement, taux) est un tag, jamais un dossier.
+  - `<source>` d'un fait ou d'un signal est l'hôte lu, sans `www.`, passé par `staging.slugify` (`www.bankofcanada.ca` donne `bankofcanada-ca`), et `<hash>` vient de l'identifiant de l'élément, lui-même tiré de l'adresse, des localisateurs et de la date d'observation. Les tickers d'un fait ou d'un signal vont dans ses tags. Deux sources qui publient la même valeur donnent deux documents, chacun dans le dossier de sa source.
+  - Pour ajouter un dossier, on le décrit d'abord ici. Puis, dans la même PR : `research.checks.target` (ou `collect.supervisor`), les sections de `write_general_index`, `GENERAL_FOLDERS` (`app/web/src/lib/okf.ts`) et ses libellés, et les préfixes IAM du rôle `supervisor` (section 1).
 - Chaque document d'actualité ou de données garde sa date d'observation et sa date de publication.
 - `Stock Features` (`general/donnees/features/<ticker-slug>/<as_of>.md`, `ticker-slug` = `shop-to` pour `SHOP.TO`) : un document par titre et par date `as_of` (`AAAA-MM-JJ`), jamais réécrit (une seconde écriture donne `conflict`). Les définitions des caractéristiques appartiennent au volet finance; A6 ne calcule rien, il valide et écrit. `data` :
 
@@ -614,13 +619,14 @@ Construction du portefeuille simulé d'un client par le volet finance (section 9
 | Action | Entrée (en plus de `action`) | Réponse |
 | --- | --- | --- |
 | `health` | — | `{"ok": true, "role": "portfolio", "release", "env"}`, sans charger le moteur |
-| `build` | `client_id` (UUID v4) **ou** `persona` (`amira`, `mateo`, `robert` : profils FICTION de démonstration, `finance/personas/`), `as_of` facultatif (`AAAA-MM-JJ`, par défaut `DEFAULT_AS_OF` du moteur), `strategy` facultatif (booléen, `true` par défaut : étape 0 active), `style_preference` facultatif (`defensive`, `dynamique` ou `offensive`, `finance.strategy.STYLES`), `request` facultatif (`{ticker, amount_cad?, weight?}`, demande précise de l'investisseur), `mode` facultatif (`llm` par défaut, `rules` pour le repli déterministe), `locale` facultatif (`fr`, `en`) | `{"client_id", "persona", "persona_label", "fiction", "audit", "as_of", "mode", "simulation_only": true, "decision_key": "clients/<id>/decisions/<decision_id>.md", "decision": Decision, "rounds": [{"round", "verdicts", "amendments"}], "explanation_report", "grounding", "strategy": StrategyResult.summary() \| null}` |
+| `build` | `client_id` (UUID v4) **ou** `persona` (`amira`, `mateo`, `robert` : profils FICTION de démonstration, `finance/personas/`), `as_of` facultatif (`AAAA-MM-JJ`, par défaut `DEFAULT_AS_OF` du moteur), `strategy` facultatif (booléen, `true` par défaut : étape 0 active), `style_preference` facultatif (`defensive`, `dynamique` ou `offensive`, `finance.strategy.STYLES`), `request` facultatif (`{ticker, amount_cad?, weight?}`, demande précise de l'investisseur), `mode` facultatif (`llm` par défaut, `rules` pour le repli déterministe), `locale` facultatif (`fr`, `en`) | `{"client_id", "persona", "persona_label", "fiction", "audit", "xray_trace_id", "as_of", "mode", "simulation_only": true, "decision_key": "clients/<id>/decisions/<decision_id>.md", "decision": Decision, "rounds": [{"round", "verdicts", "amendments"}], "explanation_report", "grounding", "strategy": StrategyResult.summary() \| null}` |
 
 - Étape 0 (`strategy: true`) : les variables de style viennent du profil court (`style_inputs_from_view` sur `OkfClientStore.view`), comme `finance/debate/app.py`; `style_preference` est prioritaire sur l'objectif du profil. `strategy` vaut `null` dans la réponse quand l'étape 0 est désactivée.
 - Erreurs : `bad_request` (requête mal formée ou style inconnu, refusée avant tout calcul), `not_found` (pas de `profil.md`), `model_error` (Bedrock ou Strands), `conflict`, `internal`.
 - Réponse JSON seulement (pas de streaming en version 1); une construction en mode `llm` prend plusieurs appels de modèle.
 - `persona` (démo, FICTION) : profil de test du moteur (`demo-<persona>`), variables de style et demande précise de `finance/personas/demo.yaml` (Robert : TSLA). La décision est écrite sous `clients/demo-<persona>/decisions/`; aucun vrai profil n'est lu.
 - `audit` : chaîne de décisions (`finance/observability/audit.py`) si `ALPHAFORGE_DECISIONS_TABLE` et `ALPHAFORGE_TRACE_BUCKET` sont posées (tête `head#<profil>` dans DynamoDB, décision sous `decisions/` du bucket de traces); un échec est rapporté (`{"error"}`) sans annuler la simulation.
+- `xray_trace_id` : la construction tourne sous un span racine `portfolio.build` ; les outils du moteur et l'audit en sont les enfants, donc une seule trace X-Ray par décision. Son identifiant, au format X-Ray `1-<8 hex>-<24 hex>`, est aussi dans `audit` (avec `otel_trace_id`). `null` sans traceur.
 - Les traces OpenTelemetry du moteur sont configurées au premier `build` (`telemetry.setup`, X-Ray si `ALPHAFORGE_OTLP_XRAY=1`) et vidées après chaque construction.
 
 Déploiement (`infrastructure/infra/agentcore.tf`) : seulement si `portfolio_enabled = true` (faux par défaut, le plan ne change alors rien). Zip `runtime/agents-portfolio-<release>.zip`, construit par `package.sh` si `ALPHAFORGE_PACKAGE_PORTFOLIO=1` (roues `aarch64-manylinux_2_28`); s'il manque, le runtime prend le zip commun et `build` renvoie `internal` en le disant. Variables en plus de celles de `profile` :

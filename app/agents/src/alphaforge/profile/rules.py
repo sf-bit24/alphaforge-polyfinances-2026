@@ -43,8 +43,19 @@ def _points(table: dict[str, Any], value: Any) -> float | None:
 
 
 # ---------------------------------------------------------------------- niveau de connaissances
-def measured_knowledge_points(q: Questionnaire, values: dict[str, Any]) -> int | None:
-    rule = q.rules["knowledge_level"]
+def _product_points(rule: dict[str, Any], products: list[str]) -> int:
+    """Points des produits connus : 0 sans produit de base, 1 jusqu'à deux, 2 au-delà, 3 avec un produit avancé."""
+    core_count = sum(1 for product in products if product in rule["products"]["core"])
+    knows_advanced = any(product in rule["products"]["advanced"] for product in products)
+    if core_count == 0:
+        return 0
+    if core_count <= 2:
+        return 1
+    return 3 if knows_advanced else 2
+
+
+def measured_knowledge_points(questionnaire: Questionnaire, values: dict[str, Any]) -> int | None:
+    rule = questionnaire.rules["knowledge_level"]
     total = 0.0
     for field_id, table in rule["points"].items():
         points = _points(table, values.get(field_id))
@@ -54,24 +65,14 @@ def measured_knowledge_points(q: Questionnaire, values: dict[str, Any]) -> int |
     products = values.get("knowledge.products_known")
     if products is None:
         return None
-    core = sum(1 for p in products if p in rule["products"]["core"])
-    advanced = any(p in rule["products"]["advanced"] for p in products)
-    if core == 0:
-        product_points = 0
-    elif core <= 2:
-        product_points = 1
-    elif advanced:
-        product_points = 3
-    else:
-        product_points = 2
-    return int(total) + product_points
+    return int(total) + _product_points(rule, products)
 
 
-def measured_knowledge_level(q: Questionnaire, values: dict[str, Any]) -> str | None:
-    points = measured_knowledge_points(q, values)
+def measured_knowledge_level(questionnaire: Questionnaire, values: dict[str, Any]) -> str | None:
+    points = measured_knowledge_points(questionnaire, values)
     if points is None:
         return None
-    bands = q.rules["knowledge_level"]["bands"]
+    bands = questionnaire.rules["knowledge_level"]["bands"]
     level = "beginner"
     for name in LEVELS_KNOWLEDGE:
         if points >= bands[name]:
@@ -79,30 +80,30 @@ def measured_knowledge_level(q: Questionnaire, values: dict[str, Any]) -> str | 
     return level
 
 
-def computed_knowledge_level(q: Questionnaire, values: dict[str, Any]) -> str | None:
-    measured = measured_knowledge_level(q, values)
+def computed_knowledge_level(questionnaire: Questionnaire, values: dict[str, Any]) -> str | None:
+    measured = measured_knowledge_level(questionnaire, values)
     declared = values.get("knowledge.self_assessment")
     if measured is None or declared not in LEVELS_KNOWLEDGE:
         return None
-    margin = int(q.rules["knowledge_level"].get("self_assessment_margin", 1))
+    margin = int(questionnaire.rules["knowledge_level"].get("self_assessment_margin", 1))
     ceiling = min(LEVELS_KNOWLEDGE.index(measured) + margin, len(LEVELS_KNOWLEDGE) - 1)
     return LEVELS_KNOWLEDGE[min(LEVELS_KNOWLEDGE.index(declared), ceiling)]
 
 
-def knowledge_level(q: Questionnaire, values: dict[str, Any]) -> str | None:
+def knowledge_level(questionnaire: Questionnaire, values: dict[str, Any]) -> str | None:
     override = values.get("knowledge.level")
     if override in LEVELS_KNOWLEDGE:
         return override
-    return computed_knowledge_level(q, values)
+    return computed_knowledge_level(questionnaire, values)
 
 
 # ---------------------------------------------------------------------- risque
-def risk_levels(q: Questionnaire) -> tuple[str, ...]:
-    return tuple(q.rules["risk"]["levels"])
+def risk_levels(questionnaire: Questionnaire) -> tuple[str, ...]:
+    return tuple(questionnaire.rules["risk"]["levels"])
 
 
-def tolerance_score(q: Questionnaire, values: dict[str, Any]) -> int | None:
-    rule = q.rules["risk"]["tolerance"]
+def tolerance_score(questionnaire: Questionnaire, values: dict[str, Any]) -> int | None:
+    rule = questionnaire.rules["risk"]["tolerance"]
     if any(values.get(field_id) is None for field_id in rule["required"]):
         return None
     scores = []
@@ -115,8 +116,17 @@ def tolerance_score(q: Questionnaire, values: dict[str, Any]) -> int | None:
     return int(math.floor(sum(scores) / len(scores)))
 
 
-def capacity_score(q: Questionnaire, values: dict[str, Any]) -> int | None:
-    rule = q.rules["risk"]["capacity"]
+def _threshold_points(thresholds: list[list[float]], number: float) -> float | None:
+    """Points du dernier palier atteint, les paliers étant croissants; ``None`` sous le premier palier."""
+    points = None
+    for minimum, value in thresholds:
+        if number >= float(minimum):
+            points = float(value)
+    return points
+
+
+def capacity_score(questionnaire: Questionnaire, values: dict[str, Any]) -> int | None:
+    rule = questionnaire.rules["risk"]["capacity"]
     if any(values.get(field_id) is None for field_id in rule["required"]):
         return None
     scores = []
@@ -126,11 +136,7 @@ def capacity_score(q: Questionnaire, values: dict[str, Any]) -> int | None:
             return None
         scores.append(points)
     for field_id, thresholds in rule["thresholds"].items():
-        number = float(values[field_id])
-        points = None
-        for minimum, value in thresholds:
-            if number >= float(minimum):
-                points = float(value)
+        points = _threshold_points(thresholds, float(values[field_id]))
         if points is None:
             return None
         scores.append(points)
@@ -142,10 +148,10 @@ def capacity_score(q: Questionnaire, values: dict[str, Any]) -> int | None:
     return score
 
 
-def risk_profile(q: Questionnaire, values: dict[str, Any]) -> dict[str, str | None]:
-    levels = risk_levels(q)
-    tolerance = tolerance_score(q, values)
-    capacity = capacity_score(q, values)
+def risk_profile(questionnaire: Questionnaire, values: dict[str, Any]) -> dict[str, str | None]:
+    levels = risk_levels(questionnaire)
+    tolerance = tolerance_score(questionnaire, values)
+    capacity = capacity_score(questionnaire, values)
     effective = None if tolerance is None or capacity is None else min(tolerance, capacity)
     return {
         "tolerance": levels[tolerance] if tolerance is not None else None,
@@ -154,32 +160,32 @@ def risk_profile(q: Questionnaire, values: dict[str, Any]) -> dict[str, str | No
     }
 
 
-def level_label(q: Questionnaire, level: str | None, locale: str, *, effective: bool = False) -> str | None:
+def level_label(questionnaire: Questionnaire, level: str | None, locale: str, *, effective: bool = False) -> str | None:
     if level is None:
         return None
-    labels = q.rules["risk"]["effective_labels" if effective else "level_labels"]
+    labels = questionnaire.rules["risk"]["effective_labels" if effective else "level_labels"]
     entry = labels.get(level) or {}
     return entry.get(locale) or entry.get("fr") or level
 
 
 # ---------------------------------------------------------------------- complétude
-def field_known(q: Questionnaire, field_id: str, values: dict[str, Any]) -> bool:
-    spec = q.fields[field_id]
+def field_known(questionnaire: Questionnaire, field_id: str, values: dict[str, Any]) -> bool:
+    spec = questionnaire.fields[field_id]
     if spec.computed and field_id == "knowledge.level":
-        return knowledge_level(q, values) is not None
+        return knowledge_level(questionnaire, values) is not None
     value = values.get(field_id)
     return value is not None and not (isinstance(value, list) and not value and spec.type != "multi_enum")
 
 
-def completeness(q: Questionnaire, values: dict[str, Any], locale: str = "fr") -> dict[str, Any]:
+def completeness(questionnaire: Questionnaire, values: dict[str, Any], locale: str = "fr") -> dict[str, Any]:
     total = 0.0
     known = 0.0
     missing: list[tuple[float, int, dict[str, Any]]] = []
-    for index, spec in enumerate(q.fields.values()):
-        if spec.weight <= 0 or not q.applicable(spec.when, values):
+    for index, spec in enumerate(questionnaire.fields.values()):
+        if spec.weight <= 0 or not questionnaire.applicable(spec.when, values):
             continue
         total += spec.weight
-        if field_known(q, spec.id, values):
+        if field_known(questionnaire, spec.id, values):
             known += spec.weight
         else:
             missing.append(
@@ -193,18 +199,22 @@ def completeness(q: Questionnaire, values: dict[str, Any], locale: str = "fr") -
     missing.sort(key=lambda item: (item[0], item[1]))
     return {
         "score": score,
-        "displayed": round(min(score, q.cap), 4),
-        "threshold": q.threshold,
-        "cap": q.cap,
-        "ready": score >= q.threshold,
+        "displayed": round(min(score, questionnaire.cap), 4),
+        "threshold": questionnaire.threshold,
+        "cap": questionnaire.cap,
+        "ready": score >= questionnaire.threshold,
         "missing": [entry for _, _, entry in missing],
     }
 
 
-def missing_fields(q: Questionnaire, values: dict[str, Any]) -> list[str]:
+def missing_fields(questionnaire: Questionnaire, values: dict[str, Any]) -> list[str]:
     """Identifiants complets des champs requis manquants, du plus lourd au plus léger."""
-    out = []
-    for spec in sorted(q.fields.values(), key=lambda s: -s.weight):
-        if spec.weight > 0 and q.applicable(spec.when, values) and not field_known(q, spec.id, values):
-            out.append(spec.id)
-    return out
+    missing = []
+    for spec in sorted(questionnaire.fields.values(), key=lambda spec: -spec.weight):
+        if (
+            spec.weight > 0
+            and questionnaire.applicable(spec.when, values)
+            and not field_known(questionnaire, spec.id, values)
+        ):
+            missing.append(spec.id)
+    return missing

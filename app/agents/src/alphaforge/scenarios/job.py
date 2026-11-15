@@ -26,13 +26,15 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
+import itertools
 import json
 import os
 import platform
 import re
-import subprocess  # noqa: S404 - lecture facultative du SHA git, commande fixe
+import subprocess  # lecture facultative du SHA git, commande fixe
 import sys
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -41,8 +43,8 @@ import pandas as pd
 import yaml
 
 from . import schema
-from .data import FAMILY_SPECS, build_pool, load_inputs
-from .engine import BASES, historical_reference, run_pool, simulate_metrics, to_rows
+from .data import FAMILY_SPECS, Inputs, Pool, build_pool, load_inputs, sha256_file
+from .engine import BASES, SimulationConfig, historical_reference, run_pool, simulate_metrics, to_rows
 from .grid import enumerate_mixes
 from .models import StationaryBootstrap, make_model, rng_for
 
@@ -59,16 +61,16 @@ _CODE_FILES = ("schema.py", "grid.py", "data.py", "bootstrap.py", "hmm.py", "mod
 
 def package_sha() -> str:
     """Empreinte (sha256, 12 caractères) des modules du job et des configurations livrées : disponible sans git."""
-    h = hashlib.sha256()
+    digest = hashlib.sha256()
     paths = (
         [PACKAGE_DIR / name for name in _CODE_FILES]
         + sorted((PACKAGE_DIR / "configs").glob("*.yaml"))
         + ([VALIDATION_FILE] if VALIDATION_FILE.exists() else [])
     )
     for path in paths:
-        h.update(path.relative_to(PACKAGE_DIR).as_posix().encode())
-        h.update(path.read_bytes())
-    return h.hexdigest()[:12]
+        digest.update(path.relative_to(PACKAGE_DIR).as_posix().encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:12]
 
 
 def code_sha() -> str:
@@ -92,6 +94,20 @@ DISPLAY = {
 }
 VALIDATED_HORIZONS = [1, 3, 5, 10]
 VALIDATION_NOTE = "5 et 10 ans : mise en garde forte ; 15–30 ans, base réelle, or et crypto : non validés"
+DISCLAIMER = "Simulation : modèle, pas prévision. Aucun conseil financier personnalisé."
+LICENCE = (
+    "Table dérivée de sources publiques (Ken French, FRED, OCDE, Banque du Canada, Shiller, datahub, Yahoo) : "
+    "voir alphaforge/data/long/SOURCES.md ; données brutes non redistribuées."
+)
+# Sorties du job (chemins relatifs à --output), listées dans le manifeste avec leur sha256.
+OUTPUT_FILES = {
+    "table": "table/scenarios.parquet",
+    "runtime_json": "runtime/scenarios_runtime.json",
+    "runtime_csv": "runtime/scenarios_runtime.csv",
+    "historical_reference": "historical_reference.csv",
+    "sensitivity": "sensitivity_block_length.csv",
+    "fits": "fits.json",
+}
 
 
 def _validation_texts() -> dict[str, str]:
@@ -130,17 +146,9 @@ def _model_entry(model_id: str, validation: dict[str, str]) -> dict[str, Any]:
     }
 
 
-def _sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 def git_sha() -> str | None:
     try:
-        out = subprocess.run(  # noqa: S603
+        out = subprocess.run(
             ["git", "rev-parse", "--short=12", "HEAD"],  # noqa: S607
             cwd=PACKAGE_DIR,
             capture_output=True,
@@ -160,62 +168,60 @@ def load_config(value: str) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"configuration introuvable : {value}")
     text = path.read_text(encoding="utf-8")
-    cfg = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
-    cfg["_source"] = str(path.name)
-    return cfg
+    config = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
+    config["_source"] = str(path.name)
+    return config
 
 
-def _pools(cfg: dict[str, Any]) -> list[tuple[str, bool]]:
+def _pools(config: dict[str, Any]) -> list[tuple[str, bool]]:
     out = []
-    for family in cfg["families"]:
+    for family in config["families"]:
         if family not in FAMILY_SPECS:
             raise ValueError(f"famille inconnue {family}")
         out.append((family, False))
-        if cfg.get("crypto", {}).get("enabled") and family in cfg["crypto"].get("families", []):
+        if config.get("crypto", {}).get("enabled") and family in config["crypto"].get("families", []):
             out.append((family, True))
     return out
 
 
-def _grid_for(cfg: dict[str, Any], pool) -> list[str]:
+def _grid_for(config: dict[str, Any], pool) -> list[str]:
     key = "crypto" if pool.hypothese else "core"
-    grid = cfg["grid"][key]
+    grid = config["grid"][key]
     ranges = grid.get(pool.family, grid.get("default"))
-    anchors = cfg["grid"].get("anchors", {}).get(pool.family, [])
+    anchors = config["grid"].get("anchors", {}).get(pool.family, [])
     if pool.hypothese:
-        anchors = cfg["grid"].get("anchors_crypto", {}).get(pool.family, [])
-    return enumerate_mixes(pool.blocks, ranges, anchors, max_mixes=int(cfg["grid"].get("max_mixes", 5000)))
+        anchors = config["grid"].get("anchors_crypto", {}).get(pool.family, [])
+    return enumerate_mixes(pool.blocks, ranges, anchors, max_mixes=int(config["grid"].get("max_mixes", 5000)))
 
 
-def _sensitivity(cfg: dict[str, Any], pool, mixes: list[str], horizons: list[int], seed: int) -> list[dict]:
-    sens = cfg.get("sensitivity", {})
-    if not sens.get("enabled", False):
+def _sensitivity(config: dict[str, Any], pool, mixes: list[str], horizons: list[int], seed: int) -> list[dict]:
+    sensitivity = config.get("sensitivity", {})
+    if not sensitivity.get("enabled", False):
         return []
-    targets = list(dict.fromkeys(m for m in sens.get("mixes", []) if m in mixes)) or mixes[:3]
+    targets = list(dict.fromkeys(mix for mix in sensitivity.get("mixes", []) if mix in mixes)) or mixes[:3]
     rows = []
-    for L in sens.get("block_lengths", [1, 3, 6, 12, 24]):
-        model = StationaryBootstrap(block_length=float(L))
-        fitted = model.fit(pool, cfg.get("fitted_through"))
-        vals = simulate_metrics(
-            fitted, targets, horizons, int(sens.get("n_paths", 2000)), rng_for(seed, pool.name, "sens", int(L))
+    for block_length in sensitivity.get("block_lengths", [1, 3, 6, 12, 24]):
+        fitted = StationaryBootstrap(block_length=float(block_length)).fit(pool, config.get("fitted_through"))
+        n_paths = int(sensitivity.get("n_paths", 2000))
+        values = simulate_metrics(
+            fitted, targets, horizons, n_paths, rng_for(seed, pool.name, "sens", int(block_length))
         )
-        for basis in ("nominal",):
-            for m_i, mid in enumerate(targets):
-                for h_i, H in enumerate(horizons):
-                    for k, metric in enumerate(schema.METRICS):
-                        if metric not in sens.get("metrics", schema.METRICS):
-                            continue
-                        rows.append(
-                            {
-                                "family": pool.family,
-                                "pool": pool.name,
-                                "mean_block": L,
-                                "mix_id": mid,
-                                "horizon_years": H,
-                                "basis": basis,
-                                "metric": metric,
-                                "value": float(vals[basis][k, h_i, m_i]),
-                            }
-                        )
+        cells = itertools.product(("nominal",), enumerate(targets), enumerate(horizons), enumerate(schema.METRICS))
+        for basis, (m_i, mix), (h_i, horizon), (k, metric) in cells:
+            if metric not in sensitivity.get("metrics", schema.METRICS):
+                continue
+            rows.append(
+                {
+                    "family": pool.family,
+                    "pool": pool.name,
+                    "mean_block": block_length,
+                    "mix_id": mix,
+                    "horizon_years": horizon,
+                    "basis": basis,
+                    "metric": metric,
+                    "value": float(values[basis][k, h_i, m_i]),
+                }
+            )
     return rows
 
 
@@ -230,96 +236,114 @@ def _write_parquet(table: pd.DataFrame, path: Path) -> None:
         "float64": pa.float64(),
         "bool": pa.bool_(),
     }
-    arrow_schema = pa.schema([(name, types[t]) for name, t in schema.COLUMNS])
+    arrow_schema = pa.schema([(name, types[type_name]) for name, type_name in schema.COLUMNS])
     pq.write_table(pa.Table.from_pandas(table, schema=arrow_schema, preserve_index=False), path, compression="snappy")
 
 
-def _runtime_outputs(table: pd.DataFrame, cfg: dict[str, Any], out_dir: Path, meta: dict[str, Any]) -> int:
-    rt = cfg.get("runtime", {})
-    sub = table
-    if rt.get("models"):
-        sub = sub[sub["model_id"].isin(rt["models"])]
-    if rt.get("bases"):
-        sub = sub[sub["basis"].isin(rt["bases"])]
-    if rt.get("metrics"):
-        sub = sub[sub["metric"].isin(rt["metrics"])]
-    digits = int(rt.get("digits", 4))
-    sub = sub.copy()
-    for c in ("value", "ci_lo", "ci_hi"):
-        sub[c] = sub[c].round(digits)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    sub.to_csv(out_dir / "scenarios_runtime.csv", index=False)  # mêmes colonnes que la table (schema.COLUMNS)
+RUNTIME_UNITS = {
+    "ret_ann_*": "rendement annualisé (fraction)",
+    "wealth_p10": "richesse finale pour 1 placé (p10)",
+    "mdd_*": "perte maximale depuis un sommet (fraction positive)",
+    "cvar95_12m": "perte moyenne des 5 % pires années (fraction positive ; négatif = gain)",
+    "p_*": "probabilité (0-1)",
+}
+
+
+def _runtime_subset(table: pd.DataFrame, runtime: dict[str, Any]) -> pd.DataFrame:
+    """Lignes retenues pour l'outil (modèles, bases, métriques), valeurs arrondies à ``digits`` décimales."""
+    subset = table
+    if runtime.get("models"):
+        subset = subset[subset["model_id"].isin(runtime["models"])]
+    if runtime.get("bases"):
+        subset = subset[subset["basis"].isin(runtime["bases"])]
+    if runtime.get("metrics"):
+        subset = subset[subset["metric"].isin(runtime["metrics"])]
+    digits = int(runtime.get("digits", 4))
+    subset = subset.copy()
+    for column in ("value", "ci_lo", "ci_hi"):
+        subset[column] = subset[column].round(digits)
+    return subset
+
+
+def _runtime_mixes(group: pd.DataFrame) -> dict[str, Any]:
+    """``{mix_id: {basis: {horizon: {metric: [value, ci_lo, ci_hi]}}}}``, NaN écrit ``null``."""
+    mixes: dict[str, Any] = {}
+    for row in group.itertuples(index=False):
+        cell = mixes.setdefault(row.mix_id, {}).setdefault(row.basis, {}).setdefault(str(row.horizon_years), {})
+        cell[row.metric] = [_num(row.value), _num(row.ci_lo), _num(row.ci_hi)]
+    return mixes
+
+
+def _runtime_tables(subset: pd.DataFrame) -> dict[str, Any]:
+    """Une entrée par (modèle, famille, pool crypto), sous la clé ``model_id|famille`` (suffixe ``+CRYPTO``)."""
     tables: dict[str, Any] = {}
-    group_cols = ["model_id", "family", "hypothese"]
-    for (model_id, family, hyp), g in sub.groupby(group_cols, sort=True):
-        key = f"{model_id}|{family}{'+CRYPTO' if hyp else ''}"
-        first = g.iloc[0]
-        mixes: dict[str, Any] = {}
-        for row in g.itertuples(index=False):
-            cell = mixes.setdefault(row.mix_id, {}).setdefault(row.basis, {}).setdefault(str(row.horizon_years), {})
-            cell[row.metric] = [_num(row.value), _num(row.ci_lo), _num(row.ci_hi)]
+    for (model_id, family, hypothese), group in subset.groupby(["model_id", "family", "hypothese"], sort=True):
+        key = f"{model_id}|{family}{'+CRYPTO' if hypothese else ''}"
+        first = group.iloc[0]
         tables[key] = {
             "model_id": model_id,
             "family": family,
             "currency": first["currency"],
-            "hypothese": bool(hyp),
+            "hypothese": bool(hypothese),
             "window_start": first["window_start"],
             "fitted_through": first["fitted_through"],
             "n_hist_months": int(first["n_hist_months"]),
             "n_paths": int(first["n_paths"]),
             "n_boot": int(first["n_boot"]),
             "seed": int(first["seed"]),
-            "mixes": mixes,
+            "mixes": _runtime_mixes(group),
         }
+    return tables
+
+
+def _runtime_outputs(table: pd.DataFrame, config: dict[str, Any], out_dir: Path, meta: dict[str, Any]) -> int:
+    subset = _runtime_subset(table, config.get("runtime", {}))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    subset.to_csv(out_dir / "scenarios_runtime.csv", index=False)  # mêmes colonnes que la table (schema.COLUMNS)
     doc = {
         **meta,
         "value_order": ["value", "ci_lo", "ci_hi"],
-        "units": {
-            "ret_ann_*": "rendement annualisé (fraction)",
-            "wealth_p10": "richesse finale pour 1 placé (p10)",
-            "mdd_*": "perte maximale depuis un sommet (fraction positive)",
-            "cvar95_12m": "perte moyenne des 5 % pires années (fraction positive ; négatif = gain)",
-            "p_*": "probabilité (0-1)",
-        },
-        "tables": tables,
+        "units": RUNTIME_UNITS,
+        "tables": _runtime_tables(subset),
     }
     (out_dir / "scenarios_runtime.json").write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")))
-    return len(sub)
+    return len(subset)
 
 
 def _num(x: float) -> float | None:
     return None if x != x else float(x)
 
 
-def _model_params(cfg: dict[str, Any], model_id: str) -> dict[str, Any] | None:
+def _horizons(config: dict[str, Any]) -> list[int]:
+    return [int(horizon) for horizon in config.get("horizons", schema.HORIZONS)]
+
+
+def _model_params(config: dict[str, Any], model_id: str) -> dict[str, Any] | None:
     """Paramètres du modèle ; une variante ``*_ca`` reprend ceux du modèle de base sauf mention explicite."""
-    params = cfg.get("model_params", {})
+    params = config.get("model_params", {})
     base = model_id[:-3] if model_id.endswith("_ca") else model_id
     return params.get(model_id) or params.get(base)
 
 
-def _run_task(cfg: dict[str, Any], pool, mixes: list[str], model_id: str, csha: str):
+def _run_task(config: dict[str, Any], pool, mixes: list[str], model_id: str, code_sha_value: str):
     """Une tâche (pool, modèle) ; exécutable dans un processus séparé (graines dérivées du pool et du modèle)."""
-    sim = cfg["simulation"]
-    seed = int(cfg["seed"])
-    horizons = [int(h) for h in cfg.get("horizons", schema.HORIZONS)]
-    model = make_model(model_id, _model_params(cfg, model_id))
-    res = run_pool(
-        model,
-        pool,
-        mixes,
-        horizons,
+    simulation = config["simulation"]
+    seed = int(config["seed"])
+    horizons = _horizons(config)
+    model = make_model(model_id, _model_params(config, model_id))
+    settings = SimulationConfig(
         seed=seed,
-        n_paths=int(sim["n_paths"]),
-        n_boot=int(sim["n_boot"]),
-        n_paths_boot=int(sim["n_paths_boot"]),
-        ci_level=float(sim.get("ci_level", 0.90)),
-        mem_budget_mb=float(sim.get("mem_budget_mb", 512)),
+        n_paths=int(simulation["n_paths"]),
+        n_boot=int(simulation["n_boot"]),
+        n_paths_boot=int(simulation["n_paths_boot"]),
+        ci_level=float(simulation.get("ci_level", 0.90)),
+        mem_budget_mb=float(simulation.get("mem_budget_mb", 512)),
     )
+    result = run_pool(model, pool, mixes, horizons, settings)
     key = f"{model_id}|{pool.name}"
-    print(f"[scenarios] {key}: {len(mixes)} mélanges, {res.timings}", file=sys.stderr, flush=True)
-    cols = to_rows(res, seed=seed, code_sha=csha, schema_version=schema.SCHEMA_VERSION)
-    return key, cols, {**res.fit_info, "bootstrap": res.boot_info}, res.timings
+    print(f"[scenarios] {key}: {len(mixes)} mélanges, {result.timings}", file=sys.stderr, flush=True)
+    columns = to_rows(result, seed=seed, code_sha=code_sha_value, schema_version=schema.SCHEMA_VERSION)
+    return key, columns, {**result.fit_info, "bootstrap": result.boot_info}, result.timings
 
 
 def resolve_run_id(run_id: str | None, output_dir: str) -> str:
@@ -330,139 +354,15 @@ def resolve_run_id(run_id: str | None, output_dir: str) -> str:
     return value
 
 
-def run(
-    cfg: dict[str, Any], input_dir: str, output_dir: str, workers: int | None = None, run_id: str | None = None
-) -> dict[str, Any]:
-    started = time.perf_counter()
-    cfg = copy.deepcopy(cfg)
-    run_id = resolve_run_id(run_id, output_dir)
-    out = Path(output_dir)
-    (out / "table").mkdir(parents=True, exist_ok=True)
-    seed = int(cfg["seed"])
-    horizons = [int(h) for h in cfg.get("horizons", schema.HORIZONS)]
-    csha = code_sha()
-    inputs = load_inputs(input_dir)
-    timings: dict[str, Any] = {}
-    all_cols: dict[str, list] = {k: [] for k in schema.COLUMN_NAMES}
-    hist_rows: list[dict] = []
-    sens_rows: list[dict] = []
-    fits: dict[str, Any] = {}
-    pools_meta: list[dict] = []
-
-    pools = {}
-    for family, crypto in _pools(cfg):
-        pool = build_pool(inputs, family, crypto=crypto)
-        if cfg.get("fitted_through"):
-            pool = pool.truncate(cfg["fitted_through"])
-        mixes = _grid_for(cfg, pool)
-        pools[(family, crypto)] = (pool, mixes)
-        pools_meta.append({**pool.describe(), "n_mixes": len(mixes)})
-        hist_rows += historical_reference(pool, mixes, horizons)
-        t0 = time.perf_counter()
-        sens_rows += _sensitivity(cfg, pool, mixes, horizons, seed)
-        timings[f"{pool.name}|sensitivity_s"] = round(time.perf_counter() - t0, 3)
-
-    tasks = [(family, crypto, model_id) for (family, crypto) in pools for model_id in cfg["models"]]
-    workers = max(1, min(int(workers or cfg.get("workers", 1)), len(tasks)))
-    if workers == 1:
-        results = [_run_task(cfg, pools[(f, c)][0], pools[(f, c)][1], m, csha) for f, c, m in tasks]
-    else:
-        from concurrent.futures import ProcessPoolExecutor
-
-        with ProcessPoolExecutor(max_workers=workers) as ex:
-            futures = [ex.submit(_run_task, cfg, pools[(f, c)][0], pools[(f, c)][1], m, csha) for f, c, m in tasks]
-            results = [fut.result() for fut in futures]
-    for key, cols, fit_info, task_timings in results:  # ordre des tâches : sortie déterministe
-        fits[key] = fit_info
-        timings[key] = task_timings
-        for k in all_cols:
-            all_cols[k] += cols[k]
-
-    table = pd.DataFrame(all_cols, columns=list(schema.COLUMN_NAMES))
-    errors = schema.validate_rows(table.head(0).to_dict("records")) if table.empty else _validate_df(table)
-    if errors:
-        raise ValueError("table invalide : " + "; ".join(errors[:10]))
-    _write_parquet(table, out / "table" / "scenarios.parquet")
-    meta = {
-        "schema_version": schema.SCHEMA_VERSION,
-        "data_sha256": inputs.data_sha256,
-        "code_sha": csha,
-        "generated_utc": pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "metrics": list(schema.METRICS),
-        "horizons": horizons,
-        "bases": list(BASES),
-        "disclaimer": "Simulation : modèle, pas prévision. Aucun conseil financier personnalisé.",
-    }
-    n_runtime = _runtime_outputs(table, cfg, out / "runtime", meta)
-    pd.DataFrame(hist_rows).to_csv(out / "historical_reference.csv", index=False)
-    pd.DataFrame(sens_rows).to_csv(out / "sensitivity_block_length.csv", index=False)
-    (out / "fits.json").write_text(json.dumps(fits, ensure_ascii=False, indent=1, default=_json_default))
-    outputs = {
-        "table": "table/scenarios.parquet",
-        "runtime_json": "runtime/scenarios_runtime.json",
-        "runtime_csv": "runtime/scenarios_runtime.csv",
-        "historical_reference": "historical_reference.csv",
-        "sensitivity": "sensitivity_block_length.csv",
-        "fits": "fits.json",
-    }
-    outputs_sha = {rel: _sha256(out / rel) for rel in outputs.values()}
-    validation = _validation_texts()
-    families: dict[str, Any] = {}
-    for meta_pool in pools_meta:
-        entry = families.setdefault(meta_pool["family"], {})
-        entry["crypto_pool" if meta_pool["hypothese"] else "core_pool"] = meta_pool
-        entry["currency"] = meta_pool["currency"]
-    manifest = {
-        **{k: meta[k] for k in ("schema_version", "data_sha256", "code_sha", "generated_utc")},
-        "run_id": run_id,
-        "release": os.environ.get("ALPHAFORGE_RELEASE") or None,
-        "package_sha": package_sha(),
-        "git_sha": git_sha(),
-        "starter_dir": os.environ.get("ALPHAFORGE_STARTER_DIR") or None,
-        "seed": seed,
-        "default_model": cfg.get("default_model", "sbb_ca"),
-        "models": [_model_entry(m, validation) for m in cfg["models"]],
-        "validated_horizons": VALIDATED_HORIZONS,
-        "validation_note": VALIDATION_NOTE,
-        "validation_source": validation.get("_source"),
-        "families": families,
-        "licence": (
-            "Table dérivée de sources publiques (Ken French, FRED, OCDE, Banque du Canada, Shiller, datahub, Yahoo) : "
-            "voir alphaforge/data/long/SOURCES.md ; données brutes non redistribuées."
-        ),
-        "disclaimer": meta["disclaimer"],
-        "table": {
-            "file": outputs["runtime_csv"],
-            "format": "csv",
-            "sha256": outputs_sha[outputs["runtime_csv"]],
-        },
-        "outputs_sha256": outputs_sha,
-        "config": {k: v for k, v in cfg.items()},
-        "input": {"dir": inputs.input_dir, "files_sha256": inputs.files_sha256, "data_version": inputs.data_version},
-        "pools": pools_meta,
-        "rows": {
-            "table": len(table),
-            "runtime": n_runtime,
-            "historical_reference": len(hist_rows),
-            "sensitivity": len(sens_rows),
-        },
-        "outputs": outputs,
-        "timings": {**timings, "total_s": round(time.perf_counter() - started, 3)},
-        "environment": {"python": platform.python_version(), "numpy": np.__version__, "pandas": pd.__version__},
-    }
-    (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1, default=_json_default))
-    return manifest
-
-
 def _validate_df(table: pd.DataFrame) -> list[str]:
     errors = []
-    dup = table.duplicated(["model_id", "family", "mix_id", "horizon_years", "basis", "metric"]).sum()
-    if dup:
-        errors.append(f"{dup} clés en double")
+    duplicates = table.duplicated(["model_id", "family", "mix_id", "horizon_years", "basis", "metric"]).sum()
+    if duplicates:
+        errors.append(f"{duplicates} clés en double")
     if table["value"].isna().any():
         errors.append("valeurs NaN")
-    prob = table["metric"].str.startswith("p_") | table["metric"].str.startswith("mdd_")
-    if ((table.loc[prob, "value"] < 0) | (table.loc[prob, "value"] > 1)).any():
+    bounded = table["metric"].str.startswith("p_") | table["metric"].str.startswith("mdd_")
+    if ((table.loc[bounded, "value"] < 0) | (table.loc[bounded, "value"] > 1)).any():
         errors.append("probabilité ou perte maximale hors [0, 1]")
     if (table["ci_lo"] > table["ci_hi"] + 1e-12).any():
         errors.append("ci_lo > ci_hi")
@@ -475,12 +375,185 @@ def _validate_df(table: pd.DataFrame) -> list[str]:
     return errors
 
 
-def _json_default(obj: Any) -> Any:
-    if isinstance(obj, np.generic):
-        return obj.item()
-    if isinstance(obj, np.ndarray):
-        return obj.tolist()
-    return str(obj)
+def _check_table(table: pd.DataFrame) -> None:
+    errors = schema.validate_rows(table.head(0).to_dict("records")) if table.empty else _validate_df(table)
+    if errors:
+        raise ValueError("table invalide : " + "; ".join(errors[:10]))
+
+
+def _json_default(value: Any) -> Any:
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    return str(value)
+
+
+def _families(pools_meta: list[dict]) -> dict[str, Any]:
+    """Pools de chaque famille (``core_pool``, ``crypto_pool``) et sa devise."""
+    families: dict[str, Any] = {}
+    for meta_pool in pools_meta:
+        entry = families.setdefault(meta_pool["family"], {})
+        entry["crypto_pool" if meta_pool["hypothese"] else "core_pool"] = meta_pool
+        entry["currency"] = meta_pool["currency"]
+    return families
+
+
+@dataclass
+class _JobRun:
+    """Une exécution du job : configuration et entrées, plus ce qui s'accumule avant l'écriture des sorties."""
+
+    config: dict[str, Any]
+    out: Path
+    run_id: str
+    started: float
+    seed: int
+    horizons: list[int]
+    code_sha: str
+    inputs: Inputs
+    timings: dict[str, Any] = field(default_factory=dict)
+    pools_meta: list[dict] = field(default_factory=list)
+    historical_rows: list[dict] = field(default_factory=list)
+    sensitivity_rows: list[dict] = field(default_factory=list)
+    fits: dict[str, Any] = field(default_factory=dict)
+    columns: dict[str, list] = field(default_factory=lambda: {name: [] for name in schema.COLUMN_NAMES})
+
+    def prepare_pools(self) -> dict[tuple[str, bool], tuple[Pool, list[str]]]:
+        """Pools et grilles de mélanges ; repères historiques et sensibilité calculés au passage, pool par pool."""
+        pools = {}
+        for family, crypto in _pools(self.config):
+            pool = build_pool(self.inputs, family, crypto=crypto)
+            if self.config.get("fitted_through"):
+                pool = pool.truncate(self.config["fitted_through"])
+            mixes = _grid_for(self.config, pool)
+            pools[(family, crypto)] = (pool, mixes)
+            self.pools_meta.append({**pool.describe(), "n_mixes": len(mixes)})
+            self.historical_rows += historical_reference(pool, mixes, self.horizons)
+            started = time.perf_counter()
+            self.sensitivity_rows += _sensitivity(self.config, pool, mixes, self.horizons, self.seed)
+            self.timings[f"{pool.name}|sensitivity_s"] = round(time.perf_counter() - started, 3)
+        return pools
+
+    def run_tasks(self, pools: dict[tuple[str, bool], tuple[Pool, list[str]]], workers: int | None) -> list[tuple]:
+        """Une tâche par (pool, modèle), dans un ordre fixe ; en parallèle si plus d'un processus est demandé."""
+        tasks = [(family, crypto, model_id) for (family, crypto) in pools for model_id in self.config["models"]]
+        workers = max(1, min(int(workers or self.config.get("workers", 1)), len(tasks)))
+        if workers == 1:
+            return [
+                _run_task(self.config, *pools[(family, crypto)], model_id, self.code_sha)
+                for family, crypto, model_id in tasks
+            ]
+        from concurrent.futures import ProcessPoolExecutor
+
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            futures = [
+                executor.submit(_run_task, self.config, *pools[(family, crypto)], model_id, self.code_sha)
+                for family, crypto, model_id in tasks
+            ]
+            return [future.result() for future in futures]
+
+    def add_task_results(self, results: list[tuple]) -> None:
+        for key, columns, fit_info, task_timings in results:  # ordre des tâches : sortie déterministe
+            self.fits[key] = fit_info
+            self.timings[key] = task_timings
+            for name in self.columns:
+                self.columns[name] += columns[name]
+
+    def table_meta(self) -> dict[str, Any]:
+        """En-tête commun du JSON compact et du manifeste (``generated_utc`` : heure de l'appel)."""
+        return {
+            "schema_version": schema.SCHEMA_VERSION,
+            "data_sha256": self.inputs.data_sha256,
+            "code_sha": self.code_sha,
+            "generated_utc": pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "metrics": list(schema.METRICS),
+            "horizons": self.horizons,
+            "bases": list(BASES),
+            "disclaimer": DISCLAIMER,
+        }
+
+    def write_diagnostics(self) -> None:
+        """Repères historiques, sensibilité à la longueur de bloc et détails des ajustements."""
+        pd.DataFrame(self.historical_rows).to_csv(self.out / "historical_reference.csv", index=False)
+        pd.DataFrame(self.sensitivity_rows).to_csv(self.out / "sensitivity_block_length.csv", index=False)
+        (self.out / "fits.json").write_text(json.dumps(self.fits, ensure_ascii=False, indent=1, default=_json_default))
+
+    def manifest(self, meta: dict[str, Any], rows: dict[str, int]) -> dict[str, Any]:
+        """Manifeste du run ; à construire après l'écriture des sorties, dont il donne les sha256."""
+        outputs_sha = {rel: sha256_file(self.out / rel) for rel in OUTPUT_FILES.values()}
+        validation = _validation_texts()
+        return {
+            **{k: meta[k] for k in ("schema_version", "data_sha256", "code_sha", "generated_utc")},
+            "run_id": self.run_id,
+            "release": os.environ.get("ALPHAFORGE_RELEASE") or None,
+            "package_sha": package_sha(),
+            "git_sha": git_sha(),
+            "starter_dir": os.environ.get("ALPHAFORGE_STARTER_DIR") or None,
+            "seed": self.seed,
+            "default_model": self.config.get("default_model", "sbb_ca"),
+            "models": [_model_entry(model_id, validation) for model_id in self.config["models"]],
+            "validated_horizons": VALIDATED_HORIZONS,
+            "validation_note": VALIDATION_NOTE,
+            "validation_source": validation.get("_source"),
+            "families": _families(self.pools_meta),
+            "licence": LICENCE,
+            "disclaimer": meta["disclaimer"],
+            "table": {
+                "file": OUTPUT_FILES["runtime_csv"],
+                "format": "csv",
+                "sha256": outputs_sha[OUTPUT_FILES["runtime_csv"]],
+            },
+            "outputs_sha256": outputs_sha,
+            "config": dict(self.config),
+            "input": {
+                "dir": self.inputs.input_dir,
+                "files_sha256": self.inputs.files_sha256,
+                "data_version": self.inputs.data_version,
+            },
+            "pools": self.pools_meta,
+            "rows": rows,
+            "outputs": dict(OUTPUT_FILES),
+            "timings": {**self.timings, "total_s": round(time.perf_counter() - self.started, 3)},
+            "environment": {"python": platform.python_version(), "numpy": np.__version__, "pandas": pd.__version__},
+        }
+
+
+def run(
+    config: dict[str, Any], input_dir: str, output_dir: str, workers: int | None = None, run_id: str | None = None
+) -> dict[str, Any]:
+    """Exécute le job et écrit ses sorties dans ``output_dir`` ; renvoie le manifeste (écrit aussi en JSON)."""
+    started = time.perf_counter()
+    config = copy.deepcopy(config)
+    run_id = resolve_run_id(run_id, output_dir)
+    out = Path(output_dir)
+    (out / "table").mkdir(parents=True, exist_ok=True)
+    job_run = _JobRun(
+        config=config,
+        out=out,
+        run_id=run_id,
+        started=started,
+        seed=int(config["seed"]),
+        horizons=_horizons(config),
+        code_sha=code_sha(),
+        inputs=load_inputs(input_dir),
+    )
+    pools = job_run.prepare_pools()
+    job_run.add_task_results(job_run.run_tasks(pools, workers))
+    table = pd.DataFrame(job_run.columns, columns=list(schema.COLUMN_NAMES))
+    _check_table(table)
+    _write_parquet(table, out / "table" / "scenarios.parquet")
+    meta = job_run.table_meta()
+    n_runtime = _runtime_outputs(table, config, out / "runtime", meta)
+    job_run.write_diagnostics()
+    rows = {
+        "table": len(table),
+        "runtime": n_runtime,
+        "historical_reference": len(job_run.historical_rows),
+        "sensitivity": len(job_run.sensitivity_rows),
+    }
+    manifest = job_run.manifest(meta, rows)
+    (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1, default=_json_default))
+    return manifest
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -499,12 +572,12 @@ def main(argv: list[str] | None = None) -> int:
         run_id = resolve_run_id(args.run_id, args.output)
     except ValueError as exc:
         parser.error(str(exc))
-    cfg = load_config(args.config)
+    config = load_config(args.config)
     if args.seed is not None:
-        cfg["seed"] = args.seed
+        config["seed"] = args.seed
     if args.fitted_through:
-        cfg["fitted_through"] = args.fitted_through
-    manifest = run(cfg, args.input, args.output, workers=args.workers, run_id=run_id)
+        config["fitted_through"] = args.fitted_through
+    manifest = run(config, args.input, args.output, workers=args.workers, run_id=run_id)
     print(json.dumps({"rows": manifest["rows"], "total_s": manifest["timings"]["total_s"]}, ensure_ascii=False))
     return 0
 

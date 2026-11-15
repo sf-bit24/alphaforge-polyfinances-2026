@@ -22,35 +22,36 @@ HC_FAMILIES = ("CAD77_hc", "CAD71_hc", "USD46_hc")
 HC_MAX_EQUITY = 10  # e <= 10 -> portefeuille de reference demi-cash (reference_portfolios.N0)
 
 
-def build_from_calibration(out_dir: str | Path) -> dict:
+def _family_envelope(calibration, families: tuple[str, ...]):
+    """Pire valeur de chaque colonne, par part d'actions, parmi les familles retenues."""
+    selected = calibration[calibration["mix"].isin(families)].copy()
+    selected["y2022"] = -selected["y2022"]  # perte positive
+    return selected.groupby("eq")[list(COLUMNS)].max()
+
+
+def build_from_calibration(calibration_dir: str | Path) -> dict:
     """Recalcule l'enveloppe depuis tests/finance/fixtures/calibration (calib_grid5.csv, halfcash_env.csv)."""
     import pandas as pd
 
-    out = Path(out_dir)
-    files = {"G5": out / "calib_grid5.csv", "HC": out / "halfcash_env.csv"}
-
-    def envof(df, fams):
-        x = df[df["mix"].isin(fams)].copy()
-        x["y2022"] = -x["y2022"]  # perte positive
-        return x.groupby("eq")[list(COLUMNS)].max()
-
-    g5 = envof(pd.read_csv(files["G5"]), G5_FAMILIES)
-    hc = envof(pd.read_csv(files["HC"]), HC_FAMILIES)
+    directory = Path(calibration_dir)
+    files = {"G5": directory / "calib_grid5.csv", "HC": directory / "halfcash_env.csv"}
+    grid_envelope = _family_envelope(pd.read_csv(files["G5"]), G5_FAMILIES)
+    half_cash_envelope = _family_envelope(pd.read_csv(files["HC"]), HC_FAMILIES)
     rows = {}
-    for e in sorted(int(v) for v in g5.index):
-        src = hc if e <= HC_MAX_EQUITY else g5
-        rows[e] = {c: round(float(src.loc[e, c]), 6) for c in COLUMNS}
-        rows[e]["family_set"] = "HC" if e <= HC_MAX_EQUITY else "G5"
+    for equity_pct in sorted(int(value) for value in grid_envelope.index):
+        family_envelope = half_cash_envelope if equity_pct <= HC_MAX_EQUITY else grid_envelope
+        rows[equity_pct] = {column: round(float(family_envelope.loc[equity_pct, column]), 6) for column in COLUMNS}
+        rows[equity_pct]["family_set"] = "HC" if equity_pct <= HC_MAX_EQUITY else "G5"
     return {
         "version": "0.2.0",
         "definition": "ENV(e,col) = max des familles ; HC (CAD77_hc, CAD71_hc, USD46_hc) si e<=10, "
         "sinon G5 (CAD77_main, CAD71_USeq, USD46) ; y2022 en perte positive",
         "source_files": {
-            k: {
-                "path": f"app/agents/tests/finance/fixtures/calibration/{p.name}",
-                "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+            name: {
+                "path": f"app/agents/tests/finance/fixtures/calibration/{path.name}",
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             }
-            for k, p in files.items()
+            for name, path in files.items()
         },
         "equity_pct": rows,
     }
@@ -58,17 +59,17 @@ def build_from_calibration(out_dir: str | Path) -> dict:
 
 @lru_cache(maxsize=4)
 def _load(path: str) -> dict:
-    with open(path, encoding="utf-8") as fh:
-        return yaml.safe_load(fh)
+    with open(path, encoding="utf-8") as stream:
+        return yaml.safe_load(stream)
 
 
 def load_envelope(path: str | Path | None = None) -> dict:
     return _load(str(path or ENVELOPE_FILE))
 
 
-def env(e_pct: int, col: str, path: str | Path | None = None) -> float:
-    return float(load_envelope(path)["equity_pct"][int(e_pct)][col])
+def env(equity_pct: int, column: str, path: str | Path | None = None) -> float:
+    return float(load_envelope(path)["equity_pct"][int(equity_pct)][column])
 
 
 def grid(path: str | Path | None = None) -> list[int]:
-    return sorted(int(e) for e in load_envelope(path)["equity_pct"])
+    return sorted(int(equity_pct) for equity_pct in load_envelope(path)["equity_pct"])

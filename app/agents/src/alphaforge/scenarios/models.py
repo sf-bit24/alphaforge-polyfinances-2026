@@ -24,7 +24,7 @@ import numpy as np
 
 from .bootstrap import auto_block_length, politis_white, stationary_indices
 from .data import Pool
-from .hmm import HMMFit, fit_hmm, simulate_chain
+from .hmm import EMSettings, HMMFit, fit_hmm, simulate_chain
 
 MODEL_IDS = ("sbb", "iid", "hmm_rs", "sbb_ca", "iid_ca", "hmm_rs_ca", "hmm_rs_fl")
 
@@ -32,7 +32,7 @@ MODEL_IDS = ("sbb", "iid", "hmm_rs", "sbb_ca", "iid_ca", "hmm_rs_ca", "hmm_rs_fl
 def rng_for(seed: int, *parts: str | int) -> np.random.Generator:
     """Générateur déterministe pour (graine, étiquettes). Les chaînes passent par crc32 (stable entre exécutions,
     contrairement à ``hash()``)."""
-    keys = [int(seed)] + [zlib.crc32(p.encode()) if isinstance(p, str) else int(p) for p in parts]
+    keys = [int(seed)] + [zlib.crc32(part.encode()) if isinstance(part, str) else int(part) for part in parts]
     return np.random.default_rng(np.random.SeedSequence(keys))
 
 
@@ -55,31 +55,31 @@ class Fitted:
         if self.hmm is None:
             return stationary_indices(n, n_paths, n_months, self.mean_block, rng)
         assert self.hmm is not None
-        p = self.hmm.params
-        init = p.stationary() if self.hmm_init == "stationary" else self.hmm.filtered_last
-        states = simulate_chain(p.A, init, n_paths, n_months, rng)
-        u = rng.random((n_paths, n_months))
-        idx = np.empty((n_paths, n_months), dtype=np.int32)
+        params = self.hmm.params
+        init = params.stationary() if self.hmm_init == "stationary" else self.hmm.filtered_last
+        states = simulate_chain(params.transition_matrix, init, n_paths, n_months, rng)
+        uniforms = rng.random((n_paths, n_months))
+        indices = np.empty((n_paths, n_months), dtype=np.int32)
         for k, cdf in enumerate(self._cdfs):
             mask = states == k
-            idx[mask] = np.minimum(np.searchsorted(cdf, u[mask], side="right"), n - 1)
-        return idx
+            indices[mask] = np.minimum(np.searchsorted(cdf, uniforms[mask], side="right"), n - 1)
+        return indices
 
     def pseudo_history(self, rng: np.random.Generator) -> Pool:
         """Pseudo-historique de même longueur tiré du modèle ajusté (bootstrap fondé sur le modèle)."""
-        idx = self.simulate_indices(1, self.pool.n, rng)[0]
-        return self.pool.take(idx, name_suffix="*")
+        indices = self.simulate_indices(1, self.pool.n, rng)[0]
+        return self.pool.take(indices, name_suffix="*")
 
 
 def excess_returns(pool: Pool) -> np.ndarray:
     """Rendements en excès du cash (colonne CASH inchangée). Sert au choix de la longueur de bloc et aux variables
     du HMM : ces quantités ne dépendent alors pas du niveau des taux, ni donc de l'ancrage ``_ca``."""
     if "CASH" not in pool.blocks:
-        return pool.R
+        return pool.returns
     j = pool.blocks.index("CASH")
-    X = pool.R - pool.R[:, [j]]
-    X[:, j] = pool.R[:, j]
-    return X
+    excess = pool.returns - pool.returns[:, [j]]
+    excess[:, j] = pool.returns[:, j]
+    return excess
 
 
 class Model:
@@ -114,7 +114,7 @@ class Model:
 class StationaryBootstrap(Model):
     base_id = "sbb"
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - mots-clés = clés de model_params dans configs/*.yaml (make_model les passe tels quels)
         self,
         block_length: float | str = "auto",
         *,
@@ -137,11 +137,11 @@ class StationaryBootstrap(Model):
         if self.block_length != "auto":
             value = float(self.block_length)
             return value, {"block_rule": "fixed", "mean_block": value}
-        cols = [j for j, b in enumerate(pool.blocks) if b not in self.exclude_blocks]
-        X = excess_returns(pool)
-        _, per_level = auto_block_length(X, cols, "max")
-        per_sq = [politis_white(X[:, j] ** 2) for j in cols] if self.include_squared else []
-        values = per_level + per_sq
+        columns = [j for j, block in enumerate(pool.blocks) if block not in self.exclude_blocks]
+        excess = excess_returns(pool)
+        _, per_level = auto_block_length(excess, columns, "max")
+        per_squared = [politis_white(excess[:, j] ** 2) for j in columns] if self.include_squared else []
+        values = per_level + per_squared
         raw = float(max(values)) if self.rule == "max" else float(np.median(values))
         value = float(min(max(raw, self.min_block), self.max_block))
         detail = {
@@ -149,10 +149,12 @@ class StationaryBootstrap(Model):
             "block_raw": round(raw, 3),
             "block_bounds": [self.min_block, self.max_block],
             "mean_block": round(value, 3),
-            "pw_levels": {pool.blocks[j]: round(v, 3) for j, v in zip(cols, per_level, strict=True)},
+            "pw_levels": {pool.blocks[j]: round(length, 3) for j, length in zip(columns, per_level, strict=True)},
         }
-        if per_sq:
-            detail["pw_squared"] = {pool.blocks[j]: round(v, 3) for j, v in zip(cols, per_sq, strict=True)}
+        if per_squared:
+            detail["pw_squared"] = {
+                pool.blocks[j]: round(length, 3) for j, length in zip(columns, per_squared, strict=True)
+            }
         return value, detail
 
     def _fit(self, pool: Pool, rng: np.random.Generator) -> Fitted:
@@ -178,7 +180,7 @@ class RegimeBootstrap(Model):
             return self.base_id + "_fl" + ("_ca" if self.anchor_months else "")
         return self.base_id + ("_ca" if self.anchor_months else "")
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - mots-clés = clés de model_params dans configs/*.yaml (make_model les passe tels quels)
         self,
         k_candidates: tuple[int, ...] = (1, 2, 3),
         *,
@@ -204,32 +206,35 @@ class RegimeBootstrap(Model):
         self.refit_max_iter = refit_max_iter
 
     def _features(self, pool: Pool) -> tuple[np.ndarray, list[str]]:
-        cols = [j for j, b in enumerate(pool.blocks) if b not in self.exclude_blocks]
-        X = excess_returns(pool)[:, cols]
-        mu, sd = X.mean(axis=0), X.std(axis=0)
-        sd[sd == 0] = 1.0
-        return (X - mu) / sd, [pool.blocks[j] for j in cols]
+        columns = [j for j, block in enumerate(pool.blocks) if block not in self.exclude_blocks]
+        excess = excess_returns(pool)[:, columns]
+        mean, std = excess.mean(axis=0), excess.std(axis=0)
+        std[std == 0] = 1.0
+        return (excess - mean) / std, [pool.blocks[j] for j in columns]
 
     def _finish(self, pool: Pool, fit: HMMFit, info: dict[str, Any]) -> Fitted:
         gamma = fit.gamma
         cdfs = []
         for k in range(gamma.shape[1]):
-            w = gamma[:, k] / gamma[:, k].sum()
-            cdf = np.cumsum(w)
+            weights = gamma[:, k] / gamma[:, k].sum()
+            cdf = np.cumsum(weights)
             cdf[-1] = 1.0
             cdfs.append(cdf)
-        p = fit.params
+        params = fit.params
         info = {
             **info,
-            "k": p.k,
+            "k": params.k,
             "loglik": round(fit.loglik, 3),
             "converged": fit.converged,
             "n_iter": fit.n_iter,
             "initial_state": self.initial_state,
-            "transition": np.round(p.A, 4).tolist(),
-            "stationary": np.round(p.stationary(), 4).tolist(),
+            "transition": np.round(params.transition_matrix, 4).tolist(),
+            "stationary": np.round(params.stationary(), 4).tolist(),
             "expected_duration_months": [
-                round(float(1.0 / (1.0 - p.A[k, k])), 2) if p.A[k, k] < 1.0 - 1e-9 else None for k in range(p.k)
+                round(float(1.0 / (1.0 - params.transition_matrix[k, k])), 2)
+                if params.transition_matrix[k, k] < 1.0 - 1e-9
+                else None
+                for k in range(params.k)
             ],
             "regime_monthly_vol": _regime_vol(pool, gamma),
             "regime_share_months": np.round(gamma.mean(axis=0), 4).tolist(),
@@ -237,14 +242,15 @@ class RegimeBootstrap(Model):
         return Fitted(self.model_id, pool, info, hmm=fit, hmm_init=self.initial_state, _cdfs=cdfs)
 
     def _fit(self, pool: Pool, rng: np.random.Generator) -> Fitted:
-        X, names = self._features(pool)
+        features, names = self._features(pool)
         fits = {}
         # Un générateur dédié par K, dérivé d'une seule graine tirée de ``rng`` : les départs de K = 2 ou 3 ne
         # dépendent ni des tirages faits pour les autres K, ni de la liste ``k_candidates``.
         root = int(rng.integers(0, 2**63 - 1))
-        for K in self.k_candidates:
-            rng_k = np.random.default_rng(np.random.SeedSequence(root, spawn_key=(int(K),)))
-            fits[K] = fit_hmm(X, K, rng_k, n_init=self.n_init, max_iter=self.max_iter, tol=self.tol)
+        settings = EMSettings(n_init=self.n_init, max_iter=self.max_iter, tol=self.tol)
+        for n_states in self.k_candidates:
+            rng_k = np.random.default_rng(np.random.SeedSequence(root, spawn_key=(int(n_states),)))
+            fits[n_states] = fit_hmm(features, n_states, rng_k, settings)
         best_k = min(fits, key=lambda k: fits[k].bic)
         info = {
             "model_id": self.model_id,
@@ -252,21 +258,19 @@ class RegimeBootstrap(Model):
             "fitted_through": pool.fitted_through,
             "features": names,
             "k_selection": "bic",
-            "bic": {str(k): round(f.bic, 2) for k, f in fits.items()},
+            "bic": {str(k): round(candidate.bic, 2) for k, candidate in fits.items()},
         }
         return self._finish(pool, fits[best_k], info)
 
     def refit(self, fitted: Fitted, pool: Pool, rng: np.random.Generator) -> Fitted:
         """Bootstrap externe : K fixé à celui de l'ajustement principal, départ chaud + ``refit_n_init`` départs."""
         assert fitted.hmm is not None
-        X, names = self._features(pool)
+        features, names = self._features(pool)
         fit = fit_hmm(
-            X,
+            features,
             fitted.hmm.params.k,
             rng,
-            n_init=self.refit_n_init,
-            max_iter=self.refit_max_iter,
-            tol=1e-6,
+            EMSettings(n_init=self.refit_n_init, max_iter=self.refit_max_iter, tol=1e-6),
             warm_start=fitted.hmm.params,
         )
         info = {"model_id": self.model_id, "pool": pool.name, "features": names, "k_selection": "fixed_from_main"}
@@ -275,13 +279,13 @@ class RegimeBootstrap(Model):
 
 def _regime_vol(pool: Pool, gamma: np.ndarray) -> dict[str, list[float]]:
     out = {}
-    for j, b in enumerate(pool.blocks):
+    for j, block in enumerate(pool.blocks):
         vols = []
         for k in range(gamma.shape[1]):
-            w = gamma[:, k] / gamma[:, k].sum()
-            m = float(w @ pool.R[:, j])
-            vols.append(round(float(np.sqrt(w @ (pool.R[:, j] - m) ** 2)), 5))
-        out[b] = vols
+            weights = gamma[:, k] / gamma[:, k].sum()
+            mean = float(weights @ pool.returns[:, j])
+            vols.append(round(float(np.sqrt(weights @ (pool.returns[:, j] - mean) ** 2)), 5))
+        out[block] = vols
     return out
 
 

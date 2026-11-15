@@ -16,8 +16,8 @@ import io
 import json
 import math
 import re
-import xml.etree.ElementTree as ET  # noqa: S405 - DTD et entités refusées avant l'analyse (_safe_xml)
 from typing import Any
+from xml.etree import ElementTree  # DTD et entités refusées avant l'analyse (_safe_xml)
 
 PREVIEW_LINES = 120
 MAX_VALUE_CHARS = 240
@@ -30,21 +30,21 @@ class DocumentError(Exception):
 
 # ----------------------------------------------------------------------------- détection et analyse
 def detect_format(content_type: str, body: bytes, url: str = "") -> str:
-    ctype = (content_type or "").lower()
+    media_type = (content_type or "").lower()
     head = body[:600].lstrip().lower()
-    if "html" in ctype or head.startswith((b"<!doctype html", b"<html")):
+    if "html" in media_type or head.startswith((b"<!doctype html", b"<html")):
         raise DocumentError("HTML refusé : seule la lecture de flux et d'API est permise (pas de pages HTML)")
-    if any(t in ctype for t in ("spreadsheet", "excel", "zip", "pdf", "octet-stream")) or head.startswith(
-        (b"pk\x03\x04", b"%pdf")
-    ):
+    if any(
+        marker in media_type for marker in ("spreadsheet", "excel", "zip", "pdf", "octet-stream")
+    ) or head.startswith((b"pk\x03\x04", b"%pdf")):
         raise DocumentError("format binaire non pris en charge en phase 1 (XLSX, ZIP, PDF)")
-    if "json" in ctype or head.startswith((b"{", b"[")):
+    if "json" in media_type or head.startswith((b"{", b"[")):
         return "json"
-    if "csv" in ctype or url.lower().split("?")[0].endswith(".csv"):
+    if "csv" in media_type or url.lower().split("?")[0].endswith(".csv"):
         return "csv"
-    if "xml" in ctype or "rss" in ctype or "atom" in ctype or head.startswith(b"<"):
+    if "xml" in media_type or "rss" in media_type or "atom" in media_type or head.startswith(b"<"):
         return "feed" if (b"<rss" in head or b"<feed" in head or b"<rdf:rdf" in head) else "xml"
-    if "text/plain" in ctype or "text/" in ctype:
+    if "text/plain" in media_type or "text/" in media_type:
         sample = body[:2000].decode("utf-8", errors="replace")
         if sample.count(",") >= 2 and "\n" in sample:
             return "csv"
@@ -52,13 +52,13 @@ def detect_format(content_type: str, body: bytes, url: str = "") -> str:
     raise DocumentError(f"type de contenu non pris en charge : {content_type or 'inconnu'}")
 
 
-def _safe_xml(text: str) -> ET.Element:
+def _safe_xml(text: str) -> ElementTree.Element:
     upper = text[:5000].upper()
     if "<!DOCTYPE" in upper or "<!ENTITY" in upper:
         raise DocumentError("document XML avec DTD ou entités refusé")
     try:
-        return ET.fromstring(text)  # noqa: S314 - DTD et entités refusées ci-dessus
-    except ET.ParseError as exc:
+        return ElementTree.fromstring(text)  # noqa: S314 - DTD et entités refusées ci-dessus
+    except ElementTree.ParseError as exc:
         raise DocumentError(f"XML illisible : {exc}") from exc
 
 
@@ -66,13 +66,13 @@ def _local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1] if "}" in tag else tag.split(":")[-1]
 
 
-def _xml_tree(element: ET.Element) -> Any:
+def _xml_tree(element: ElementTree.Element) -> Any:
     children = list(element)
-    attrs = {f"@{_local(k)}": v for k, v in element.attrib.items()}
+    attributes = {f"@{_local(name)}": value for name, value in element.attrib.items()}
     text = (element.text or "").strip()
-    if not children and not attrs:
+    if not children and not attributes:
         return text
-    node: dict[str, Any] = dict(attrs)
+    node: dict[str, Any] = dict(attributes)
     grouped: dict[str, list[Any]] = {}
     for child in children:
         grouped.setdefault(_local(child.tag), []).append(_xml_tree(child))
@@ -83,31 +83,34 @@ def _xml_tree(element: ET.Element) -> Any:
     return node
 
 
-def _feed_tree(root: ET.Element) -> dict[str, Any]:
+def _feed_item(entry: ElementTree.Element) -> dict[str, Any]:
+    """Champs d'un ``item`` ou d'une ``entry``; un champ répété devient une liste."""
+    item: dict[str, Any] = {}
+    for child in entry:
+        key = _local(child.tag)
+        if key == "link" and child.attrib.get("href"):
+            value = child.attrib["href"]
+        else:
+            value = "".join(child.itertext()).strip()
+        if key in ("encoded",):
+            continue  # content:encoded : corps de l'article, jamais lu
+        if key in item:
+            if not isinstance(item[key], list):
+                item[key] = [item[key]]
+            item[key].append(value)
+        else:
+            item[key] = value
+    return item
+
+
+def _feed_tree(root: ElementTree.Element) -> dict[str, Any]:
     """RSS 2.0, RSS 1.0 (RDF) et Atom ramenés à ``{"title", "items": [{title, link, guid, published, ...}]}``."""
-    entries = [e for e in root.iter() if _local(e.tag) in ("item", "entry")]
-    items = []
-    for entry in entries:
-        item: dict[str, Any] = {}
-        for child in entry:
-            key = _local(child.tag)
-            if key == "link" and child.attrib.get("href"):
-                value = child.attrib["href"]
-            else:
-                value = "".join(child.itertext()).strip()
-            if key in ("encoded",):
-                continue  # content:encoded : corps de l'article, jamais lu
-            if key in item:
-                if not isinstance(item[key], list):
-                    item[key] = [item[key]]
-                item[key].append(value)
-            else:
-                item[key] = value
-        items.append(item)
+    entries = [element for element in root.iter() if _local(element.tag) in ("item", "entry")]
+    items = [_feed_item(entry) for entry in entries]
     channel_title = ""
-    for e in root.iter():
-        if _local(e.tag) == "title":
-            channel_title = "".join(e.itertext()).strip()
+    for element in root.iter():
+        if _local(element.tag) == "title":
+            channel_title = "".join(element.itertext()).strip()
             break
     return {"title": channel_title, "items": items}
 
@@ -122,11 +125,11 @@ def _csv_tree(text: str) -> dict[str, Any]:
     rows = [row for row in reader if any(cell.strip() for cell in row)]
     if not rows:
         return {"columns": [], "rows": []}
-    columns = [c.strip() or f"col{i}" for i, c in enumerate(rows[0])]
-    out = []
+    columns = [name.strip() or f"col{i}" for i, name in enumerate(rows[0])]
+    records = []
     for row in rows[1:]:
-        out.append({columns[i] if i < len(columns) else f"col{i}": cell.strip() for i, cell in enumerate(row)})
-    return {"columns": columns, "rows": out}
+        records.append({columns[i] if i < len(columns) else f"col{i}": cell.strip() for i, cell in enumerate(row)})
+    return {"columns": columns, "rows": records}
 
 
 def parse_tree(body: bytes, fmt: str) -> Any:
@@ -154,11 +157,11 @@ def parse_locator(locator: str) -> list[str | int]:
     if not isinstance(locator, str) or not locator.strip():
         raise DocumentError("localisateur vide")
     parts: list[str | int] = []
-    pos = 0
+    position = 0
     text = locator.strip()
-    while pos < len(text):
-        match = _TOKEN.match(text, pos)
-        if not match or match.end() == pos:
+    while position < len(text):
+        match = _TOKEN.match(text, position)
+        if not match or match.end() == position:
             raise DocumentError(f"localisateur illisible : {locator!r}")
         quoted, index, key = match.groups()
         if quoted is not None:
@@ -167,7 +170,7 @@ def parse_locator(locator: str) -> list[str | int]:
             parts.append(int(index))
         else:
             parts.append(key)
-        pos = match.end()
+        position = match.end()
     return parts
 
 
@@ -207,7 +210,7 @@ def extract_rows(tree: Any, rows_locator: str, date_field: str, value_field: str
     rows = resolve(tree, rows_locator)
     if not isinstance(rows, list):
         raise DocumentError(f"{rows_locator!r} ne désigne pas une liste")
-    out = []
+    readable = []
     for index, row in enumerate(rows):
         try:
             date = scalar(resolve(row, date_field))
@@ -215,30 +218,30 @@ def extract_rows(tree: Any, rows_locator: str, date_field: str, value_field: str
         except DocumentError:
             continue
         if date and value not in ("", "-", ".", "NaN", "null", "None"):
-            out.append({"date": date, "value": value, "row": index})
-    if not out:
+            readable.append({"date": date, "value": value, "row": index})
+    if not readable:
         raise DocumentError("aucune ligne lisible avec ces champs de date et de valeur")
-    return out
+    return readable
 
 
 # ----------------------------------------------------------------------------- aperçus
-def _flatten(node: Any, path: str, out: list[str]) -> None:
+def _flatten(node: Any, path: str, lines: list[str]) -> None:
     if isinstance(node, dict):
         if not node:
-            out.append(f"{path} = {{}}")
+            lines.append(f"{path} = {{}}")
         for key, value in node.items():
             safe = key if re.fullmatch(r"[A-Za-z_@#][\w@#:-]*", str(key)) else json.dumps(str(key))
             child = (f"{path}.{safe}" if path else safe) if not safe.startswith('"') else f"{path}[{safe}]"
-            _flatten(value, child, out)
+            _flatten(value, child, lines)
     elif isinstance(node, list):
-        out.append(f"{path} : liste de {len(node)} éléments")
+        lines.append(f"{path} : liste de {len(node)} éléments")
         for index, value in enumerate(node):
-            _flatten(value, f"{path}[{index}]", out)
+            _flatten(value, f"{path}[{index}]", lines)
     else:
         text = scalar(node)
         if len(text) > MAX_VALUE_CHARS:
             text = text[: MAX_VALUE_CHARS - 1] + "…"
-        out.append(f"{path} = {text}")
+        lines.append(f"{path} = {text}")
 
 
 def preview(tree: Any, offset: int = 0, lines: int = PREVIEW_LINES) -> dict[str, Any]:
@@ -270,10 +273,10 @@ def numbers_in(text: str) -> list[tuple[float, int, bool]]:
         raw = re.sub(r"[   ]", "", raw)
         decimals = 0
         if "," in raw or "." in raw:
-            sep = "," if "," in raw else "."
-            whole, frac = raw.split(sep, 1)
-            decimals = len(frac)
-            raw = f"{whole}.{frac}"
+            separator = "," if "," in raw else "."
+            whole, fraction = raw.split(separator, 1)
+            decimals = len(fraction)
+            raw = f"{whole}.{fraction}"
         try:
             number = float(raw)
         except ValueError:
@@ -297,9 +300,9 @@ def grounded(text: str, allowed_values: list[str], allowed_dates: list[str] | tu
     missing = []
     for number, decimals, with_unit in numbers_in(text):
         tolerance = 0.5 * 10 ** (-decimals) + 1e-9
-        if any(abs(number - v) <= tolerance or abs(number - v * 100) <= tolerance for v in values):
+        if any(abs(number - value) <= tolerance or abs(number - value * 100) <= tolerance for value in values):
             continue
-        if not with_unit and decimals == 0 and any(abs(abs(number) - d) <= tolerance for d in dates):
+        if not with_unit and decimals == 0 and any(abs(abs(number) - date_part) <= tolerance for date_part in dates):
             continue
         missing.append(f"{number:g}")
     return missing

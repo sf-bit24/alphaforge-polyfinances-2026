@@ -21,61 +21,68 @@ VIEW_DIMENSIONS = (
 
 
 def dimension_summary(
-    q: Questionnaire, dimension: str, values: dict[str, Any], risk: dict[str, Any], locale: str
+    questionnaire: Questionnaire, dimension: str, values: dict[str, Any], risk: dict[str, Any], locale: str
 ) -> str | None:
     if dimension == "risk_tolerance":
-        return rules.level_label(q, risk["tolerance"], locale)
+        return rules.level_label(questionnaire, risk["tolerance"], locale)
     if dimension == "risk_capacity":
-        return rules.level_label(q, risk["capacity"], locale)
+        return rules.level_label(questionnaire, risk["capacity"], locale)
     parts = []
-    for spec in q.fields.values():
+    for spec in questionnaire.fields.values():
         if spec.dimension != dimension or not spec.summary or values.get(spec.id) is None:
             continue
-        if not q.applicable(spec.when, values):
+        if not questionnaire.applicable(spec.when, values):
             continue
         text = format_field_value(spec, values[spec.id], locale)
         parts.append(text if spec.type == "enum" else f"{spec.label_text(locale)} : {text}")
     return " · ".join(parts) or None
 
 
+def _dimension_status(questionnaire: Questionnaire, dimension: str, values: dict[str, Any]) -> str:
+    """``known`` quand tous les champs requis de la dimension sont connus, ``partial`` quand une partie l'est."""
+    required = [
+        spec
+        for spec in questionnaire.fields.values()
+        if spec.dimension == dimension and spec.weight > 0 and questionnaire.applicable(spec.when, values)
+    ]
+    known_required = [spec for spec in required if rules.field_known(questionnaire, spec.id, values)]
+    if required and len(known_required) == len(required):
+        return "known"
+    if known_required:
+        return "partial"
+    return "missing"
+
+
+def _confirmed_facts_by_date(session: ClientSession) -> list[dict[str, Any]]:
+    # Une valeur à confirmer n'est pas encore un fait du profil (la valeur confirmée qu'elle remplace l'est).
+    confirmed = sorted(session.confirmed_facts().items(), key=lambda item: (item[1].get("at") or "", item[0]))
+    return [
+        {"field": field_id, "value": fact.get("value"), "provenance": fact.get("provenance"), "at": fact.get("at")}
+        for field_id, fact in confirmed
+    ]
+
+
 def profile_view(
-    q: Questionnaire, session: ClientSession, locale: str, documents: list[dict[str, Any]] | None = None
+    questionnaire: Questionnaire, session: ClientSession, locale: str, documents: list[dict[str, Any]] | None = None
 ) -> dict[str, Any]:
     values = session.values()
-    risk = rules.risk_profile(q, values)
+    risk = rules.risk_profile(questionnaire, values)
     dimensions: dict[str, Any] = {}
     for dimension in VIEW_DIMENSIONS:
-        required = [
-            spec
-            for spec in q.fields.values()
-            if spec.dimension == dimension and spec.weight > 0 and q.applicable(spec.when, values)
-        ]
-        known_required = [spec for spec in required if rules.field_known(q, spec.id, values)]
-        if required and len(known_required) == len(required):
-            status = "known"
-        elif known_required:
-            status = "partial"
-        else:
-            status = "missing"
+        status = _dimension_status(questionnaire, dimension, values)
         fields = {
             spec.name: values[spec.id]
-            for spec in q.fields.values()
+            for spec in questionnaire.fields.values()
             if spec.dimension == dimension and values.get(spec.id) is not None
         }
         dimensions[dimension] = {
             "status": status,
-            "summary": dimension_summary(q, dimension, values, risk, locale),
+            "summary": dimension_summary(questionnaire, dimension, values, risk, locale),
             "fields": fields,
         }
-    facts = [
-        {"field": field_id, "value": fact.get("value"), "provenance": fact.get("provenance"), "at": fact.get("at")}
-        # Une valeur à confirmer n'est pas encore un fait du profil (la valeur confirmée qu'elle remplace l'est).
-        for field_id, fact in sorted(
-            session.confirmed_facts().items(), key=lambda item: (item[1].get("at") or "", item[0])
-        )
-    ]
+    facts = _confirmed_facts_by_date(session)
     return {
-        "knowledge_level": rules.knowledge_level(q, values),
+        "knowledge_level": rules.knowledge_level(questionnaire, values),
         "effective_risk": risk["effective"],
         "risk": risk,
         "dimensions": dimensions,
@@ -84,21 +91,21 @@ def profile_view(
     }
 
 
-def completeness_view(q: Questionnaire, session: ClientSession, locale: str) -> dict[str, Any]:
-    return rules.completeness(q, session.values(), locale)
+def completeness_view(questionnaire: Questionnaire, session: ClientSession, locale: str) -> dict[str, Any]:
+    return rules.completeness(questionnaire, session.values(), locale)
 
 
-def current_questions(q: Questionnaire, session: ClientSession, locale: str) -> list[dict[str, Any]]:
+def current_questions(questionnaire: Questionnaire, session: ClientSession, locale: str) -> list[dict[str, Any]]:
     if session.stage == "base_questions":
-        question = q.next_question(session.values(), session.answers)
-        return [q.render(question, locale)] if question else []
+        question = questionnaire.next_question(session.values(), session.answers)
+        return [questionnaire.render(question, locale)] if question else []
     if session.stage == "followups":
         return list(session.data.get("pending_questions") or [])
     return []
 
 
-def client_state(
-    q: Questionnaire,
+def client_state(  # noqa: PLR0913 - signature gardée : le service l'appelle par mots-clés
+    questionnaire: Questionnaire,
     session: ClientSession,
     *,
     locale: str,
@@ -112,9 +119,9 @@ def client_state(
         "locale": locale,
         "stage": session.stage,
         "message": message,
-        "questions": current_questions(q, session, locale),
-        "profile": profile_view(q, session, locale, documents),
-        "completeness": completeness_view(q, session, locale),
+        "questions": current_questions(questionnaire, session, locale),
+        "profile": profile_view(questionnaire, session, locale, documents),
+        "completeness": completeness_view(questionnaire, session, locale),
         "portfolio": portfolio,
         "trace": trace.steps,
     }

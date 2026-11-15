@@ -9,49 +9,54 @@ import yaml
 
 EMPHASIS_FILE = Path(__file__).with_name("emphasis.yaml")
 LENSES = ("timeline", "risk", "diversity", "constraints")
-_OPS = {
-    "is_true": lambda s, v: bool(s),
-    "lt": lambda s, v: s < v,
-    "le": lambda s, v: s <= v,
-    "gt": lambda s, v: s > v,
-    "ge": lambda s, v: s >= v,
+_OPERATORS = {
+    "is_true": lambda signal, _threshold: bool(signal),
+    "lt": lambda signal, threshold: signal < threshold,
+    "le": lambda signal, threshold: signal <= threshold,
+    "gt": lambda signal, threshold: signal > threshold,
+    "ge": lambda signal, threshold: signal >= threshold,
 }
 
 
 def load_rules(path: str | Path | None = None) -> dict:
-    with open(path or EMPHASIS_FILE, encoding="utf-8") as fh:
-        return yaml.safe_load(fh)
+    with open(path or EMPHASIS_FILE, encoding="utf-8") as stream:
+        return yaml.safe_load(stream)
 
 
 def compute_emphasis(
     signals: dict[str, Any], path: str | Path | None = None
 ) -> tuple[dict[str, float], list[str], list[dict]]:
     """Retourne (poids normalises, ids des regles declenchees, trace)."""
-    cfg = load_rules(path)
-    ver = cfg["version"]
-    raw = {k: float(cfg["base"][k]) for k in LENSES}
+    config = load_rules(path)
+    version = config["version"]
+    raw_weights = {lens: float(config["base"][lens]) for lens in LENSES}
     fired, trace = [], []
-    for i, r in enumerate(cfg["rules"]):
-        if r["lens"] not in raw:
-            raise ValueError(f"emphasis.yaml : lentille inconnue {r['lens']}")
-        if r["signal"] not in signals:
-            raise KeyError(f"emphasis.yaml : signal inconnu {r['signal']}")
-        s = signals[r["signal"]]
-        hit = s is not None and _OPS[r["op"]](s, r.get("value"))
-        if hit:
-            raw[r["lens"]] += float(r["bonus"])
-            fired.append(r["id"])
+    for index, rule in enumerate(config["rules"]):
+        if rule["lens"] not in raw_weights:
+            raise ValueError(f"emphasis.yaml : lentille inconnue {rule['lens']}")
+        if rule["signal"] not in signals:
+            raise KeyError(f"emphasis.yaml : signal inconnu {rule['signal']}")
+        signal = signals[rule["signal"]]
+        is_triggered = signal is not None and _OPERATORS[rule["op"]](signal, rule.get("value"))
+        if is_triggered:
+            raw_weights[rule["lens"]] += float(rule["bonus"])
+            fired.append(rule["id"])
             trace.append(
                 {
-                    "rule": f"emphasis.{r['id']}",
-                    "inputs": {r["signal"]: s, "op": r["op"], "value": r.get("value")},
-                    "output": {r["lens"]: float(r["bonus"])},
-                    "yaml_path": f"emphasis.yaml@{ver}#rules[{i}]",
+                    "rule": f"emphasis.{rule['id']}",
+                    "inputs": {rule["signal"]: signal, "op": rule["op"], "value": rule.get("value")},
+                    "output": {rule["lens"]: float(rule["bonus"])},
+                    "yaml_path": f"emphasis.yaml@{version}#rules[{index}]",
                 }
             )
-    total = sum(raw.values())
-    weights = {k: raw[k] / total for k in LENSES}
+    total = sum(raw_weights.values())
+    weights = {lens: raw_weights[lens] / total for lens in LENSES}
     trace.append(
-        {"rule": "emphasis.normalize", "inputs": raw, "output": weights, "yaml_path": f"emphasis.yaml@{ver}#base"}
+        {
+            "rule": "emphasis.normalize",
+            "inputs": raw_weights,
+            "output": weights,
+            "yaml_path": f"emphasis.yaml@{version}#base",
+        }
     )
     return weights, fired, trace

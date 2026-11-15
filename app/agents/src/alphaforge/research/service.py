@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import re
 import threading
+import time
 from dataclasses import replace
 from datetime import date, timedelta
 from typing import Any
@@ -94,8 +95,68 @@ def _question(value: Any) -> str:
     return text[:MAX_QUESTION]
 
 
+def _researcher_job(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        brief = researcher_mod.parse_brief(payload)
+    except researcher_mod.ResearchError as exc:
+        raise AppError("bad_request", str(exc)) from exc
+    return {"brief": brief, "marker": f"{brief.prefix}_done.json"}
+
+
+def _researcher_cap(payload: dict[str, Any], depth: str) -> int:
+    """Plafond de chercheurs de l'expert : celui de la profondeur, abaissé par ``max_researchers``."""
+    cap = DEPTH_CAPS[depth]
+    max_researchers = payload.get("max_researchers")
+    if max_researchers is not None:
+        if not isinstance(max_researchers, int) or max_researchers < 1:
+            raise AppError("bad_request", "max_researchers doit être un entier positif.")
+        cap = min(cap, max_researchers)
+    return cap
+
+
+def _expert_job(payload: dict[str, Any], run_id: str) -> dict[str, Any]:
+    code = payload.get("subject")
+    if code not in SUBJECTS:
+        raise AppError("bad_request", f"subject doit être parmi {list(SUBJECTS)}.")
+    mode = payload.get("mode") or "sweep"
+    if mode not in ("sweep", "question"):
+        raise AppError("bad_request", "mode doit valoir sweep ou question.")
+    depth = _depth(payload.get("depth") or ("quick" if mode == "sweep" else "standard"))
+    default_issuers = list(starter.universe()) if mode == "sweep" else []
+    cap = _researcher_cap(payload, depth)
+    job = expert_mod.ExpertJob(
+        run_id=run_id,
+        subject=SUBJECTS[code],
+        mode=mode,
+        question=_question(payload.get("question")) if mode == "question" else None,
+        sub_question=(" ".join(str(payload.get("sub_question") or "").split())[:400] or None),
+        issuers=_tickers(payload.get("issuers"), default_issuers),
+        themes=_themes(payload.get("themes")),
+        since=_since(payload.get("since")),
+        as_of=_as_of(payload.get("as_of")),
+        depth=depth,
+        max_researchers=cap,
+    )
+    return {"expert": job, "marker": f"{job.prefix}_done.json"}
+
+
+def _router_job(payload: dict[str, Any], run_id: str) -> dict[str, Any]:
+    if payload["action"] == "route":
+        job = {
+            "run_id": run_id,
+            "question": _question(payload.get("question")),
+            "issuers": _tickers(payload.get("issuers"), []),
+            "themes": _themes(payload.get("themes")),
+            "as_of": _as_of(payload.get("as_of")),
+            "depth": _depth(payload.get("depth")),
+            "since": _since(payload.get("since")),
+        }
+        return {"route": job, "marker": f"staging/{run_id}/router/_routed.json"}
+    return {"marker": f"staging/{run_id}/router/_composed.json"}
+
+
 class ResearchService:
-    def __init__(
+    def __init__(  # noqa: PLR0913 - signature publique gelée (tests, server.build_service, PR #43)
         self,
         settings: Settings,
         store: Store,
@@ -188,55 +249,12 @@ class ResearchService:
         run_id = payload.get("run_id")
         if not isinstance(run_id, str) or not staging.RUN_ID.match(run_id):
             raise AppError("bad_request", "run_id doit suivre ^[A-Za-z0-9_-]{1,64}$.", {"run_id": run_id})
-        action = payload["action"]
+        head = {"action": payload["action"], "run_id": run_id}
         if self.role == "researcher":
-            try:
-                brief = researcher_mod.parse_brief(payload)
-            except researcher_mod.ResearchError as exc:
-                raise AppError("bad_request", str(exc)) from exc
-            return {"action": action, "run_id": run_id, "brief": brief, "marker": f"{brief.prefix}_done.json"}
+            return {**head, **_researcher_job(payload)}
         if self.role == "expert":
-            code = payload.get("subject")
-            if code not in SUBJECTS:
-                raise AppError("bad_request", f"subject doit être parmi {list(SUBJECTS)}.")
-            mode = payload.get("mode") or "sweep"
-            if mode not in ("sweep", "question"):
-                raise AppError("bad_request", "mode doit valoir sweep ou question.")
-            depth = _depth(payload.get("depth") or ("quick" if mode == "sweep" else "standard"))
-            default_issuers = list(starter.universe()) if mode == "sweep" else []
-            max_researchers = payload.get("max_researchers")
-            cap = DEPTH_CAPS[depth]
-            if max_researchers is not None:
-                if not isinstance(max_researchers, int) or max_researchers < 1:
-                    raise AppError("bad_request", "max_researchers doit être un entier positif.")
-                cap = min(cap, max_researchers)
-            job = expert_mod.ExpertJob(
-                run_id=run_id,
-                subject=SUBJECTS[code],
-                mode=mode,
-                question=_question(payload.get("question")) if mode == "question" else None,
-                sub_question=(" ".join(str(payload.get("sub_question") or "").split())[:400] or None),
-                issuers=_tickers(payload.get("issuers"), default_issuers),
-                themes=_themes(payload.get("themes")),
-                since=_since(payload.get("since")),
-                as_of=_as_of(payload.get("as_of")),
-                depth=depth,
-                max_researchers=cap,
-            )
-            return {"action": action, "run_id": run_id, "expert": job, "marker": f"{job.prefix}_done.json"}
-        # router
-        if action == "route":
-            job = {
-                "run_id": run_id,
-                "question": _question(payload.get("question")),
-                "issuers": _tickers(payload.get("issuers"), []),
-                "themes": _themes(payload.get("themes")),
-                "as_of": _as_of(payload.get("as_of")),
-                "depth": _depth(payload.get("depth")),
-                "since": _since(payload.get("since")),
-            }
-            return {"action": action, "run_id": run_id, "route": job, "marker": f"staging/{run_id}/router/_routed.json"}
-        return {"action": action, "run_id": run_id, "marker": f"staging/{run_id}/router/_composed.json"}
+            return {**head, **_expert_job(payload, run_id)}
+        return {**head, **_router_job(payload, run_id)}
 
     def accept(self, payload: dict[str, Any]) -> dict[str, Any]:
         job = self._job(payload)
@@ -267,15 +285,15 @@ class ResearchService:
                 model_id=self.researcher_model_id,
             )
         if self.role == "expert":
-            return expert_mod.run_expert(
+            run = expert_mod.ExpertRun(
                 job=job["expert"],
                 store=self.store,
-                trace=trace,
-                model_factory=self.model_factory,
-                model_id=self.settings.model_id,
                 launcher=self.launcher(),
                 knowledge=self.knowledge_search(),
-                budget_seconds=self.expert_budget_seconds,
+                deadline=time.monotonic() + self.expert_budget_seconds,
+            )
+            return expert_mod.run_expert(
+                run, trace=trace, model_factory=self.model_factory, model_id=self.settings.model_id
             )
         common = {
             "store": self.store,
@@ -304,7 +322,7 @@ class ResearchService:
                 "role": self.role,
                 "action": job["action"],
                 "run_id": job["run_id"],
-                **{k: v for k, v in marker.items() if k != "status"},
+                **{key: value for key, value in marker.items() if key != "status"},
                 "started_at": started_at,
                 "finished_at": clock.iso(),
                 "release": self.settings.release,

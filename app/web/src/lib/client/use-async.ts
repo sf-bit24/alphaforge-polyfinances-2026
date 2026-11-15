@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent, useState } from "react";
-import { ApiError, isAbort } from "./api";
+import { isAbort, toApiError, type ApiError } from "./api";
 
 interface Loaded<T> {
   key: string;
@@ -26,8 +26,7 @@ export function useAsync<T>(key: string | null, load: (signal: AbortSignal) => P
       },
       (error: unknown) => {
         if (controller.signal.aborted || isAbort(error)) return;
-        const apiError = error instanceof ApiError ? error : new ApiError("internal", error instanceof Error ? error.message : String(error));
-        setLoaded({ key, data: null, error: apiError });
+        setLoaded({ key, data: null, error: toApiError(error) });
       },
     );
     return () => controller.abort();

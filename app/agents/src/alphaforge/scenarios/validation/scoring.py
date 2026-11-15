@@ -34,43 +34,44 @@ def crps_samples(samples: np.ndarray, y: float) -> float:
     return term1 - 0.5 * term2
 
 
-def pit(samples: np.ndarray, y: float, u: float) -> float:
-    """PIT randomisé : ``(#{X < y} + u · #{X = y}) / n`` avec ``u`` ~ U(0, 1) fourni par l'appelant."""
+def pit(samples: np.ndarray, y: float, uniform: float) -> float:
+    """PIT randomisé : ``(#{X < y} + u · #{X = y}) / n``, où ``u`` (``uniform``) ~ U(0, 1) est fourni par
+    l'appelant."""
     x = np.asarray(samples)
     n = len(x)
-    lo = float(np.count_nonzero(x < y))
-    eq = float(np.count_nonzero(x == y))
-    return (lo + u * eq) / n
+    below = float(np.count_nonzero(x < y))
+    ties = float(np.count_nonzero(x == y))
+    return (below + uniform * ties) / n
 
 
 def pinball(q_pred: float, y: float, tau: float) -> float:
     """Perte quantile (pinball) du quantile prédit ``q_pred`` au niveau ``tau``."""
-    d = y - q_pred
-    return float(max(tau * d, (tau - 1.0) * d))
+    error = y - q_pred
+    return float(max(tau * error, (tau - 1.0) * error))
 
 
 def _kolmogorov_sf(lam: float) -> float:
     if lam <= 0:
         return 1.0
-    s = 0.0
+    total = 0.0
     for k in range(1, 101):
         term = 2.0 * (-1) ** (k - 1) * math.exp(-2.0 * k * k * lam * lam)
-        s += term
+        total += term
         if abs(term) < 1e-12:
             break
-    return float(min(max(s, 0.0), 1.0))
+    return float(min(max(total, 0.0), 1.0))
 
 
-def ks_uniform(u: np.ndarray) -> tuple[float, float, int]:
-    """(D, p-valeur asymptotique, n) du test KS de ``u`` contre U(0, 1). ``nan`` si n < 3."""
-    u = np.sort(np.asarray(u, dtype=np.float64)[np.isfinite(u)])
-    n = len(u)
+def ks_uniform(pit_values: np.ndarray) -> tuple[float, float, int]:
+    """(D, p-valeur asymptotique, n) du test KS de ``pit_values`` contre U(0, 1). ``nan`` si n < 3."""
+    values = np.sort(np.asarray(pit_values, dtype=np.float64)[np.isfinite(pit_values)])
+    n = len(values)
     if n < 3:
         return float("nan"), float("nan"), n
     i = np.arange(1, n + 1)
-    d = float(max(np.max(i / n - u), np.max(u - (i - 1) / n)))
-    sn = math.sqrt(n)
-    return d, _kolmogorov_sf((sn + 0.12 + 0.11 / sn) * d), n
+    statistic = float(max(np.max(i / n - values), np.max(values - (i - 1) / n)))
+    sqrt_n = math.sqrt(n)
+    return statistic, _kolmogorov_sf((sqrt_n + 0.12 + 0.11 / sqrt_n) * statistic), n
 
 
 def moving_block_bootstrap(n: int, block: int, n_boot: int, rng: np.random.Generator) -> np.ndarray:
@@ -78,8 +79,8 @@ def moving_block_bootstrap(n: int, block: int, n_boot: int, rng: np.random.Gener
     block = int(max(1, min(block, n)))
     n_blocks = int(math.ceil(n / block))
     starts = rng.integers(0, n, size=(n_boot, n_blocks))
-    idx = (starts[:, :, None] + np.arange(block)[None, None, :]) % n
-    return idx.reshape(n_boot, -1)[:, :n]
+    indices = (starts[:, :, None] + np.arange(block)[None, None, :]) % n
+    return indices.reshape(n_boot, -1)[:, :n]
 
 
 def block_ci(
@@ -87,55 +88,57 @@ def block_ci(
 ) -> tuple[float, float, float]:
     """Moyenne et intervalle bootstrap par blocs (percentile) de la moyenne de ``values`` (1-D, ordre des
     origines). Les ``nan`` sont ignorés dans chaque réplication."""
-    v = np.asarray(values, dtype=np.float64)
-    ok = np.isfinite(v)
-    if ok.sum() == 0:
+    array = np.asarray(values, dtype=np.float64)
+    finite = np.isfinite(array)
+    if finite.sum() == 0:
         return float("nan"), float("nan"), float("nan")
-    v = v[ok]
-    idx = moving_block_bootstrap(len(v), block, n_boot, rng)
-    means = v[idx].mean(axis=1)
-    a = (1.0 - level) / 2.0
-    return float(v.mean()), float(np.quantile(means, a)), float(np.quantile(means, 1.0 - a))
+    array = array[finite]
+    indices = moving_block_bootstrap(len(array), block, n_boot, rng)
+    means = array[indices].mean(axis=1)
+    alpha = (1.0 - level) / 2.0
+    return float(array.mean()), float(np.quantile(means, alpha)), float(np.quantile(means, 1.0 - alpha))
 
 
-def realized_outcome(lr: np.ndarray) -> tuple[float, float, float]:
-    """Pour des log-rendements mensuels réalisés ``lr`` (1-D, 12·H mois) : (rendement annualisé, perte maximale
-    depuis un sommet capital initial compris, log-richesse finale).
+def realized_outcome(log_returns: np.ndarray) -> tuple[float, float, float]:
+    """Pour des log-rendements mensuels réalisés ``log_returns`` (1-D, 12·H mois) : (rendement annualisé, perte
+    maximale depuis un sommet capital initial compris, log-richesse finale).
     Même définition que ``engine.metrics_from_paths``."""
-    cum = np.cumsum(lr)
+    cum = np.cumsum(log_returns)
     peak = np.maximum.accumulate(np.maximum(cum, 0.0))
     mdd = float(-np.expm1(-np.max(peak - cum)))
-    h = len(lr) / 12.0
-    return float(np.expm1(cum[-1] / h)), mdd, float(cum[-1])
+    years = len(log_returns) / 12.0
+    return float(np.expm1(cum[-1] / years)), mdd, float(cum[-1])
 
 
-def path_outcomes(lr_hist: np.ndarray, idx: np.ndarray, horizons: list[int]) -> dict[int, dict[str, np.ndarray]]:
+def path_outcomes(
+    log_returns: np.ndarray, indices: np.ndarray, horizons: list[int]
+) -> dict[int, dict[str, np.ndarray]]:
     """Échantillons simulés par horizon : rendement annualisé, perte maximale, log-richesse finale.
 
-    ``lr_hist`` (T, M) log-rendements mensuels des mélanges ; ``idx`` (N, T_sim) indices de mois. Renvoie, pour chaque
-    H, des tableaux (N, M)."""
-    cum = np.cumsum(lr_hist[idx], axis=1)  # (N, T, M)
-    dd = np.maximum.accumulate(np.maximum(cum, 0.0), axis=1) - cum
-    np.maximum.accumulate(dd, axis=1, out=dd)
+    ``log_returns`` (T, M) log-rendements mensuels des mélanges ; ``indices`` (N, T_sim) indices de mois. Renvoie,
+    pour chaque H, des tableaux (N, M)."""
+    cum = np.cumsum(log_returns[indices], axis=1)  # (N, T, M)
+    drawdown = np.maximum.accumulate(np.maximum(cum, 0.0), axis=1) - cum
+    np.maximum.accumulate(drawdown, axis=1, out=drawdown)
     out = {}
-    for H in horizons:
-        m = 12 * H - 1
-        out[H] = {
-            "ret": np.expm1(cum[:, m, :] / H),
-            "mdd": -np.expm1(-dd[:, m, :]),
-            "logw": cum[:, m, :].copy(),
+    for horizon in horizons:
+        month = 12 * horizon - 1
+        out[horizon] = {
+            "ret": np.expm1(cum[:, month, :] / horizon),
+            "mdd": -np.expm1(-drawdown[:, month, :]),
+            "logw": cum[:, month, :].copy(),
         }
     return out
 
 
-def rolling_outcomes(lr: np.ndarray, H: int) -> dict[str, np.ndarray]:
-    """Résultats de toutes les fenêtres glissantes de 12·H mois de ``lr`` (1-D) : base empirique naïve."""
-    n = 12 * H
-    T = len(lr)
-    if T < n:
+def rolling_outcomes(log_returns: np.ndarray, horizon: int) -> dict[str, np.ndarray]:
+    """Résultats de toutes les fenêtres glissantes de 12·H mois de ``log_returns`` (1-D) : base empirique naïve."""
+    n = 12 * horizon
+    n_months = len(log_returns)
+    if n_months < n:
         return {"ret": np.empty(0), "mdd": np.empty(0), "logw": np.empty(0)}
-    win = np.lib.stride_tricks.sliding_window_view(lr, n)  # (T-n+1, n)
-    cum = np.cumsum(win, axis=1)
+    windows = np.lib.stride_tricks.sliding_window_view(log_returns, n)  # (T-n+1, n)
+    cum = np.cumsum(windows, axis=1)
     peak = np.maximum.accumulate(np.maximum(cum, 0.0), axis=1)
     mdd = -np.expm1(-np.max(peak - cum, axis=1))
-    return {"ret": np.expm1(cum[:, -1] / H), "mdd": mdd, "logw": cum[:, -1].copy()}
+    return {"ret": np.expm1(cum[:, -1] / horizon), "mdd": mdd, "logw": cum[:, -1].copy()}

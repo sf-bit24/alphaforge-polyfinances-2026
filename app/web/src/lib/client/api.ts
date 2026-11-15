@@ -3,6 +3,7 @@
  * contract's zod schemas; streamed responses are read event by event.
  */
 import type { z } from "zod";
+import { PortfolioBuildResponse, type PortfolioBuildRequestInput } from "@/lib/contract/portfolio";
 import type { AgentRequestInput, CollectRequest } from "@/lib/contract/requests";
 import {
   ClientState,
@@ -16,9 +17,11 @@ import {
   type Locale,
   type TraceStep,
 } from "@/lib/contract/schemas";
-import { readAgentEvents } from "@/lib/sse";
+import type { Dictionary } from "@/lib/i18n/dictionary";
+import { readAgentEvents, type DecodedEvent } from "@/lib/sse";
 
 export class ApiError extends Error {
+  // eslint-disable-next-line max-params -- frozen public signature: callers build ApiError positionally.
   constructor(
     readonly code: string,
     message: string,
@@ -35,10 +38,22 @@ export function isAbort(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
-interface CallOptions {
+/** Anything a call threw, as an ApiError: an abort becomes `aborted`, any other failure `internal`. */
+export function toApiError(error: unknown): ApiError {
+  if (error instanceof ApiError) return error;
+  if (isAbort(error)) return new ApiError("aborted", "Aborted");
+  return new ApiError("internal", error instanceof Error ? error.message : String(error));
+}
+
+export interface CallOptions {
   locale: Locale;
   signal?: AbortSignal;
   messages: { network: string; invalidResponse: string; noResult: string };
+}
+
+/** The texts of a failed call, in the interface language. */
+export function callMessages(t: Dictionary): CallOptions["messages"] {
+  return { network: t.errors.network, invalidResponse: t.errors.invalidResponse, noResult: t.errors.noResult };
 }
 
 function issuesOf(error: z.ZodError) {
@@ -92,6 +107,38 @@ export interface StreamHandlers {
   onDelta: (text: string) => void;
 }
 
+/** An event outside the contract is skipped, unless it claims to be the result or an error: then the call fails. */
+function skipOutsideContract(decoded: Extract<DecodedEvent, { ok: false }>, options: CallOptions): void {
+  let type: unknown = null;
+  try {
+    type = (JSON.parse(decoded.raw) as { type?: unknown }).type;
+  } catch {
+    // not JSON at all
+  }
+  if (type === "result" || type === "error") {
+    throw new ApiError("invalid_response", options.messages.invalidResponse, { reason: decoded.reason });
+  }
+  console.warn("Ignored a stream event outside the contract:", decoded.reason);
+}
+
+/** Pass trace and delta events to the handlers as they arrive; the last `result` event is the answer. */
+async function readStreamedState(body: ReadableStream<Uint8Array>, handlers: StreamHandlers, options: CallOptions): Promise<ClientState> {
+  let result: ClientState | null = null;
+  for await (const decoded of readAgentEvents(body, options.signal)) {
+    if (!decoded.ok) {
+      skipOutsideContract(decoded, options);
+      continue;
+    }
+    const event = decoded.event;
+    if (event.type === "trace") handlers.onTrace(event.step);
+    else if (event.type === "delta") handlers.onDelta(event.text);
+    else if (event.type === "error") throw new ApiError(event.error.code, event.error.message, event.error.details);
+    else result = event.result;
+  }
+  if (!result) throw new ApiError("invalid_response", options.messages.noResult);
+  return result;
+}
+
 /** `stream: true` call: trace and delta events as they arrive, then the final ClientState. */
 export async function callAgentStream(
   request: AgentRequestInput,
@@ -108,29 +155,7 @@ export async function callAgentStream(
     // The runtime may answer in JSON even when asked to stream.
     return parseEnvelope(await readJson(response, options), ClientState, options, response.status);
   }
-  let result: ClientState | null = null;
-  for await (const decoded of readAgentEvents(response.body, options.signal)) {
-    if (!decoded.ok) {
-      let type: unknown = null;
-      try {
-        type = (JSON.parse(decoded.raw) as { type?: unknown }).type;
-      } catch {
-        // not JSON at all
-      }
-      if (type === "result" || type === "error") {
-        throw new ApiError("invalid_response", options.messages.invalidResponse, { reason: decoded.reason });
-      }
-      console.warn("Ignored a stream event outside the contract:", decoded.reason);
-      continue;
-    }
-    const event = decoded.event;
-    if (event.type === "trace") handlers.onTrace(event.step);
-    else if (event.type === "delta") handlers.onDelta(event.text);
-    else if (event.type === "error") throw new ApiError(event.error.code, event.error.message, event.error.details);
-    else result = event.result;
-  }
-  if (!result) throw new ApiError("invalid_response", options.messages.noResult);
-  return result;
+  return readStreamedState(response.body, handlers, options);
 }
 
 export async function getHealth(options: CallOptions): Promise<GatewayHealth> {
@@ -169,4 +194,10 @@ export async function describeExecution(executionArn: string, options: CallOptio
 export async function startCollection(input: CollectRequest, options: CallOptions) {
   const response = await send("/api/collect", { method: "POST", body: JSON.stringify(input) }, options);
   return parseEnvelope(await readJson(response, options), ExecutionStartResponse, options, response.status);
+}
+
+/** `build` on the `portfolio` runtime (CONTRACTS.md 12); the Decision is validated before it reaches the screen. */
+export async function buildPortfolio(input: Omit<PortfolioBuildRequestInput, "action">, options: CallOptions): Promise<PortfolioBuildResponse> {
+  const response = await send("/api/portfolio", { method: "POST", body: JSON.stringify({ action: "build", ...input }) }, options);
+  return parseEnvelope(await readJson(response, options), PortfolioBuildResponse, options, response.status);
 }

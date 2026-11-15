@@ -37,10 +37,14 @@ function hasTraversal(key: string): boolean {
   return key.split("/").some((part) => part === ".." || part === ".");
 }
 
+function base64Padding(data: string): number {
+  if (data.endsWith("==")) return 2;
+  return data.endsWith("=") ? 1 : 0;
+}
+
 /** Decoded size of a base64 string, without decoding it. */
 export function base64DecodedBytes(data: string): number {
-  const padding = data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0;
-  return Math.floor((data.length * 3) / 4) - padding;
+  return Math.floor((data.length * 3) / 4) - base64Padding(data);
 }
 
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
@@ -99,17 +103,18 @@ export const PositionInput = z.object({
 });
 export type PositionInput = z.infer<typeof PositionInput>;
 
-const answerValue = AnswerValue.refine(
-  (value) =>
-    typeof value === "number"
-      ? Number.isFinite(value)
-      : typeof value === "string"
-        ? value.length <= 4_000
-        : Array.isArray(value)
-          ? value.length <= 50 && value.every((item) => item.length <= 500)
-          : true,
-  { message: "Answer value out of bounds" },
-);
+const MAX_ANSWER_CHARS = 4_000;
+const MAX_ANSWER_OPTIONS = 50;
+const MAX_OPTION_CHARS = 500;
+
+function isAnswerValueInBounds(value: AnswerValue): boolean {
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value === "string") return value.length <= MAX_ANSWER_CHARS;
+  if (Array.isArray(value)) return value.length <= MAX_ANSWER_OPTIONS && value.every((item) => item.length <= MAX_OPTION_CHARS);
+  return true;
+}
+
+const answerValue = AnswerValue.refine(isAnswerValueInBounds, { message: "Answer value out of bounds" });
 
 const kbPrefix = z.string().refine(
   (prefix) => prefix === "general/" || CLIENT_PREFIX.test(prefix),

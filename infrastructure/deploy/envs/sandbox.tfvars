@@ -32,6 +32,11 @@ collecte_schedule_enabled    = true
 # sous runtime/data/long/ (scripts/finance/upload_long_data.py).
 portfolio_enabled = true
 
+# Evolution du portefeuille dans le temps (evolution.tf) : machine Step Functions
+# qui appelle les actions evolution.* du runtime portfolio. Lancee a la demande ;
+# l'horaire de demo (1 execution = 1 mois simule) reste desactive.
+evolution_enabled = true
+
 additional_tags = {
   Owner = "larpathon"
   Event = "datathon-polyfinances-2026"

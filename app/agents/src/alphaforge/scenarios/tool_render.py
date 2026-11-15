@@ -40,7 +40,7 @@ SECTIONS = (
 )
 
 
-def _fmt(number: float, decimals: int) -> str:
+def _format_percent(number: float, decimals: int) -> str:
     text = f"{number:.{decimals}f}"
     if "." in text:
         text = text.rstrip("0").rstrip(".")
@@ -63,7 +63,7 @@ def pct(value: float, rounding: str = "nearest") -> str:
         if rounding == "up" and abs(number) >= 10 and decimals:
             decimals = 0
             number = math.ceil(number - 1e-9)
-    return _fmt(number, decimals)
+    return _format_percent(number, decimals)
 
 
 def is_probability(metric: str | None) -> bool:
@@ -77,12 +77,12 @@ def prob(value: float, n_paths: int | None, rounding: str = "up") -> str:
             bound = 100 / n_paths
             decimals = max(1, -math.floor(math.log10(bound)) + 1) if bound < 1 else 1
             # Arrondi vers le haut : « < x » doit rester vrai (x >= 1/n_paths).
-            return "< " + _fmt(math.ceil(bound * 10**decimals - 1e-9) / 10**decimals, decimals)
+            return "< " + _format_percent(math.ceil(bound * 10**decimals - 1e-9) / 10**decimals, decimals)
         return "0 %"
     return pct(max(value, 0.0), rounding)
 
 
-def _dec(value: float) -> str:
+def _decimal(value: float) -> str:
     return f"{value:.2f}".replace(".", ",")
 
 
@@ -90,7 +90,7 @@ def money(value: float) -> str:
     return f"{round(value):,}".replace(",", " ") + " $"
 
 
-def _ids(view: dict[str, Any]) -> list[str]:
+def _fact_ids(view: dict[str, Any]) -> list[str]:
     base = view["fact_id"]
     return [base, base + ".ci_lo", base + ".ci_hi"]
 
@@ -100,12 +100,12 @@ def _interval(view: dict[str, Any], metric: str | None = None) -> str:
     if is_probability(metric):
         n = view.get("n_paths")
         # Borne haute nulle : on affiche 1/n_paths sans « < » (l'intervalle affiché contient toujours le calculé).
-        lo, hi = prob(view["ci_lo"], n, "down"), prob(view["ci_hi"], n, "up").removeprefix("< ")
-        return f"{prob(view['value'], n, 'up')} [IC 90 % : {lo}–{hi}]"
+        low, high = prob(view["ci_lo"], n, "down"), prob(view["ci_hi"], n, "up").removeprefix("< ")
+        return f"{prob(view['value'], n, 'up')} [IC 90 % : {low}–{high}]"
     return f"{pct(view['value'])} [IC 90 % : {pct(view['ci_lo'])}–{pct(view['ci_hi'])}]"
 
 
-def _st(text: str, fact_ids: list[str] | None = None, label: str = "FAIT") -> dict[str, Any]:
+def _statement(text: str, fact_ids: list[str] | None = None, label: str = "FAIT") -> dict[str, Any]:
     return {"text_fr": text, "fact_ids": list(fact_ids or []), "label": label}
 
 
@@ -144,91 +144,102 @@ def _headline(result: dict[str, Any]) -> tuple[str, list[str]]:
                 f"({pct(bucket['bucket_pct'])} du montant) sur {years} ; pour le seuil demandé de "
                 f"{money(bucket['loss_threshold_cad'])}, c'est un majorant{tail}"
             )
-        return text, _ids(view)
+        return text, _fact_ids(view)
     if "ret_ann_p10" in primary:
         view = primary["ret_ann_p10"]
         text = (
             f"{who}, dans 10 % des scénarios le rendement annualisé sur {years} est inférieur à {_interval(view)}{tail}"
         )
-        return text, _ids(view)
+        return text, _fact_ids(view)
     metric, view = next(iter(primary.items()))
-    return f"{who}, {metric} = {_interval(view, metric)} sur {years}{tail}", _ids(view)
+    return f"{who}, {metric} = {_interval(view, metric)} sur {years}{tail}", _fact_ids(view)
 
 
-def render_fr(result: dict[str, Any]) -> dict[str, Any]:
-    if result.get("status") != "ok":
-        message = (result.get("error") or {}).get("message", "refus")
-        statement = _st(f"Aucun chiffre produit : {message}. {result.get('disclaimer_fr', '')}".strip(), [], "FAIT")
-        out = {key: [] for key, _ in SECTIONS} | {"limits": [statement], "headline": statement["text_fr"]}
-        out["text"] = statement["text_fr"]
-        return out
+def _refusal_explanation(result: dict[str, Any]) -> dict[str, Any]:
+    message = (result.get("error") or {}).get("message", "refus")
+    statement = _statement(f"Aucun chiffre produit : {message}. {result.get('disclaimer_fr', '')}".strip(), [], "FAIT")
+    out = {key: [] for key, _ in SECTIONS} | {"limits": [statement], "headline": statement["text_fr"]}
+    out["text"] = statement["text_fr"]
+    return out
 
-    primary, grid, horizon, bucket = result["primary"], result["grid"], result["horizon"], result["threshold"]
-    headline, head_ids = _headline(result)
-    first_id = head_ids[0]
-    run = result["run"]
 
-    data_used = [
-        _st(
+def _data_used(result: dict[str, Any], headline_fact_id: str) -> list[dict[str, Any]]:
+    run, grid = result["run"], result["grid"]
+    return [
+        _statement(
             f"Table de scénarios {run['run_id']} (sha256 {run['table_sha256'][:12]}…, code {run['code_sha']}), "
             f"modèle {result['model_name']} ({result['model_id']}), famille {result['family']} "
             f"({result['currency'] or '?'}, base {result['basis']}), données {_years(result)} "
             f"(ajusté jusqu'à {result['fitted_through'] or 'non indiqué'}), {_paths(result)}.",
-            [first_id],
+            [headline_fact_id],
         ),
-        _st(
-            f"Mélange de la grille retenu : {grid['mix_id']}, à une distance L1 de {_dec(grid['l1_distance'])} "
-            f"du mélange demandé (tolérance {_dec(grid['max_l1_distance'])}).",
+        _statement(
+            f"Mélange de la grille retenu : {grid['mix_id']}, à une distance L1 de {_decimal(grid['l1_distance'])} "
+            f"du mélange demandé (tolérance {_decimal(grid['max_l1_distance'])}).",
             [grid["l1_fact_id"]],
         ),
     ]
 
-    why = [_st(headline, head_ids, "HYPOTHESE" if result["hypothese"] else "FAIT")]
+
+def _why(result: dict[str, Any], headline: str, headline_fact_ids: list[str]) -> list[dict[str, Any]]:
+    primary, horizon = result["primary"], result["horizon"]
+    why = [_statement(headline, headline_fact_ids, "HYPOTHESE" if result["hypothese"] else "FAIT")]
     if "ret_ann_p10" in primary and "ret_ann_p50" in primary:
         p10, p50 = primary["ret_ann_p10"], primary["ret_ann_p50"]
         why.append(
-            _st(
+            _statement(
                 f"Rendement annualisé sur {horizon['used']} ans : médiane {_interval(p50)}, "
                 f"10e centile {_interval(p10)}.",
-                _ids(p50) + _ids(p10),
+                _fact_ids(p50) + _fact_ids(p10),
             )
         )
     if "mdd_p90" in primary:
         view = primary["mdd_p90"]
         why.append(
-            _st(f"Dans 10 % des scénarios, la baisse maximale en cours de route dépasse {_interval(view)}.", _ids(view))
-        )
-    if result.get("wealth_p10_amount"):
-        w = result["wealth_p10_amount"]
-        why.append(
-            _st(
-                f"Patrimoine final au 10e centile : environ {money(w['value'])} "
-                f"[IC 90 % : {money(w['ci_lo'])}–{money(w['ci_hi'])}].",
-                [w["fact_id"], *_ids(primary["wealth_p10"])],
+            _statement(
+                f"Dans 10 % des scénarios, la baisse maximale en cours de route dépasse {_interval(view)}.",
+                _fact_ids(view),
             )
         )
+    if result.get("wealth_p10_amount"):
+        wealth = result["wealth_p10_amount"]
+        why.append(
+            _statement(
+                f"Patrimoine final au 10e centile : environ {money(wealth['value'])} "
+                f"[IC 90 % : {money(wealth['ci_lo'])}–{money(wealth['ci_hi'])}].",
+                [wealth["fact_id"], *_fact_ids(primary["wealth_p10"])],
+            )
+        )
+    return why
 
+
+def _model_limits(result: dict[str, Any]) -> list[dict[str, Any]]:
     limits = [
-        _st(
+        _statement(
             "C'est un modèle statistique des rendements passés, pas une prévision : il suppose que l'avenir "
             "ressemble aux périodes historiques rééchantillonnées; un choc sans précédent n'y figure pas.",
             [],
             "HYPOTHESE",
         )
     ]
-    limits += [_st(str(a), [], "HYPOTHESE") for a in result.get("model_assumptions") or []]
-    limits.append(_st(BOND_RATE_LIMIT, [], "FAIT"))
-    limits.append(_st(BOND_RATE_HYPOTHESIS, [], "HYPOTHESE"))
+    limits += [_statement(str(assumption), [], "HYPOTHESE") for assumption in result.get("model_assumptions") or []]
+    limits.append(_statement(BOND_RATE_LIMIT, [], "FAIT"))
+    limits.append(_statement(BOND_RATE_HYPOTHESIS, [], "HYPOTHESE"))
+    return limits
+
+
+def _validation_limits(result: dict[str, Any]) -> list[dict[str, Any]]:
+    limits: list[dict[str, Any]] = []
     if result.get("validated") is False:
         limits.append(
-            _st(
+            _statement(
                 "Résultat non validé hors échantillon : " + "; ".join(result.get("validation_reasons") or []) + ".",
                 [],
             )
         )
     if result.get("degraded_calibration"):
         limits.append(
-            _st(
+            _statement(
                 f"Mise en garde : calibration dégradée à long horizon ({result['horizon']['used']} ans) ; "
                 "les probabilités sont moins fiables qu'à 1 ou 3 ans.",
                 [],
@@ -238,13 +249,20 @@ def render_fr(result: dict[str, Any]) -> dict[str, Any]:
     for model, validation in by_model.items():
         if validation:
             text = validation if isinstance(validation, str) else json.dumps(validation, ensure_ascii=False)
-            limits.append(_st(f"Validation hors échantillon de {model} (manifeste, citée telle quelle) : {text}", []))
+            limits.append(
+                _statement(f"Validation hors échantillon de {model} (manifeste, citée telle quelle) : {text}", [])
+            )
         else:
-            limits.append(_st(f"Le manifeste ne fournit pas de validation hors échantillon pour {model}.", []))
+            limits.append(_statement(f"Le manifeste ne fournit pas de validation hors échantillon pour {model}.", []))
+    return limits
+
+
+def _data_limits(result: dict[str, Any]) -> list[dict[str, Any]]:
+    limits: list[dict[str, Any]] = []
     integrity = result.get("integrity") or {}
     if integrity.get("ci_not_enclosing"):
         limits.append(
-            _st(
+            _statement(
                 f"Pour {integrity['ci_not_enclosing']} valeur(s) de la table, l'IC à 90 % (bootstrap des paramètres) "
                 "n'encadre pas la valeur centrale : l'estimation est instable à cet endroit.",
                 [],
@@ -252,15 +270,21 @@ def render_fr(result: dict[str, Any]) -> dict[str, Any]:
         )
     if result["hypothese"]:
         limits.append(
-            _st(
+            _statement(
                 "Le mélange contient de la crypto, dont l'historique ne commence qu'en 2014 : chiffres HYPOTHESE.",
                 [],
                 "HYPOTHESE",
             )
         )
+    return limits
+
+
+def _grid_limits(result: dict[str, Any]) -> list[dict[str, Any]]:
+    horizon, bucket, grid = result["horizon"], result["threshold"], result["grid"]
+    limits: list[dict[str, Any]] = []
     if not horizon["exact"]:
         limits.append(
-            _st(
+            _statement(
                 f"Horizon {horizon['requested']} ans absent de la grille : chiffres à {horizon['used']} ans, sans "
                 "interpolation. La probabilité de perte ne varie pas forcément de façon régulière avec l'horizon.",
                 [],
@@ -269,7 +293,7 @@ def render_fr(result: dict[str, Any]) -> dict[str, Any]:
         )
     if bucket and bucket["is_lower_bound"]:
         limits.append(
-            _st(
+            _statement(
                 f"Seuil demandé ({pct(bucket['requested_pct'])} du montant) sous le plus petit palier de la table : "
                 "le chiffre est un minorant.",
                 [],
@@ -277,7 +301,7 @@ def render_fr(result: dict[str, Any]) -> dict[str, Any]:
         )
     if bucket and result["currency"] and result["currency"] != "CAD":
         limits.append(
-            _st(
+            _statement(
                 f"Famille en {result['currency']} : le seuil en dollars canadiens est appliqué en pourcentage, sans "
                 "conversion de change.",
                 [],
@@ -286,57 +310,99 @@ def render_fr(result: dict[str, Any]) -> dict[str, Any]:
         )
     if grid["l1_distance"] > 0:
         limits.append(
-            _st("Le mélange demandé a été rapproché de la grille ; aucune extrapolation.", [grid["l1_fact_id"]])
+            _statement("Le mélange demandé a été rapproché de la grille ; aucune extrapolation.", [grid["l1_fact_id"]])
         )
+    return limits
 
-    change: list[dict[str, Any]] = []
-    focus = bucket["bucket_metric"] if bucket else ("ret_ann_p10" if "ret_ann_p10" in primary else None)
-    others = [m for m in result["all_models"] if m["model_id"] != result["model_id"] and focus in m["metrics"]]
+
+def _limits(result: dict[str, Any]) -> list[dict[str, Any]]:
+    return _model_limits(result) + _validation_limits(result) + _data_limits(result) + _grid_limits(result)
+
+
+def _model_disagreement(result: dict[str, Any], focus: str | None) -> list[dict[str, Any]]:
+    statements = []
+    others = [
+        entry for entry in result["all_models"] if entry["model_id"] != result["model_id"] and focus in entry["metrics"]
+    ]
     for other in others:
         view = other["metrics"][focus]
         text = f"Avec le modèle {other['name']} ({other['model_id']}) : {_interval(view, focus)}."
-        change.append(_st(text, _ids(view)))
+        statements.append(_statement(text, _fact_ids(view)))
     spread = result["model_spread"].get(focus) if focus else None
     if spread and spread["max"] - spread["min"] > 0:
         if is_probability(focus):
-            lo, hi = prob(spread["min"], None, "down"), prob(spread["max"], None, "up")
+            low, high = prob(spread["min"], None, "down"), prob(spread["max"], None, "up")
         else:
-            lo, hi = pct(spread["min"]), pct(spread["max"])
-        change.append(
-            _st(
-                f"Écart entre modèles : de {lo} ({spread['min_model']}) à {hi} "
+            low, high = pct(spread["min"]), pct(spread["max"])
+        statements.append(
+            _statement(
+                f"Écart entre modèles : de {low} ({spread['min_model']}) à {high} "
                 f"({spread['max_model']}); ce désaccord fait partie de l'incertitude.",
-                [m["metrics"][focus]["fact_id"] for m in result["all_models"] if focus in m["metrics"]],
+                [entry["metrics"][focus]["fact_id"] for entry in result["all_models"] if focus in entry["metrics"]],
             )
         )
-    if bucket:
-        for metric, view in primary.items():
-            if metric.startswith("p_loss_gt_") and metric != bucket["bucket_metric"]:
-                change.append(
-                    _st(
-                        f"Avec un seuil de perte de {int(metric[-2:])} % du montant : {_interval(view, metric)}.",
-                        _ids(view),
-                    )
-                )
+    return statements
+
+
+def _threshold_alternatives(result: dict[str, Any]) -> list[dict[str, Any]]:
+    bucket = result["threshold"]
+    if not bucket:
+        return []
+    return [
+        _statement(
+            f"Avec un seuil de perte de {int(metric[-2:])} % du montant : {_interval(view, metric)}.",
+            _fact_ids(view),
+        )
+        for metric, view in result["primary"].items()
+        if metric.startswith("p_loss_gt_") and metric != bucket["bucket_metric"]
+    ]
+
+
+def _what_would_change(result: dict[str, Any]) -> list[dict[str, Any]]:
+    primary, bucket = result["primary"], result["threshold"]
+    focus = bucket["bucket_metric"] if bucket else ("ret_ann_p10" if "ret_ann_p10" in primary else None)
+    change = _model_disagreement(result, focus) + _threshold_alternatives(result)
     upper = result.get("upper_horizon")
     if upper:
         change.append(
-            _st(f"À {upper['horizon_years']} ans (horizon supérieur de la grille) : {_interval(upper)}.", _ids(upper))
+            _statement(
+                f"À {upper['horizon_years']} ans (horizon supérieur de la grille) : {_interval(upper)}.",
+                _fact_ids(upper),
+            )
         )
     change.append(
-        _st(
+        _statement(
             "Un autre mélange (plus ou moins d'actions), un autre horizon, la base réelle (après inflation) ou une "
             "autre famille de données changeraient ces chiffres : relancer l'outil plutôt que d'extrapoler.",
             [],
             "HYPOTHESE",
         )
     )
+    return change
 
-    out = {"headline": headline, "data_used": data_used, "why": why, "limits": limits, "what_would_change": change}
-    lines = [headline, ""]
+
+def _display_text(explanation: dict[str, Any], disclaimer_fr: str) -> str:
+    lines = [explanation["headline"], ""]
     for key, title in SECTIONS:
         lines.append(f"{title} :")
-        lines += [f"- {s['text_fr']}" + (" (hypothèse)" if s["label"] == "HYPOTHESE" else "") for s in out[key]]
-    lines.append(result["disclaimer_fr"])
-    out["text"] = "\n".join(lines)
+        lines += [
+            f"- {statement['text_fr']}" + (" (hypothèse)" if statement["label"] == "HYPOTHESE" else "")
+            for statement in explanation[key]
+        ]
+    lines.append(disclaimer_fr)
+    return "\n".join(lines)
+
+
+def render_fr(result: dict[str, Any]) -> dict[str, Any]:
+    if result.get("status") != "ok":
+        return _refusal_explanation(result)
+    headline, headline_fact_ids = _headline(result)
+    out = {
+        "headline": headline,
+        "data_used": _data_used(result, headline_fact_ids[0]),
+        "why": _why(result, headline, headline_fact_ids),
+        "limits": _limits(result),
+        "what_would_change": _what_would_change(result),
+    }
+    out["text"] = _display_text(out, result["disclaimer_fr"])
     return out

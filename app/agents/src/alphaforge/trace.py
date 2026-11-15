@@ -83,7 +83,7 @@ class Trace:
     def t(self, fr: str, en: str) -> str:
         return en if self.locale == "en" else fr
 
-    def add(
+    def add(  # noqa: PLR0913 - une étape de trace : ses champs facultatifs sont passés par mot-clé
         self,
         kind: str,
         actor: str,

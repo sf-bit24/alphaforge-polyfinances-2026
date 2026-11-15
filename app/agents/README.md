@@ -216,7 +216,7 @@ ALPHAFORGE_LLM_MODE=replay uv run --group finance python scripts/finance/demo_tr
 
 Déterminisme : Claude 5.x n'accepte ni `temperature` ni `seed`. Les chiffres, poids et verdicts viennent du code ;
 seule la formulation du LLM varie, et elle est figée en `replay`. Si le prompt, le Guardrail, les données ou le code
-changent, la clé ne correspond plus et l'appel lève `ReplayMiss` : la dérive est détectée.
+changent, la clé ne correspond plus et l'appel lève `ReplayMissError` : la dérive est détectée.
 
 Ressources AWS de traçabilité (Terraform, `infrastructure/infra/traceability.tf`), lues dans l'environnement :
 

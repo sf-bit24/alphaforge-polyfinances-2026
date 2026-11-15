@@ -1,6 +1,6 @@
 """Ex-ante allocation strategies.
 
-Contract: `target(hist, ctx) -> weights` where `hist` contains ONLY monthly returns
+Contract: `target(history, context) -> weights` where `history` contains ONLY monthly returns
 strictly before the decision month (the backtester slices it; tests/test_lookahead.py
 checks that changing future data never changes a decision). The returned weights are
 then projected onto the profile's admissible set by the backtester.
@@ -8,6 +8,7 @@ then projected onto the profile's admissible set by the backtester.
 If fewer than `min_history` months are available the strategy returns the profile's
 `fallback_weights` (or equal weights) and the backtester counts the month as a fallback.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -23,39 +24,48 @@ from .constraints import ConstraintSet
 class Context:
     assets: list[str]
     cash_asset: str
-    cs: ConstraintSet
-    date: pd.Timestamp            # decision month (its return is NOT in hist)
-    progress: float = 0.0         # 0 at the first decision of the window, 1 at the last scheduled one
+    constraints: ConstraintSet
+    date: pd.Timestamp  # decision month (its return is NOT in history)
+    progress: float = 0.0  # 0 at the first decision of the window, 1 at the last scheduled one
     fallback: np.ndarray | None = None
     info: dict = field(default_factory=dict)
 
     @property
-    def cash_idx(self) -> int:
+    def cash_index(self) -> int:
         return self.assets.index(self.cash_asset)
 
 
-def _vec(assets, weights: dict) -> np.ndarray:
-    return np.array([float(weights.get(a, 0.0)) for a in assets])
+def _weight_vector(assets: list[str], weights: dict) -> np.ndarray:
+    return np.array([float(weights.get(asset, 0.0)) for asset in assets])
 
 
-def ledoit_wolf(x: np.ndarray) -> np.ndarray:
+def _equal_weights(context: Context) -> np.ndarray:
+    return np.full(len(context.assets), 1 / len(context.assets))
+
+
+def ledoit_wolf(returns: np.ndarray) -> np.ndarray:
     """Ledoit-Wolf (2004) shrinkage of the sample covariance towards a scaled identity."""
-    t, n = x.shape
-    xc = x - x.mean(axis=0)
-    s = xc.T @ xc / t
-    mu = np.trace(s) / n
-    d2 = np.sum((s - mu * np.eye(n)) ** 2)
-    b2 = sum(np.sum((np.outer(r, r) - s) ** 2) for r in xc) / t ** 2
-    b2 = min(b2, d2)
-    delta = b2 / d2 if d2 > 0 else 1.0
-    return delta * mu * np.eye(n) + (1 - delta) * s
+    n_months, n_assets = returns.shape
+    centered = returns - returns.mean(axis=0)
+    sample = centered.T @ centered / n_months
+    scale = np.trace(sample) / n_assets  # mu
+    distance = np.sum((sample - scale * np.eye(n_assets)) ** 2)  # d^2
+    error = sum(np.sum((np.outer(row, row) - sample) ** 2) for row in centered) / n_months**2  # b^2
+    error = min(error, distance)
+    shrinkage = error / distance if distance > 0 else 1.0  # delta
+    return shrinkage * scale * np.eye(n_assets) + (1 - shrinkage) * sample
 
 
-def _solve(fun, x0, cs: ConstraintSet) -> np.ndarray:
-    res = minimize(fun, x0, bounds=cs.bounds(), constraints=cs.scipy_constraints(), method="SLSQP",
-                   options={"ftol": 1e-10, "maxiter": 300})
-    w = res.x if res.success or cs.is_feasible(res.x, 1e-5) else x0
-    return w
+def _solve(objective, start: np.ndarray, constraints: ConstraintSet) -> np.ndarray:
+    result = minimize(
+        objective,
+        start,
+        bounds=constraints.bounds(),
+        constraints=constraints.scipy_constraints(),
+        method="SLSQP",
+        options={"ftol": 1e-10, "maxiter": 300},
+    )
+    return result.x if result.success or constraints.is_feasible(result.x, 1e-5) else start
 
 
 class Strategy:
@@ -69,14 +79,14 @@ class Strategy:
         self.min_history = int(self.params.get("min_history", self.params.get("lookback", 0)))
         self.window_dependent = False  # True if target depends on window progress (no cross-window cache)
 
-    def target(self, hist: pd.DataFrame, ctx: Context) -> np.ndarray:
-        if len(hist) < self.min_history:
-            ctx.info["fallback"] = True
-            return ctx.fallback if ctx.fallback is not None else np.full(len(ctx.assets), 1 / len(ctx.assets))
-        ctx.info["fallback"] = False
-        return self._target(hist, ctx)
+    def target(self, history: pd.DataFrame, context: Context) -> np.ndarray:
+        if len(history) < self.min_history:
+            context.info["fallback"] = True
+            return context.fallback if context.fallback is not None else _equal_weights(context)
+        context.info["fallback"] = False
+        return self._target(history, context)
 
-    def _target(self, hist, ctx):  # pragma: no cover
+    def _target(self, history, context):  # pragma: no cover
         raise NotImplementedError
 
     def describe(self) -> dict:
@@ -85,74 +95,85 @@ class Strategy:
 
 class Static(Strategy):
     """Fixed policy weights, rebalanced per the profile/strategy rebalancing rule."""
+
     type = "static"
 
-    def _target(self, hist, ctx):
-        return _vec(ctx.assets, self.params["weights"])
+    def _target(self, history, context):
+        return _weight_vector(context.assets, self.params["weights"])
 
 
 class SixtyForty(Strategy):
     """Equity share split equally among `equity` assets, the rest equally among `bonds`."""
+
     type = "sixty_forty"
 
-    def _target(self, hist, ctx):
-        eq, bd = self.params["equity"], self.params["bonds"]
-        s = float(self.params.get("equity_share", 0.6))
-        w = {a: s / len(eq) for a in eq}
-        for a in bd:
-            w[a] = w.get(a, 0) + (1 - s) / len(bd)
-        return _vec(ctx.assets, w)
+    def _target(self, history, context):
+        equity, bonds = self.params["equity"], self.params["bonds"]
+        equity_share = float(self.params.get("equity_share", 0.6))
+        weights = {asset: equity_share / len(equity) for asset in equity}
+        for asset in bonds:
+            weights[asset] = weights.get(asset, 0) + (1 - equity_share) / len(bonds)
+        return _weight_vector(context.assets, weights)
 
 
 class Glidepath(Strategy):
     """Linear interpolation from `start_weights` to `end_weights` as the horizon elapses."""
+
     type = "glidepath"
 
-    def __init__(self, *a, **k):
-        super().__init__(*a, **k)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.window_dependent = True
 
-    def _target(self, hist, ctx):
-        w0, w1 = _vec(ctx.assets, self.params["start_weights"]), _vec(ctx.assets, self.params["end_weights"])
-        return (1 - ctx.progress) * w0 + ctx.progress * w1
+    def _target(self, history, context):
+        start = _weight_vector(context.assets, self.params["start_weights"])
+        end = _weight_vector(context.assets, self.params["end_weights"])
+        return (1 - context.progress) * start + context.progress * end
+
+
+def _equal_risk_contribution(returns: np.ndarray, selected: np.ndarray, inverse_vol: np.ndarray) -> np.ndarray:
+    """Weights whose risk contributions are equal among the `selected` assets (SLSQP from the inverse-vol mix)."""
+    covariance = ledoit_wolf(returns)[np.ix_(selected, selected)]
+
+    def contribution_dispersion(weights):
+        variance = weights @ covariance @ weights
+        contributions = weights * (covariance @ weights) / variance
+        return np.sum((contributions - 1 / selected.sum()) ** 2)
+
+    start = inverse_vol[selected] / inverse_vol[selected].sum()
+    result = minimize(
+        contribution_dispersion,
+        start,
+        bounds=[(1e-6, 1)] * selected.sum(),
+        constraints=[{"type": "eq", "fun": lambda weights: weights.sum() - 1}],
+        method="SLSQP",
+    )
+    weights = np.zeros(len(inverse_vol))
+    weights[selected] = result.x
+    return weights
 
 
 class RiskParity(Strategy):
     """Inverse-volatility (default) or equal-risk-contribution weights on a trailing window."""
+
     type = "risk_parity"
 
-    def __init__(self, *a, **k):
-        super().__init__(*a, **k)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.lookback = int(self.params.get("lookback", 36))
         self.min_history = int(self.params.get("min_history", self.lookback))
 
-    def _target(self, hist, ctx):
-        x = hist.iloc[-self.lookback:].values
-        incl = np.array([a not in self.params.get("exclude", []) for a in ctx.assets]) & (ctx.cs.ub > 0)
-        vol = x.std(axis=0, ddof=1)
+    def _target(self, history, context):
+        recent = history.iloc[-self.lookback :].values
+        excluded = self.params.get("exclude", [])
+        included = np.array([asset not in excluded for asset in context.assets]) & (context.constraints.ub > 0)
+        vol = recent.std(axis=0, ddof=1)
         vol = np.where(vol > 1e-8, vol, np.nan)
-        w = np.where(incl, 1 / vol, 0.0)
-        w = np.nan_to_num(w)
+        weights = np.where(included, 1 / vol, 0.0)
+        weights = np.nan_to_num(weights)
         if self.params.get("method", "inverse_vol") == "erc":
-            cov = ledoit_wolf(x)
-            m = incl & (w > 0)
-            c = cov[np.ix_(m, m)]
-
-            def f(v):
-                p = v @ c @ v
-                rc = v * (c @ v) / p
-                return np.sum((rc - 1 / m.sum()) ** 2)
-            v0 = w[m] / w[m].sum()
-            r = minimize(
-                f,
-                v0,
-                bounds=[(1e-6, 1)] * m.sum(),
-                constraints=[{"type": "eq", "fun": lambda v: v.sum() - 1}],
-                method="SLSQP",
-            )
-            w = np.zeros(len(ctx.assets))
-            w[m] = r.x
-        return w / w.sum()
+            weights = _equal_risk_contribution(recent, included & (weights > 0), weights)
+        return weights / weights.sum()
 
 
 class MinVariance(Strategy):
@@ -160,15 +181,15 @@ class MinVariance(Strategy):
 
     type = "min_variance"
 
-    def __init__(self, *a, **k):
-        super().__init__(*a, **k)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.lookback = int(self.params.get("lookback", 60))
         self.min_history = int(self.params.get("min_history", self.lookback))
 
-    def _target(self, hist, ctx):
-        c = ledoit_wolf(hist.iloc[-self.lookback :].values) * 12
-        x0 = ctx.cs.project(np.full(len(ctx.assets), 1 / len(ctx.assets)))
-        return _solve(lambda w: w @ c @ w, x0, ctx.cs)
+    def _target(self, history, context):
+        covariance = ledoit_wolf(history.iloc[-self.lookback :].values) * 12
+        start = context.constraints.project(_equal_weights(context))
+        return _solve(lambda x: x @ covariance @ x, start, context.constraints)
 
 
 class MaxSharpe(Strategy):
@@ -176,23 +197,24 @@ class MaxSharpe(Strategy):
 
     type = "max_sharpe"
 
-    def __init__(self, *a, **k):
-        super().__init__(*a, **k)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.lookback = int(self.params.get("lookback", 60))
         self.min_history = int(self.params.get("min_history", self.lookback))
 
-    def _mu_cov(self, hist, ctx):
-        x = hist.iloc[-self.lookback :]
-        ex = x.sub(x[ctx.cash_asset], axis=0).values
-        mu = ex.mean(axis=0) * 12
-        k = float(self.params.get("mu_shrink", 0.5))
-        mu = (1 - k) * mu + k * mu.mean()
-        return mu, ledoit_wolf(x.values) * 12
+    def _mean_and_covariance(self, history, context):
+        """Annualised mean excess return over cash, shrunk towards its cross-sectional mean, and LW covariance."""
+        recent = history.iloc[-self.lookback :]
+        excess = recent.sub(recent[context.cash_asset], axis=0).values
+        mean = excess.mean(axis=0) * 12
+        shrink = float(self.params.get("mu_shrink", 0.5))
+        mean = (1 - shrink) * mean + shrink * mean.mean()
+        return mean, ledoit_wolf(recent.values) * 12
 
-    def _target(self, hist, ctx):
-        mu, c = self._mu_cov(hist, ctx)
-        x0 = ctx.cs.project(np.full(len(ctx.assets), 1 / len(ctx.assets)))
-        return _solve(lambda w: -(mu @ w) / np.sqrt(w @ c @ w + 1e-12), x0, ctx.cs)
+    def _target(self, history, context):
+        mean, covariance = self._mean_and_covariance(history, context)
+        start = context.constraints.project(_equal_weights(context))
+        return _solve(lambda x: -(mean @ x) / np.sqrt(x @ covariance @ x + 1e-12), start, context.constraints)
 
 
 class MeanVariance(MaxSharpe):
@@ -200,11 +222,11 @@ class MeanVariance(MaxSharpe):
 
     type = "mean_variance"
 
-    def _target(self, hist, ctx):
-        mu, c = self._mu_cov(hist, ctx)
-        lam = float(self.params.get("risk_aversion", 4.0))
-        x0 = ctx.cs.project(np.full(len(ctx.assets), 1 / len(ctx.assets)))
-        return _solve(lambda w: -(mu @ w) + 0.5 * lam * (w @ c @ w), x0, ctx.cs)
+    def _target(self, history, context):
+        mean, covariance = self._mean_and_covariance(history, context)
+        risk_aversion = float(self.params.get("risk_aversion", 4.0))
+        start = context.constraints.project(_equal_weights(context))
+        return _solve(lambda x: -(mean @ x) + 0.5 * risk_aversion * (x @ covariance @ x), start, context.constraints)
 
 
 class TrendFilter(Strategy):
@@ -213,21 +235,21 @@ class TrendFilter(Strategy):
 
     type = "trend_filter"
 
-    def __init__(self, *a, **k):
-        super().__init__(*a, **k)
-        self.ma = int(self.params.get("ma_months", 10))
-        self.min_history = int(self.params.get("min_history", self.ma))
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.ma_months = int(self.params.get("ma_months", 10))
+        self.min_history = int(self.params.get("min_history", self.ma_months))
 
-    def _target(self, hist, ctx):
-        w = _vec(ctx.assets, self.params["base_weights"])
-        idx = (1 + hist.iloc[-self.ma :]).cumprod()
-        below = idx.iloc[-1] < idx.mean()
-        ci = ctx.cash_idx
-        for i, a in enumerate(ctx.assets):
-            if i != ci and a not in self.params.get("always_hold", []) and bool(below[a]):
-                w[ci] += w[i]
-                w[i] = 0.0
-        return w
+    def _target(self, history, context):
+        weights = _weight_vector(context.assets, self.params["base_weights"])
+        total_return_index = (1 + history.iloc[-self.ma_months :]).cumprod()
+        below = total_return_index.iloc[-1] < total_return_index.mean()
+        cash = context.cash_index
+        for i, asset in enumerate(context.assets):
+            if i != cash and asset not in self.params.get("always_hold", []) and bool(below[asset]):
+                weights[cash] += weights[i]
+                weights[i] = 0.0
+        return weights
 
 
 class Momentum(Strategy):
@@ -238,32 +260,42 @@ class Momentum(Strategy):
 
     type = "momentum"
 
-    def __init__(self, *a, **k):
-        super().__init__(*a, **k)
-        self.lb = int(self.params.get("lookback", 12))
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.lookback = int(self.params.get("lookback", 12))
         self.skip = int(self.params.get("skip", 0))
-        self.min_history = int(self.params.get("min_history", self.lb + self.skip))
+        self.min_history = int(self.params.get("min_history", self.lookback + self.skip))
 
-    def _target(self, hist, ctx):
-        cand = self.params.get("candidates") or [a for a in ctx.assets if a != ctx.cash_asset]
-        x = hist.iloc[len(hist) - self.lb - self.skip : len(hist) - self.skip]
-        mom = (1 + x).prod() - 1
-        core = _vec(ctx.assets, self.params.get("core_weights", {}))
+    def _target(self, history, context):
+        candidates = self.params.get("candidates") or [asset for asset in context.assets if asset != context.cash_asset]
+        recent = history.iloc[len(history) - self.lookback - self.skip : len(history) - self.skip]
+        momentum = (1 + recent).prod() - 1
+        core = _weight_vector(context.assets, self.params.get("core_weights", {}))
         sleeve = 1 - core.sum()
-        k = int(self.params.get("top_k", 2))
-        ranked = mom[cand].sort_values(ascending=False).index[:k]
-        w = core.copy()
-        for a in ranked:
-            j = ctx.assets.index(a)
-            if self.params.get("absolute", True) and mom[a] < mom[ctx.cash_asset]:
-                j = ctx.cash_idx
-            w[j] += sleeve / k
-        return w
+        top_k = int(self.params.get("top_k", 2))
+        ranked = momentum[candidates].sort_values(ascending=False).index[:top_k]
+        weights = core.copy()
+        for asset in ranked:
+            position = context.assets.index(asset)
+            if self.params.get("absolute", True) and momentum[asset] < momentum[context.cash_asset]:
+                position = context.cash_index
+            weights[position] += sleeve / top_k
+        return weights
 
 
 REGISTRY = {
-    c.type: c
-    for c in (Static, SixtyForty, Glidepath, RiskParity, MinVariance, MaxSharpe, MeanVariance, TrendFilter, Momentum)
+    strategy.type: strategy
+    for strategy in (
+        Static,
+        SixtyForty,
+        Glidepath,
+        RiskParity,
+        MinVariance,
+        MaxSharpe,
+        MeanVariance,
+        TrendFilter,
+        Momentum,
+    )
 }
 
 

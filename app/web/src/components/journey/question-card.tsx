@@ -2,17 +2,22 @@
 
 import { ArrowRight, Check } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import type { AnswerValue, Question } from "@/lib/contract/schemas";
+import type { AnswerValue, Question, QuestionKind } from "@/lib/contract/schemas";
 import { draftToValue, emptyDraft, type Draft } from "@/lib/client/answers";
 import type { Dictionary } from "@/lib/i18n/dictionary";
 import { shortcutIndex } from "@/lib/journey/path";
 import { curly } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
+import { fieldText, MONEY_PLACEHOLDER } from "@/components/profile/answer-input";
 import { cn } from "@/components/ui/cn";
-import s from "./journey.module.css";
+import { AssistantLine } from "./assistant-line";
+import styles from "./journey.module.css";
 
 /** The draft lets a picked answer show for a moment before the walker sets off. */
 const PICK_DELAY_MS = 280;
+
+/** Unit shown in a numeric field when the question has none. */
+const KIND_UNITS: Partial<Record<QuestionKind, string>> = { money: "$", percent: "%" };
 
 interface Choice {
   key: string;
@@ -47,37 +52,51 @@ function choicesOf(question: Question, t: Dictionary): Choice[] | null {
 const isTyping = (target: EventTarget | null) =>
   target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
 
-/**
- * One base question as the draft's card: the assistant's line, the question, the
- * answers (keys 1 to 9 pick them), and « Pourquoi cette question ? » from `help`.
- */
-export function QuestionCard({
-  question,
-  say,
-  busy,
-  autoFocus,
-  onAnswer,
-  children,
-}: {
-  question: Question;
-  say: string;
-  busy: boolean;
-  autoFocus: boolean;
-  onAnswer: (value: AnswerValue) => void;
-  /** Error notice of the last attempt, rendered under the answers. */
-  children?: ReactNode;
-}) {
+/** The multiple-choice draft with `value` added, or removed when it was there. */
+function toggled(current: Draft, value: string): string[] {
+  const selected = Array.isArray(current) ? current : [];
+  return selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value];
+}
+
+/** The answer being prepared: the draft, the picked option, the problem to show, and how to edit or send it. */
+function useAnswerDraft(question: Question, busy: boolean, onAnswer: (value: AnswerValue) => void) {
   const { t, locale } = useI18n();
-  const headingId = useId();
-  const helpId = useId();
-  const errorId = useId();
   const [draft, setDraft] = useState<Draft>(() => emptyDraft(question));
   const [picked, setPicked] = useState<string | null>(null);
   const [delaying, setDelaying] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const locked = busy || delaying;
+
+  const toggle = (value: string) => {
+    if (locked) return;
+    setProblem(null);
+    setDraft((current) => toggled(current, value));
+  };
+
+  const submit = (event?: FormEvent) => {
+    event?.preventDefault();
+    if (locked) return;
+    const result = draftToValue(question, draft, t, locale);
+    setProblem(result.ok ? null : result.error);
+    if (result.ok) onAnswer(result.value);
+  };
+
+  const edit = (text: string) => {
+    setDraft(text);
+    setProblem(null);
+  };
+
+  return { draft, picked, setPicked, setDelaying, problem, setProblem, locked, toggle, submit, edit };
+}
+
+type AnswerDraft = ReturnType<typeof useAnswerDraft>;
+
+/** The answer buttons: one-click choices (picked, then sent after a pause) and the one focused on arrival. */
+function useAnswerOptions(question: Question, draft: AnswerDraft, autoFocus: boolean, onAnswer: (value: AnswerValue) => void) {
+  const { t } = useI18n();
+  const { locked, setPicked, setDelaying, setProblem } = draft;
   const firstRef = useRef<HTMLElement | null>(null);
   const timer = useRef<number | null>(null);
-  const locked = busy || delaying;
   const choices = useMemo(() => choicesOf(question, t), [question, t]);
   const options = useMemo(() => question.options ?? [], [question]);
 
@@ -104,30 +123,16 @@ export function QuestionCard({
     }, PICK_DELAY_MS);
   };
 
-  const toggle = (value: string) => {
-    if (locked) return;
-    setProblem(null);
-    setDraft((current) => {
-      const selected = Array.isArray(current) ? current : [];
-      return selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value];
-    });
+  const setFirst = (index: number) => (node: HTMLElement | null) => {
+    if (index === 0) firstRef.current = node;
   };
 
-  const submit = (event?: FormEvent) => {
-    event?.preventDefault();
-    if (locked) return;
-    const result = draftToValue(question, draft, t, locale);
-    if (!result.ok) {
-      setProblem(result.error);
-      return;
-    }
-    setProblem(null);
-    onAnswer(result.value);
-  };
+  return { choices, options, pick, setFirst };
+}
 
-  // Keys 1 to 9: pick an option, or toggle one for a multiple choice.
+/** Keys 1 to 9: pick an option, or toggle one for a multiple choice. */
+function useShortcutKeys(keyed: Array<Choice | string>, toggle: (value: string) => void, pick: (choice: Choice) => void) {
   useEffect(() => {
-    const keyed = question.kind === "multi_choice" ? options.map((option) => option.value) : (choices ?? []);
     if (keyed.length === 0) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
@@ -142,173 +147,220 @@ export function QuestionCard({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+}
 
-  const describedBy = [question.help ? helpId : null, problem ? errorId : null].filter(Boolean).join(" ") || undefined;
-  const setFirst = (index: number) => (node: HTMLElement | null) => {
-    if (index === 0) firstRef.current = node;
-  };
-  const continueButton = (
-    <div className={s.actions}>
-      <button type="submit" className={s.primary} disabled={locked}>
-        {busy ? t.journey.sending : t.journey.continue}
-        <ArrowRight aria-hidden className="size-4" />
-      </button>
+type Answer = AnswerDraft & ReturnType<typeof useAnswerOptions>;
+
+interface BodyProps {
+  question: Question;
+  answer: Answer;
+  /** Ids naming and describing the answers. */
+  aria: { labelledBy: string; describedBy: string | undefined };
+  busy: boolean;
+}
+
+function ChoiceButtons({ answer, aria, choices }: BodyProps & { choices: Choice[] }) {
+  return (
+    <div className={styles.answers} role="group" aria-labelledby={aria.labelledBy} aria-describedby={aria.describedBy}>
+      {choices.map((choice, index) => (
+        <button
+          key={choice.key}
+          ref={answer.setFirst(index)}
+          type="button"
+          className={cn(styles.answer, answer.picked === choice.key && styles.picked)}
+          onClick={() => answer.pick(choice)}
+          disabled={answer.locked}
+        >
+          {index < 9 ? <kbd aria-hidden>{index + 1}</kbd> : null}
+          {choice.label}
+        </button>
+      ))}
     </div>
   );
+}
 
-  let body: ReactNode;
-  if (choices && question.kind !== "scale") {
-    body = (
-      <div className={s.answers} role="group" aria-labelledby={headingId} aria-describedby={describedBy}>
+function ScaleButtons({ question, answer, aria, choices }: BodyProps & { choices: Choice[] }) {
+  const { t } = useI18n();
+  const { options } = answer;
+  const min = question.min ?? 1;
+  const max = question.max ?? 10;
+  const endLabel = (step: number, fallback: string) => options.find((option) => option.value === String(step))?.label ?? fallback;
+  return (
+    <>
+      <div className={styles.scale} role="group" aria-labelledby={aria.labelledBy} aria-describedby={aria.describedBy}>
         {choices.map((choice, index) => (
           <button
             key={choice.key}
-            ref={setFirst(index)}
+            ref={answer.setFirst(index)}
             type="button"
-            className={cn(s.answer, picked === choice.key && s.picked)}
-            onClick={() => pick(choice)}
-            disabled={locked}
+            className={cn(styles.answer, answer.picked === choice.key && styles.picked)}
+            onClick={() => answer.pick(choice)}
+            disabled={answer.locked}
+            title={options.find((option) => option.value === choice.key)?.label}
           >
-            {index < 9 ? <kbd aria-hidden>{index + 1}</kbd> : null}
             {choice.label}
           </button>
         ))}
       </div>
-    );
-  } else if (choices) {
-    const min = question.min ?? 1;
-    const max = question.max ?? 10;
-    const endLabel = (step: number, fallback: string) => options.find((option) => option.value === String(step))?.label ?? fallback;
-    body = (
-      <>
-        <div className={s.scale} role="group" aria-labelledby={headingId} aria-describedby={describedBy}>
-          {choices.map((choice, index) => (
+      <div className={styles.scaleEnds} aria-hidden>
+        <span>
+          {min} · {endLabel(min, t.question.scaleMin)}
+        </span>
+        <span>
+          {endLabel(max, t.question.scaleMax)} · {max}
+        </span>
+      </div>
+    </>
+  );
+}
+
+/** The answers typed or ticked before « Continuer ». */
+function AnswerForm({ answer, busy, children }: { answer: Answer; busy: boolean; children: ReactNode }) {
+  const { t } = useI18n();
+  return (
+    <form onSubmit={answer.submit} noValidate>
+      {children}
+      <div className={styles.actions}>
+        <button type="submit" className={styles.primary} disabled={answer.locked}>
+          {busy ? t.journey.sending : t.journey.continue}
+          <ArrowRight aria-hidden className="size-4" />
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function MultiChoiceForm({ answer, aria, busy }: BodyProps) {
+  const { t } = useI18n();
+  const selected = Array.isArray(answer.draft) ? answer.draft : [];
+  return (
+    <AnswerForm answer={answer} busy={busy}>
+      <p className={styles.hint}>{t.question.chooseMany}</p>
+      <div className={styles.answers} role="group" aria-labelledby={aria.labelledBy} aria-describedby={aria.describedBy}>
+        {answer.options.map((option, index) => {
+          const isSelected = selected.includes(option.value);
+          return (
             <button
-              key={choice.key}
-              ref={setFirst(index)}
+              key={option.value}
+              ref={answer.setFirst(index)}
               type="button"
-              className={cn(s.answer, picked === choice.key && s.picked)}
-              onClick={() => pick(choice)}
-              disabled={locked}
-              title={options.find((option) => option.value === choice.key)?.label}
+              aria-pressed={isSelected}
+              className={styles.answer}
+              onClick={() => answer.toggle(option.value)}
+              disabled={answer.locked}
             >
-              {choice.label}
+              {index < 9 ? <kbd aria-hidden>{index + 1}</kbd> : null}
+              {curly(option.label)}
+              {isSelected ? <Check aria-hidden className={styles.check} strokeWidth={2.5} /> : null}
             </button>
-          ))}
-        </div>
-        <div className={s.scaleEnds} aria-hidden>
-          <span>
-            {min} · {endLabel(min, t.question.scaleMin)}
-          </span>
-          <span>
-            {endLabel(max, t.question.scaleMax)} · {max}
-          </span>
-        </div>
-      </>
-    );
-  } else if (question.kind === "multi_choice") {
-    const selected = Array.isArray(draft) ? draft : [];
-    body = (
-      <form onSubmit={submit} noValidate>
-        <p className={s.hint}>{t.question.chooseMany}</p>
-        <div className={s.answers} role="group" aria-labelledby={headingId} aria-describedby={describedBy}>
-          {options.map((option, index) => {
-            const on = selected.includes(option.value);
-            return (
-              <button
-                key={option.value}
-                ref={setFirst(index)}
-                type="button"
-                aria-pressed={on}
-                className={s.answer}
-                onClick={() => toggle(option.value)}
-                disabled={locked}
-              >
-                {index < 9 ? <kbd aria-hidden>{index + 1}</kbd> : null}
-                {curly(option.label)}
-                {on ? <Check aria-hidden className={s.check} strokeWidth={2.5} /> : null}
-              </button>
-            );
-          })}
-        </div>
-        {continueButton}
-      </form>
-    );
-  } else if (question.kind === "text") {
-    body = (
-      <form onSubmit={submit} noValidate>
-        <textarea
-          ref={(node) => void (firstRef.current = node)}
-          className={s.textarea}
-          rows={3}
-          maxLength={2000}
-          value={typeof draft === "string" ? draft : ""}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            setProblem(null);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) submit();
-          }}
-          aria-labelledby={headingId}
-          aria-describedby={describedBy}
-          aria-invalid={problem ? true : undefined}
-          disabled={locked}
+          );
+        })}
+      </div>
+    </AnswerForm>
+  );
+}
+
+function TextForm({ answer, aria, busy }: BodyProps) {
+  return (
+    <AnswerForm answer={answer} busy={busy}>
+      <textarea
+        ref={answer.setFirst(0)}
+        className={styles.textarea}
+        rows={3}
+        maxLength={2000}
+        value={typeof answer.draft === "string" ? answer.draft : ""}
+        onChange={(event) => answer.edit(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) answer.submit();
+        }}
+        aria-labelledby={aria.labelledBy}
+        aria-describedby={aria.describedBy}
+        aria-invalid={answer.problem ? true : undefined}
+        disabled={answer.locked}
+      />
+    </AnswerForm>
+  );
+}
+
+function NumberForm({ question, answer, aria, busy }: BodyProps) {
+  const { locale } = useI18n();
+  const unit = question.unit || (KIND_UNITS[question.kind] ?? "");
+  return (
+    <AnswerForm answer={answer} busy={busy}>
+      <div className={styles.field}>
+        <input
+          ref={answer.setFirst(0)}
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          value={fieldText(answer.draft)}
+          onChange={(event) => answer.edit(event.target.value)}
+          placeholder={question.kind === "money" ? MONEY_PLACEHOLDER[locale] : ""}
+          aria-labelledby={aria.labelledBy}
+          aria-describedby={aria.describedBy}
+          aria-invalid={answer.problem ? true : undefined}
+          disabled={answer.locked}
+          style={unit ? { paddingRight: `${Math.max(2.5, unit.length * 0.6 + 1.6)}rem` } : undefined}
         />
-        {continueButton}
-      </form>
-    );
-  } else {
-    const unit = question.unit || (question.kind === "money" ? "$" : question.kind === "percent" ? "%" : "");
-    body = (
-      <form onSubmit={submit} noValidate>
-        <div className={s.field}>
-          <input
-            ref={(node) => void (firstRef.current = node)}
-            type="text"
-            inputMode="decimal"
-            autoComplete="off"
-            value={typeof draft === "string" ? draft : draft === null ? "" : String(draft)}
-            onChange={(event) => {
-              setDraft(event.target.value);
-              setProblem(null);
-            }}
-            placeholder={question.kind === "money" ? (locale === "fr" ? "50 000" : "50,000") : ""}
-            aria-labelledby={headingId}
-            aria-describedby={describedBy}
-            aria-invalid={problem ? true : undefined}
-            disabled={locked}
-            style={unit ? { paddingRight: `${Math.max(2.5, unit.length * 0.6 + 1.6)}rem` } : undefined}
-          />
-          {unit ? (
-            <span aria-hidden className={s.unit}>
-              {unit}
-            </span>
-          ) : null}
-        </div>
-        {continueButton}
-      </form>
-    );
-  }
+        {unit ? (
+          <span aria-hidden className={styles.unit}>
+            {unit}
+          </span>
+        ) : null}
+      </div>
+    </AnswerForm>
+  );
+}
+
+/** The answers of the question's kind. */
+function AnswerBody(props: BodyProps) {
+  const { question, answer } = props;
+  if (answer.choices && question.kind !== "scale") return <ChoiceButtons {...props} choices={answer.choices} />;
+  if (answer.choices) return <ScaleButtons {...props} choices={answer.choices} />;
+  if (question.kind === "multi_choice") return <MultiChoiceForm {...props} />;
+  if (question.kind === "text") return <TextForm {...props} />;
+  return <NumberForm {...props} />;
+}
+
+interface QuestionCardProps {
+  question: Question;
+  say: string;
+  busy: boolean;
+  autoFocus: boolean;
+  onAnswer: (value: AnswerValue) => void;
+  /** Error notice of the last attempt, rendered under the answers. */
+  children?: ReactNode;
+}
+
+/**
+ * One base question as the draft's card: the assistant's line, the question, the
+ * answers (keys 1 to 9 pick them), and « Pourquoi cette question ? » from `help`.
+ */
+export function QuestionCard({ question, say, busy, autoFocus, onAnswer, children }: QuestionCardProps) {
+  const { t } = useI18n();
+  const headingId = useId();
+  const helpId = useId();
+  const errorId = useId();
+  const draft = useAnswerDraft(question, busy, onAnswer);
+  const answerOptions = useAnswerOptions(question, draft, autoFocus, onAnswer);
+  const keyed = question.kind === "multi_choice" ? answerOptions.options.map((option) => option.value) : (answerOptions.choices ?? []);
+  useShortcutKeys(keyed, draft.toggle, answerOptions.pick);
+  const answer: Answer = { ...draft, ...answerOptions };
+  const describedBy = [question.help ? helpId : null, answer.problem ? errorId : null].filter(Boolean).join(" ") || undefined;
 
   return (
     <>
-      <div className={s.say}>
-        <span className={s.avatar} aria-hidden>
-          Y
-        </span>
-        <p>{say}</p>
-      </div>
+      <AssistantLine>{say}</AssistantLine>
       <h2 id={headingId}>{curly(question.prompt)}</h2>
-      {body}
-      {problem ? (
-        <p id={errorId} role="alert" className={s.error}>
-          {problem}
+      <AnswerBody question={question} answer={answer} aria={{ labelledBy: headingId, describedBy }} busy={busy} />
+      {answer.problem ? (
+        <p id={errorId} role="alert" className={styles.error}>
+          {answer.problem}
         </p>
       ) : null}
-      {children ? <div className={s.notice}>{children}</div> : null}
+      {children ? <div className={styles.notice}>{children}</div> : null}
       {question.help ? (
-        <p id={helpId} className={s.why}>
+        <p id={helpId} className={styles.why}>
           <b>{t.journey.why}</b> {curly(question.help)}
         </p>
       ) : null}

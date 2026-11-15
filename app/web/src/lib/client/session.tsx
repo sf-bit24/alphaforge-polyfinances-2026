@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useI18n } from "@/lib/i18n/provider";
+import { callMessages } from "./api";
 import { SessionStore, type SessionSnapshot } from "./session-store";
 
 type SessionActions = Pick<
@@ -11,6 +12,7 @@ type SessionActions = Pick<
   | "restart"
   | "forget"
   | "answerBase"
+  | "answerAllBase"
   | "submitPortfolio"
   | "confirmPortfolio"
   | "skipPortfolio"
@@ -33,7 +35,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
 
   useEffect(() => {
-    store.configure(locale, { network: t.errors.network, invalidResponse: t.errors.invalidResponse, noResult: t.errors.noResult });
+    store.configure(locale, callMessages(t));
   }, [store, locale, t]);
 
   useEffect(() => {
@@ -48,6 +50,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       restart: store.restart,
       forget: store.forget,
       answerBase: store.answerBase,
+      answerAllBase: store.answerAllBase,
       submitPortfolio: store.submitPortfolio,
       confirmPortfolio: store.confirmPortfolio,
       skipPortfolio: store.skipPortfolio,

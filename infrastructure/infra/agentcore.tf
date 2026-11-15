@@ -50,10 +50,11 @@ locals {
   agentcore_portfolio_runtimes = {
     for role, runtime in {
       portfolio = {
-        description    = "Portefeuille simule : etape 0, A3, lentilles et Judge du volet finance (simulation seulement)."
-        s3_read        = concat(["general/*", "clients/*"], local.agentcore_profile_scenarios_keys)
-        s3_write       = ["clients/*"]
-        s3_list        = concat(["general/*", "clients/*"], local.agentcore_profile_scenarios_keys)
+        description = "Portefeuille simule : etape 0, A3, lentilles et Judge du volet finance (simulation seulement)."
+        # staging/*/evolution/* : marqueurs des actions evolution.tick et evolution.replay (evolution.tf)
+        s3_read        = concat(["general/*", "clients/*", "staging/*/evolution/*"], local.agentcore_profile_scenarios_keys)
+        s3_write       = ["clients/*", "staging/*/evolution/*"]
+        s3_list        = concat(["general/*", "clients/*", "staging/*/evolution/*"], local.agentcore_profile_scenarios_keys)
         knowledge_base = true
         guardrail      = true
       }

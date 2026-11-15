@@ -16,7 +16,7 @@ personas:
   mateo:
     label: "Mateo, 41 ans, deux enfants, critères ESG (FICTION)"
     style_inputs:
-      goal: retirement
+      goal: project  # études des enfants (objectif « etudes » du profil moteur, 9 ans)
       approach: mixed
       exclusions: [fossil_fuels]
       exclusion_strictness: absolute

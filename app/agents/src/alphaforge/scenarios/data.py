@@ -20,7 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
@@ -70,12 +70,12 @@ def month_end(value: str) -> pd.Timestamp:
     return (pd.Timestamp(value).to_period("M").to_timestamp(how="end")).normalize()
 
 
-def _sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 @dataclass
@@ -92,20 +92,21 @@ def load_inputs(input_dir: str | Path) -> Inputs:
     """Lit les fichiers du build long. ``data_sha256`` vient de ``data_version.json`` (identifiant du build) ;
     à défaut, c'est le sha256 de ``monthly_returns.parquet``."""
     root = Path(input_dir)
-    ret_path = root / "monthly_returns.parquet"
-    inf_path = root / "inflation_monthly.parquet"
-    if not ret_path.exists():
-        raise FileNotFoundError(f"{ret_path} introuvable")
-    returns = pd.read_parquet(ret_path)
+    returns_path = root / "monthly_returns.parquet"
+    inflation_path = root / "inflation_monthly.parquet"
+    if not returns_path.exists():
+        raise FileNotFoundError(f"{returns_path} introuvable")
+    returns = pd.read_parquet(returns_path)
     returns["date"] = pd.to_datetime(returns["date"]).dt.normalize()
-    inflation = pd.read_parquet(inf_path) if inf_path.exists() else pd.DataFrame(columns=["date"])
+    inflation = pd.read_parquet(inflation_path) if inflation_path.exists() else pd.DataFrame(columns=["date"])
     if "date" in inflation:
         inflation["date"] = pd.to_datetime(inflation["date"]).dt.normalize()
-    files = {p.name: _sha256_file(p) for p in (ret_path, inf_path, root / "data_version.json") if p.exists()}
+    candidates = (returns_path, inflation_path, root / "data_version.json")
+    files = {path.name: sha256_file(path) for path in candidates if path.exists()}
     version: dict = {}
     if (root / "data_version.json").exists():
         version = json.loads((root / "data_version.json").read_text(encoding="utf-8"))
-    data_sha = str(version.get("data_sha256") or files[ret_path.name])
+    data_sha = str(version.get("data_sha256") or files[returns_path.name])
     slim_version = {
         k: version[k] for k in ("data_sha256", "built_utc", "last_complete_month", "n_rows") if k in version
     }
@@ -114,15 +115,16 @@ def load_inputs(input_dir: str | Path) -> Inputs:
 
 @dataclass
 class Pool:
-    """Panneau mensuel rectangulaire d'une famille : ``R[t, j]`` = rendement simple du bloc ``blocks[j]`` au mois t."""
+    """Panneau mensuel rectangulaire d'une famille : ``returns[t, j]`` = rendement simple du bloc ``blocks[j]`` au
+    mois t."""
 
     name: str
     family: str
     currency: str
     blocks: tuple[str, ...]
     dates: pd.DatetimeIndex
-    R: np.ndarray
-    infl: np.ndarray
+    returns: np.ndarray
+    inflation: np.ndarray
     hypothese: bool
     data_sha256: str
     sources: dict[str, str] = field(default_factory=dict)
@@ -168,74 +170,55 @@ class Pool:
         if "CASH" not in self.blocks:
             raise ValueError("ancrage impossible sans bloc CASH")
         j = self.blocks.index("CASH")
-        cash = self.R[:, j]
-        s = float(cash[-months:].mean() / cash.mean())
-        infl_recent, infl_window = float(self.infl[-months:].mean()), float(self.infl.mean())
+        cash = self.returns[:, j]
+        cash_scale = float(cash[-months:].mean() / cash.mean())  # s
+        infl_recent, infl_window = float(self.inflation[-months:].mean()), float(self.inflation.mean())
         if infl_recent > 0 and infl_window > 0:
-            infl_anchor, s_infl = "scale", infl_recent / infl_window
-            infl = self.infl * s_infl
+            infl_anchor, infl_scale = "scale", infl_recent / infl_window  # s_infl
+            inflation = self.inflation * infl_scale
         else:
-            infl_anchor, s_infl = "additive", None
-            infl = self.infl + (infl_recent - infl_window)
-        R = self.R + (s - 1.0) * cash[:, None]
-        R[:, j] = s * cash
-        pool = Pool(
-            self.name,
-            self.family,
-            self.currency,
-            self.blocks,
-            self.dates,
-            R,
-            infl,
-            self.hypothese,
-            self.data_sha256,
-            dict(self.sources),
-            dict(self.flag_counts),
+            infl_anchor, infl_scale = "additive", None
+            inflation = self.inflation + (infl_recent - infl_window)
+        returns = self.returns + (cash_scale - 1.0) * cash[:, None]
+        returns[:, j] = cash_scale * cash
+        pool = replace(
+            self, returns=returns, inflation=inflation, sources=dict(self.sources), flag_counts=dict(self.flag_counts)
         )
         info = {
             "mean_adjust": f"cash_anchor_{months}m",
-            "cash_scale": round(s, 4),
+            "cash_scale": round(cash_scale, 4),
             "infl_anchor": infl_anchor,
-            "infl_scale": round(s_infl, 4) if s_infl is not None else None,
+            "infl_scale": round(infl_scale, 4) if infl_scale is not None else None,
             "cash_ann_window": round(float(cash.mean()) * 12, 5),
             "cash_ann_anchor": round(float(cash[-months:].mean()) * 12, 5),
-            "infl_ann_window": round(float(self.infl.mean()) * 12, 5),
-            "infl_ann_anchor": round(float(self.infl[-months:].mean()) * 12, 5),
+            "infl_ann_window": round(float(self.inflation.mean()) * 12, 5),
+            "infl_ann_anchor": round(float(self.inflation[-months:].mean()) * 12, 5),
         }
         return pool, info
 
-    def take(self, idx: np.ndarray, name_suffix: str = "") -> Pool:
-        """Pseudo-historique fait des mois ``idx`` (rééchantillonnage). Les dates deviennent fictives et consécutives
-        (même dernier mois), pour que ``fitted_through`` reste celui du pool d'origine."""
-        idx = np.asarray(idx, dtype=np.int64)
-        dates = pd.date_range(end=self.dates[-1], periods=len(idx), freq="ME")
-        return Pool(
-            self.name + name_suffix,
-            self.family,
-            self.currency,
-            self.blocks,
-            dates,
-            self.R[idx].copy(),
-            self.infl[idx].copy(),
-            self.hypothese,
-            self.data_sha256,
-            dict(self.sources),
-            {},
+    def take(self, indices: np.ndarray, name_suffix: str = "") -> Pool:
+        """Pseudo-historique fait des mois ``indices`` (rééchantillonnage). Les dates deviennent fictives et
+        consécutives (même dernier mois), pour que ``fitted_through`` reste celui du pool d'origine."""
+        indices = np.asarray(indices, dtype=np.int64)
+        dates = pd.date_range(end=self.dates[-1], periods=len(indices), freq="ME")
+        return replace(
+            self,
+            name=self.name + name_suffix,
+            dates=dates,
+            returns=self.returns[indices].copy(),
+            inflation=self.inflation[indices].copy(),
+            sources=dict(self.sources),
+            flag_counts={},
         )
 
-    def _subset(self, idx: np.ndarray) -> Pool:
-        return Pool(
-            self.name,
-            self.family,
-            self.currency,
-            self.blocks,
-            self.dates[idx],
-            self.R[idx].copy(),
-            self.infl[idx].copy(),
-            self.hypothese,
-            self.data_sha256,
-            dict(self.sources),
-            dict(self.flag_counts),
+    def _subset(self, indices: np.ndarray) -> Pool:
+        return replace(
+            self,
+            dates=self.dates[indices],
+            returns=self.returns[indices].copy(),
+            inflation=self.inflation[indices].copy(),
+            sources=dict(self.sources),
+            flag_counts=dict(self.flag_counts),
         )
 
     def describe(self) -> dict:
@@ -253,6 +236,67 @@ class Pool:
         }
 
 
+def _block_assets(spec: dict, family: str, *, crypto: bool) -> dict[str, str]:
+    """Bloc -> série du build long ; le bloc CRYPTO seulement si ``crypto``."""
+    mapping = {block: asset for block, asset in spec["blocks"].items() if block != CRYPTO_BLOCK}
+    if crypto:
+        if CRYPTO_BLOCK not in spec["blocks"]:
+            raise ValueError(f"famille {family} sans bloc CRYPTO")
+        mapping[CRYPTO_BLOCK] = spec["blocks"][CRYPTO_BLOCK]
+    return mapping
+
+
+def _pivot(returns: pd.DataFrame, assets: list[str], values: str) -> pd.DataFrame:
+    """Colonne ``values`` du format long, une ligne par date et une colonne par série de ``assets``."""
+    return returns[returns["asset_id"].isin(assets)].pivot(index="date", columns="asset_id", values=values)
+
+
+def _window_bounds(
+    wide: pd.DataFrame, assets: list[str], family_start: str, end: str | None
+) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """Intersection des historiques des séries, bornée par le début de la famille et par ``end``."""
+    starts = [wide[asset].first_valid_index() for asset in assets]
+    ends = [wide[asset].last_valid_index() for asset in assets]
+    first_month = max([*starts, month_end(family_start)])
+    last_month = min(ends)
+    if end is not None:
+        last_month = min(last_month, month_end(end))
+    return first_month, last_month
+
+
+def _checked_window(
+    wide: pd.DataFrame, columns: list[str], first_month: pd.Timestamp, last_month: pd.Timestamp, family: str
+) -> pd.DataFrame:
+    """Mois ``first_month`` .. ``last_month`` des séries ``columns`` : un mois absent ou manquant est une erreur."""
+    window = wide.loc[(wide.index >= first_month) & (wide.index <= last_month), columns]
+    expected = pd.date_range(first_month, last_month, freq="ME")
+    if len(window) != len(expected) or not np.array_equal(window.index.values, expected.values):
+        raise ValueError(f"{family} : calendrier mensuel incomplet entre {first_month:%Y-%m} et {last_month:%Y-%m}")
+    if window.isna().any().any():
+        bad = window.columns[window.isna().any()].tolist()
+        raise ValueError(f"{family} : mois manquants à l'intérieur de la fenêtre pour {bad}")
+    return window
+
+
+def _window_inflation(inflation: pd.DataFrame, column: str, dates: pd.Index, family: str) -> pd.Series:
+    series = inflation.set_index("date")[column].reindex(dates) if column in inflation else None
+    if series is None or series.isna().any():
+        raise ValueError(f"{family} : inflation {column} manquante dans la fenêtre")
+    return series
+
+
+def _flag_counts(flags: pd.DataFrame, mapping: dict[str, str], blocks: tuple[str, ...]) -> dict[str, dict[str, int]]:
+    """Drapeaux de qualité comptés par bloc ; une valeur peut en porter plusieurs, séparés par ``;``."""
+    flag_counts: dict[str, dict[str, int]] = {}
+    for block in blocks:
+        counter: Counter[str] = Counter()
+        for value in flags[mapping[block]].fillna(""):
+            counter.update(token for token in str(value).split(";") if token)
+        if counter:
+            flag_counts[block] = dict(sorted(counter.items()))
+    return flag_counts
+
+
 def build_pool(inputs: Inputs, family: str, *, crypto: bool = False, end: str | None = None) -> Pool:
     """Construit le pool d'une famille. ``crypto=True`` ajoute le bloc CRYPTO et réduit la fenêtre à son historique.
 
@@ -260,61 +304,29 @@ def build_pool(inputs: Inputs, family: str, *, crypto: bool = False, end: str | 
     ``fit(..., fitted_through=...)`` qui font la même chose au moment de l'ajustement.
     """
     spec = FAMILY_SPECS[family]
-    mapping = {b: a for b, a in spec["blocks"].items() if b != CRYPTO_BLOCK}
-    if crypto:
-        if CRYPTO_BLOCK not in spec["blocks"]:
-            raise ValueError(f"famille {family} sans bloc CRYPTO")
-        mapping[CRYPTO_BLOCK] = spec["blocks"][CRYPTO_BLOCK]
-    blocks = tuple(b for b in BLOCKS if b in mapping)
-    col = spec["return_col"]
-    df = inputs.returns
-    wide = df[df["asset_id"].isin(list(mapping.values()))].pivot(index="date", columns="asset_id", values=col)
-    flags = df[df["asset_id"].isin(list(mapping.values()))].pivot(index="date", columns="asset_id", values="flag")
-    missing_assets = [a for a in mapping.values() if a not in wide.columns]
+    mapping = _block_assets(spec, family, crypto=crypto)
+    blocks = tuple(block for block in BLOCKS if block in mapping)
+    return_col = spec["return_col"]
+    assets = list(mapping.values())
+    wide = _pivot(inputs.returns, assets, return_col)
+    flags = _pivot(inputs.returns, assets, "flag")
+    missing_assets = [asset for asset in mapping.values() if asset not in wide.columns]
     if missing_assets:
         raise ValueError(f"séries absentes de l'entrée : {missing_assets}")
-
-    starts = [wide[a].first_valid_index() for a in mapping.values()]
-    ends = [wide[a].last_valid_index() for a in mapping.values()]
-    lo = max([*starts, month_end(spec["start"])])
-    hi = min(ends)
-    if end is not None:
-        hi = min(hi, month_end(end))
-    window = wide.loc[(wide.index >= lo) & (wide.index <= hi), [mapping[b] for b in blocks]]
-    expected = pd.date_range(lo, hi, freq="ME")
-    if len(window) != len(expected) or not np.array_equal(window.index.values, expected.values):
-        raise ValueError(f"{family} : calendrier mensuel incomplet entre {lo:%Y-%m} et {hi:%Y-%m}")
-    if window.isna().any().any():
-        bad = window.columns[window.isna().any()].tolist()
-        raise ValueError(f"{family} : mois manquants à l'intérieur de la fenêtre pour {bad}")
-
+    first_month, last_month = _window_bounds(wide, assets, spec["start"], end)
+    window = _checked_window(wide, [mapping[block] for block in blocks], first_month, last_month, family)
     infl_col = spec["inflation_col"]
-    infl = inputs.inflation.set_index("date")[infl_col].reindex(window.index) if infl_col in inputs.inflation else None
-    if infl is None or infl.isna().any():
-        raise ValueError(f"{family} : inflation {infl_col} manquante dans la fenêtre")
-
-    flag_counts: dict[str, dict[str, int]] = {}
-    fwin = flags.loc[window.index]
-    for block in blocks:
-        counter: Counter[str] = Counter()
-        for value in fwin[mapping[block]].fillna(""):
-            for token in str(value).split(";"):
-                if token:
-                    counter[token] += 1
-        if counter:
-            flag_counts[block] = dict(sorted(counter.items()))
-
-    name = f"{family}{'+CRYPTO' if crypto else ''}"
+    inflation = _window_inflation(inputs.inflation, infl_col, window.index, family)
     return Pool(
-        name=name,
+        name=f"{family}{'+CRYPTO' if crypto else ''}",
         family=family,
         currency=spec["currency"],
         blocks=blocks,
         dates=pd.DatetimeIndex(window.index),
-        R=window.to_numpy(dtype=np.float64),
-        infl=infl.to_numpy(dtype=np.float64),
+        returns=window.to_numpy(dtype=np.float64),
+        inflation=inflation.to_numpy(dtype=np.float64),
         hypothese=crypto,
         data_sha256=inputs.data_sha256,
-        sources={b: f"{mapping[b]}.{col}" for b in blocks} | {"INFLATION": infl_col},
-        flag_counts=flag_counts,
+        sources={block: f"{mapping[block]}.{return_col}" for block in blocks} | {"INFLATION": infl_col},
+        flag_counts=_flag_counts(flags.loc[window.index], mapping, blocks),
     )

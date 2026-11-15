@@ -124,7 +124,7 @@ def test_the_code_keeps_its_own_documents_and_checks_each_note(settings, store):
     session = ClientSession.create("8f0c3a8e-5d7b-4e2a-9f51-2c6d3b1a7e90", "fr", q)
     session.set_fact("horizon.horizon_band", "gt10", "base:q_horizon")
     session.set_fact("objective.goal_detail", "Une maison", "a1:2", confirmed=False)
-    turn = brain.BrainTurn(q, session, store, skill=brain.INIT_SKILL, version="v")
+    turn = brain.BrainTurn(session, store, skill=brain.INIT_SKILL, version="v")
     for path in (
         "profil.md",
         "journal.md",
@@ -137,27 +137,40 @@ def test_the_code_keeps_its_own_documents_and_checks_each_note(settings, store):
         "a/b/c/d.md",
         "notes.txt",
     ):
-        assert turn._write(path, "Titre", "Une description.", [], ["horizon.horizon_band"], "x")["status"] == "error", (
-            path
-        )
-    unconfirmed = turn._write("objectif.md", "Objectif", "Une description.", [], ["objective.goal_detail"], "x")
+        assert (
+            turn._write(brain.NoteDraft(path, "Titre", "Une description.", [], ["horizon.horizon_band"], "x"))["status"]
+            == "error"
+        ), path
+    unconfirmed = turn._write(
+        brain.NoteDraft("objectif.md", "Objectif", "Une description.", [], ["objective.goal_detail"], "x")
+    )
     assert "unknown" in unconfirmed["reason"]  # une valeur à confirmer n'entre pas dans la base
     assert (
-        turn._write("horizon.md", "Horizon", "Une description.", ["Pas Un Slug"], ["horizon.horizon_band"], "x")[
+        turn._write(
+            brain.NoteDraft("horizon.md", "Horizon", "Une description.", ["Pas Un Slug"], ["horizon.horizon_band"], "x")
+        )["status"]
+        == "error"
+    )
+    assert (
+        turn._write(brain.NoteDraft("horizon.md", "Horizon", "Une description.", [], ["horizon.horizon_band"], "# H"))[
+            "status"
+        ]
+        == "ok"
+    )
+    assert "synthese.md" in turn._finish("x")["reason"]
+    assert (
+        turn._write(
+            brain.NoteDraft("synthese.md", "Synthèse", "Une description.", [], ["horizon.horizon_band"], "# S")
+        )["status"]
+        == "ok"
+    )
+    assert turn._finish("Deux notes.")["status"] == "ok"
+    assert (
+        turn._write(brain.NoteDraft("autre.md", "Autre", "Une description.", [], ["horizon.horizon_band"], "x"))[
             "status"
         ]
         == "error"
     )
-    assert (
-        turn._write("horizon.md", "Horizon", "Une description.", [], ["horizon.horizon_band"], "# H")["status"] == "ok"
-    )
-    assert "synthese.md" in turn._finish("x")["reason"]
-    assert (
-        turn._write("synthese.md", "Synthèse", "Une description.", [], ["horizon.horizon_band"], "# S")["status"]
-        == "ok"
-    )
-    assert turn._finish("Deux notes.")["status"] == "ok"
-    assert turn._write("autre.md", "Autre", "Une description.", [], ["horizon.horizon_band"], "x")["status"] == "error"
 
 
 def test_update_skill_rewrites_changed_notes_and_retires_the_others(settings, store):

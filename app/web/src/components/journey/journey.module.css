@@ -75,6 +75,12 @@
   border-color: var(--navy);
   color: var(--ink);
 }
+.topLink:disabled {
+  cursor: default;
+  opacity: 0.6;
+  border-color: var(--line);
+  color: var(--ink-2);
+}
 .topLink svg {
   width: 14px;
   height: 14px;
@@ -149,6 +155,50 @@
   gap: 18px;
   align-items: center;
 }
+/* The landing text stands on the city: a soft white veil behind it keeps every line readable. */
+.landing::before {
+  content: "";
+  position: absolute;
+  inset: -16px -24px -12px -24px;
+  z-index: -1;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 0 28px 18px rgba(255, 255, 255, 0.72);
+  pointer-events: none;
+}
+/* Secondary actions of the landing (start over, skip the questions): white pills, never bare text on the scene. */
+.landingAlt {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--ink-2);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.landingAlt:hover {
+  border-color: var(--navy);
+  color: var(--ink);
+}
+.landingAlt:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.landingAlt svg {
+  width: 14px;
+  height: 14px;
+}
+.landing .landingSkip {
+  margin-top: 14px;
+}
 
 .cta {
   display: inline-flex;
@@ -202,6 +252,11 @@
 .ghost:disabled {
   cursor: default;
   opacity: 0.6;
+}
+.skipCount {
+  font-size: 13px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- question card ---------- */

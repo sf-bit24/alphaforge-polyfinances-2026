@@ -68,7 +68,7 @@ class CompileResult:
     trace: list[dict[str, Any]]
     missing_defaults: list[str]
     status: str  # COMPLETE | INCOMPLETE | PROTECTION (effectif)
-    level_from_R: str
+    level_from_R: str  # noqa: N815 (champ public fige : lu par la selection de strategie et par les tests)
     horizon_years: float | None  # T du seau risque
     l_star: float | None
     e_cap: float | None  # part actions max (fraction)
@@ -84,5 +84,5 @@ class CompileResult:
             return self.policy
         data = self.policy.model_dump()
         limits = [*self.policy.limits, *self.request.limits]
-        data["limits"] = [lim.model_dump() for lim in limits]
+        data["limits"] = [limit.model_dump() for limit in limits]
         return PolicySpec.model_validate(data)

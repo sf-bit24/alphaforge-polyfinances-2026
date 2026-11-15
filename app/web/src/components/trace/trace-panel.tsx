@@ -72,8 +72,8 @@ function StepItem({ step, last }: { step: TraceStep; last: boolean }) {
       <p className="mt-1 text-sm leading-snug font-medium text-ink-950">{step.title}</p>
       {step.detail ? <p className="mt-0.5 text-[0.8rem] leading-snug break-words text-ink-600">{step.detail}</p> : null}
       {step.sources.length > 0 ? (
-        <div className="mt-2 rounded-md bg-brand-50/60 px-2.5 py-1.5 ring-1 ring-brand-100">
-          <p className="text-[0.65rem] font-semibold tracking-wide text-brand-700 uppercase">{t.trace.sources}</p>
+        <div className="mt-2 rounded-md bg-soft px-2.5 py-1.5 ring-1 ring-line">
+          <p className="text-[0.65rem] font-semibold tracking-wide text-navy uppercase">{t.trace.sources}</p>
           <ul className="mt-0.5 space-y-1">
             {step.sources.map((source) => (
               <SourceLine key={source.id} source={source} />
@@ -83,7 +83,7 @@ function StepItem({ step, last }: { step: TraceStep; last: boolean }) {
       ) : null}
       {hasIo ? (
         <details className="group/io mt-1.5">
-          <summary className="inline-flex items-center gap-1 rounded text-[0.75rem] font-medium text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-brand-500">
+          <summary className="inline-flex items-center gap-1 rounded text-[0.75rem] font-medium text-navy hover:underline focus-visible:outline-2 focus-visible:outline-focus">
             <ChevronDown aria-hidden className="size-3.5 transition-transform group-open/io:rotate-180" />
             {t.trace.io}
           </summary>
@@ -116,13 +116,13 @@ function RunCard({ run, hidden, defaultOpen, live }: { run: TraceRun; hidden: Se
   );
   return (
     <li>
-      <details open={defaultOpen} className={cn("group/run rounded-lg ring-1", live ? "bg-brand-50/40 ring-brand-200" : "bg-white ring-ink-150")}>
-        <summary className="flex items-start gap-2 rounded-lg px-3 py-2.5 focus-visible:outline-2 focus-visible:outline-brand-500">
+      <details open={defaultOpen} className={cn("group/run rounded-lg ring-1", live ? "bg-soft/60 ring-line-2" : "bg-white ring-ink-150")}>
+        <summary className="flex items-start gap-2 rounded-lg px-3 py-2.5 focus-visible:outline-2 focus-visible:outline-focus">
           <div className="min-w-0 flex-1">
             <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink-950">
               {t.trace.actions[run.action] ?? run.action}
               {live ? (
-                <Badge tone="brand" icon={<span className="size-1.5 animate-pulse-dot rounded-full bg-brand-500" />}>
+                <Badge tone="brand" icon={<span className="size-1.5 animate-pulse-dot rounded-full bg-navy" />}>
                   {t.common.live}
                 </Badge>
               ) : null}
@@ -144,7 +144,7 @@ function RunCard({ run, hidden, defaultOpen, live }: { run: TraceRun; hidden: Se
               ) : null}
               <span>·</span>
               <span>{t.trace.steps(run.steps.length)}</span>
-              {run.streamed ? <span className="text-brand-600">· {t.trace.streamed}</span> : null}
+              {run.streamed ? <span className="text-navy">· {t.trace.streamed}</span> : null}
             </p>
             {counts.length > 0 ? (
               <p aria-hidden className="mt-1.5 flex h-1.5 gap-0.5 overflow-hidden rounded-full">
@@ -189,7 +189,7 @@ export function TracePanel({ className }: { className?: string }) {
   return (
     <section aria-labelledby="trace-title" className={cn("rounded-xl bg-surface shadow-card ring-1 ring-ink-200/80", className)}>
       <header className="flex items-start gap-2 border-b border-ink-150 px-4 py-3.5">
-        <Activity aria-hidden className="mt-0.5 size-4 text-brand-600" />
+        <Activity aria-hidden className="mt-0.5 size-4 text-navy" />
         <div className="min-w-0 flex-1">
           <h2 id="trace-title" className="text-[0.95rem] font-semibold tracking-tight text-ink-950">
             {t.trace.title}
@@ -214,7 +214,7 @@ export function TracePanel({ className }: { className?: string }) {
                 onClick={() => toggle(kind)}
                 title={t.trace.kindHelp[kind]}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.7rem] font-medium ring-1 transition focus-visible:outline-2 focus-visible:outline-brand-500",
+                  "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[0.7rem] font-medium ring-1 transition focus-visible:outline-2 focus-visible:outline-focus",
                   on ? "bg-white text-ink-800 ring-ink-200" : "bg-ink-50 text-ink-400 line-through ring-ink-150",
                 )}
               >

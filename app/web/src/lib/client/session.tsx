@@ -20,6 +20,7 @@ type SessionActions = Pick<
   | "retry"
   | "dismissError"
   | "clearRuns"
+  | "getState"
 >;
 
 export type SessionValue = SessionSnapshot & SessionActions;
@@ -56,6 +57,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       retry: store.retry,
       dismissError: store.dismissError,
       clearRuns: store.clearRuns,
+      getState: store.getState,
     }),
     [snapshot, store],
   );

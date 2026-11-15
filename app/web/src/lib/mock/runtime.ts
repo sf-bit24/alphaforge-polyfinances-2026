@@ -707,8 +707,8 @@ export class MockRuntime {
       actor: "A2",
       title: fr ? "Positions corrigées relues par le code" : "Corrected positions re-read by code",
       detail: fr
-        ? `${normalized.length} position(s), ${normalized.filter((position) => !position.resolved).length} hors du jeu de départ`
-        : `${normalized.length} position(s), ${normalized.filter((position) => !position.resolved).length} outside the starter universe`,
+        ? `${normalized.length} ${normalized.length > 1 ? "positions" : "position"}, ${normalized.filter((position) => !position.resolved).length} hors du jeu de départ`
+        : `${normalized.length} ${normalized.length === 1 ? "position" : "positions"}, ${normalized.filter((position) => !position.resolved).length} outside the starter universe`,
       inputs: { positions: positions.length },
       outputs: { tickers: normalized.map((position) => position.ticker) },
       sources: [STARTER_SOURCES.universe, STARTER_SOURCES.prices],

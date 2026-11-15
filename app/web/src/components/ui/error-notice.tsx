@@ -75,7 +75,7 @@ export function ErrorNotice({
           <button
             type="button"
             onClick={onDismiss}
-            className="rounded p-1 text-ink-500 hover:bg-white/60 hover:text-ink-800 focus-visible:outline-2 focus-visible:outline-brand-500"
+            className="rounded p-1 text-ink-500 hover:bg-white/60 hover:text-ink-800 focus-visible:outline-2 focus-visible:outline-focus"
             aria-label={t.common.dismiss}
           >
             <X aria-hidden className="size-4" />

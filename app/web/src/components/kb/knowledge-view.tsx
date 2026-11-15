@@ -63,7 +63,7 @@ export function KnowledgeView() {
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 py-8 sm:px-6">
       <div className="flex items-start gap-3">
-        <LibraryBig aria-hidden className="mt-1 size-6 text-brand-600" />
+        <LibraryBig aria-hidden className="mt-1 size-6 text-navy" />
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-ink-950">{t.kb.title}</h1>
           <p className="mt-1 max-w-3xl text-sm text-ink-600">{t.kb.intro}</p>
@@ -85,7 +85,7 @@ export function KnowledgeView() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={t.kb.search}
-                className="block w-full rounded-lg border-0 bg-white py-2 pr-3 pl-9 text-sm ring-1 ring-ink-300 ring-inset placeholder:text-ink-400 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                className="block w-full rounded-lg border-0 bg-white py-2 pr-3 pl-9 text-sm ring-1 ring-ink-300 ring-inset placeholder:text-ink-400 focus:ring-2 focus:ring-navy focus:outline-none"
               />
             </div>
           </div>
@@ -110,11 +110,11 @@ export function KnowledgeView() {
                           onClick={() => setSelected(item.key)}
                           aria-current={active ? "true" : undefined}
                           className={cn(
-                            "flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-brand-500",
-                            active ? "bg-brand-50 ring-1 ring-brand-100" : "hover:bg-ink-50",
+                            "flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-focus",
+                            active ? "bg-soft ring-1 ring-line" : "hover:bg-ink-50",
                           )}
                         >
-                          <FileText aria-hidden className={cn("mt-0.5 size-4 shrink-0", active ? "text-brand-600" : "text-ink-400")} />
+                          <FileText aria-hidden className={cn("mt-0.5 size-4 shrink-0", active ? "text-navy" : "text-ink-400")} />
                           <span className="min-w-0 flex-1">
                             <span className="block text-sm leading-snug font-medium text-ink-900">{item.title ?? item.key}</span>
                             {item.description ? <span className="mt-0.5 line-clamp-2 block text-xs leading-snug text-ink-500">{item.description}</span> : null}

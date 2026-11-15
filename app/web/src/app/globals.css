@@ -1,37 +1,56 @@
 @import "tailwindcss";
 
 /*
- * AlphaForge AI design tokens. Data colors follow the validated reference palette
- * (categorical slots in fixed order, a one-hue blue ramp, reserved status colors);
- * text always uses ink tokens, never a data color.
+ * AlphaForge AI design tokens: the approved drafts (white surfaces, Banque Nationale
+ * red #E41C23 for actions and accents, navy #0B2341 for text and structure; both are
+ * approximations, no logo). Text always uses ink tokens, never a data color.
  */
 @theme {
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
-  --color-ink-950: #0a1222;
-  --color-ink-900: #111b2f;
-  --color-ink-800: #1c2840;
-  --color-ink-700: #2f3c56;
-  --color-ink-600: #47536b;
-  --color-ink-500: #5d6880;
-  --color-ink-400: #8a93a6;
-  --color-ink-300: #b9c0cd;
-  --color-ink-200: #dde2ea;
-  --color-ink-150: #e7ebf1;
-  --color-ink-100: #eff2f6;
-  --color-ink-50: #f6f8fb;
+  /* Ink: navy-based grays. 950 is the navy text color, 600 and 500 the two secondary inks. */
+  --color-ink-950: #0b2341;
+  --color-ink-900: #12294a;
+  --color-ink-800: #1f3454;
+  --color-ink-700: #33465f;
+  --color-ink-600: #44566c;
+  --color-ink-500: #5f7186;
+  --color-ink-400: #8d9bad;
+  --color-ink-300: #b4c0ce;
+  --color-ink-200: #dce3ec;
+  --color-ink-150: #e6ebf1;
+  --color-ink-100: #f2f5f9;
+  --color-ink-50: #f5f7fa;
 
-  /* One-hue blue ramp (sequential steps 100 to 700). */
-  --color-brand-50: #eef5fe;
-  --color-brand-100: #cde2fb;
-  --color-brand-200: #9ec5f4;
-  --color-brand-300: #86b6ef;
-  --color-brand-400: #5598e7;
-  --color-brand-500: #2a78d6;
-  --color-brand-600: #1c5cab;
-  --color-brand-700: #104281;
-  --color-brand-800: #0d366b;
+  /* Brand: the red ramp. 600 is the action red, 700 its hover; 50 to 200 are washes. */
+  --color-brand-50: #fef6f6;
+  --color-brand-100: #fdecec;
+  --color-brand-200: #fbd5d6;
+  --color-brand-300: #f5a9ac;
+  --color-brand-400: #ee6a6f;
+  --color-brand-500: #e41c23;
+  --color-brand-600: #e41c23;
+  --color-brand-700: #b8141a;
+  --color-brand-800: #8f0f14;
+
+  /* Named colors of the drafts. */
+  --color-navy: #0b2341;
+  --color-red: #e41c23;
+  --color-red-dark: #b8141a;
+  --color-red-soft: #fdecec;
+  --color-line: #dce3ec;
+  --color-line-2: #c9d3df;
+  --color-soft: #f2f5f9;
+  --color-focus: #0b2341;
+
+  /* Chart series of the portfolio views, validated together (dataviz validator, light mode):
+     navy, red, pink, gold, slate. Gold is darkened from the draft's #C9A13B to stay apart from pink. */
+  --color-series-navy: #0b2341;
+  --color-series-red: #e41c23;
+  --color-series-pink: #f08a8e;
+  --color-series-gold: #a8831c;
+  --color-series-slate: #8d9bad;
 
   /* Trace step kinds: categorical slots 1 to 6, in fixed order. */
   --color-kind-deterministic: #2a78d6;
@@ -42,9 +61,9 @@
   --color-kind-guardrail: #008300;
 
   /* Status colors, reserved for state and always paired with an icon and a label. */
-  --color-good: #0ca30c;
-  --color-good-ink: #006300;
-  --color-good-wash: #e8f6e8;
+  --color-good: #1f8a50;
+  --color-good-ink: #176b40;
+  --color-good-wash: #e8f5ee;
   --color-warning: #fab219;
   --color-warning-ink: #7a5100;
   --color-warning-wash: #fff6e0;
@@ -57,11 +76,23 @@
   --color-surface: #ffffff;
   --color-page: #f5f7fa;
 
-  --shadow-card: 0 1px 2px rgb(10 18 34 / 0.05), 0 1px 1px rgb(10 18 34 / 0.03);
-  --shadow-lift: 0 10px 30px -12px rgb(10 18 34 / 0.25);
+  --shadow-card: 0 1px 2px rgb(11 35 65 / 0.05), 0 1px 1px rgb(11 35 65 / 0.03);
+  --shadow-lift: 0 2px 4px rgb(11 35 65 / 0.05), 0 12px 32px rgb(11 35 65 / 0.1);
 
   --animate-fade-in: fade-in 220ms ease-out both;
   --animate-pulse-dot: pulse-dot 1.4s ease-in-out infinite;
+  --animate-drawer-in: drawer-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+
+  @keyframes drawer-in {
+    from {
+      opacity: 0;
+      transform: translateX(24px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
 
   @keyframes fade-in {
     from {
@@ -87,6 +118,31 @@
 
 :root {
   color-scheme: light;
+
+  /* The drafts' own variable names, used by the screen CSS modules (journey, dashboard, details). */
+  --red: #e41c23;
+  --red-dark: #b8141a;
+  --red-soft: #fdecec;
+  --navy: #0b2341;
+  --ink: #0b2341;
+  --ink-2: #44566c;
+  --ink-3: #5f7186;
+  --line: #dce3ec;
+  --line-2: #c9d3df;
+  --soft: #f2f5f9;
+  --ok: #176b40;
+  --ok-soft: #e8f5ee;
+  --gold-soft: #fbf3e2;
+  --gold-ink: #7a5d0e;
+  --s-navy: #0b2341;
+  --s-red: #e41c23;
+  --s-pink: #f08a8e;
+  --s-gold: #a8831c;
+  --s-slate: #8d9bad;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html {
@@ -95,25 +151,26 @@ html {
 }
 
 body {
-  background: var(--color-page);
-  color: var(--color-ink-900);
+  background: #fff;
+  color: var(--color-ink-950);
   font-feature-settings: "kern";
 }
 
 ::selection {
-  background: var(--color-brand-100);
+  background: var(--color-brand-200);
+  color: var(--color-navy);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
+:focus-visible {
+  outline-color: var(--color-focus);
 }
+
+/*
+ * No blanket prefers-reduced-motion override: the walk, the flock and the chart
+ * entrances are part of the approved design and must play for every investor
+ * (Windows with animations turned off reports reduced motion too). Each long
+ * animation has its own skip control instead (« Passer la marche »).
+ */
 
 /* Markdown rendered from agents and OKF documents. */
 .prose-af {
@@ -148,7 +205,7 @@ body {
   color: var(--color-ink-950);
 }
 .prose-af a {
-  color: var(--color-brand-600);
+  color: var(--color-navy);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -166,7 +223,7 @@ body {
   margin-top: 0.25em;
 }
 .prose-af blockquote {
-  border-left: 3px solid var(--color-brand-200);
+  border-left: 3px solid var(--color-line-2);
   padding: 0.25em 0 0.25em 0.9em;
   color: var(--color-ink-600);
 }

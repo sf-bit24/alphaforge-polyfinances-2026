@@ -312,8 +312,8 @@ function contextView(values: FieldValues, locale: Locale): DimensionView {
   else if (existing && typeof existing === "object" && "positions" in existing && "total_value_cad" in existing) {
     const { positions, total_value_cad } = existing as { positions: number; total_value_cad: number };
     summary = fr
-      ? `Portefeuille existant : ${positions} position(s), ${formatMoney(total_value_cad, locale)}`
-      : `Existing portfolio: ${positions} position(s), ${formatMoney(total_value_cad, locale)}`;
+      ? `Portefeuille existant : ${positions} ${positions > 1 ? "positions" : "position"}, ${formatMoney(total_value_cad, locale)}`
+      : `Existing portfolio: ${positions} ${positions === 1 ? "position" : "positions"}, ${formatMoney(total_value_cad, locale)}`;
   } else if (values.get("context.has_portfolio")?.value === true) {
     summary = fr ? "Portefeuille existant à analyser" : "Existing portfolio to analyse";
   }

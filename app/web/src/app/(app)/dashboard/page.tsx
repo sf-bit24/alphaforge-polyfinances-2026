@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { ProfileWorkspace } from "@/components/profile/workspace";
+import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { serverDictionary } from "@/lib/i18n/server";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await serverDictionary();
-  return { title: t.nav.profile };
+  return { title: t.appNav.dashboard };
 }
 
-export default function ProfilePage() {
-  return <ProfileWorkspace />;
+export default function DashboardPage() {
+  return <DashboardView />;
 }

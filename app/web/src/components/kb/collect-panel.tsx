@@ -125,7 +125,7 @@ function ExecutionDetails({ execution, onOpenDoc }: { execution: ExecutionSummar
                       <button
                         type="button"
                         onClick={() => onOpenDoc(key)}
-                        className="rounded text-left font-mono text-xs break-all text-brand-700 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-brand-500"
+                        className="rounded text-left font-mono text-xs break-all text-navy underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-focus"
                       >
                         {key}
                       </button>
@@ -253,7 +253,7 @@ export function CollectPanel({ onWritten, onOpenDoc }: { onWritten: () => void; 
                 max={new Date().toISOString().slice(0, 10)}
                 onChange={(event) => setSince(event.target.value)}
                 aria-describedby={`${sinceId}-help`}
-                className="mt-1 block w-full rounded-lg border-0 bg-white px-3 py-2 text-sm ring-1 ring-ink-300 ring-inset focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                className="mt-1 block w-full rounded-lg border-0 bg-white px-3 py-2 text-sm ring-1 ring-ink-300 ring-inset focus:ring-2 focus:ring-navy focus:outline-none"
               />
               <p id={`${sinceId}-help`} className="mt-1 text-xs text-ink-500">
                 {t.collect.sinceHelp}
@@ -270,7 +270,7 @@ export function CollectPanel({ onWritten, onOpenDoc }: { onWritten: () => void; 
                 placeholder="RY.TO, AAPL, BTC-USD"
                 aria-invalid={tickersInvalid || undefined}
                 aria-describedby={`${tickersId}-help`}
-                className="mt-1 block w-full rounded-lg border-0 bg-white px-3 py-2 font-mono text-sm uppercase ring-1 ring-ink-300 ring-inset placeholder:normal-case focus:ring-2 focus:ring-brand-500 focus:outline-none aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-critical"
+                className="mt-1 block w-full rounded-lg border-0 bg-white px-3 py-2 font-mono text-sm uppercase ring-1 ring-ink-300 ring-inset placeholder:normal-case focus:ring-2 focus:ring-navy focus:outline-none aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-critical"
               />
               <p id={`${tickersId}-help`} className={cn("mt-1 text-xs", tickersInvalid ? "text-critical-ink" : "text-ink-500")}>
                 {tickersInvalid ? t.collect.tickersInvalid : t.collect.tickersHelp}
@@ -282,7 +282,7 @@ export function CollectPanel({ onWritten, onOpenDoc }: { onWritten: () => void; 
           </div>
           {startError ? <ErrorNotice className="mx-5 mt-4" error={startError} onDismiss={() => setStartError(null)} /> : null}
           {startedName && !startError ? (
-            <p role="status" className="mx-5 mt-4 rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-800 ring-1 ring-brand-100">
+            <p role="status" className="mx-5 mt-4 rounded-lg bg-soft px-3 py-2 text-sm text-navy ring-1 ring-line">
               {t.collect.started(startedName)}
             </p>
           ) : null}
@@ -324,7 +324,7 @@ export function CollectPanel({ onWritten, onOpenDoc }: { onWritten: () => void; 
                       const open = selected === execution.execution_arn;
                       const duration = execution.stop_date ? Date.parse(execution.stop_date) - Date.parse(execution.start_date) : null;
                       return (
-                        <tr key={execution.execution_arn} className={cn("border-b border-ink-150 align-middle", open && "bg-brand-50/50")}>
+                        <tr key={execution.execution_arn} className={cn("border-b border-ink-150 align-middle", open && "bg-soft")}>
                           <td className="py-2 pr-3">
                             <button
                               type="button"
@@ -332,7 +332,7 @@ export function CollectPanel({ onWritten, onOpenDoc }: { onWritten: () => void; 
                               aria-expanded={open}
                               aria-label={t.collect.detailsOf(execution.name)}
                               title={execution.name}
-                              className="rounded font-mono text-xs text-brand-700 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-brand-500"
+                              className="rounded font-mono text-xs text-navy underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-focus"
                             >
                               {execution.name.slice(0, 13)}…
                             </button>

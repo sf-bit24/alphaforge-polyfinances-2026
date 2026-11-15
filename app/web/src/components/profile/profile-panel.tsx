@@ -119,7 +119,7 @@ function Section({
 }) {
   return (
     <details open={defaultOpen} className="group border-t border-ink-150 px-5 py-3">
-      <summary className="flex items-center gap-2 rounded text-sm font-semibold text-ink-900 focus-visible:outline-2 focus-visible:outline-brand-500">
+      <summary className="flex items-center gap-2 rounded text-sm font-semibold text-ink-900 focus-visible:outline-2 focus-visible:outline-focus">
         {icon}
         <span className="flex-1">{title}</span>
         <ChevronDown aria-hidden className="size-4 text-ink-400 transition-transform group-open:rotate-180" />
@@ -149,12 +149,12 @@ function DocumentsSection({ clientId, revision }: { clientId: string; revision: 
         type="button"
         onClick={() => setOpen(item)}
         aria-label={t.panel.open(item.title ?? item.key)}
-        className="flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-brand-500"
+        className="flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-focus"
       >
         {json ? (
           <FileJson aria-hidden className="mt-0.5 size-4 shrink-0 text-ink-400" />
         ) : (
-          <FileText aria-hidden className="mt-0.5 size-4 shrink-0 text-brand-500" />
+          <FileText aria-hidden className="mt-0.5 size-4 shrink-0 text-navy" />
         )}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-ink-900">{item.title ?? item.key.split("/").pop()}</span>
@@ -198,7 +198,7 @@ export function ProfilePanel({ state }: { state: ClientState }) {
   return (
     <div className="overflow-hidden rounded-xl bg-surface shadow-card ring-1 ring-ink-200/80">
       <header className="flex items-center gap-2 px-5 pt-4">
-        <UserRound aria-hidden className="size-4 text-brand-600" />
+        <UserRound aria-hidden className="size-4 text-navy" />
         <h2 className="flex-1 text-[0.95rem] font-semibold tracking-tight text-ink-950">{t.panel.title}</h2>
         <span className="font-mono text-[0.7rem] text-ink-400" title={state.client_id}>
           {t.session.id} {state.client_id.slice(0, 8)}

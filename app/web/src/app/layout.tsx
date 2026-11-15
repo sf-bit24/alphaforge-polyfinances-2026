@@ -1,8 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { Footer } from "@/components/layout/footer";
-import { Header } from "@/components/layout/header";
-import { ResponsibleBanner } from "@/components/layout/banner";
 import { SessionProvider } from "@/lib/client/session";
 import { I18nProvider } from "@/lib/i18n/provider";
 import { serverDictionary } from "@/lib/i18n/server";
@@ -18,23 +15,20 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#0a1222",
+  themeColor: "#ffffff",
 };
 
+/**
+ * Providers only: the journey (/) draws its own full-screen scene and top bar,
+ * the other screens get the navigation from app/(app)/layout.tsx.
+ */
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const { locale } = await serverDictionary();
   return (
     <html lang={locale}>
-      <body className="flex min-h-dvh flex-col font-sans antialiased">
+      <body className="font-sans antialiased">
         <I18nProvider initialLocale={locale}>
-          <SessionProvider>
-            <Header />
-            <ResponsibleBanner />
-            <main id="main" tabIndex={-1} className="flex flex-1 flex-col focus:outline-none">
-              {children}
-            </main>
-            <Footer />
-          </SessionProvider>
+          <SessionProvider>{children}</SessionProvider>
         </I18nProvider>
       </body>
     </html>

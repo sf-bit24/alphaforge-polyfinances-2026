@@ -13,14 +13,16 @@ import type {
   Stage,
   TraceKind,
 } from "@/lib/contract/schemas";
+import { screensEn, screensFr } from "./screens";
 
 type Fn<A extends unknown[]> = (...args: A) => string;
 
 const fr = {
+  ...screensFr,
   meta: {
-    title: "AlphaForge AI : aide à la décision d'investissement explicable",
+    title: "AlphaForge AI : aide à la décision d’investissement explicable",
     description:
-      "Profil d'investisseur dynamique, portefeuille existant analysé, relances d'agents et traces explicables. Simulation seulement.",
+      "Profil d’investisseur dynamique, portefeuille existant analysé, relances d’agents et traces explicables. Simulation seulement.",
   },
   common: {
     loading: "Chargement…",
@@ -53,7 +55,7 @@ const fr = {
     menu: "Navigation principale",
   },
   brand: {
-    tagline: "Aide à la décision d'investissement explicable",
+    tagline: "Aide à la décision d’investissement explicable",
   },
   language: {
     label: "Langue",
@@ -77,7 +79,7 @@ const fr = {
   },
   home: {
     eyebrow: "Datathon PolyFinances 2026",
-    title: "Un profil d'investisseur qui s'explique, à votre niveau.",
+    title: "Un profil d’investisseur qui s’explique, à votre niveau.",
     subtitle:
       "AlphaForge AI construit votre profil en cinq dimensions, analyse votre portefeuille existant et précise ce qui manque grâce à des agents sur Amazon Bedrock AgentCore. Chaque étape est tracée et chaque chiffre cite sa source.",
     start: "Commencer mon profil",
@@ -96,11 +98,11 @@ const fr = {
       },
       {
         title: "Portefeuille existant",
-        text: "Collez du texte ou déposez n'importe quel fichier : A2 en tire des positions que vous corrigez, puis le code calcule les expositions.",
+        text: "Collez du texte ou déposez n’importe quel fichier : A2 en tire des positions que vous corrigez, puis le code calcule les expositions.",
       },
       {
-        title: "Relances d'A1",
-        text: "L'agent A1 précise ce qui manque, sans s'écarter du sujet, dans le langage de votre niveau de connaissances.",
+        title: "Relances d’A1",
+        text: "L’agent A1 précise ce qui manque, sans s’écarter du sujet, dans le langage de votre niveau de connaissances.",
       },
       {
         title: "Traçabilité complète",
@@ -110,20 +112,20 @@ const fr = {
     flowTitle: "Le parcours",
     flow: [
       { title: "Questions de base", text: "Niveau, puis les cinq dimensions du profil." },
-      { title: "Portefeuille existant", text: "Facultatif : A2 l'analyse, vous le confirmez." },
-      { title: "Relances d'A1", text: "Ce qui manque encore, à votre rythme." },
+      { title: "Portefeuille existant", text: "Facultatif : A2 l’analyse, vous le confirmez." },
+      { title: "Relances d’A1", text: "Ce qui manque encore, à votre rythme." },
       { title: "Profil complet", text: "Une base OKF à vous, prête pour la suite." },
     ],
     thresholdNote:
-      "Dès 70 % de complétude, vous pouvez vous arrêter. L'affichage plafonne à 95 % : un profil n'est jamais parfaitement connu.",
+      "Dès 70 % de complétude, vous pouvez vous arrêter. L’affichage plafonne à 95 % : un profil n’est jamais parfaitement connu.",
     agentsTitle: "Les agents et leur rôle",
-    agentsLead: "Le code calcule, le modèle explique : aucun chiffre n'est deviné par un modèle.",
+    agentsLead: "Le code calcule, le modèle explique : aucun chiffre n’est deviné par un modèle.",
     agents: [
       { id: "A1", title: "Création du profil", text: "Mène les relances, tient à jour la base du client et vérifie la complétude." },
-      { id: "A2", title: "Portefeuille existant", text: "Lit un portefeuille sous n'importe quelle forme et propose des positions normalisées." },
-      { id: "A4", title: "Spécialiste de la presse", text: "Collecte l'actualité datée par sa publication." },
+      { id: "A2", title: "Portefeuille existant", text: "Lit un portefeuille sous n’importe quelle forme et propose des positions normalisées." },
+      { id: "A4", title: "Spécialiste de la presse", text: "Collecte l’actualité datée par sa publication." },
       { id: "A5", title: "Spécialiste des données", text: "Collecte les séries économiques et financières." },
-      { id: "A6", title: "Superviseur de la base", text: "Rejette ce qui n'est ni sourcé ni daté, puis écrit dans la base générale." },
+      { id: "A6", title: "Superviseur de la base", text: "Rejette ce qui n’est ni sourcé ni daté, puis écrit dans la base générale." },
     ],
     versionNote: "Version 1 : profil et base générale. Le portefeuille guidé viendra ensuite.",
   },
@@ -131,14 +133,14 @@ const fr = {
     base_questions: "Questions de base",
     existing_portfolio: "Portefeuille existant",
     portfolio_review: "Vérification des positions",
-    followups: "Relances d'A1",
+    followups: "Relances d’A1",
     complete: "Profil complet",
   } satisfies Record<Stage, string>,
   stepper: {
     label: "Étapes du profil",
     base: "Questions de base",
     portfolio: "Portefeuille",
-    followups: "Relances d'A1",
+    followups: "Relances d’A1",
     complete: "Profil complet",
     current: "étape en cours",
     done: "terminée",
@@ -179,7 +181,7 @@ const fr = {
   },
   question: {
     deterministic: "Question de base",
-    a1: "Relance d'A1",
+    a1: "Relance d’A1",
     fallback: "Question de repli",
     fallbackHelp: "A1 est indisponible : question préparée par le code.",
     help: "Pourquoi cette question",
@@ -192,8 +194,8 @@ const fr = {
     chooseAtLeastOne: "Cochez au moins une option.",
     enterNumber: "Entrez un nombre.",
     between: ((min: string, max: string) => `La valeur doit être comprise entre ${min} et ${max}.`) as Fn<[string, string]>,
-    atLeast: ((min: string) => `La valeur doit être d'au moins ${min}.`) as Fn<[string]>,
-    atMost: ((max: string) => `La valeur doit être d'au plus ${max}.`) as Fn<[string]>,
+    atLeast: ((min: string) => `La valeur doit être d’au moins ${min}.`) as Fn<[string]>,
+    atMost: ((max: string) => `La valeur doit être d’au plus ${max}.`) as Fn<[string]>,
     integer: "Choisissez une valeur entière.",
     textLength: "Le texte doit compter de 1 à 2 000 caractères.",
     chars: ((count: number) => `${count.toLocaleString("fr-CA")} / 2 000 caractères`) as Fn<[number]>,
@@ -205,7 +207,7 @@ const fr = {
   portfolioInput: {
     title: "Votre portefeuille existant",
     intro:
-      "Donnez-le sous n'importe quelle forme : collez du texte, ou déposez des fichiers (CSV, tableur, PDF, image, JSON). A2 en tire des positions que vous vérifierez avant tout calcul.",
+      "Donnez-le sous n’importe quelle forme : collez du texte, ou déposez des fichiers (CSV, tableur, PDF, image, JSON). A2 en tire des positions que vous vérifierez avant tout calcul.",
     textLabel: "Coller du texte",
     textPlaceholder: "Par exemple :\n100 RY.TO CELI\n25 AAPL REER\n10 000 $ XBB.TO\nfonds maison XYZ",
     dropTitle: "Glissez-déposez vos fichiers ici",
@@ -220,7 +222,7 @@ const fr = {
     analyzing: "A2 analyse votre portefeuille…",
     skip: "Passer cette étape",
     privacy:
-      "N'indiquez aucun numéro de compte : tout reste fictif. Le garde-fou masque les renseignements personnels détectés.",
+      "N’indiquez aucun numéro de compte : tout reste fictif. Le garde-fou masque les renseignements personnels détectés.",
     reading: "Lecture des fichiers…",
     example: "Insérer un exemple",
     units: { bytes: "o", kilobytes: "Ko", megabytes: "Mo" },
@@ -231,7 +233,7 @@ const fr = {
     columns: {
       ticker: "Titre",
       name: "Nom",
-      assetClass: "Classe d'actifs",
+      assetClass: "Classe d’actifs",
       quantity: "Quantité",
       value: "Valeur déclarée",
       currency: "Devise",
@@ -249,7 +251,7 @@ const fr = {
     deleteRow: ((label: string) => `Supprimer la position ${label}`) as Fn<[string]>,
     unresolvedTitle: "Éléments non identifiés",
     addAsRow: "Ajouter comme position",
-    staleNote: "Vous avez modifié des positions : les expositions ci-dessous datent de l'analyse d'A2 et seront recalculées par le code à la confirmation.",
+    staleNote: "Vous avez modifié des positions : les expositions ci-dessous datent de l’analyse d’A2 et seront recalculées par le code à la confirmation.",
     confirm: "Confirmer les positions",
     confirming: "Confirmation…",
     needOne: "Gardez au moins une position, ou passez cette étape en revenant en arrière.",
@@ -266,7 +268,7 @@ const fr = {
     computedByCode: "Calculées par le code, jamais par le modèle",
     fx: ((rate: string, date: string) => `Valeurs en CAD converties à ${rate} au ${date}.`) as Fn<[string, string]>,
     total: "Valeur totale",
-    byAssetClass: "Par classe d'actifs",
+    byAssetClass: "Par classe d’actifs",
     byCurrency: "Par devise",
     byMarket: "Par marché",
     bySector: "Par secteur",
@@ -297,20 +299,20 @@ const fr = {
       title: "Cryptoactifs élevés",
       text: "Plus de 10 % du portefeuille est en cryptoactifs, dont la valeur varie fortement.",
     },
-    cash_heavy: { title: "Beaucoup d'encaisse", text: "Plus de 30 % du portefeuille est en encaisse." },
+    cash_heavy: { title: "Beaucoup d’encaisse", text: "Plus de 30 % du portefeuille est en encaisse." },
     few_holdings: {
       title: "Peu de positions",
       text: "Moins de cinq positions et aucun FNB ni fonds : la diversification est limitée.",
     },
     unvalued_positions: {
       title: "Lignes non évaluées",
-      text: "Au moins une ligne n'a pas pu être évaluée : elle n'est pas comptée dans les expositions.",
+      text: "Au moins une ligne n’a pas pu être évaluée : elle n’est pas comptée dans les expositions.",
     },
   } as Record<string, { title: string; text: string }>,
   assetClasses: {
     equity: "Action",
-    etf_equity: "FNB d'actions",
-    etf_bond: "FNB d'obligations",
+    etf_equity: "FNB d’actions",
+    etf_bond: "FNB d’obligations",
     etf_commodity: "FNB de matières premières",
     bond: "Obligation",
     cash: "Encaisse",
@@ -332,30 +334,30 @@ const fr = {
     retrieved: "récupéré le",
   },
   followups: {
-    title: "Relances d'A1",
+    title: "Relances d’A1",
     intro: "A1 précise ce qui manque à votre profil. Répondez à ses questions, ou écrivez-lui librement.",
     agent: "A1 · agent du profil",
     you: "Vous",
     thinking: "A1 rédige sa réponse…",
     preparing: "A1 prépare ses premières relances…",
-    noQuestions: "A1 n'a pas d'autre question pour l'instant. Écrivez-lui, ou arrêtez-vous ici.",
+    noQuestions: "A1 n’a pas d’autre question pour l’instant. Écrivez-lui, ou arrêtez-vous ici.",
     sendAnswers: "Envoyer mes réponses",
     messageLabel: "Votre message à A1",
-    messagePlaceholder: "Écrivez avec vos mots, par exemple : j'ai six mois de dépenses de côté et aucune dette.",
+    messagePlaceholder: "Écrivez avec vos mots, par exemple : j’ai six mois de dépenses de côté et aucune dette.",
     send: "Envoyer",
-    stop: "M'arrêter ici",
+    stop: "M’arrêter ici",
     stopHintLocked: ((pct: string) => `Possible dès 70 % de complétude (actuellement ${pct}).`) as Fn<[string]>,
     stopHintReady: "Votre profil dépasse le seuil de 70 % : vous pouvez vous arrêter.",
-    stoppedNote: "A demandé à s'arrêter",
+    stoppedNote: "A demandé à s’arrêter",
     answersLabel: "Réponses",
     nothingToSend: "Répondez à une question ou écrivez un message.",
-    kickoffFailed: "A1 n'a pas pu poser ses premières relances.",
+    kickoffFailed: "A1 n’a pas pu poser ses premières relances.",
   },
   completion: {
     title: "Votre profil est prêt",
     lead: "A1 a enregistré votre profil dans votre base OKF. Vous pouvez le préciser à tout moment.",
     displayed: ((pct: string) => `Complétude affichée : ${pct}`) as Fn<[string]>,
-    capNote: "L'affichage plafonne à 95 % : un profil n'est jamais parfaitement connu.",
+    capNote: "L’affichage plafonne à 95 % : un profil n’est jamais parfaitement connu.",
     refine: "Préciser mon profil",
     refineLabel: "Ce qui a changé ou ce que vous voulez préciser",
     refineSend: "Envoyer à A1",
@@ -382,10 +384,10 @@ const fr = {
     missing: "Ce qui manque",
     missingNone: "Rien : le profil est complet.",
     facts: ((count: number) => `Faits et provenance (${count})`) as Fn<[number]>,
-    noFacts: "Aucun fait pour l'instant.",
+    noFacts: "Aucun fait pour l’instant.",
     documentsTitle: "Documents de votre base",
-    noDocuments: "Aucun document pour l'instant.",
-    traces: ((count: number) => `Traces d'exécution (${count})`) as Fn<[number]>,
+    noDocuments: "Aucun document pour l’instant.",
+    traces: ((count: number) => `Traces d’exécution (${count})`) as Fn<[number]>,
     open: ((title: string) => `Ouvrir ${title}`) as Fn<[string]>,
   },
   provenance: {
@@ -413,12 +415,12 @@ const fr = {
     invalidFrontmatter: "Frontmatter illisible : le document est affiché tel quel.",
   },
   trace: {
-    title: "Trace d'exécution",
-    subtitle: "Chaque requête, étape par étape : ce qui vient d'une règle, d'un agent, du modèle ou d'un outil.",
+    title: "Trace d’exécution",
+    subtitle: "Chaque requête, étape par étape : ce qui vient d’une règle, d’un agent, du modèle ou d’un outil.",
     legend: "Légende",
-    filter: "Filtrer par type d'étape",
+    filter: "Filtrer par type d’étape",
     all: "Tout",
-    clear: "Effacer l'historique",
+    clear: "Effacer l’historique",
     empty: "Les étapes apparaîtront ici dès votre première action.",
     running: "En cours",
     failed: "Échec",
@@ -444,7 +446,7 @@ const fr = {
       model: "Appel au modèle Bedrock : il rédige, il ne calcule pas.",
       tool: "Outil appelé par un agent : données, calculs, base.",
       storage: "Lecture ou écriture dans la base OKF.",
-      guardrail: "Garde-fou du cadre responsable, à l'entrée et à la sortie.",
+      guardrail: "Garde-fou du cadre responsable, à l’entrée et à la sortie.",
     } satisfies Record<TraceKind, string>,
     actions: {
       "session.start": "Démarrage de la session",
@@ -461,7 +463,7 @@ const fr = {
   kb: {
     title: "Base de connaissances générale",
     intro:
-      "Commune à tous les investisseurs, elle ne contient rien d'un client. A4 (presse) et A5 (données) collectent, A6 vérifie et écrit, puis la Knowledge Base est réindexée.",
+      "Commune à tous les investisseurs, elle ne contient rien d’un client. A4 (presse) et A5 (données) collectent, A6 vérifie et écrit, puis la Knowledge Base est réindexée.",
     documents: "Documents",
     search: "Filtrer les documents",
     count: ((count: number) => `${count} document${count > 1 ? "s" : ""}`) as Fn<[number]>,
@@ -469,8 +471,8 @@ const fr = {
     select: "Choisissez un document pour le lire.",
     emptyGeneral: "La base générale est encore vide.",
     emptyGeneralHelp:
-      "Les méthodologies sont poussées par Terraform, et A6 écrit l'index, les actualités et les données à la première collecte. Lancez une collecte ci-dessous.",
-    noIndex: "Pas encore d'index : A6 écrit general/index.md à la première collecte.",
+      "Les méthodologies sont poussées par Terraform, et A6 écrit l’index, les actualités et les données à la première collecte. Lancez une collecte ci-dessous.",
+    noIndex: "Pas encore d’index : A6 écrit general/index.md à la première collecte.",
     groups: {
       methodologie: "Méthodologie",
       actualites: "Actualités",
@@ -482,21 +484,21 @@ const fr = {
   },
   collect: {
     title: "Alimenter la base générale",
-    lead: "Lance la machine Step Functions : A4 et A5 collectent en parallèle, A6 rejette ce qui n'est ni sourcé ni daté, puis la Knowledge Base est réindexée.",
+    lead: "Lance la machine Step Functions : A4 et A5 collectent en parallèle, A6 rejette ce qui n’est ni sourcé ni daté, puis la Knowledge Base est réindexée.",
     since: "Depuis le",
-    sinceHelp: "Par défaut, sept jours avant aujourd'hui.",
+    sinceHelp: "Par défaut, sept jours avant aujourd’hui.",
     tickers: "Titres (facultatif)",
-    tickersHelp: "Séparés par des virgules. Par défaut, l'univers du jeu de départ.",
+    tickersHelp: "Séparés par des virgules. Par défaut, l’univers du jeu de départ.",
     tickersInvalid: "Titres invalides : utilisez des symboles comme RY.TO, AAPL, BTC-USD.",
     start: "Lancer une collecte",
     starting: "Lancement…",
     started: ((name: string) => `Collecte lancée : ${name}`) as Fn<[string]>,
     machine: ((name: string) => `Machine : ${name}`) as Fn<[string]>,
     recent: "Collectes récentes",
-    none: "Aucune collecte pour l'instant.",
+    none: "Aucune collecte pour l’instant.",
     autoRefresh: "Actualisation automatique pendant une collecte.",
     unavailableLocal:
-      "En mode local, la collecte n'est pas disponible : elle passe par Step Functions. Le mode mock la simule, le mode aws la lance vraiment.",
+      "En mode local, la collecte n’est pas disponible : elle passe par Step Functions. Le mode mock la simule, le mode aws la lance vraiment.",
     columns: {
       run: "Exécution",
       status: "Statut",
@@ -518,20 +520,20 @@ const fr = {
     } satisfies Record<ExecutionStatus, string>,
     collectorOk: ((items: string) => `OK · ${items} élément(s)`) as Fn<[string]>,
     collectorError: "Échec",
-    collectorNote: "Un échec d'A4 ou d'A5 n'arrête pas la collecte : A6 traite ce qui est arrivé.",
+    collectorNote: "Un échec d’A4 ou d’A5 n’arrête pas la collecte : A6 traite ce qui est arrivé.",
     writtenDocs: "Documents écrits par A6",
     rejectedDocs: "Éléments rejetés par A6",
     input: "Entrée",
     output: "Sortie",
     error: "Erreur",
     cause: "Cause",
-    pending: "Résultats disponibles à la fin de l'exécution.",
+    pending: "Résultats disponibles à la fin de l’exécution.",
     open: "Ouvrir",
     detailsOf: ((name: string) => `Détails de ${name}`) as Fn<[string]>,
   },
   settings: {
     title: "Réglages",
-    language: "Langue de l'interface et des agents",
+    language: "Langue de l’interface et des agents",
     languageHelp: "Les textes des agents (questions, messages, traces) suivent aussi cette langue.",
     knowledge: "Niveau de connaissances",
     knowledgeHelp: "Il change le langage et la précision des explications, jamais les chiffres.",
@@ -553,12 +555,12 @@ const fr = {
     code: "Code",
     details: "Détails techniques",
     hints: {
-      bad_request: "La requête n'a pas été acceptée.",
+      bad_request: "La requête n’a pas été acceptée.",
       unknown_action: "Action inconnue du runtime.",
       not_found: "Élément introuvable.",
       invalid_answer: "La réponse ne respecte pas le format attendu.",
-      conflict: "Cette action ne correspond pas à l'étape en cours.",
-      model_error: "Le modèle n'a pas pu répondre : réessayez dans un instant.",
+      conflict: "Cette action ne correspond pas à l’étape en cours.",
+      model_error: "Le modèle n’a pas pu répondre : réessayez dans un instant.",
       guardrail_blocked: "Le garde-fou du cadre responsable a bloqué ce message.",
       internal: "Erreur interne de la passerelle ou du runtime.",
       network_error: "Le serveur local ne répond pas.",
@@ -567,22 +569,23 @@ const fr = {
     calm: {
       guardrail_blocked: {
         title: "Le cadre responsable a retenu ce message",
-        hint: "AlphaForge AI ne passe aucun ordre et ne donne aucun conseil personnalisé. Rien n'a été enregistré et votre texte reste dans la zone de saisie : reformulez-le autour de votre profil, puis renvoyez-le.",
+        hint: "AlphaForge AI ne passe aucun ordre et ne donne aucun conseil personnalisé. Rien n’a été enregistré et votre texte reste dans la zone de saisie : reformulez-le autour de votre profil, puis renvoyez-le.",
       },
       model_error: {
-        title: "Le modèle n'a pas pu répondre cette fois",
+        title: "Le modèle n’a pas pu répondre cette fois",
         hint: "Sa réponse a été filtrée ou refusée, ou le modèle est momentanément indisponible. Votre saisie est conservée : réessayez dans un instant, ou reformulez votre message.",
       },
     } as Record<string, { title: string; hint: string } | undefined>,
     network: "Impossible de joindre le serveur Next.js local.",
     invalidResponse: "Réponse non conforme au contrat (validation zod).",
-    noResult: "Le flux s'est terminé sans résultat.",
+    noResult: "Le flux s’est terminé sans résultat.",
   },
 };
 
 export type Dictionary = typeof fr;
 
 const en: Dictionary = {
+  ...screensEn,
   meta: {
     title: "AlphaForge AI: explainable investment decision aid",
     description:
@@ -986,7 +989,7 @@ const en: Dictionary = {
     sources: "Sources",
     io: "Inputs and outputs",
     streamed: "streamed",
-    footnote: "A trace describes observable actions (rule applied, tool called, inputs, result), never the model's internal reasoning.",
+    footnote: "A trace describes observable actions (rule applied, tool called, inputs, result), never the model’s internal reasoning.",
     hiddenSteps: (count: number) => `${count} step${count > 1 ? "s" : ""} hidden by the filter`,
     kinds: {
       deterministic: "Coded rule",

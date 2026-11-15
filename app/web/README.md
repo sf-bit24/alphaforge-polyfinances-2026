@@ -1,10 +1,44 @@
 # AlphaForge AI : interface locale
 
-Interface web d'AlphaForge AI (Datathon PolyFinances 2026), à lancer sur le poste. Elle construit le profil d'investisseur (questions de base, portefeuille existant analysé par A2, relances d'A1), affiche la complétude, les documents OKF du client et la trace de chaque requête, puis permet de lire et d'alimenter la base générale (collecte A4, A5, A6 par Step Functions).
+Interface web d'AlphaForge AI (Datathon PolyFinances 2026), à lancer sur le poste. Elle suit les maquettes approuvées par l'équipe (`.impeccable/preview/` : `parcours.html`, `tableau-de-bord.html`, `details.html`) : fond blanc, rouge Banque Nationale `#E41C23` pour les actions, marine `#0B2341` pour le texte (approximations, aucun logo).
 
 Simulation seulement : aucune transaction réelle, aucun conseil financier personnalisé.
 
 Le contrat avec les runtimes Python et l'infrastructure est `app/CONTRACTS.md` : chaque réponse est validée par zod (`src/lib/contract/`) avant d'arriver à l'écran.
+
+## Écrans
+
+| Route | Écran |
+| --- | --- |
+| `/` | **Parcours du profil** : un personnage marche le long d'un chemin et s'arrête à un panneau par question de base (le runtime choisit la suivante, embranchements compris). Touches 1 à 9 pour répondre, « Pourquoi cette question ? » tiré de `help`. Un panneau à mallette accueille le portefeuille existant (A2 : texte collé ou fichiers, puis vérification des positions). La maison affiche la première version du profil et mène au tableau de bord. Boutons Trace et Profil : la trace complète et le profil détaillé (faits, provenance, documents OKF) s'ouvrent dans un panneau latéral. |
+| `/dashboard` | **Tableau de bord** : tuiles d'indicateurs et assistant. L'assistant s'ouvre sur un paysage (personnage, volée d'oiseaux qui réagit au pointeur et à la saisie), puis devient la conversation avec A1 (`followup.reply`) : relances, questions structurées, arrêt dès 70 %. Chaque réponse porte ses sources et « Comment j'ai répondu », la trace de la requête. |
+| `/details` | **Détails du portefeuille** : valeur, rendements quotidiens, retraite, volatilité, comparaison avec XIU.TO, répartition, gouvernance, stress test 2022, rendements mensuels, journal des décisions, les quatre questions de l'atelier BNCD, positions. |
+| `/knowledge` | Base de connaissances générale et collecte (A4, A5, A6). |
+| `/settings` | Réglages (langue, niveau de connaissances, session). |
+
+`/profile` redirige vers `/`.
+
+### Données d'exemple : mode `mock` seulement
+
+La version 1 n'a pas de moteur de portefeuille (A3, lentilles, Judge viennent ensuite). Décision de l'équipe du 2026-11-14 :
+
+- en mode `mock`, les tuiles du tableau de bord, la page Détails et les réponses de l'assistant aux questions suggérées sur le portefeuille (le piège des 50 000 $, l'or, NVDA) reprennent l'exemple des maquettes, marqué « Valeurs d'exemple » et « Exemple simulé » (`src/lib/sample/`, série synthétique calibrée : volatilité 6,1 %, baisse 2022 de −9,8 %, 400 000 $);
+- en modes `local` et `aws`, aucun chiffre inventé : les tuiles montrent ce que le code calcule (complétude, risque retenu, horizon, niveau, portefeuille existant valorisé par A2) et la page Détails annonce la version 2.
+
+### Animations
+
+La marche, la volée d'oiseaux et l'entrée des graphiques font partie de la maquette : elles jouent même si le système demande de réduire les animations (Windows avec les effets d'animation désactivés le signale). « Passer la marche » saute la marche en cours.
+
+### Tailles d'écran
+
+Vérifiées à 1920 × 1080, 1440 × 900, 1280 × 720, 1024 × 768 et 390 × 844 :
+
+- sur téléphone (moins de 760 px), le parcours devient une bande en bas de l'écran où le personnage marche, sous les cartes; la barre du haut passe en icônes;
+- sous 1024 px, les onglets passent sur une deuxième ligne que l'on fait défiler;
+- sur un écran bas (portable), les cartes du parcours se resserrent et leur bouton principal reste visible en bas de la carte;
+- le tableau de bord tient sur un écran à partir de 1100 px de large et 805 px de haut; plus bas, la page défile un peu plutôt que de couper les tuiles.
+
+Le rouge est réservé aux actions principales, à la marque et à la progression; les sélections, liens, focus et icônes sont en marine, comme dans les maquettes.
 
 ## Prérequis
 
@@ -106,20 +140,29 @@ Limites appliquées par le serveur : 5 fichiers de 10 Mo au plus par `portfolio.
 
 ```text
 src/
-  app/                  pages (accueil, profil, base de connaissances, réglages) et routes /api
-  components/           interface : profil, trace, base de connaissances, réglages, composants communs
+  app/                  / (parcours), (app)/ : dashboard, details, knowledge, settings, sous la navigation; routes /api
+  components/journey/   parcours : scène et personnage, cartes de question, portefeuille existant, synthèse
+  components/dashboard/ tableau de bord : tuiles, assistant, scène d'accueil et volée d'oiseaux
+  components/details/   détails du portefeuille et graphiques
+  components/           aussi : profil (champs de réponse, revue A2, panneau), trace, base de connaissances, réglages, composants communs
   lib/contract/         schémas zod du contrat et des requêtes, lecture des sorties de collecte
   lib/server/           passerelle : configuration, modes local et aws, erreurs, SSE
   lib/mock/             simulateur du contrat (mode mock)
+  lib/sample/           portefeuille et réponses d'exemple des maquettes (mode mock seulement)
+  lib/journey/          chemin du parcours (panneaux, maison, reprise d'une session)
   lib/client/           appels à la passerelle, session (localStorage), état de l'interface
-  lib/i18n/             dictionnaire typé FR (par défaut) et EN
+  lib/i18n/             dictionnaire typé FR (par défaut) et EN; screens.ts pour les écrans des maquettes
   lib/sse.ts            parseur SSE (fragments, CR/LF, une ligne JSON par événement)
-tests/                  tests Vitest
+tests/                  tests Vitest (contrat, simulateur, passerelle, SSE, parcours, données d'exemple, textes)
 ```
+
+Les styles des trois écrans des maquettes sont des modules CSS (`*.module.css`) portés des maquettes; les autres composants utilisent Tailwind avec les jetons de `globals.css`.
 
 ## Limites connues
 
 - Pas de mode sombre.
+- Le parcours n'offre pas de retour à une question de base déjà répondue : le contrat n'a pas d'action pour la modifier.
+- Les réponses de l'assistant sur le portefeuille sont des exemples écrits d'avance (mode `mock`), en attendant le moteur du volet finance.
 - Le mode `mock` garde tout en mémoire; un redémarrage efface les sessions et les collectes simulées.
 - En mode `mock`, A2 ne lit que le texte et les fichiers texte (CSV, TXT, JSON); en mode `aws`, A2 lit aussi les PDF et les images avec le modèle.
 - La collecte n'est disponible qu'en modes `mock` et `aws`.

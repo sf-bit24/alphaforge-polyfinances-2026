@@ -45,7 +45,7 @@ export function DocumentContent({ content, documentKey }: { content: string; doc
     return (
       <div>
         <p className="mb-2 flex items-center gap-2 text-sm text-ink-600">
-          <FileJson aria-hidden className="size-4 text-brand-500" />
+          <FileJson aria-hidden className="size-4 text-navy" />
           {t.documentView.json}
         </p>
         <JsonView value={parsed} maxHeight="max-h-[60vh]" />
@@ -129,7 +129,7 @@ export function DocumentContent({ content, documentKey }: { content: string; doc
               ) : null}
               {hasData ? (
                 <details className="mt-4">
-                  <summary className="text-sm font-medium text-brand-700 hover:underline">{t.documentView.data}</summary>
+                  <summary className="text-sm font-medium text-navy hover:underline">{t.documentView.data}</summary>
                   <JsonView value={data} className="mt-2 bg-white" />
                 </details>
               ) : null}

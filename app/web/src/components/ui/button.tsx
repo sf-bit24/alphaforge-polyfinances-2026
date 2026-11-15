@@ -12,9 +12,9 @@ const VARIANTS: Record<Variant, string> = {
   secondary:
     "bg-white text-ink-800 ring-1 ring-inset ring-ink-300 shadow-sm hover:bg-ink-50 hover:ring-ink-400 disabled:text-ink-400 disabled:ring-ink-200",
   ghost: "text-ink-700 hover:bg-ink-100 hover:text-ink-900 disabled:text-ink-400",
-  subtle: "bg-brand-50 text-brand-700 hover:bg-brand-100 disabled:bg-ink-100 disabled:text-ink-400",
+  subtle: "bg-soft text-navy hover:bg-ink-100 disabled:bg-ink-100 disabled:text-ink-400",
   danger: "text-critical-ink hover:bg-critical-wash disabled:text-ink-400",
-  inverse: "bg-white font-semibold text-ink-950 shadow-sm hover:bg-brand-50 active:bg-brand-100 disabled:bg-white/70 disabled:text-ink-600",
+  inverse: "bg-white font-semibold text-ink-950 shadow-sm hover:bg-soft active:bg-ink-100 disabled:bg-white/70 disabled:text-ink-600",
   inverseGhost: "text-ink-100 hover:bg-white/10 hover:text-white disabled:text-ink-400",
 };
 
@@ -39,7 +39,7 @@ export function Button({ variant = "primary", size = "md", loading = false, icon
       aria-busy={loading || undefined}
       className={cn(
         "inline-flex shrink-0 items-center justify-center font-medium whitespace-nowrap transition-colors",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed",
         VARIANTS[variant],
         SIZES[size],
         className,

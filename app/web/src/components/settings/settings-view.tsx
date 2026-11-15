@@ -15,12 +15,12 @@ import { ErrorNotice } from "@/components/ui/error-notice";
 
 const RADIO_CARD =
   "group flex cursor-pointer items-start gap-3 rounded-lg bg-white px-4 py-3 ring-1 ring-ink-200 ring-inset transition hover:ring-ink-400 " +
-  "has-checked:bg-brand-50 has-checked:ring-2 has-checked:ring-brand-500 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-brand-500 " +
+  "has-checked:bg-soft has-checked:ring-2 has-checked:ring-navy has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus " +
   "has-disabled:cursor-not-allowed has-disabled:opacity-60";
 
 function Dot() {
   return (
-    <span aria-hidden className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full ring-1 ring-ink-300 group-has-checked:bg-brand-600 group-has-checked:ring-brand-600">
+    <span aria-hidden className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full ring-1 ring-ink-300 group-has-checked:bg-navy group-has-checked:ring-navy">
       <span className="size-1.5 rounded-full bg-white opacity-0 group-has-checked:opacity-100" />
     </span>
   );
@@ -126,7 +126,7 @@ export function SettingsView() {
         ) : (
           <p className="px-5 py-4 text-sm text-ink-600">
             {t.settings.knowledgeNeedsSession}{" "}
-            <Link href="/profile" className="font-medium text-brand-700 underline underline-offset-2">
+            <Link href="/profile" className="font-medium text-navy underline underline-offset-2">
               {t.home.start}
             </Link>
           </p>

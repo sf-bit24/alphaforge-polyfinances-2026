@@ -3,6 +3,7 @@
 import { Check, X } from "lucide-react";
 import type { Question } from "@/lib/contract/schemas";
 import { questionDomId, type Draft } from "@/lib/client/answers";
+import { curly } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
 import { cn } from "@/components/ui/cn";
 
@@ -20,19 +21,19 @@ interface AnswerInputProps {
 
 const OPTION_CARD =
   "group relative flex cursor-pointer items-start gap-3 rounded-lg bg-white px-4 py-3 text-sm text-ink-800 ring-1 ring-inset ring-ink-200 transition " +
-  "hover:ring-ink-400 has-checked:bg-brand-50 has-checked:text-ink-950 has-checked:ring-2 has-checked:ring-brand-500 " +
-  "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-brand-500 has-disabled:cursor-not-allowed has-disabled:opacity-60";
+  "hover:ring-ink-400 has-checked:bg-soft has-checked:text-ink-950 has-checked:ring-2 has-checked:ring-navy " +
+  "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus has-disabled:cursor-not-allowed has-disabled:opacity-60";
 
 const FIELD =
   "block w-full rounded-lg border-0 bg-white px-3.5 py-2.5 text-[0.95rem] text-ink-950 shadow-sm ring-1 ring-inset ring-ink-300 " +
-  "placeholder:text-ink-400 focus:ring-2 focus:ring-brand-500 focus:outline-none disabled:bg-ink-50 disabled:text-ink-500 aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-critical";
+  "placeholder:text-ink-400 focus:ring-2 focus:ring-navy focus:outline-none disabled:bg-ink-50 disabled:text-ink-500 aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-critical";
 
 function Mark({ type }: { type: "radio" | "checkbox" }) {
   return (
     <span
       aria-hidden
       className={cn(
-        "mt-0.5 flex size-4 shrink-0 items-center justify-center ring-1 ring-ink-300 transition group-has-checked:bg-brand-600 group-has-checked:ring-brand-600",
+        "mt-0.5 flex size-4 shrink-0 items-center justify-center ring-1 ring-ink-300 transition group-has-checked:bg-navy group-has-checked:ring-navy",
         type === "radio" ? "rounded-full" : "rounded",
       )}
     >
@@ -68,7 +69,7 @@ export function AnswerInput({ question, draft, onChange, disabled, labelledBy, d
                 className="sr-only"
               />
               <Mark type="radio" />
-              <span>{option.label}</span>
+              <span>{curly(option.label)}</span>
             </label>
           ))}
         </div>
@@ -94,7 +95,7 @@ export function AnswerInput({ question, draft, onChange, disabled, labelledBy, d
                   className="sr-only"
                 />
                 <Mark type="checkbox" />
-                <span>{option.label}</span>
+                <span>{curly(option.label)}</span>
               </label>
             ))}
           </div>
@@ -118,8 +119,8 @@ export function AnswerInput({ question, draft, onChange, disabled, labelledBy, d
                 autoFocus={autoFocus && index === 0}
                 className="sr-only"
               />
-              <span className="text-ink-500 group-has-checked:text-brand-600">{option.icon}</span>
-              {option.label}
+              <span className="text-ink-500 group-has-checked:text-navy">{option.icon}</span>
+              {curly(option.label)}
             </label>
           ))}
         </div>
@@ -138,8 +139,8 @@ export function AnswerInput({ question, draft, onChange, disabled, labelledBy, d
                 title={optionLabel(step)}
                 className={cn(
                   "relative flex size-11 cursor-pointer items-center justify-center rounded-lg bg-white text-sm font-semibold text-ink-700 ring-1 ring-inset ring-ink-200 transition",
-                  "hover:ring-ink-400 has-checked:bg-brand-600 has-checked:text-white has-checked:ring-brand-600",
-                  "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-brand-500 has-disabled:opacity-60",
+                  "hover:ring-ink-400 has-checked:bg-navy has-checked:text-white has-checked:ring-navy",
+                  "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus has-disabled:opacity-60",
                 )}
               >
                 <input
@@ -181,7 +182,7 @@ export function AnswerInput({ question, draft, onChange, disabled, labelledBy, d
             disabled={disabled}
             aria-labelledby={labelledBy}
             aria-valuetext={`${text || 0} %`}
-            className="h-2 w-full flex-1 cursor-pointer accent-brand-600"
+            className="h-2 w-full flex-1 cursor-pointer accent-navy"
           />
           <div className="relative w-32">
             <input

@@ -15,7 +15,6 @@ Le contrat avec les runtimes Python et l'infrastructure est `app/CONTRACTS.md` :
 | `/details` | **Détails du portefeuille** : valeur, rendements quotidiens, retraite, volatilité, comparaison avec XIU.TO, répartition, gouvernance, stress test 2022, rendements mensuels, journal des décisions, les quatre questions de l'atelier BNCD, positions. |
 | `/portfolio` | **Portefeuille simulé** : la `Decision` du runtime `portfolio` (CONTRACTS.md, section 12), affichée telle quelle pour un profil de démonstration FICTION (Amira, Mateo, Robert) ou, hors mode `mock`, pour son propre profil. Positions cœur et satellite, style et bande de part actions de l'étape 0, classement des titres individuels (momentum en sensibilité seulement), les quatre questions avec l'étiquette FAIT, HYPOTHÈSE ou FICTION de chaque énoncé et ses faits cliquables (valeur, source, étape de trace), contrefactuels, verdicts des lentilles, contrôles du Judge, trace. Bandeau permanent « Simulation éducative — aucun conseil, aucune transaction ». |
 | `/knowledge` | Base de connaissances générale et collecte (A4, A5, A6). |
-| `/tldoole` | tldoole : vidéos verticales d’environ une minute sur les concepts que l’investisseur ne comprend pas encore (CONTRACTS.md, section 8). |
 | `/settings` | Réglages (langue, niveau de connaissances, session). |
 
 `/profile` redirige vers `/`.

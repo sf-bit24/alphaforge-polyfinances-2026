@@ -251,7 +251,7 @@ def test_confirmation_questions_are_built_by_the_code(q):
     questions, targets = a1.confirmation_questions(q, session, turn=4, locale="en")
     assert [x["id"] for x in questions] == ["cf_4_1", "cf_4_2"]  # deux au plus, les plus lourds d'abord
     assert targets == {"cf_4_1": "objective.goal_detail", "cf_4_2": MONTHLY}
-    assert questions[1]["prompt"] == "I understood: Planned monthly contribution = $3,000. Is that right?"
+    assert questions[1]["prompt"] == "Planned monthly contribution: I understood “$3,000”. Is that right?"
     assert all(x["kind"] == "boolean" and x["field"] is None and x["source"] == "deterministic" for x in questions)
 
 
@@ -350,3 +350,18 @@ def test_a_value_whose_condition_is_waiting_is_confirmed_after_it(q):
     session.set_fact("constraints.withdrawal_pct_12m", 20, "a1:2", confirmed=False)
     questions, targets = a1.confirmation_questions(q, session, turn=2, locale="fr")
     assert list(targets.values()) == ["constraints.liquidity_need"]
+
+
+def test_completeness_is_shown_as_the_interface_writes_it():
+    from alphaforge.profile.a1 import completeness_brief, shown_percent
+
+    assert shown_percent(0.7478, "fr") == "75\u00a0%"
+    assert shown_percent(0.8261, "en") == "83%"
+    brief = completeness_brief({"score": 0.7478, "displayed": 0.7478, "threshold": 0.7, "ready": True}, "fr")
+    assert brief == {
+        "score": 0.7478,
+        "threshold": 0.7,
+        "ready": True,
+        "shown": "75\u00a0%",
+        "threshold_shown": "70\u00a0%",
+    }

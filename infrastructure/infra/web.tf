@@ -139,10 +139,12 @@ data "aws_ec2_managed_prefix_list" "cloudfront" {
   name  = "com.amazonaws.global.cloudfront.origin-facing"
 }
 
+# Descriptions des groupes et des regles : EC2 n'accepte que
+# a-zA-Z0-9. _-:/()#,@[]+=&;{}!$* (ni apostrophe ni accent).
 resource "aws_security_group" "web_alb" {
   count       = local.web_count
   name        = "${local.web_name}-alb"
-  description = "ALB de l'interface : HTTP depuis CloudFront et web_allowed_cidrs"
+  description = "ALB interface web, HTTP depuis CloudFront et web_allowed_cidrs"
   vpc_id      = var.web_vpc_id
 }
 
@@ -159,7 +161,7 @@ resource "aws_vpc_security_group_ingress_rule" "web_alb_cloudfront" {
 resource "aws_vpc_security_group_ingress_rule" "web_alb_direct" {
   for_each          = var.web_enabled ? toset(var.web_allowed_cidrs) : toset([])
   security_group_id = aws_security_group.web_alb[0].id
-  description       = "Acces direct a l'ALB"
+  description       = "Acces direct a ALB"
   cidr_ipv4         = each.value
   ip_protocol       = "tcp"
   from_port         = 80
@@ -179,14 +181,14 @@ resource "aws_vpc_security_group_egress_rule" "web_alb_tasks" {
 resource "aws_security_group" "web_tasks" {
   count       = local.web_count
   name        = "${local.web_name}-tasks"
-  description = "Taches de l'interface : entree depuis l'ALB, sortie HTTPS vers ECR et les API AWS"
+  description = "Taches interface web, entree depuis ALB, sortie HTTPS vers ECR et API AWS"
   vpc_id      = var.web_vpc_id
 }
 
 resource "aws_vpc_security_group_ingress_rule" "web_tasks_alb" {
   count                        = local.web_count
   security_group_id            = aws_security_group.web_tasks[0].id
-  description                  = "Depuis l'ALB"
+  description                  = "Depuis ALB"
   referenced_security_group_id = aws_security_group.web_alb[0].id
   ip_protocol                  = "tcp"
   from_port                    = local.web_port
@@ -356,7 +358,7 @@ data "aws_cloudfront_origin_request_policy" "all_viewer" {
 resource "aws_cloudfront_distribution" "web" {
   count           = local.web_count
   enabled         = true
-  comment         = "${local.web_name} : interface AlphaForge (HTTPS devant l'ALB)"
+  comment         = "${local.web_name} : interface AlphaForge, HTTPS devant ALB"
   is_ipv6_enabled = true
   http_version    = "http2and3"
   price_class     = "PriceClass_100"

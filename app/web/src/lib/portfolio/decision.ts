@@ -188,6 +188,15 @@ export function derivedFromLabel(raw: string, labels: Readonly<Record<string, st
     .join(", ");
 }
 
+/**
+ * Whether a check's raw provenance is worth showing under its name: not when the two read the same once the
+ * typographic apostrophe of the dictionary (’) and the engine's straight one (') are taken as one.
+ */
+export function showsRawProvenance(label: string, raw: string): boolean {
+  const plain = (text: string) => text.replaceAll("’", "'");
+  return plain(label) !== plain(raw);
+}
+
 /** The unit of the fact that measures a constraint, to format its limit the same way. */
 export function constraintUnit(facts: FactIndex, valueFactId: string | null | undefined): string | undefined {
   return valueFactId ? facts.get(valueFactId)?.unit : undefined;

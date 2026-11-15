@@ -15,7 +15,7 @@ import type { Locale } from "@/lib/contract/schemas";
 import { portfolioEn, portfolioFr } from "@/lib/i18n/portfolio";
 import { I18nProvider } from "@/lib/i18n/provider";
 import { PORTFOLIO_FIXTURES } from "@/lib/mock/decisions";
-import { derivedFromLabel, indexFacts, indexTrace } from "@/lib/portfolio/decision";
+import { derivedFromLabel, indexFacts, indexTrace, showsRawProvenance } from "@/lib/portfolio/decision";
 
 const fixtures = DEMO_PERSONAS.map((persona) => [persona, PortfolioBuildResponse.parse(PORTFOLIO_FIXTURES[persona])] as const);
 
@@ -154,6 +154,13 @@ describe("provenance of the Judge's checks (issue #78, review)", () => {
     expect(derivedFromLabel("constructor", fr)).toBe("constructor");
   });
 
+  it("does not repeat a provenance whose name only changes the apostrophe", () => {
+    const raw = "définition d'un portefeuille";
+    expect(showsRawProvenance(derivedFromLabel(raw, portfolioFr.constraints.derivedFrom), raw)).toBe(false);
+    expect(showsRawProvenance(derivedFromLabel(raw, portfolioEn.constraints.derivedFrom), raw)).toBe(true);
+    expect(showsRawProvenance(derivedFromLabel("level", portfolioFr.constraints.derivedFrom), "level")).toBe(true);
+  });
+
   it("shows the name in the table and the raw identifier under it, for the audit", () => {
     const fr = renderChecks("fr");
     expect(fr).toContain("sang-froid sous 40<span");
@@ -164,7 +171,11 @@ describe("provenance of the Judge's checks (issue #78, review)", () => {
     expect(en).toContain("composure below 40<span");
     expect(en).toContain("risk level<span");
     expect(en).toContain(">level</span>");
-    // A provenance the engine wrote as a sentence has nothing to show under it.
+    // A provenance the engine wrote as a sentence has nothing to show under it, nor one only retypeset (’).
     expect(fr).toContain("<td>étape 0 : style défensif (τ = -0,25)</td>");
+    expect(fr).toContain("<td>définition d’un portefeuille</td>");
+    expect(fr).not.toContain(">définition d&#x27;un portefeuille</span>");
+    expect(en).toContain("definition of a portfolio<span");
+    expect(en).toContain(">définition d&#x27;un portefeuille</span>");
   });
 });

@@ -1,0 +1,16 @@
+[project]
+name = "alphaforge-backtest"
+version = "0.1.0"
+description = "AlphaForge AI - long-history (1926-2026) monthly data layer and backtest engine (simulation only)"
+requires-python = ">=3.11"
+dependencies = ["numpy", "pandas", "scipy", "pyarrow", "pyyaml", "openpyxl", "xlrd", "yfinance", "pytest"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["engine"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

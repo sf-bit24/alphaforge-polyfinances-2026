@@ -1,0 +1,25 @@
+# downloaded, untrusted raw data (rebuild with data/build_data.py)
+data/raw/
+# local environment and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+# large / scratch outputs
+*.zip
+*.xls
+*.xlsx
+results/**/*_scratch*
+results/tmp/
+*.log
+# processed data is NOT versioned: part of it derives from Yahoo/yfinance (redistribution not allowed)
+# and from Moody's / OECD series (copyrighted). Rebuild with data/build_data.py. Catalogue/metadata CSVs stay.
+data/processed/*.parquet
+# local derived data copies made by persona analyses (rebuilt by their build_ext_data.py)
+analysis/*/data_ext/
+# run traces are large (~650 MB) and reproducible: only the per-analysis summaries are versioned
+results/*
+!results/*_analysis/

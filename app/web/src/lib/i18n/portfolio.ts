@@ -8,6 +8,11 @@ import type { DecisionKind, FactLabel, LensVerdict, Style } from "@/lib/contract
 
 type Fn<A extends unknown[]> = (...args: A) => string;
 
+/** « 0 contrôle », « 1 contrôle », « 2 contrôles » : en français, 0 et 1 prennent le singulier. */
+const frCount = (count: number, one: string, many = `${one}s`) => `${count} ${count > 1 ? many : one}`;
+/** "0 checks", "1 check", "2 checks": in English, only 1 takes the singular. */
+const enCount = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+
 export const portfolioFr = {
   title: "Portefeuille simulé",
   lead: "Le moteur du volet finance construit le portefeuille; cet écran l’affiche tel quel, chaque chiffre relié au fait qui le source.",
@@ -69,7 +74,7 @@ export const portfolioFr = {
   } satisfies Record<FactLabel, string>,
   positions: {
     title: "Positions",
-    count: ((count: number) => `${count} position${count > 1 ? "s" : ""}`) as Fn<[number]>,
+    count: ((count: number) => frCount(count, "position")) as Fn<[number]>,
     asset: "Titre",
     role: "Rôle",
     weight: "Poids",
@@ -140,7 +145,7 @@ export const portfolioFr = {
       what_would_change: "Qu’est-ce qui changerait la réponse ?",
     },
     empty: "Aucun énoncé.",
-    more: ((count: number) => `+ ${count} fait${count > 1 ? "s" : ""}`) as Fn<[number]>,
+    more: ((count: number) => `+ ${frCount(count, "fait")}`) as Fn<[number]>,
     less: "Moins de faits",
   },
   counterfactuals: {
@@ -161,7 +166,8 @@ export const portfolioFr = {
     blocking: "bloquante",
     indicative: "indicative",
     respected: "respectée",
-    summary: ((total: number, active: number, violated: number) => `${total} contrôles · ${active} saturés · ${violated} violés`) as Fn<[number, number, number]>,
+    summary: ((total: number, active: number, violated: number) =>
+      `${frCount(total, "contrôle")} · ${frCount(active, "saturé")} · ${frCount(violated, "violé")}`) as Fn<[number, number, number]>,
     showAll: ((count: number) => `Afficher les ${count} contrôles`) as Fn<[number]>,
     showLess: "Ne montrer que les contrôles saturés ou violés",
     requestCheck: "Contrôle de la demande telle quelle",
@@ -204,8 +210,8 @@ export const portfolioFr = {
   },
   trace: {
     title: "Trace d’exécution",
-    count: ((count: number) => `${count} étape${count > 1 ? "s" : ""}`) as Fn<[number]>,
-    facts: ((count: number) => `${count} fait${count > 1 ? "s" : ""}`) as Fn<[number]>,
+    count: ((count: number) => frCount(count, "étape")) as Fn<[number]>,
+    facts: ((count: number) => frCount(count, "fait")) as Fn<[number]>,
     status: { ok: "ok", erreur: "erreur", refus: "refus" } as Record<string, string>,
   },
   fact: {
@@ -302,7 +308,7 @@ export const portfolioEn: PortfolioStrings = {
   },
   positions: {
     title: "Positions",
-    count: ((count: number) => `${count} position${count > 1 ? "s" : ""}`) as Fn<[number]>,
+    count: ((count: number) => enCount(count, "position")) as Fn<[number]>,
     asset: "Security",
     role: "Role",
     weight: "Weight",
@@ -373,7 +379,7 @@ export const portfolioEn: PortfolioStrings = {
       what_would_change: "What would change the answer?",
     },
     empty: "No statement.",
-    more: ((count: number) => `+ ${count} fact${count > 1 ? "s" : ""}`) as Fn<[number]>,
+    more: ((count: number) => `+ ${enCount(count, "fact")}`) as Fn<[number]>,
     less: "Fewer facts",
   },
   counterfactuals: {
@@ -394,7 +400,7 @@ export const portfolioEn: PortfolioStrings = {
     blocking: "blocking",
     indicative: "indicative",
     respected: "respected",
-    summary: ((total: number, active: number, violated: number) => `${total} checks · ${active} binding · ${violated} violated`) as Fn<[number, number, number]>,
+    summary: ((total: number, active: number, violated: number) => `${enCount(total, "check")} · ${active} binding · ${violated} violated`) as Fn<[number, number, number]>,
     showAll: ((count: number) => `Show the ${count} checks`) as Fn<[number]>,
     showLess: "Only show binding or violated checks",
     requestCheck: "Check of the request as asked",
@@ -431,8 +437,8 @@ export const portfolioEn: PortfolioStrings = {
   },
   trace: {
     title: "Execution trace",
-    count: ((count: number) => `${count} step${count === 1 ? "" : "s"}`) as Fn<[number]>,
-    facts: ((count: number) => `${count} fact${count > 1 ? "s" : ""}`) as Fn<[number]>,
+    count: ((count: number) => enCount(count, "step")) as Fn<[number]>,
+    facts: ((count: number) => enCount(count, "fact")) as Fn<[number]>,
     status: { ok: "ok", erreur: "error", refus: "refusal" },
   },
   fact: {

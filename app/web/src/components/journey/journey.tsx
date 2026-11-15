@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, LayoutDashboard, UserRound } from "lucide-react";
+import { Activity, FastForward, LayoutDashboard, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useRef, type CSSProperties, type ReactNode } from "react";
 import type { ClientState, Stage } from "@/lib/contract/schemas";
@@ -19,10 +19,37 @@ import { ErrorNotice } from "@/components/ui/error-notice";
 import { Spinner } from "@/components/ui/spinner";
 import { Scene, sceneLayout, WORLD, type SceneHandle } from "./scene";
 import { StageCard } from "./stage-card";
-import { useJourneyFlow, type DrawerName } from "./use-journey-flow";
+import { AssistantLine } from "./assistant-line";
+import { useJourneyFlow, type DrawerName, type Flow } from "./use-journey-flow";
 import styles from "./journey.module.css";
 
-function TopBar({ state, onOpen }: { state: ClientState | null; onOpen: (drawer: DrawerName) => void }) {
+/** « Passer les questions » in the top bar, while base questions remain (the landing has its own pill). */
+function TopSkipButton({ onSkip, disabled }: { onSkip: () => void; disabled: boolean }) {
+  const { t } = useI18n();
+  return (
+    <button
+      type="button"
+      className={styles.topLink}
+      onClick={onSkip}
+      disabled={disabled}
+      title={t.journey.skipQuestionsHint}
+      aria-label={t.journey.skipQuestions}
+    >
+      <FastForward aria-hidden />
+      <span className={styles.topLabel}>{t.journey.skipQuestionsShort}</span>
+    </button>
+  );
+}
+
+interface TopBarProps {
+  state: ClientState | null;
+  onOpen: (drawer: DrawerName) => void;
+  /** Shown only when given: during the base questions. */
+  onSkip?: () => void;
+  skipDisabled?: boolean;
+}
+
+function TopBar({ state, onOpen, onSkip, skipDisabled = false }: TopBarProps) {
   const { t } = useI18n();
   const atHouse = state ? itemForStage(state.stage) === "house" : false;
   return (
@@ -30,6 +57,7 @@ function TopBar({ state, onOpen }: { state: ClientState | null; onOpen: (drawer:
       <Brand />
       <div className={styles.topRight}>
         <span className={styles.topNote}>{t.appNav.simulation}</span>
+        {onSkip ? <TopSkipButton onSkip={onSkip} disabled={skipDisabled} /> : null}
         {state ? (
           <>
             <button type="button" className={styles.topLink} onClick={() => onOpen("trace")}>
@@ -176,9 +204,24 @@ interface LandingProps {
   onStart: () => void;
   onResume: () => void;
   onRestart: () => void;
+  onSkip: () => void;
+  skipDisabled: boolean;
 }
 
-function LandingPanel({ shown, resumed, style, onStart, onResume, onRestart }: LandingProps) {
+/** Tests and demos: on its own line, on a white pill, so the scene behind never runs through it. */
+function LandingSkip({ onSkip, disabled }: { onSkip: () => void; disabled: boolean }) {
+  const { t } = useI18n();
+  return (
+    <p className={styles.landingSkip}>
+      <button type="button" className={styles.landingAlt} onClick={onSkip} disabled={disabled} title={t.journey.skipQuestionsHint}>
+        <FastForward aria-hidden />
+        {t.journey.skipQuestions}
+      </button>
+    </p>
+  );
+}
+
+function LandingPanel({ shown, resumed, style, onStart, onResume, onRestart, onSkip, skipDisabled }: LandingProps) {
   const { t } = useI18n();
   const session = useSession();
   const startError =
@@ -195,12 +238,13 @@ function LandingPanel({ shown, resumed, style, onStart, onResume, onRestart }: L
           </svg>
         </button>
         {resumed ? (
-          <button type="button" className={styles.ghost} onClick={onRestart} disabled={Boolean(session.pending)}>
+          <button type="button" className={styles.landingAlt} onClick={onRestart} disabled={Boolean(session.pending)}>
             {t.journey.landing.restart}
           </button>
         ) : null}
       </div>
       <p className={styles.meta}>{t.journey.landing.meta}</p>
+      <LandingSkip onSkip={onSkip} disabled={skipDisabled} />
       {session.notice === "not_found" ? <p className={styles.meta}>{t.session.notFound}</p> : null}
       {startError ? (
         <div className={styles.notice}>
@@ -224,6 +268,20 @@ function CardPanel({ shape, visible, style, children }: { shape: CardShape; visi
   );
 }
 
+/** What the card shows while « Passer les questions » answers for the investor. */
+function SkippingLine({ count }: { count: number }) {
+  const { t } = useI18n();
+  return (
+    <div role="status">
+      <AssistantLine>
+        {t.journey.skipping}
+        <br />
+        <span className={styles.skipCount}>{t.journey.skipped(count)}</span>
+      </AssistantLine>
+    </div>
+  );
+}
+
 function SkipWalkButton({ geo, moving, onSkip }: { geo: SceneLayout; moving: boolean; onSkip: () => void }) {
   const { t } = useI18n();
   return (
@@ -236,6 +294,11 @@ function SkipWalkButton({ geo, moving, onSkip }: { geo: SceneLayout; moving: boo
       {t.journey.skipWalk}
     </button>
   );
+}
+
+function CardContent({ state, flow, visible }: { state: ClientState | null; flow: Flow; visible: boolean }) {
+  if (flow.skipping !== null) return <SkippingLine count={flow.skipping} />;
+  return state ? <StageCard state={state} flow={flow} visible={visible} /> : null;
 }
 
 function JourneyDrawers({ drawer, state, onClose }: { drawer: DrawerName | null; state: ClientState | null; onClose: () => void }) {
@@ -264,10 +327,17 @@ function JourneyFlow({ initial }: { initial: ClientState | null }) {
   const visible = flow.phase === "ready";
   // A new panel per stop, so each starts scrolled to its top.
   const panelKey = state ? `${state.stage}:${state.questions[0]?.id ?? ""}` : "none";
+  const skipDisabled = Boolean(session.pending) || flow.skipping !== null;
+  const inQuestions = flow.phase !== "landing" && state?.stage === "base_questions";
 
   return (
     <div className={styles.root}>
-      <TopBar state={state} onOpen={flow.setDrawer} />
+      <TopBar
+        state={state}
+        onOpen={flow.setDrawer}
+        onSkip={inQuestions ? flow.skipQuestions : undefined}
+        skipDisabled={skipDisabled || !visible}
+      />
       <ProgressBar state={state} started={flow.phase !== "landing" && state !== null} />
       <Scene
         ref={scene}
@@ -285,9 +355,11 @@ function JourneyFlow({ initial }: { initial: ClientState | null }) {
         onStart={() => void flow.startFresh(session.start)}
         onResume={flow.resume}
         onRestart={flow.restart}
+        onSkip={flow.skipQuestions}
+        skipDisabled={skipDisabled}
       />
       <CardPanel key={panelKey} shape={shape} visible={visible} style={panelStyle(frame, shape)}>
-        {state ? <StageCard state={state} flow={flow} visible={visible} /> : null}
+        <CardContent state={state} flow={flow} visible={visible} />
       </CardPanel>
       <p className={styles.disclaimer}>{t.journey.disclaimer}</p>
       <SkipWalkButton geo={frame.geo} moving={flow.moving} onSkip={() => scene.current?.skip()} />

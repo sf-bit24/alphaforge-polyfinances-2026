@@ -5,6 +5,7 @@ import type { AnswerValue, ClientState, Dimension } from "@/lib/contract/schemas
 import type { SessionValue } from "@/lib/client/session";
 import type { Dictionary } from "@/lib/i18n/dictionary";
 import { itemForStage, plant, resumeLayout, START, type PathLayout } from "@/lib/journey/path";
+import { sampleAnswer } from "@/lib/journey/sample-profile";
 import type { SceneHandle } from "./scene";
 
 type Phase = "landing" | "walking" | "ready";
@@ -23,6 +24,8 @@ function useJourneyState(initial: ClientState | null) {
   const [waiting, setWaiting] = useState(false);
   const [interacted, setInteracted] = useState(false);
   const [drawer, setDrawer] = useState<DrawerName | null>(null);
+  /** Answers saved so far by « Passer les questions », or null when it is not running. */
+  const [skipping, setSkipping] = useState<number | null>(null);
   // The latest layout, for the async flows below (they outlive the render that started them).
   const latestLayout = useRef(layout);
   const apply = (next: PathLayout) => {
@@ -50,6 +53,8 @@ function useJourneyState(initial: ClientState | null) {
     setInteracted,
     drawer,
     setDrawer,
+    skipping,
+    setSkipping,
   };
 }
 
@@ -110,9 +115,38 @@ async function advance(walk: Walk, call: () => Promise<boolean>): Promise<boolea
   return true;
 }
 
+/**
+ * « Passer les questions » (tests, demos): the sample profile answers every base question
+ * through the runtime, then the walker stands at the house with the profile's first version.
+ * If an answer fails, the journey stops at that question and its card shows the error.
+ */
+async function skipQuestions(walk: Walk, setSkipping: (count: number | null) => void): Promise<void> {
+  const { session, scene, apply, setPhase, setPrevious, setInteracted } = walk;
+  setInteracted(true);
+  setSkipping(0);
+  setPhase("ready");
+  if (!session.getState() && !(await session.start())) {
+    setSkipping(null);
+    setPhase("landing");
+    return;
+  }
+  await session.answerAllBase(sampleAnswer, setSkipping);
+  const next = session.getState();
+  setSkipping(null);
+  setPrevious(null);
+  if (!next) {
+    setPhase("landing");
+    return;
+  }
+  const at = resumeLayout(next);
+  apply(at);
+  scene.current?.jumpTo(at.stand);
+}
+
 /** The journey's state and the investor's moves; each move interleaves the walk with the runtime's reply. */
 export function useJourneyFlow(initial: ClientState | null, scene: RefObject<SceneHandle | null>, session: SessionValue, t: Dictionary) {
-  const { latestLayout, apply, setPhase, setResumed, setGreetBack, setPrevious, setWaiting, setInteracted, ...view } = useJourneyState(initial);
+  const { latestLayout, apply, setPhase, setResumed, setGreetBack, setPrevious, setWaiting, setInteracted, setSkipping, ...view } =
+    useJourneyState(initial);
   const { setDrawer } = view;
   const walk: Walk = { session, scene, latestLayout, apply, setPhase, setPrevious, setWaiting, setInteracted };
 
@@ -138,8 +172,16 @@ export function useJourneyFlow(initial: ClientState | null, scene: RefObject<Sce
     void advance(walk, () => session.answerBase(questionId, value));
   };
 
+  const skip = () => {
+    setGreetBack(false);
+    setResumed(false);
+    setDrawer(null);
+    void skipQuestions(walk, setSkipping);
+  };
+
   return {
     ...view,
+    skipQuestions: skip,
     startFresh: (call: () => Promise<boolean>) => startFresh(walk, call),
     advance: (call: () => Promise<boolean>) => advance(walk, call),
     resume,

@@ -482,6 +482,38 @@ fields:
       - {value: 5to10, label: {fr: "De 5 % à moins de 10 %", en: "5% to less than 10%"}}
       - {value: gt10, label: {fr: "Plus de 10 %", en: "More than 10%"}}
       - {value: propose_limit, label: {fr: "Proposez-moi une limite", en: "Suggest a limit to me"}}
+  # Affinité pour des titres individuels de l'univers (liste fermée : data/starter/assets_universe.csv, actions
+  # seulement). Lu par l'étape 0 (strategy.yaml, bonus.favored_tickers_bonus) : un bonus de score, jamais un
+  # plancher ni une exception aux limites. Poids 0 : hors de la complétude. Posée à qui connaît les actions.
+  - id: preferences.favored_tickers
+    type: multi_enum
+    weight: 0
+    exclusive: [none]
+    when: {field: knowledge.products_known, contains: stocks}
+    writable_by: [base, a1]
+    label: {fr: "Entreprises préférées", en: "Favored companies"}
+    values:
+      - {value: RY.TO, label: {fr: "Banque Royale du Canada (RY.TO)", en: "Royal Bank of Canada (RY.TO)"}}
+      - {value: TD.TO, label: {fr: "Banque Toronto-Dominion (TD.TO)", en: "Toronto-Dominion Bank (TD.TO)"}}
+      - {value: MFC.TO, label: {fr: "Financière Manuvie (MFC.TO)", en: "Manulife Financial (MFC.TO)"}}
+      - {value: ENB.TO, label: {fr: "Enbridge (ENB.TO)", en: "Enbridge (ENB.TO)"}}
+      - {value: CNQ.TO, label: {fr: "Canadian Natural Resources (CNQ.TO)", en: "Canadian Natural Resources (CNQ.TO)"}}
+      - {value: CNR.TO, label: {fr: "Canadien National (CNR.TO)", en: "Canadian National Railway (CNR.TO)"}}
+      - {value: FTS.TO, label: {fr: "Fortis (FTS.TO)", en: "Fortis (FTS.TO)"}}
+      - {value: ATD.TO, label: {fr: "Alimentation Couche-Tard (ATD.TO)", en: "Alimentation Couche-Tard (ATD.TO)"}}
+      - {value: SHOP.TO, label: {fr: "Shopify (SHOP.TO)", en: "Shopify (SHOP.TO)"}}
+      - {value: CSU.TO, label: {fr: "Constellation Software (CSU.TO)", en: "Constellation Software (CSU.TO)"}}
+      - {value: AAPL, label: {fr: "Apple (AAPL)", en: "Apple (AAPL)"}}
+      - {value: MSFT, label: {fr: "Microsoft (MSFT)", en: "Microsoft (MSFT)"}}
+      - {value: NVDA, label: {fr: "NVIDIA (NVDA)", en: "NVIDIA (NVDA)"}}
+      - {value: GOOGL, label: {fr: "Alphabet, classe A (GOOGL)", en: "Alphabet, Class A (GOOGL)"}}
+      - {value: AMZN, label: {fr: "Amazon (AMZN)", en: "Amazon (AMZN)"}}
+      - {value: TSLA, label: {fr: "Tesla (TSLA)", en: "Tesla (TSLA)"}}
+      - {value: JPM, label: {fr: "JPMorgan Chase (JPM)", en: "JPMorgan Chase (JPM)"}}
+      - {value: JNJ, label: {fr: "Johnson & Johnson (JNJ)", en: "Johnson & Johnson (JNJ)"}}
+      - {value: PG, label: {fr: "Procter & Gamble (PG)", en: "Procter & Gamble (PG)"}}
+      - {value: XOM, label: {fr: "Exxon Mobil (XOM)", en: "Exxon Mobil (XOM)"}}
+      - {value: none, label: {fr: "Aucune en particulier", en: "None in particular"}}
   - id: preferences.approach
     type: enum
     weight: 4
@@ -776,6 +808,12 @@ questions:
     kind: single_choice
     when: {field: preferences.crypto_place, in: [small, larger]}
     prompt: {fr: "Au maximum, quelle part de votre portefeuille voulez-vous en cryptoactifs ?", en: "At most, what share of your portfolio do you want in crypto-assets?"}
+  - id: q_favored_tickers
+    field: preferences.favored_tickers
+    kind: multi_choice
+    when: {field: knowledge.products_known, contains: stocks}
+    prompt: {fr: "Y a-t-il des entreprises de cette liste que vous aimeriez voir dans votre portefeuille ?", en: "Are there companies on this list you would like to see in your portfolio?"}
+    help: {fr: "C'est une préférence : elle compte dans le choix des titres, mais ne passe jamais avant vos limites de risque.", en: "This is a preference: it counts when securities are chosen, but never ahead of your risk limits."}
 
   # 8. Comportement : une mise en situation, puis sa relance si l'investisseur achèterait.
   - id: q_hype_reaction

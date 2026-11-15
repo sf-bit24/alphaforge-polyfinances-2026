@@ -63,12 +63,21 @@ class Features(_Strict):
     core: dict[str, float]
 
 
+class InterestAsset(_Strict):
+    """Intérêt servi par un FNB, pas par un titre individuel : plancher borné par une limite du mandat."""
+
+    asset: str
+    limit: str  # rule_id du plafond qui borne le plancher (ex. alloc.gold)
+
+
 class Bonus(_Strict):
     size: float
     style_tags: dict[StyleId, list[str]]
     interests: dict[str, dict[str, Any]]
+    interest_assets: dict[str, InterestAsset] = Field(default_factory=dict)
     unavailable_interests: list[str]
     preference_penalty: float
+    favored_tickers_bonus: int = Field(default=1, ge=0, le=1)  # bonus de `size` pour un titre préféré, une fois
 
 
 class Eligibility(_Strict):

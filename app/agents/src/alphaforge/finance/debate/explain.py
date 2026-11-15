@@ -192,7 +192,11 @@ def strategy_statements(book: FactBook, final: dict | None = None) -> dict[str, 
         rank = f"strat.rank.{t}"
         ids = [fid, rank, "strat.n_candidates"]
         cad = f"strat.floor_cad.{t}"
-        text = f"Titre retenu {t} : rang {v(rank)} sur {v('strat.n_candidates')}, plancher de satellite {v(fid)}"
+        if rank in f:
+            text = f"Titre retenu {t} : rang {v(rank)} sur {v('strat.n_candidates')}, plancher de satellite {v(fid)}"
+        else:  # FNB d'un intérêt de l'investisseur (or → GLD) : pas de classement
+            ids = [fid]
+            text = f"{t}, demandé par un intérêt de l'investisseur : plancher de {v(fid)}, dans le plafond du niveau"
         if cad in f:
             text += f", soit {v(cad)}"
             ids.append(cad)

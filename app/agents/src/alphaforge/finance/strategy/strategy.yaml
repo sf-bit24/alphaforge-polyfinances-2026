@@ -109,7 +109,14 @@ bonus:
     canadian_companies: {tag: canada}
     healthcare: {tag: healthcare}
     technology: {tag: tech}
+  # Intérêts servis par un FNB (pas un titre individuel classé) : un plancher non bloquant, au plus
+  # min(φ · plafond de la limite, f_abs), retiré en premier par le repli. Jamais au-delà du plafond du niveau.
+  interest_assets:
+    gold: {asset: GLD, limit: alloc.gold}
   unavailable_interests: [clean_energy]   # aucun actif dans le starter → signalé, renvoyé aux issues #21/#22
+  # preferences.favored_tickers : un bonus de `size` (une fois) pour un titre que l'investisseur préfère.
+  # Jamais un plancher propre, jamais une exception aux règles d'éligibilité ni à une limite risk.*.
+  favored_tickers_bonus: 1
   preference_penalty: -0.10     # exclusion « simple préférence » : pénalité de score, sans exclusion
 
 # ---------------------------------------------------------------------------------------------

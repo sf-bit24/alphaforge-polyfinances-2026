@@ -19,6 +19,13 @@ from .config import StrategyConfig, StyleId, load_strategy
 from .style import StyleDecision, StyleInputs, floor_step, limit
 
 STRAT = "strat."
+INTEREST_SRC = "bonus.interest_assets."  # source d'un plancher d'intérêt : ...#bonus.interest_assets.<intérêt>
+
+
+def _interest_of(lim: Limit) -> str | None:
+    src = lim.source or ""
+    i = src.find("#" + INTEREST_SRC)
+    return src[i + 1 + len(INTEREST_SRC) :] if i >= 0 else None
 
 
 @dataclass(frozen=True)
@@ -52,6 +59,7 @@ class Plan:
     floors: dict[str, float]  # ticker -> plancher (ordre = rang)
     sector_caps: dict[str, tuple[float, str]]
     exclusions: dict[str, str]  # ticker -> raison (titres non retenus)
+    interest_floors: dict[str, str] = field(default_factory=dict)  # FNB -> intérêt (planchers de floors)
 
     def empty(self) -> bool:
         return self.growth_floor is None and not self.floors and not self.sector_caps and not self.exclusions
@@ -91,6 +99,8 @@ def bonuses_for(c: Candidate, style: StyleId, inputs: StyleInputs, cfg: Strategy
         tag = (cfg.bonus.interests.get(interest) or {}).get("tag")
         if tag and tag in c.tags and tag != emp_tag:
             out.append(f"interest:{interest}")
+    if cfg.bonus.favored_tickers_bonus and c.ticker in inputs.favored_tickers:
+        out.append(f"favored:{c.ticker}")  # score seulement : l'éligibilité et les limites restent les mêmes
     return [b for b in out if not (emp_tag and b == f"style:{emp_tag}")]
 
 
@@ -248,6 +258,43 @@ def stock_floors(
     return out, notes
 
 
+def interest_asset_floors(
+    base: PolicySpec,
+    comp: CompileResult,
+    decision: StyleDecision,
+    inputs: StyleInputs,
+    cfg: StrategyConfig | None = None,
+) -> tuple[dict[str, float], dict[str, str], list[str]]:
+    """Intérêt servi par un FNB (``bonus.interest_assets``, ex. or → GLD) : plancher non bloquant.
+
+    plancher = min(φ · plafond de la limite liée, f_abs), arrondi ; rien si le FNB est hors univers ou exclu, si la
+    limite liée vaut 0 (niveau qui n'admet pas l'actif) ou si la ligne tombe sous les minimums. Jamais au-delà du
+    plafond : l'intérêt ne relâche aucune limite."""
+    cfg = cfg or load_strategy()
+    floors: dict[str, float] = {}
+    owner: dict[str, str] = {}
+    notes: list[str] = []
+    for interest in inputs.interests:
+        spec = cfg.bonus.interest_assets.get(interest)
+        if spec is None or spec.asset in floors:
+            continue
+        t = spec.asset
+        if t not in base.universe or t in base.excluded:
+            notes.append(f"{t} ({interest}) : hors de l'univers investissable, aucun plancher")
+            continue
+        cap_lim = limit(comp, spec.limit)
+        cap = float(cap_lim.max) if cap_lim is not None and cap_lim.max is not None else 0.0
+        f = round(min(floor_step(decision.floor_fraction * cap, 0.0025), cfg.floors.f_abs, cap), 6)
+        if f < cfg.floors.min_floor:
+            notes.append(f"{t} ({interest}) : plafond {spec.limit} = {cap:g}, plancher sous le minimum, retiré")
+            continue
+        if inputs.amount_cad and f * inputs.amount_cad < cfg.eligibility.min_line_cad:
+            notes.append(f"{t} ({interest}) : ligne de {f * inputs.amount_cad:.0f} $ sous le minimum, retirée")
+            continue
+        floors[t], owner[t] = f, interest
+    return floors, owner, notes
+
+
 # --------------------------------------------------------------------------- limites et mandat
 
 
@@ -268,6 +315,7 @@ def build_limits(plan: Plan, cfg: StrategyConfig | None = None) -> list[Limit]:
             )
         )
     for t, f in plan.floors.items():
+        interest = plan.interest_floors.get(t)
         lims.append(
             Limit(
                 rule_id=f"strat.floor.{t}",
@@ -275,9 +323,11 @@ def build_limits(plan: Plan, cfg: StrategyConfig | None = None) -> list[Limit]:
                 selector=Selector(assets=[t]),
                 min=f,
                 blocking=False,
-                derived_from="étape 0 : titre retenu par le classement du style",
-                source=cfg.src("floors"),
-                description_fr=f"plancher du satellite {t}",
+                derived_from=f"étape 0 : intérêt « {interest} » de l'investisseur"
+                if interest
+                else "étape 0 : titre retenu par le classement du style",
+                source=cfg.src(f"{INTEREST_SRC}{interest}" if interest else "floors"),
+                description_fr=f"plancher de {t} (intérêt {interest})" if interest else f"plancher du satellite {t}",
             )
         )
     for tag, (cap, why) in plan.sector_caps.items():
@@ -329,19 +379,27 @@ def clamp_strategy_floors(policy: PolicySpec) -> tuple[PolicySpec, list[str]]:
             for a in lim.selector.assets:
                 asset_caps[a] = min(asset_caps.get(a, 1.0), float(lim.max))
     new_floor: dict[str, float] = {}
+    interest_rids: set[str] = set()
     for rid, lim in floors.items():
         a = lim.selector.assets[0]
-        cap = min(x for x in (lim.min, each, asset_caps.get(a)) if x is not None)
+        interest = _interest_of(lim)
+        if interest is not None:  # FNB d'un intérêt : borné par sa limite liée, hors des limites des titres
+            spec = load_strategy().bonus.interest_assets.get(interest)
+            bound = _max_of(policy, spec.limit) if spec else 0.0
+            cap = min(x for x in (lim.min, bound, asset_caps.get(a)) if x is not None)
+            interest_rids.add(rid)
+        else:
+            cap = min(x for x in (lim.min, each, asset_caps.get(a)) if x is not None)
         if a in policy.excluded:
             notes.append(f"{rid} retiré : {a} exclu")
             continue
         if cap < lim.min - 1e-12:
             notes.append(f"{rid} abaissé de {lim.min:g} à {cap:g}")
         new_floor[rid] = cap
-    s = sum(new_floor.values())
+    s = sum(v for r, v in new_floor.items() if r not in interest_rids)
     if total is not None and s > total + 1e-12 and s > 0:
         k = total / s
-        new_floor = {r: floor_step(v * k, 0.0025) for r, v in new_floor.items()}
+        new_floor = {r: (v if r in interest_rids else floor_step(v * k, 0.0025)) for r, v in new_floor.items()}
         notes.append(f"planchers des titres ramenés sous conc.single_total ({total:g})")
     for lim in policy.limits:
         if lim.rule_id in floors:

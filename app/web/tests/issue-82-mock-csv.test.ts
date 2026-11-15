@@ -1,13 +1,14 @@
 /**
  * Issue #82: the simulator's A2 reads a broker CSV with a header by column name, keeps an explicit
  * symbol outside the starter universe unidentified (VFV.TO is not SPY), reads CASH as cash, and the
- * guardrail masks usual account numbers in the pasted text.
+ * guardrail masks usual account numbers in the pasted text. Like the real runtime (#77), a SIN is refused.
  */
 import { describe, expect, it } from "vitest";
 import type { AgentRequestInput } from "@/lib/contract/requests";
 import { AgentRequest, PositionInput } from "@/lib/contract/requests";
-import { ClientState, type AnswerValue, type Position } from "@/lib/contract/schemas";
+import { ClientState, ErrorEnvelope, KbGetResponse, type AnswerValue, type Locale, type Position } from "@/lib/contract/schemas";
 import { screenMessage } from "@/lib/mock/agents";
+import { MockError } from "@/lib/mock/envelope";
 import { computeExposures, extractPositions, normalizeConfirmed } from "@/lib/mock/portfolio";
 import { MockRuntime } from "@/lib/mock/runtime";
 import { findAssetByTicker, USDCAD } from "@/lib/mock/starter";
@@ -168,7 +169,7 @@ describe("issue #82: a header with a date", () => {
 });
 
 describe("issue #82: account numbers in the pasted text", () => {
-  it("masks usual account numbers, and keeps the SIN masked", () => {
+  it("masks usual account numbers", () => {
     const screened = screenMessage("Mon CELI chez Disnat, compte 123-45678-9 :");
     expect(screened.text).toBe("Mon CELI chez Disnat, compte [masqué] :");
     expect(screened.masked).toBe(1);
@@ -178,7 +179,6 @@ describe("issue #82: account numbers in the pasted text", () => {
     expect(screenMessage("No de compte : 12345, CELI").text).toBe("No de compte : [masqué], CELI");
     // The quantity after the account number stays.
     expect(screenMessage("Compte no 98765 150 XIU.TO").text).toBe("Compte no [masqué] 150 XIU.TO");
-    expect(screenMessage("Mon NAS est 123 456 789").text).toBe("Mon NAS est [masqué]");
   });
 
   it("does not mask amounts, quantities, prices or dates", () => {
@@ -234,9 +234,13 @@ async function state(runtime: MockRuntime, request: AgentRequestInput) {
   return ClientState.parse(await runtime.handle(AgentRequest.parse(request)));
 }
 
+async function failure(runtime: MockRuntime, request: AgentRequestInput) {
+  return ErrorEnvelope.parse(await runtime.handle(AgentRequest.parse(request))).error;
+}
+
 /** A session at the existing-portfolio step, after the base questions. */
-async function atExistingPortfolio(runtime: MockRuntime) {
-  let current = await state(runtime, { action: "session.start", locale: "fr" });
+async function atExistingPortfolio(runtime: MockRuntime, locale: Locale = "fr") {
+  let current = await state(runtime, { action: "session.start", locale });
   while (current.stage === "base_questions") {
     const question = current.questions[0];
     const value = question ? BASE_ANSWERS[question.id] : undefined;
@@ -261,5 +265,63 @@ describe("issue #82: portfolio.submit of the e2e run", () => {
     expect(JSON.stringify(review)).not.toContain("123-45678-9");
     expect(review.trace.find((step) => step.kind === "guardrail")?.outputs).toMatchObject({ masked: 1 });
     expect(review.message).not.toMatch(/585/);
+  });
+});
+
+/** The refusal of the real runtime (agentkit.py, `personal_data_error`, #77). */
+const SIN_REFUSAL = {
+  code: "guardrail_blocked",
+  message: {
+    fr: "Votre message contient un renseignement personnel (NAS) : retirez-le, puis renvoyez-le.",
+    en: "Your message contains personal information (SIN): remove it, then send it again.",
+  },
+  details: { reason: "personal_data", entity: "CA_SIN" },
+} as const;
+
+function thrown(run: () => unknown): unknown {
+  try {
+    run();
+  } catch (error) {
+    return error;
+  }
+  return null;
+}
+
+describe("issue #82: a SIN is refused like in the real runtime, other personal data stays masked", () => {
+  it.each(["Mon NAS est 123 456 789", "SIN: 046-454-286", "NAS 046 454-286, compte no 12345"])("screenMessage refuses %j", (text) => {
+    const error = thrown(() => screenMessage(text));
+    expect(error).toBeInstanceOf(MockError);
+    expect(error).toMatchObject({ code: SIN_REFUSAL.code, text: SIN_REFUSAL.message, details: SIN_REFUSAL.details });
+  });
+
+  it("masks the other personal data, and a SIN-like number written without separators", () => {
+    expect(screenMessage("moi@exemple.ca, 514-555-1234, compte 123-45678-9, 123456789")).toMatchObject({
+      text: "[masqué], [masqué], compte [masqué], [masqué]",
+      masked: 4,
+    });
+  });
+
+  it.each(["fr", "en"] as const)("refuses a SIN in followup.reply, and journals nothing (%s)", async (locale) => {
+    const runtime = new MockRuntime({ delayScale: 0 });
+    const id = await atExistingPortfolio(runtime, locale);
+    await state(runtime, { action: "portfolio.skip", client_id: id });
+    const message = "Mon NAS est 046 454 286, je prépare ma retraite";
+    const error = await failure(runtime, { action: "followup.reply", client_id: id, message });
+    expect(error).toEqual({ code: SIN_REFUSAL.code, message: SIN_REFUSAL.message[locale], details: SIN_REFUSAL.details });
+    const journal = KbGetResponse.parse(await runtime.handle(AgentRequest.parse({ action: "kb.get", key: `clients/${id}/journal.md`, client_id: id })));
+    expect(journal.content).not.toContain("046");
+  });
+
+  it("refuses a SIN in portfolio.submit, and keeps the existing-portfolio step", async () => {
+    const runtime = new MockRuntime({ delayScale: 0 });
+    const id = await atExistingPortfolio(runtime);
+    const error = await failure(runtime, { action: "portfolio.submit", client_id: id, text: "NAS : 046-454-286\n100 RY.TO", files: [csvFile(CSV)] });
+    expect(error).toEqual({ code: SIN_REFUSAL.code, message: SIN_REFUSAL.message.fr, details: SIN_REFUSAL.details });
+    const resumed = await state(runtime, { action: "session.resume", client_id: id });
+    expect(resumed).toMatchObject({ stage: "existing_portfolio", portfolio: null });
+    // Without the SIN, the same text and file are read, the other personal data masked.
+    const review = await state(runtime, { action: "portfolio.submit", client_id: id, text: "moi@exemple.ca\n100 RY.TO", files: [csvFile(CSV)] });
+    expect(review.stage).toBe("portfolio_review");
+    expect(review.trace.find((step) => step.kind === "guardrail")?.outputs).toMatchObject({ masked: 1 });
   });
 });

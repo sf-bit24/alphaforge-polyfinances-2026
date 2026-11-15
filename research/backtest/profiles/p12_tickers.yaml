@@ -1,0 +1,47 @@
+# Persona 12 - translation of the robust proxies into universe tickers, checked on 2021-11..2026-09 (CAD).
+# Used by analysis/p12/tickers.py (single window via engine.backtest.run_window). SIMULATION ONLY.
+# Mapping: CA_EQ->XIU.TO, US_MKT->SPY, CA_GOV_10Y->XBB.TO, CA_TBILL->ZST.TO, UST_5Y->AGG (approx.), GOLD->GLD,
+# US_IND_UTILS->FTS.TO, US_IND_MONEY->RY.TO (README proxy table). Caps from results/p12_analysis/derive_caps.json.
+id: p12_tickers
+description: "P12 real tickers 2021-11..2026-09"
+currency: CAD
+universe: [XIU.TO, SPY, XBB.TO, ZST.TO, AGG, GLD, FTS.TO, RY.TO, BTC-USD]
+cash_asset: ZST.TO
+objective: {type: min_shortfall, target_real_return: 0.03153}
+constraints:
+  default_bounds: [0.0, 1.0]
+  asset_bounds: {FTS.TO: [0.0, 0.01], RY.TO: [0.0, 0.01], GLD: [0.0, 0.05], BTC-USD: [0.0, 0.01]}
+risk_limits: {max_drawdown: 0.252}
+flows: {initial: 1300000.0, monthly: -4333.33, indexed_to_inflation: true}
+rebalancing: {frequency: annual, band: 0.05}
+costs_bps: 10
+fallback_weights: {XIU.TO: 0.18, SPY: 0.42, XBB.TO: 0.40}
+strategies:
+  - {name: bnc_prudent, type: static, params: {weights: {XBB.TO: 0.80, XIU.TO: 0.06, SPY: 0.14}}}
+  - {name: bnc_conservateur, type: static, params: {weights: {XBB.TO: 0.70, XIU.TO: 0.09, SPY: 0.21}}}
+  - {name: bnc_pondere, type: static, params: {weights: {XBB.TO: 0.55, XIU.TO: 0.135, SPY: 0.315}}}
+  - {name: bnc_equilibre, type: static, params: {weights: {XBB.TO: 0.40, XIU.TO: 0.18, SPY: 0.42}}}
+  - {name: bnc_croissance, type: static, params: {weights: {XBB.TO: 0.20, XIU.TO: 0.24, SPY: 0.56}}}
+  - {name: bnc_actions, type: static, params: {weights: {XIU.TO: 0.30, SPY: 0.70}}}
+  - {name: eq100_spy, type: static, params: {weights: {SPY: 1.0}}}
+  - {name: dividend_tilt, type: static, params: {weights: {XIU.TO: 0.40, SPY: 0.18, FTS.TO: 0.01, RY.TO: 0.01, XBB.TO: 0.40}}}
+  - {name: eq60_buffer10_bond30, type: static, params: {weights: {XIU.TO: 0.18, SPY: 0.42, ZST.TO: 0.10, XBB.TO: 0.30}}}
+  - {name: eq60_agg40, type: static, params: {weights: {XIU.TO: 0.18, SPY: 0.42, AGG: 0.40}}}
+  - {name: eq70_gold5_bond25, type: static, params: {weights: {XIU.TO: 0.21, SPY: 0.49, GLD: 0.05, XBB.TO: 0.25}}}
+  - {name: eq60_btc1, type: static, params: {weights: {XIU.TO: 0.18, SPY: 0.41, BTC-USD: 0.01, XBB.TO: 0.40}}}
+  - name: glide_rising_40_to_70
+    type: glidepath
+    params:
+      start_weights: {XIU.TO: 0.12, SPY: 0.28, XBB.TO: 0.45, ZST.TO: 0.15}
+      end_weights: {XIU.TO: 0.21, SPY: 0.49, XBB.TO: 0.30}
+  - name: trend_eq60
+    type: trend_filter
+    rebalancing: {frequency: monthly}
+    params: {ma_months: 10, base_weights: {XIU.TO: 0.18, SPY: 0.42, XBB.TO: 0.40}, always_hold: [XBB.TO]}
+  - name: momentum_core_bond
+    type: momentum
+    rebalancing: {frequency: monthly}
+    params: {lookback: 12, top_k: 2, absolute: true, core_weights: {XBB.TO: 0.4}, candidates: [XIU.TO, SPY, GLD, XBB.TO]}
+selection: {quantile: 0.10, max_breach_rate: 0.10, min_past_windows: 3}
+oracle: {enabled: true, n_starts: 4}
+seed: 42

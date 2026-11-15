@@ -1,0 +1,313 @@
+{
+ "run_id": "hist2022",
+ "created_utc": "20261115T003610Z",
+ "disclaimer": "Simulation historique uniquement (donnees publiques). Ne constitue pas un conseil financier. Les resultats passes ne predisent pas les resultats futurs. Les lignes hindsight=True (ORACLE) utilisent le futur et sont non investissables.",
+ "engine_sha256": "4d3e707a3271717d",
+ "data_version": {
+  "data_sha256": "008f122d5da4f8f7",
+  "built_utc": "2026-11-14T22:15:31+00:00",
+  "last_complete_month": "2026-10-31"
+ },
+ "script": "analysis/croisement/hist2022.py",
+ "inputs": [
+  "data/processed/monthly_returns.parquet",
+  "analyse/relation-profils-actifs/quant/metriques_strategies_cad.csv"
+ ],
+ "params": {
+  "doc": "Item 5 - put the regulatory analysis' 2022 finding (\"d\u00e9fensive -11,2 % ~ offensive -10,7 %\", 10-synthese.md\nconstat 4) in the long history, with the engine data (data/processed, monthly total returns):\n  - calendar years where equities AND bonds both lose (USD 1926+: US_MKT vs UST_10Y / UST_5Y;\n    CAD 1977+: CA_EQ vs CA_GOV_10Y; and US_MKT in CAD);\n  - monthly stock/bond correlation by decade, and share of 36-month rolling windows with a positive correlation;\n  - BNC Conservateur (70/9/21) vs Actions (0/30/70) on CA_GOV_10Y / CA_EQ / US_MKT, CAD, calendar years:\n    how often the defensive mix lost about as much as (or more than) the offensive one.\nConstant mixes rebalanced monthly here (same convention as quant/stats_classes.py), declared. SIMULATION ONLY.\nCaveat: synthetic bonds from monthly-AVERAGE yields (pre-1962 US, CA_GOV_10Y) understate volatility; correlations\nare descriptive.\n"
+ },
+ "results": {
+  "usd_1926": {
+   "period": [
+    "1926-08-31",
+    "2026-09-30"
+   ],
+   "both_down_10y": {
+    "n_years": 99,
+    "first": 1927,
+    "last": 2025,
+    "n_both_negative": 4,
+    "share": 0.04040404040404041,
+    "years": {
+     "1941": {
+      "equity": -0.1055,
+      "bonds": -0.0179
+     },
+     "1969": {
+      "equity": -0.1095,
+      "bonds": -0.0544
+     },
+     "1994": {
+      "equity": -0.0015,
+      "bonds": -0.0711
+     },
+     "2022": {
+      "equity": -0.1992,
+      "bonds": -0.1636
+     }
+    },
+    "n_equity_negative": 24,
+    "bonds_negative_given_equity_negative": 0.16666666666666666
+   },
+   "both_down_5y": {
+    "n_years": 99,
+    "first": 1927,
+    "last": 2025,
+    "n_both_negative": 5,
+    "share": 0.050505050505050504,
+    "years": {
+     "1929": {
+      "equity": -0.1485,
+      "bonds": -0.0433
+     },
+     "1941": {
+      "equity": -0.1055,
+      "bonds": -0.0027
+     },
+     "1969": {
+      "equity": -0.1095,
+      "bonds": -0.0085
+     },
+     "1994": {
+      "equity": -0.0015,
+      "bonds": -0.0425
+     },
+     "2022": {
+      "equity": -0.1992,
+      "bonds": -0.0931
+     }
+    },
+    "n_equity_negative": 24,
+    "bonds_negative_given_equity_negative": 0.20833333333333334
+   },
+   "decade_corr_10y": {
+    "1920s": {
+     "corr": -0.286,
+     "n_months": 41,
+     "share_36m_corr_positive": 0.0
+    },
+    "1930s": {
+     "corr": 0.131,
+     "n_months": 120,
+     "share_36m_corr_positive": 0.35
+    },
+    "1940s": {
+     "corr": 0.118,
+     "n_months": 120,
+     "share_36m_corr_positive": 0.875
+    },
+    "1950s": {
+     "corr": -0.081,
+     "n_months": 120,
+     "share_36m_corr_positive": 0.383
+    },
+    "1960s": {
+     "corr": 0.155,
+     "n_months": 120,
+     "share_36m_corr_positive": 0.725
+    },
+    "1970s": {
+     "corr": 0.332,
+     "n_months": 120,
+     "share_36m_corr_positive": 0.983
+    },
+    "1980s": {
+     "corr": 0.257,
+     "n_months": 120,
+     "share_36m_corr_positive": 0.975
+    },
+    "1990s": {
+     "corr": 0.307,
+     "n_months": 120,
+     "share_36m_corr_positive": 1.0
+    },
+    "2000s": {
+     "corr": -0.248,
+     "n_months": 120,
+     "share_36m_corr_positive": 0.083
+    },
+    "2010s": {
+     "corr": -0.49,
+     "n_months": 120,
+     "share_36m_corr_positive": 0.0
+    },
+    "2020s": {
+     "corr": 0.28,
+     "n_months": 81,
+     "share_36m_corr_positive": 0.617
+    }
+   },
+   "y2022": {
+    "US_MKT": -0.1992,
+    "UST_10Y": -0.1636,
+    "UST_5Y": -0.0931,
+    "UST_TBILL": 0.0141
+   }
+  },
+  "cad_1977": {
+   "period": [
+    "1977-01-31",
+    "2026-09-30"
+   ],
+   "both_down_ca": {
+    "n_years": 49,
+    "first": 1977,
+    "last": 2025,
+    "n_both_negative": 1,
+    "share": 0.02040816326530612,
+    "years": {
+     "2022": {
+      "equity": -0.0573,
+      "bonds": -0.1018
+     }
+    },
+    "n_equity_negative": 11,
+    "bonds_negative_given_equity_negative": 0.09090909090909091
+   },
+   "both_down_us_in_cad": {
+    "n_years": 49,
+    "first": 1977,
+    "last": 2025,
+    "n_both_negative": 2,
+    "share": 0.04081632653061224,
+    "years": {
+     "1987": {
+      "equity": -0.043,
+      "bonds": -0.0003
+     },
+     "2022": {
+      "equity": -0.1445,
+      "bonds": -0.1018
+     }
+    },
+    "n_equity_negative": 9,
+    "bonds_negative_given_equity_negative": 0.2222222222222222
+   },
+   "decade_corr_ca": {
+    "1970s": {
+     "corr": 0.14,
+     "n_months": 36,
+     "share_36m_corr_positive": 1.0
+    },
+    "1980s": {
+     "corr": 0.306,
+     "n_months": 120,
+     "share_36m_corr_positive": 0.992
+    },
+    "1990s": {
+     "corr": 0.396,
+     "n_months": 120,
+     "share_36m_corr_positive": 1.0
+    },
+    "2000s": {
+     "corr": -0.067,
+     "n_months": 120,
+     "share_36m_corr_positive": 0.442
+    },
+    "2010s": {
+     "corr": -0.178,
+     "n_months": 120,
+     "share_36m_corr_positive": 0.15
+    },
+    "2020s": {
+     "corr": 0.039,
+     "n_months": 81,
+     "share_36m_corr_positive": 0.543
+    }
+   },
+   "y2022": {
+    "CA_EQ": -0.0573,
+    "US_MKT": -0.1445,
+    "CA_GOV_10Y": -0.1018,
+    "CA_TBILL": 0.0185
+   }
+  },
+  "bnc_cad_1977": {
+   "n_years": 49,
+   "n_actions_negative": 11,
+   "actions_negative_years": {
+    "1981": {
+     "conservateur": 0.0172,
+     "equilibre": -0.0054,
+     "actions": -0.0387
+    },
+    "1987": {
+     "conservateur": 0.0089,
+     "equilibre": 0.0093,
+     "actions": -0.0058
+    },
+    "1990": {
+     "conservateur": 0.0217,
+     "equilibre": -0.0222,
+     "actions": -0.0806
+    },
+    "2000": {
+     "conservateur": 0.0761,
+     "equilibre": 0.0316,
+     "actions": -0.0275
+    },
+    "2001": {
+     "conservateur": 0.0198,
+     "equilibre": -0.0182,
+     "actions": -0.0722
+    },
+    "2002": {
+     "conservateur": 0.0015,
+     "equilibre": -0.0836,
+     "actions": -0.1906
+    },
+    "2007": {
+     "conservateur": 0.0139,
+     "equilibre": -0.0111,
+     "actions": -0.0442
+    },
+    "2008": {
+     "conservateur": 0.0045,
+     "equilibre": -0.1125,
+     "actions": -0.2519
+    },
+    "2011": {
+     "conservateur": 0.0954,
+     "equilibre": 0.0483,
+     "actions": -0.014
+    },
+    "2018": {
+     "conservateur": 0.0068,
+     "equilibre": 0.0026,
+     "actions": -0.0057
+    },
+    "2022": {
+     "conservateur": -0.1047,
+     "equilibre": -0.1094,
+     "actions": -0.1184
+    }
+   },
+   "conservateur_loss_over_actions_loss_in_down_years_median": 0.0,
+   "n_years_conservateur_within_1pt_of_actions": 3,
+   "years_within_1pt": [
+    1988,
+    1992,
+    2004
+   ],
+   "n_years_conservateur_le_actions_and_both_negative": 0,
+   "years_conservateur_le_actions_and_both_negative": [],
+   "y2022": {
+    "conservateur": -0.1047,
+    "equilibre": -0.1094,
+    "actions": -0.1184
+   }
+  },
+  "tickers_2022_monthly_rebal": {
+   "conservateur": -0.1121,
+   "equilibre": -0.109,
+   "actions": -0.1069
+  },
+  "tickers_2022_corr_xbb_spy_monthly": 0.684,
+  "theirs_2022": {
+   "conservateur": -0.112123,
+   "equilibre": -0.108981,
+   "actions": -0.106932,
+   "source": "analyse/relation-profils-actifs/quant/metriques_strategies_cad.csv (daily)"
+  }
+ }
+}

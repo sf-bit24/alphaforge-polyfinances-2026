@@ -1,0 +1,6 @@
+A p14_etudes_usd:rolling:10:1 p14_etudes_usd:non_overlapping:10:1 p14_coussin_usd:non_overlapping:1:1 p14_coussin_usd:rolling:1:0
+B p14_retraite_usd:rolling:16:1 p14_retraite_usd:non_overlapping:16:1 p14_retraite_usd:rolling:20:0 p14_coussin_cad:non_overlapping:1:1 p14_coussin_cad:rolling:1:0
+C p14_etudes_usd_libre:rolling:10:0 p14_etudes_usd_libre:non_overlapping:10:1 p14_etudes_usd_volonte:rolling:10:0 p14_etudes_usd_volonte:non_overlapping:10:1
+D p14_retraite_usd_libre:rolling:16:0 p14_retraite_usd_libre:non_overlapping:16:1 p14_retraite_cad_libre:rolling:16:0 p14_retraite_cad_libre:non_overlapping:16:1
+E p14_etudes_cad:rolling:10:1 p14_etudes_cad:non_overlapping:10:1 p14_etudes_cad_libre:rolling:10:0 p14_etudes_cad_libre:non_overlapping:10:1
+F p14_retraite_cad:rolling:16:1 p14_retraite_cad:non_overlapping:16:1 p14_retraite_cad:rolling:20:0 p14_etudes_cad_volonte:rolling:10:0 p14_etudes_cad_volonte:non_overlapping:10:1

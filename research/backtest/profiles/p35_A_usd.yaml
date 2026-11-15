@@ -1,0 +1,39 @@
+# Persona 35 (Denise Fortier, snowbird) - POCKET A "reserve USD hiver" (< 1 an, recurrent).
+# SIMULATION ONLY - not financial advice. Persona file used ONLY for identity / RRTTLLU / objectives / biases.
+# Measured in SPENDING currency: USD, deflated by US CPI-U (Florida spending). Horizon 6 months = one winter
+# (Nov -> Apr, persona: "novembre -> avril"); rolling windows with a 1-month step = every possible start month.
+# Era: CAD assets in USD exist from 1971-02 only (FRED DEXCAUS) -> 1971+ is the main era (the question is FX).
+# Status (regulatory analysis, personas-tous.csv id=35 poche A): only FNB oblig./encaisse = coeur; equities,
+# gold, crypto = exclu -> universe restricted to cash and bonds.
+# Risk limit: willingness = AMF profile 1 (Q3 < 5 ans, Q4 liquidite) <=> Q10 bucket "0 %";
+# capacity = reserve sized at exactly one winter -> no loss absorbable without a buffer (analysis/p35/pocket_a.py).
+# min(willingness, capacity) = 0 -> max_drawdown 0.0 (any monthly loss in USD counts as a breach).
+id: p35_A_usd
+description: "Denise - pocket A, USD winter reserve, measured in USD (US CPI), 6-month windows, 1971+."
+currency: USD
+fx_fill: none
+horizon_years: 0.5
+mode: rolling
+step_months: 1
+period: {start: 1971-02, end: null}
+universe: [UST_TBILL, UST_2Y, UST_5Y, CA_TBILL, CA_GOV_10Y]
+cash_asset: UST_TBILL
+objective: {type: min_shortfall, target_real_return: 0.0}
+constraints:
+  default_bounds: [0.0, 1.0]
+  exclude: {assets: [], tags: [crypto, speculative, equity, gold], classes: [crypto]}
+  groups: []
+risk_limits: {max_vol: null, max_drawdown: 0.0, max_cvar_5: null}
+flows: {initial: 1.0, monthly: 0.0, indexed_to_inflation: true}
+rebalancing: {frequency: never, band: 0.05}
+costs_bps: 10
+strategies:
+  - {name: usd_tbill_lump, type: static, params: {weights: {UST_TBILL: 1.0}}}
+  - {name: usd_2y_lump, type: static, params: {weights: {UST_2Y: 1.0}}}
+  - {name: usd_5y_lump, type: static, params: {weights: {UST_5Y: 1.0}}}
+  - {name: cad_tbill_unconverted, type: static, params: {weights: {CA_TBILL: 1.0}}}
+  - {name: cad_10y_unconverted, type: static, params: {weights: {CA_GOV_10Y: 1.0}}}
+  - {name: half_usd_half_cad, type: static, params: {weights: {UST_TBILL: 0.5, CA_TBILL: 0.5}}}
+selection: {quantile: 0.10, max_breach_rate: 0.10, min_past_windows: 3}
+oracle: {enabled: true, n_starts: 4}
+seed: 42

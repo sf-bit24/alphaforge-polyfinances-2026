@@ -1,0 +1,42 @@
+# one job per line: <profile_id>:<mode>:<horizon_years>:<oracle 0/1> ; run with
+#   grep -v '^#' analysis/croisement/jobs.txt | xargs -n1 -P8 .venv/bin/python -I analysis/croisement/run_job.py
+# willingness reruns (profiles/x_*.yaml from make_profiles.py)
+x_robert_cad_w05:non_overlapping:4:1
+x_robert_cad_w05:rolling:4:1
+x_robert_cad_amf1:non_overlapping:4:1
+x_robert_cad_amf1:rolling:4:1
+x_robert_long_usd_w05:non_overlapping:4:1
+x_robert_long_usd_w05:rolling:4:1
+x_mateo_usd_long_esg_w15:rolling:10:1
+x_mateo_usd_gold_esg_w15:rolling:10:1
+x_mateo_cad_esg_w15:rolling:10:1
+x_mateo_cad_esg_w15:non_overlapping:10:1
+x_amira_etf_w30:non_overlapping:15:1
+x_amira_etf_w30:rolling:15:1
+x_amira_etf_w30:rolling:20:1
+x_amira_etf_long_usd_w30:non_overlapping:15:1
+x_amira_etf_long_usd_w30:rolling:15:1
+x_amira_etf_long_usd_w30:rolling:20:1
+# controls: original Amira profiles rerun with the CURRENT engine (original traces predate the glidepath fix)
+amira_etf:non_overlapping:15:1
+amira_etf:rolling:15:1
+amira_etf:rolling:20:1
+amira_etf_long_usd:non_overlapping:15:1
+amira_etf_long_usd:rolling:15:1
+amira_etf_long_usd:rolling:20:1
+# BNC public target portfolios (no oracle)
+x_bnc_robert_cap:non_overlapping:4:0
+x_bnc_robert_cap:rolling:4:0
+x_bnc_robert_cap_court:non_overlapping:4:0
+x_bnc_robert_cap_court:rolling:4:0
+x_bnc_robert_w05:non_overlapping:4:0
+x_bnc_robert_w05:rolling:4:0
+x_bnc_mateo_cap:non_overlapping:10:0
+x_bnc_mateo_cap:rolling:10:0
+x_bnc_mateo_w15:non_overlapping:10:0
+x_bnc_mateo_w15:rolling:10:0
+x_bnc_amira_cap:non_overlapping:15:0
+x_bnc_amira_cap:rolling:15:0
+x_bnc_amira_w30:non_overlapping:15:0
+x_bnc_amira_w30:rolling:15:0
+x_bnc_tickers:non_overlapping:4.9167:0

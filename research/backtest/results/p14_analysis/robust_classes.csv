@@ -1,0 +1,17 @@
+pid,h,robust_choice,w_US_MKT_XEN,w_UST_5Y,w_UST_10Y,class_fnb_actions,class_energie_directe,class_actions_us_hors_energie,class_fnb_oblig_et_encaisse,trace,w_UST_TBILL,w_UST_2Y,w_US_IND_ENRGY,w_US_IND_HLTH,w_US_IND_NODUR,w_US_IND_UTILS,w_CORP_AAA,w_CA_TBILL,w_CA_EQ,w_CA_GOV_10Y,w_GOLD,class_or,w_ENB.TO,w_XOM,w_JNJ,w_PG,w_CNQ.TO
+p14_etudes_usd,10,xen_eq40,0.4043,0.2974,0.2983,0.4043,0.0,0.0,0.5957,results/p14_etudes_usd/20261115T000101Z_rolling_h10.json,,,,,,,,,,,,,,,,,
+p14_coussin_usd,1,min_variance_36,,0.0016,0.0919,,,,1.0,results/p14_coussin_usd/20261115T000241Z_rolling_h1.json,0.7056,0.201,,,,,,,,,,,,,,,
+p14_retraite_usd,16,request_eq60_energy20,0.4874,0.1636,0.1641,0.4881,0.1514,0.0166,0.344,results/p14_retraite_usd/20261115T000120Z_rolling_h16.json,0.0054,0.0054,0.1514,0.0055,0.0055,0.0055,0.0054,,,,,,,,,,
+p14_retraite_usd,20,request_eq60_energy20,0.4874,0.1635,0.164,0.4881,0.1515,0.0166,0.3438,results/p14_retraite_usd/20261115T000206Z_rolling_h20.json,0.0054,0.0054,0.1515,0.0056,0.0055,0.0055,0.0054,,,,,,,,,,
+p14_coussin_cad,1,cad_cash100,,,,,,,1.0,results/p14_coussin_cad/20261115T000239Z_rolling_h1.json,,,,,,,,1.0,,,,,,,,,
+p14_etudes_usd_libre,10,xen_eq40,0.4043,0.2974,0.2983,0.4043,0.0,0.0,0.5957,results/p14_etudes_usd_libre/20261114T235314Z_rolling_h10.json,,,,,,,,,,,,,,,,,
+p14_etudes_usd_volonte,10,dual_mom12_top2,0.31,,0.1184,0.31,0.0,0.3077,0.3822,results/p14_etudes_usd_volonte/20261114T235527Z_rolling_h10.json,0.1117,,,0.3077,,,0.1519,,,,,,,,,,
+p14_retraite_usd_libre,16,request_eq60_energy20,0.4815,0.1581,0.1586,0.4815,0.2017,0.0,0.3168,results/p14_retraite_usd_libre/20261114T235313Z_rolling_h16.json,,,0.2017,,,,,,,,,,,,,,
+p14_retraite_cad_libre,16,dual_mom12_top2,0.2765,,,0.5246,0.0,0.0,0.3048,results/p14_retraite_cad_libre/20261114T235420Z_rolling_h16.json,,,,,,,,0.0995,0.2481,0.2053,0.1706,0.1706,,,,,
+p14_etudes_cad,10,dual_mom12_top2,0.2925,0.0085,,0.4676,0.0,0.0255,0.3287,results/p14_etudes_cad/20261114T235638Z_rolling_h10.json,,,,0.0085,0.0085,0.0085,,0.1165,0.1751,0.2037,0.1781,0.1781,,,,,
+p14_etudes_cad_libre,10,dual_mom12_top2,0.284,,,0.5272,0.0,0.0,0.3032,results/p14_etudes_cad_libre/20261114T235719Z_rolling_h10.json,,,,,,,,0.108,0.2432,0.1952,0.1696,0.1696,,,,,
+p14_retraite_cad,16,dual_mom12_top2,0.2765,,,0.5246,0.0,0.0,0.3048,results/p14_retraite_cad/20261114T235543Z_rolling_h16.json,,,,,,,,0.0995,0.2481,0.2053,0.1706,0.1706,,,,,
+p14_retraite_cad,20,dual_mom12_top2,0.2743,,,0.5275,0.0,0.0,0.3033,results/p14_retraite_cad/20261114T235609Z_rolling_h20.json,,,,,,,,0.0944,0.2532,0.2089,0.1692,0.1692,,,,,
+p14_etudes_cad_volonte,10,dual_mom12_top2,0.2925,0.0085,,0.4676,0.0,0.0255,0.3287,results/p14_etudes_cad_volonte/20261114T235626Z_rolling_h10.json,,,,0.0085,0.0085,0.0085,,0.1165,0.1751,0.2037,0.1781,0.1781,,,,,
+p14_titres_cad,10,risk_parity_iv36,0.145,,,0.2649,0.0571,0.2146,0.3372,results/p14_titres_cad/20261114T235810Z_rolling_h10.json,,,,,,,,0.0243,0.1199,0.3129,0.1262,0.1262,0.0298,0.027,0.1107,0.1038,
+p14_titres_cad_libre,10,risk_parity_iv36,0.1196,,,0.2331,0.2152,0.1641,0.2867,results/p14_titres_cad_libre/20261114T235946Z_rolling_h10.json,,,,,,,,,0.1135,0.2867,0.1009,0.1009,0.0858,0.0814,0.0851,0.079,0.0479

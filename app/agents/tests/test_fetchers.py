@@ -219,6 +219,8 @@ def test_declared_user_agent_and_fred_fallback(monkeypatch):
 
 def test_sec_user_agent_uses_the_documented_name_and_email_format(monkeypatch):
     # La SEC refuse (403) « AlphaForgeResearchBot/0.1 (+https://…) courriel » et accepte « nom courriel ».
+    from alphaforge.collect import http
+
     monkeypatch.setenv("ALPHAFORGE_CONTACT_EMAIL", "contact@example.org")
     agent = http.user_agent_for("www.sec.gov")
     assert agent == "AlphaForge AI Research contact@example.org"

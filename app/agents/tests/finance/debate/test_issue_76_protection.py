@@ -310,6 +310,27 @@ def test_high_withdrawals_name_the_withdrawal_rate():
     _assert_number_rule(book, expl)
 
 
+@pytest.mark.parametrize("withdrawal", [600.0, 2_500.0])
+def test_withdrawals_above_q_max_never_show_a_negative_loss(withdrawal):
+    """q = 6 % ou 25 % du montant par an, au-delà de q_max = 4,5 % : l_cap est borné à 0, comme dans le compilateur."""
+    base = _profile(max_loss=5_000)
+    goals = [g.model_dump() for g in base.goals]
+    goals[0].update(recurring_withdrawal=withdrawal, horizon_years=10.0)
+    profile = _with(base, goals=goals)
+    comp, book, expl = _explain(profile)
+    assert comp.decision_kind == "protection" and comp.l_star == 0
+    assert no_mandate_cause(comp).dollar_rule.withdrawal_loss == 0
+    why = " ".join(_texts(expl, "why"))
+    rate = fmt(withdrawal / 10_000, "%")
+    assert f"La perte que vos retraits prévus permettent d'absorber (0,0 %, pour des retraits de {rate}" in why
+    assert "-" not in why
+    assert all(f.value >= 0 for f in book.facts.values() if f.unit == "%")
+    changes = _texts(expl, "what_would_change")
+    assert any(t.startswith("Un taux de retrait d'au plus 3,9 % du montant par an") for t in changes), changes
+    _assert_levers_give_a_mandate(profile)
+    _assert_number_rule(book, expl)
+
+
 def test_declared_percentage_without_dollars():
     profile = _with(_profile(), max_acceptable_loss_cad=None, max_acceptable_loss_pct=0.05)
     _, book, expl = _explain(profile)

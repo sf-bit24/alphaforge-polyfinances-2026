@@ -1860,10 +1860,10 @@ class DollarRuleProtection:
 
     @property
     def withdrawal_loss(self) -> float | None:
-        """Terme de retrait de l_cap : 1 - q / q_max."""
+        """Terme de retrait de l_cap : max(0, 1 - q / q_max), borne a 0 comme l_cap (au-dela de q_max, rien)."""
         if self.withdrawal_rate is None or not self.withdrawal_rate_max:
             return None
-        return 1 - self.withdrawal_rate / self.withdrawal_rate_max
+        return max(0.0, 1 - self.withdrawal_rate / self.withdrawal_rate_max)
 
     def required_horizon_years(self) -> float | None:
         """T minimal pour que le terme d'horizon de l_cap atteigne min_L_plan."""

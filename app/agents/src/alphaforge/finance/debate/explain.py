@@ -343,6 +343,68 @@ NECESSARY_FR = " serait nécessaire pour qu'une allocation soit possible"
 # Libellé de l'objectif principal du questionnaire (from_profile_view) : « objectif : <code de l'option> », code
 # anglais brut (« retirement ») ; l'explication le nomme « votre objectif principal ».
 MAIN_GOAL_PREFIX = "objectif : "
+# Entrées de missing_info qui ne sont pas des champs du questionnaire : champs obligatoires du mandat (status.must_have)
+# et dimensions que l'adaptateur (from_profile_view) ajoute quand le profil n'en dit rien.
+MISSING_ALIASES = {
+    "investable_wealth": "context.amount_cad",
+    "goals.horizon": "horizon.horizon_band",
+    "horizon": "horizon.horizon_band",
+}
+DIMENSION_FR = {"risk_tolerance": "tolérance au risque", "risk_capacity": "capacité à prendre des risques"}
+# Mots de liaison retirés en fin de libellé quand on coupe ses nombres (« Réaction à une baisse de 20 % »).
+LINK_WORDS_FR = {"de", "des", "du", "dans", "les", "la", "le", "sous", "sur", "en", "à", "au", "aux", "par"}
+
+
+def _without_numbers(label: str) -> str:
+    """Libellé coupé avant son premier nombre : « Réaction à une baisse de 20 % » → « Réaction à une baisse ». Une
+    phrase sans Fact n'écrit aucun chiffre (règle des nombres du volet)."""
+    match = re.search(r"\d", label)
+    if match is None:
+        return label
+    head = label[: match.start()]
+    if "," in head or "(" in head:  # « …, en hausse de 60 % », « … (3 dernières années) »
+        head = head[: max(head.rfind(","), head.rfind("("))]
+    words = head.split()
+    while words and words[-1].lower() in LINK_WORDS_FR:
+        words.pop()
+    return " ".join(words)
+
+
+def _lower_first(label: str) -> str:
+    """Minuscule initiale dans une liste (« Montant à investir » → « montant à investir »), sauf pour un sigle."""
+    if len(label) > 1 and label[1].isupper():
+        return label
+    return label[:1].lower() + label[1:]
+
+
+def missing_fields_fr(missing: list[str]) -> list[str]:
+    """Champs manquants nommés en français, sans doublon, dans l'ordre du questionnaire.
+
+    Une entrée de ``missing_info`` est un identifiant complet (``context.amount_cad``), le nom court d'un champ de
+    ``completeness.missing`` (``approach``), un champ obligatoire du mandat (``investable_wealth``) ou une dimension
+    (``risk_tolerance``). Elle prend le libellé français de profile/questionnaire.yaml, sans ses nombres. Une entrée
+    inconnue reste lisible : « foo_bar » devient « foo bar ». ``missing_info`` lui-même garde les identifiants.
+    """
+    from alphaforge.profile.questionnaire import default_questionnaire  # import local : l'en-tête reste inchangé
+
+    fields = default_questionnaire().fields
+    rank = {field_id: index for index, field_id in enumerate(fields)}
+    by_name = {spec.name: field_id for field_id, spec in fields.items()}
+    first_of_dimension: dict[str, int] = {}
+    for field_id, index in rank.items():
+        first_of_dimension.setdefault(field_id.split(".", 1)[0], index)
+    named: dict[str, int] = {}
+    for entry in missing:
+        alias = MISSING_ALIASES.get(entry, entry)
+        field_id = alias if alias in fields else by_name.get(alias)
+        if field_id is not None:
+            label, index = fields[field_id].label_text("fr"), rank[field_id]
+        else:
+            label = DIMENSION_FR.get(entry) or entry.rsplit(".", 1)[-1].replace("_", " ")
+            index = first_of_dimension.get(entry, len(rank))
+        text = _lower_first(_without_numbers(label)) or "un champ du profil"
+        named[text] = min(index, named.get(text, index))
+    return sorted(named, key=lambda text: named[text])
 
 
 def no_allocation_explanation(
@@ -421,7 +483,7 @@ def _incomplete_statements(
                 label="HYPOTHESE",
             )
         )
-    missing = list(missing_info) or must
+    missing = missing_fields_fr(list(missing_info) or cause.must_have_missing)
     if missing or not change:  # sans cause connue, le statut INCOMPLETE vient du profil lui-même
         change.insert(
             0, Statement(text_fr="Compléter : " + ", ".join(missing or ["le profil"]) + ".", label="HYPOTHESE")
@@ -439,7 +501,7 @@ def _protection_explanation(
     why: list[Statement] = []
     change: list[Statement] = []
     must = [MUST_HAVE_FR.get(name, name) for name in cause.must_have_missing]
-    missing = list(missing_info) or must
+    missing = missing_fields_fr(list(missing_info) or cause.must_have_missing)
     if missing:
         change.append(Statement(text_fr="Compléter : " + ", ".join(missing) + ".", label="HYPOTHESE"))
     limits = [

@@ -389,7 +389,7 @@ def test_truly_incomplete_profile_keeps_complete_and_names_the_missing_field():
         "Le profil ne permet pas encore une proposition : il manque une information indispensable au calcul (le "
         "montant à investir) ; aucune allocation n'est calculée."
     ]
-    assert _texts(expl, "what_would_change") == ["Compléter : context.amount_cad."]
+    assert _texts(expl, "what_would_change") == ["Compléter : montant à investir."]
     assert _texts(expl, "limits") == ["Aucune allocation n'est calculée tant que le profil n'est pas complété."]
     _assert_number_rule(book, expl)
 
@@ -397,7 +397,7 @@ def test_truly_incomplete_profile_keeps_complete_and_names_the_missing_field():
 def test_waiting_position_keeps_complete_with_the_missing_fields():
     comp, book, expl = _explain(_profile(max_loss=5_000, emergency=None))
     assert comp.decision_kind == "position_attente"
-    assert _texts(expl, "what_would_change") == ["Compléter : risk_capacity.emergency_fund."]
+    assert _texts(expl, "what_would_change") == ["Compléter : fonds d'urgence."]
     assert "position d'attente prudente" in _texts(expl, "why")[0]
     _assert_number_rule(book, expl)
 
@@ -424,7 +424,7 @@ def test_protection_with_a_missing_must_have_keeps_complete_and_a_necessary_leve
     assert _texts(expl, "why")[-1] == "Il manque aussi une information indispensable au calcul (le montant à investir)."
     _assert_no_raw_goal_code(book, expl)
     changes = _texts(expl, "what_would_change")
-    assert changes[0] == "Compléter : context.amount_cad."
+    assert changes[0] == "Compléter : montant à investir."
     assert changes[1] == (
         "Un horizon de placement plus long serait nécessaire pour qu'une allocation soit possible. Par exemple : un "
         "horizon d'au moins 3,6 ans pour votre objectif principal."
@@ -443,7 +443,7 @@ def test_protection_with_missing_info_keeps_complete():
     assert comp.decision_kind == "protection"
     changes = _texts(expl, "what_would_change")
     assert changes == [
-        "Compléter : risk_capacity.emergency_fund.",
+        "Compléter : fonds d'urgence.",
         "Une perte admissible d'au moins 1 299 $ sur ce montant serait nécessaire pour qu'une allocation soit "
         "possible.",
     ]

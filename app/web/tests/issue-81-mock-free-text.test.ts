@@ -4,6 +4,7 @@ import { ClientState, type Locale } from "@/lib/contract/schemas";
 import { dictionaries } from "@/lib/i18n/dictionary";
 import { sampleAnswer } from "@/lib/journey/sample-profile";
 import { extractFacts } from "@/lib/mock/agents";
+import { dimensionViews, type FieldValues } from "@/lib/mock/profile";
 import { MockRuntime } from "@/lib/mock/runtime";
 
 /** The example the dashboard offers in its free-text field, after « par exemple : » or "for example:". */
@@ -126,4 +127,18 @@ describe("issue #81: emergency fund in words", () => {
       expect(facts(message)).not.toHaveProperty(["risk_capacity.emergency_fund"]);
     },
   );
+});
+
+describe("issue #81: labels keep their sigla in the profile summary", () => {
+  const values: FieldValues = new Map([
+    ["preferences.themes", { field: "preferences.themes", value: ["technology", "health"], provenance: "a1:1", at: "2026-11-15T00:00:00Z" }],
+    ["preferences.exclusions", { field: "preferences.exclusions", value: ["tobacco", "fossil_fuels"], provenance: "base", at: "2026-11-15T00:00:00Z" }],
+  ]);
+
+  it.each([
+    ["fr", "Exclut : tabac, énergies fossiles · intérêt : technologie et IA, santé"],
+    ["en", "Excludes: tobacco, fossil fuels · interest: technology and AI, health care"],
+  ] as const)("%s", (locale, summary) => {
+    expect(dimensionViews(values, locale).preferences.summary).toBe(summary);
+  });
 });

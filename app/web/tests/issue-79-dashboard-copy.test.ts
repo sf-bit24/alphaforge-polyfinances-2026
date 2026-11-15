@@ -2,7 +2,7 @@ import { createElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ClientState, type Locale } from "@/lib/contract/schemas";
-import { composeHints, introCopy, offersFollowups } from "@/components/dashboard/assistant-offer";
+import { composeHints, introCopy, offersFollowups, startsFollowups } from "@/components/dashboard/assistant-offer";
 import { ProfileBento } from "@/components/dashboard/bento";
 import { RealDetails } from "@/components/details/details-view";
 import { dictionaries } from "@/lib/i18n/dictionary";
@@ -72,6 +72,22 @@ describe("follow-ups chip of Yan's assistant (#79)", () => {
     expect(offersFollowups("thread", waiting)).toBe(false);
     expect(offersFollowups("thread", { ...waiting, started: false, questionCount: 0 })).toBe(true);
     expect(offersFollowups("thread", { ...waiting, started: false, replying: true, questionCount: 0 })).toBe(false);
+  });
+
+  it("never asks A1 again once its questions are asked: picking it only shows them in the thread", () => {
+    expect(startsFollowups(waiting)).toBe(false);
+    const answeredAll = { ...waiting, questionCount: 0 };
+    expect(startsFollowups(answeredAll)).toBe(false);
+    for (const replying of [false, true])
+      for (const questionCount of [0, 2]) {
+        const status = { ...waiting, replying, questionCount };
+        if (offersFollowups("intro", status)) expect(startsFollowups(status)).toBe(false);
+      }
+  });
+
+  it("asks A1 for its first follow-ups only before it has spoken, and never while it writes", () => {
+    expect(startsFollowups({ started: false, replying: false })).toBe(true);
+    expect(startsFollowups({ started: false, replying: true })).toBe(false);
   });
 
   it("is promised by the intro's lead only when it is offered", () => {

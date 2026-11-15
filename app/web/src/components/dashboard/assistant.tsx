@@ -8,7 +8,7 @@ import { useI18n } from "@/lib/i18n/provider";
 import { DEMO, DEMO_CHIPS, type DemoKey } from "@/lib/sample/assistant-demo";
 import { tr } from "@/lib/sample/portfolio";
 import { cn } from "@/components/ui/cn";
-import { composeHints, followupsStatus, introCopy, offersFollowups, type FollowupsStatus } from "./assistant-offer";
+import { composeHints, followupsStatus, introCopy, offersFollowups, startsFollowups, type FollowupsStatus } from "./assistant-offer";
 import { PendingReply, Thread, ThreadEntries, ThreadNotices, threadView, type ThreadView } from "./assistant-thread";
 import styles from "./dashboard.module.css";
 import { IntroScene, SuggestionChips, type IntroChip } from "./intro-scene";
@@ -145,9 +145,8 @@ export function Assistant({ state, sample }: { state: ClientState; sample: boole
   const status = followupsStatus(view, session.conversation.length, state.questions.length);
 
   const act = (chip: string, text: string) => {
-    // Already asked (in the journey): leaving the intro shows them in the thread.
     if (chip === "followups") {
-      if (!status.started) void session.reply({});
+      if (startsFollowups(status)) void session.reply({});
     } else if (chip === "stop") void form.send({ stop: true, text: "" });
     else if (isDemoKey(chip)) playDemo(chip);
     else void form.send({ stop: false, text });

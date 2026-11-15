@@ -43,6 +43,15 @@ export function offersFollowups(where: "intro" | "thread", { followups, replying
   return where === "intro" && (replying || questionCount > 0);
 }
 
+/**
+ * Whether picking the follow-ups chip asks A1 (`followup.reply` with nothing in it): only before
+ * it has asked anything, and never while a reply is being written. Once asked (in the journey),
+ * leaving the intro is enough: the thread shows the questions.
+ */
+export function startsFollowups({ started, replying }: Pick<FollowupsStatus, "started" | "replying">): boolean {
+  return !started && !replying;
+}
+
 /** The intro's heading and lead: during the follow-ups, the lead offers Yan's questions only when their chip is there. */
 export function introCopy(t: Dictionary, followups: boolean, followupsOffered: boolean): { heading: string; lead: string } {
   if (!followups) return { heading: t.assistant.introComplete, lead: t.assistant.leadComplete };

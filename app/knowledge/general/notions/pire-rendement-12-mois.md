@@ -14,9 +14,9 @@ sources:
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositives 6 (un rendement dépend de la période) et 7 (le temps disponible change la décision)"
   - id: moteur-metriques
     title: "Moteur de backtest AlphaForge AI : métriques sur rendements mensuels"
-    resource: "research/backtest/engine/metrics.py (worst_window_return) et app/agents/src/alphaforge/finance/portfolio/analysis.py (risk_report)"
+    resource: "app/agents/src/alphaforge/finance/backtest/metrics.py (worst_window_return) et app/agents/src/alphaforge/finance/portfolio/analysis.py (risk_report)"
   - id: politique-risque
-    title: "Politique de risque d'AlphaForge AI, niveaux N0 à N5"
+    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), section measurement (CVAR12M)"
 data:
   aliases: [pire année, pire rendement sur 12 mois, pire 12 mois, pire année glissante, worst 12 months]

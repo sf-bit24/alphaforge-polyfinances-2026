@@ -18,7 +18,7 @@ sources:
   - id: regles-canada
     title: "Paramètres canadiens d'AlphaForge AI : protection SADC"
     resource: "app/agents/src/alphaforge/finance/rules/canada_2026.yaml, cdic.coverage_limit_per_category et cdic.insured_categories (vérifiés, 2026, https://www.cdic.ca/your-coverage/whats-covered/)"
-  - id: risk-levels
+  - id: politique-risque
     title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, section capacity (emergency_req_months, hard_caps)"
 data:

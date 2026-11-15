@@ -22,7 +22,7 @@ sources:
     title: "Jeu de départ AlphaForge AI : prix quotidiens ajustés"
     resource: "starter:prices_daily.csv (colonne adj_close)"
   - id: politique-risque
-    title: "Politique de risque d'AlphaForge AI, niveaux N0 à N5"
+    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), section measurement"
 data:
   catalog_id: volatilite

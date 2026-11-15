@@ -83,6 +83,24 @@ def test_parse_rejects_invalid_documents(text):
         okf.parse(text)
 
 
+REPO = KNOWLEDGE.parents[2]
+REPO_PATH = re.compile(r"((?:app|infrastructure|research)/[\w./-]+\.(?:py|yaml|md|csv|tf))")
+
+
+def test_notions_cite_existing_files_under_one_id():
+    """Un fichier du dépôt cité par une notion existe, et toutes les notions le citent sous le même id."""
+    ids_by_path: dict[str, set[str]] = {}
+    for path in sorted((KNOWLEDGE / "notions").glob("*.md")):
+        for source in okf.parse(path.read_text(encoding="utf-8")).frontmatter["sources"]:
+            cited = REPO_PATH.findall(source.get("resource", ""))
+            for file in cited:
+                assert (REPO / file).exists(), (path.name, file)
+            if cited:  # le premier fichier cité identifie la source
+                ids_by_path.setdefault(cited[0], set()).add(source["id"])
+    assert all(len(ids) == 1 for ids in ids_by_path.values()), ids_by_path
+    assert ids_by_path, "aucune notion ne cite un fichier du dépôt"
+
+
 def test_seed_knowledge_documents_are_valid_public_okf():
     paths = sorted(KNOWLEDGE.rglob("*.md"))
     assert len(paths) >= 5 and not (KNOWLEDGE / "index.md").exists()  # general/index.md appartient à A6

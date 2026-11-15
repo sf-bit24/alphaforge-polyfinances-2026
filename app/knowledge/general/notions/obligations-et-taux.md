@@ -15,8 +15,8 @@ sources:
   - id: enonce-officiel
     title: "Énoncé officiel du défi AlphaForge AI (Datathon PolyFinances 2026)"
     resource: "Énoncé officiel, p. 10 (FNB obligataires) et p. 11 (obligations et taux : sensibilité aux taux, rôle des actifs défensifs)"
-  - id: regles-composition
-    title: "Barème des niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+  - id: politique-risque
+    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, composition (long_duration_max, etf_bond_each_max), history_proxies et reference_portfolios"
 data:
   catalog_id: obligations_taux

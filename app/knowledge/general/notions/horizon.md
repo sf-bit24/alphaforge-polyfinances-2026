@@ -12,7 +12,7 @@ sources:
   - id: atelier-bncd
     title: "Atelier BNCD : comprendre l'investisseur avant de bâtir la solution"
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositive 7 (le temps disponible change la décision)"
-  - id: risk-levels
+  - id: politique-risque
     title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, sections horizon_cap, capacity et satellites.rules"
 data:

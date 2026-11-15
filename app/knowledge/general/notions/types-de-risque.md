@@ -13,7 +13,7 @@ sources:
     title: "Atelier BNCD : comprendre l'investisseur avant de bâtir la solution"
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositive 8 (types de risque et risque pertinent; FINRA, CIRO)"
   - id: politique-risque
-    title: "Politique de risque d'AlphaForge AI, niveaux N0 à N5"
+    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), sections measurement, composition et limits_template"
 data:
   catalog_id: types_risque

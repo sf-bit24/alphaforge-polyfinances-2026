@@ -175,6 +175,19 @@ export function requestFacts(decision: Decision, facts: FactIndex): RequestFacts
   };
 }
 
+/**
+ * A check's provenance as the investor reads it: each part of `derived_from` (« level ; dollar_rule.l_star »,
+ * split on « ; ») named by `labels`, a part the table does not know kept as the engine wrote it.
+ */
+export function derivedFromLabel(raw: string, labels: Readonly<Record<string, string>>): string {
+  return raw
+    .split(";")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .map((part) => (Object.hasOwn(labels, part) ? labels[part] : part))
+    .join(", ");
+}
+
 /** The unit of the fact that measures a constraint, to format its limit the same way. */
 export function constraintUnit(facts: FactIndex, valueFactId: string | null | undefined): string | undefined {
   return valueFactId ? facts.get(valueFactId)?.unit : undefined;

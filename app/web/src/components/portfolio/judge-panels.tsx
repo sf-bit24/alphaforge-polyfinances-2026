@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { AppliedAmendment, ConstraintCheck, DebateRoundSummary, LensVerdict, PortfolioBuildResponse } from "@/lib/contract/portfolio";
 import { curly } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
-import { constraintUnit, type FactIndex } from "@/lib/portfolio/decision";
+import { constraintUnit, derivedFromLabel, type FactIndex } from "@/lib/portfolio/decision";
 import { formatLimit } from "@/lib/portfolio/format";
 import d from "@/components/details/details.module.css";
 import { cn } from "@/components/ui/cn";
@@ -91,13 +91,17 @@ export function Debate({ response }: { response: PortfolioBuildResponse }) {
 function ConstraintRow({ check, facts }: { check: ConstraintCheck; facts: FactIndex }) {
   const { t } = useI18n();
   const v = t.portfolioView.constraints;
+  const derived = derivedFromLabel(check.derived_from, v.derivedFrom);
   return (
     <tr className={check.violated ? p.rowViolated : undefined}>
       <td>
         {check.description_fr}
         <span className={p.rule}>{check.rule_id}</span>
       </td>
-      <td>{check.derived_from}</td>
+      <td>
+        {derived}
+        {derived !== check.derived_from ? <span className={p.rule}>{check.derived_from}</span> : null}
+      </td>
       <td className={cn(d.n, p.num)}>{formatLimit(check.limit, constraintUnit(facts, check.value_fact_id))}</td>
       <td>{check.value_fact_id ? <FactChip id={check.value_fact_id} compact /> : "—"}</td>
       <td>

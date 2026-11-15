@@ -1,18 +1,21 @@
 /**
  * Issue #78 (and #80, point 4): the engine's French texts translate its codes, the page says in English
- * that they stay in French, and the trace counts its steps with the right plural.
+ * that they stay in French, the Judge's provenance column names its identifiers, and the trace counts its
+ * steps with the right plural.
  */
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DecisionView } from "@/components/portfolio/decision-view";
 import { DecisionProvider } from "@/components/portfolio/facts";
+import { Constraints } from "@/components/portfolio/judge-panels";
 import { DEMO_PERSONAS, PortfolioBuildResponse, type Decision } from "@/lib/contract/portfolio";
 import type { Locale } from "@/lib/contract/schemas";
 import { portfolioEn, portfolioFr } from "@/lib/i18n/portfolio";
 import { I18nProvider } from "@/lib/i18n/provider";
 import { PORTFOLIO_FIXTURES } from "@/lib/mock/decisions";
-import { indexFacts, indexTrace } from "@/lib/portfolio/decision";
+import { derivedFromLabel, indexFacts, indexTrace } from "@/lib/portfolio/decision";
 
 const fixtures = DEMO_PERSONAS.map((persona) => [persona, PortfolioBuildResponse.parse(PORTFOLIO_FIXTURES[persona])] as const);
 
@@ -86,5 +89,82 @@ describe("trace step count (issue #80, point 4)", () => {
     expect(portfolioEn.trace.count(1)).toBe("1 step");
     expect(portfolioEn.trace.count(2)).toBe("2 steps");
     expect(portfolioEn.trace.count(0)).toBe("0 steps");
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Provenance of the Judge's checks (« Dérivée de »)                   */
+/* ------------------------------------------------------------------ */
+
+const RISK_LEVELS = new URL("../../agents/src/alphaforge/finance/policy/risk_levels.yaml", import.meta.url);
+/** Provenances the engine writes outside the template: compiler.py (_derived_from, employer and sandbox caps), judge.py, pipeline.py. */
+const ENGINE_PROVENANCES = [
+  "profile.biases[aversion_perte]",
+  "profile.composure<40",
+  "profile.biases[familiarite] ; profile.employer_equity",
+  "profile.requests ; profile.biases[FOMO]",
+  "définition d'un portefeuille",
+  "policy.universe/excluded",
+  "simulation long-only",
+  "demande précise de l'investisseur",
+];
+/** An identifier of the engine: dotted path, `->`, `[…]` or a comparison, as opposed to a sentence. */
+const IDENTIFIER = /^[a-z_]+$|->|[a-z_]\.[a-z_]|\[|</;
+const parts = (raw: string) => raw.split(";").map((part) => part.trim());
+
+/** `derived_from` of each entry of `limits_template` (read by pattern: PyYAML accepts « 0.025,# … », the `yaml` package does not). */
+function templateProvenances(): string[] {
+  const text = readFileSync(RISK_LEVELS, "utf8");
+  const entries = [...text.matchAll(/\{rule_id:\s*([\w.]+)[\s\S]*?derived_from:\s*"([^"]*)"/g)].map((match) => ({ rule: match[1], from: match[2] ?? "" }));
+  expect(entries.map((entry) => entry.rule)).toContain("risk.stress_2022");
+  // risk.cdar_m: the compiler replaces « … | composure<40 » by one of the two (ENGINE_PROVENANCES).
+  return entries.filter((entry) => entry.rule !== "risk.cdar_m").map((entry) => entry.from);
+}
+
+function renderChecks(locale: Locale): string {
+  const response = PortfolioBuildResponse.parse(PORTFOLIO_FIXTURES.robert);
+  const lookup = { facts: indexFacts(response.decision), trace: indexTrace(response.decision), open: () => {} };
+  // Every row shown: the table folds to the binding or violated checks.
+  const checks = response.decision.constraints.map((check) => ({ ...check, active: true }));
+  const view = createElement(DecisionProvider, { value: lookup }, createElement(Constraints, { checks }));
+  const props = { initialLocale: locale } as Parameters<typeof I18nProvider>[0];
+  return renderToStaticMarkup(createElement(I18nProvider, props, view));
+}
+
+describe("provenance of the Judge's checks (issue #78, review)", () => {
+  it("names every identifier the engine writes, in French and in English", () => {
+    const provenances = [
+      ...templateProvenances(),
+      ...ENGINE_PROVENANCES,
+      ...fixtures.flatMap(([, response]) => response.decision.constraints.map((check) => check.derived_from)),
+    ];
+    const identifiers = new Set(provenances.flatMap(parts).filter((part) => IDENTIFIER.test(part)));
+    expect(identifiers.size).toBeGreaterThan(10);
+    for (const labels of [portfolioFr.constraints.derivedFrom, portfolioEn.constraints.derivedFrom]) {
+      expect([...identifiers].filter((part) => !Object.hasOwn(labels, part))).toEqual([]);
+      for (const raw of provenances) expect(parts(derivedFromLabel(raw, labels).replaceAll(", ", ";")).filter((part) => IDENTIFIER.test(part)), raw).toEqual([]);
+    }
+  });
+
+  it("joins the named parts and keeps a sentence of the engine as it is", () => {
+    const fr = portfolioFr.constraints.derivedFrom;
+    expect(derivedFromLabel("level ; dollar_rule.l_star ; profile.knowledge", fr)).toBe("niveau de risque, règle des dollars (perte admissible), connaissances de l’investisseur");
+    expect(derivedFromLabel("profile.composure<40", portfolioEn.constraints.derivedFrom)).toBe("composure below 40");
+    expect(derivedFromLabel("étape 0 : style défensif (τ = -0,25)", fr)).toBe("étape 0 : style défensif (τ = -0,25)");
+    expect(derivedFromLabel("constructor", fr)).toBe("constructor");
+  });
+
+  it("shows the name in the table and the raw identifier under it, for the audit", () => {
+    const fr = renderChecks("fr");
+    expect(fr).toContain("sang-froid sous 40<span");
+    expect(fr).toContain(">profile.composure&lt;40</span>");
+    expect(fr).toContain("score de risque R du profil, puis niveau, règle des dollars (part actions maximale)<span");
+    expect(fr).toContain(">profile-&gt;R-&gt;level ; dollar_rule.e_cap</span>");
+    const en = renderChecks("en");
+    expect(en).toContain("composure below 40<span");
+    expect(en).toContain("risk level<span");
+    expect(en).toContain(">level</span>");
+    // A provenance the engine wrote as a sentence has nothing to show under it.
+    expect(fr).toContain("<td>étape 0 : style défensif (τ = -0,25)</td>");
   });
 });

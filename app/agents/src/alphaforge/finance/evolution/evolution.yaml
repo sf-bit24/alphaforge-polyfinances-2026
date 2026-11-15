@@ -1,0 +1,53 @@
+# Évolution du portefeuille dans le temps — SEULE configuration (miroir : brain references/calibration/evolution-portefeuille.md).
+# Toutes les valeurs sont des HYPOTHESES de construction, à valider par l'équipe. Aucune ne vient des fiches persona.
+version: "0.1.0"
+status: HYPOTHESE
+brain_fiche: references/calibration/evolution-portefeuille.md
+
+bands:
+  abs: 0.05            # ±5 points absolus (Brain architecture/construction-portefeuille.md:226 ; Vanguard 2010 [non vérifié])
+  rel: 0.25            # ±25 % de la cible ; la bande retenue est la plus petite des deux (Daryanani 2008 via Kitces [vérifié])
+  min_abs: 0.005       # plancher de bande pour une cible très petite (sinon une cible de 1 % aurait une bande de 0,25 pt)
+  trade_mode: half     # half = retour à mi-chemin vers la cible ; edge = au bord ; full = à la cible (choix utilisateur 2026-11-15)
+  cap_cushion: 0.005   # la cible est posée 0,5 pt à l'intérieur de chaque limite linéaire saturée (plus strict que le
+                       # profil, jamais plus souple) : la dérive d'un mois ne déclenche pas une correction de conformité
+
+trading:
+  min_trade_cad: 100.0       # une ligne sous ce montant n'est pas déplacée
+  cost_bps: 10.0             # coût par unité de rotation aller simple (écart + change), en points de base
+  max_turnover_tick: 0.20    # rotation aller-retour maximale par mois lors d'un changement de cible (glissement)
+
+flows:
+  contribution_first: true   # un apport va d'abord aux lignes sous-pondérées ; un retrait est pris sur les sur-pondérées
+  large_flow_share: 0.10     # |flux| >= 10 % de la valeur -> déclencheur LARGE_FLOW
+
+review:
+  review_months: 12          # revue périodique (RV-13 du Brain : 6, 12, 24 ou 36 mois)
+  kyc_months_managed: 12     # NI 31-103 art. 13.2 [non vérifié] : 12 mois pour un compte géré
+  kyc_months_other: 36       #                                  36 mois sinon
+  need_goal_months: 12       # un objectif « besoin » à moins de 12 mois -> GOAL_NEED_12M
+  drawdown_reference: hwm    # hwm = baisse depuis le plus haut historique ; cost = depuis les apports nets
+
+overlays:
+  order: [drawdown_control, trend_tilt, tsmom, dual_momentum, relative_strength, stop_loss, trailing_stop, take_profit, vol_target]
+  common:
+    max_equity_shift: 0.10   # ±10 points au plus (décision D4)
+    core_etf_min: 0.50       # le cœur de FNB reste >= 50 % des actions
+  trend_tilt:   {enabled: true,  ma_months: 10, shift: 0.10}
+  tsmom:        {enabled: true,  lookback: 12, skip: 1, shift: 0.05}
+  dual_momentum: {enabled: true, lookback: 12, skip: 1}
+  relative_strength: {enabled: true, lookback: 12, skip: 1, tilt: 0.25}   # tilt = part déplacée vers les mieux classés
+  stop_loss:    {enabled: true,  loss: 0.20, reentry_ma_months: 10}       # satellites seulement
+  trailing_stop: {enabled: true, drop_from_peak: 0.25, reentry_ma_months: 10}
+  take_profit:  {enabled: true,  multiple: 1.5}                            # satellite > 1,5 × cible -> retour à mi-chemin
+  drawdown_control: {enabled: true, multiplier: 3.0, floor_share_of_need: 1.0}   # CPPI sur un objectif « besoin »
+  vol_target:   {enabled: false, target_vol: 0.08, lookback: 12}           # exclu par la décision D4, comparateur seulement
+
+gate:
+  min_dsr: 0.95              # Deflated Sharpe Ratio en comptant tous les essais (Bailey & López de Prado 2014 [non vérifié])
+  max_pbo: 0.50              # probabilité de sur-ajustement (CSCV, Bailey et al. 2016 [non vérifié]) ; > 0,5 = rejet
+  min_train_months: 120      # historique minimal avant la fenêtre rejouée
+  # false : les limites LINÉAIRES dépassées pendant l'entraînement (calcul rapide sans projection) sont affichées,
+  # pas éliminatoires, car le tick les rétablit chaque mois (projection + Judge, y compris les limites de risque).
+  require_no_limit_breach: false
+  costs_included: true

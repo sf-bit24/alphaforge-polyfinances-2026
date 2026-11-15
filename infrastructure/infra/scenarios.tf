@@ -152,6 +152,8 @@ locals {
       # (request.json present) fait echouer l'execution ici, avant tout
       # calcul et sans rien reecrire (S3 repond 412 PreconditionFailed).
       # Atomique, et sans droit de plus que s3:PutObject (pas de ListBucket).
+      # Body : un objet JSONata, pas $string(...) : l'integration S3 serialise deja
+      # l'objet en JSON; une chaine serait encodee une seconde fois (request.json illisible).
       "Requete - ecrire" = {
         Type     = "Task"
         Resource = "arn:aws:states:::aws-sdk:s3:putObject"
@@ -160,7 +162,7 @@ locals {
           Key         = "{% 'scenarios/input/requests/' & $runId & '/request.json' %}"
           IfNoneMatch = "*"
           ContentType = "application/json"
-          Body        = "{% $string({'schema': 'scenarios-request/v0.1', 'run_id': $runId, 'release': '${var.release_id}', 'execution': $states.context.Execution.Id, 'requested_at': $now(), 'params': $params}) %}"
+          Body        = "{% {'schema': 'scenarios-request/v0.1', 'run_id': $runId, 'release': '${var.release_id}', 'execution': $states.context.Execution.Id, 'requested_at': $now(), 'params': $params} %}"
         }
         Catch = [{
           ErrorEquals = ["States.ALL"]
@@ -261,7 +263,7 @@ locals {
           Key         = "{% 'scenarios/output/' & $runId & '/_done.json' %}"
           IfNoneMatch = "*"
           ContentType = "application/json"
-          Body        = "{% $string({'status': 'ok', 'run_id': $runId, 'release': '${var.release_id}', 'image': '${var.scenarios_image_uri}', 'processing_job': $job, 'output_prefix': 'scenarios/output/' & $runId & '/', 'table_prefix': 'scenarios/output/' & $runId & '/table/', 'finished_at': $now()}) %}"
+          Body        = "{% {'status': 'ok', 'run_id': $runId, 'release': '${var.release_id}', 'image': '${var.scenarios_image_uri}', 'processing_job': $job, 'output_prefix': 'scenarios/output/' & $runId & '/', 'table_prefix': 'scenarios/output/' & $runId & '/table/', 'finished_at': $now()} %}"
         }
         Next = "Pointeur - ecrire"
       }
@@ -274,7 +276,7 @@ locals {
           Bucket      = local.scenarios_bucket
           Key         = "scenarios/latest.json"
           ContentType = "application/json"
-          Body        = "{% $string({'run_id': $runId, 'release': '${var.release_id}', 'marker': 'scenarios/output/' & $runId & '/_done.json', 'output_prefix': 'scenarios/output/' & $runId & '/', 'manifest': 'scenarios/output/' & $runId & '/manifest.json', 'updated_at': $now()}) %}"
+          Body        = "{% {'run_id': $runId, 'release': '${var.release_id}', 'marker': 'scenarios/output/' & $runId & '/_done.json', 'output_prefix': 'scenarios/output/' & $runId & '/', 'manifest': 'scenarios/output/' & $runId & '/manifest.json', 'updated_at': $now()} %}"
         }
         Next = "Termine"
       }
@@ -295,7 +297,7 @@ locals {
           Key         = "{% 'scenarios/output/' & $runId & '/_done.json' %}"
           IfNoneMatch = "*"
           ContentType = "application/json"
-          Body        = "{% $string($merge([$states.input, {'release': '${var.release_id}', 'finished_at': $now()}])) %}"
+          Body        = "{% $merge([$states.input, {'release': '${var.release_id}', 'finished_at': $now()}]) %}"
         }
         Output = "{% $states.input %}"
         Catch = [{

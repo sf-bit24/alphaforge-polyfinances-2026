@@ -91,7 +91,7 @@ stateDiagram-v2
 | `portfolio.submit` | `client_id`, `text` facultatif, `files` facultatif : `[{ "name", "media_type", "data_base64" }]` | A2 extrait des positions; étape `portfolio_review`. Au moins `text` ou un fichier. 10 Mo au plus par fichier, 5 fichiers. |
 | `portfolio.confirm` | `client_id`, `positions` (liste de `Position`, corrigée par l'investisseur) | Calcule les expositions par le code, écrit `portefeuille-existant.md`; étape `followups`. |
 | `portfolio.skip` | `client_id` | Passe aux relances sans portefeuille. |
-| `followup.reply` | `client_id`, `answers` facultatif : `[{ "question_id", "value" }]`, `message` facultatif, `stop` facultatif (booléen) | A1 enregistre, met le profil à jour, renvoie ses relances ou passe à `complete`. `stop: true` n'est accepté qu'à partir de 70 %. Sans `answers` ni `message` à l'arrivée en `followups`, A1 pose ses premières relances. |
+| `followup.reply` | `client_id`, `answers` facultatif : `[{ "question_id", "value" }]`, `message` facultatif, `stop` facultatif (booléen) | A1 enregistre, met le profil à jour, renvoie ses relances ou passe à `complete`. `stop: true` n'est accepté qu'à partir de 70 %. Sans `answers` ni `message` à l'arrivée en `followups`, A1 pose ses premières relances. Au passage à `complete` (y compris par `stop: true`), A1 écrit la base du client avec son skill (section 5) ; un échec est inscrit à la trace et n'empêche pas l'étape. |
 | `settings.update` | `client_id`, `locale` facultatif, `knowledge_level` facultatif | Change la langue ou le niveau de connaissances (réglages). |
 | `profile.get` | `client_id` | Comme `session.resume`, avec en plus `documents`. |
 | `kb.list` | `prefix` (`general/` ou `clients/<client_id>/`) | `{ "items": [{ "key", "title", "type", "description", "updated_at" }] }` |
@@ -269,6 +269,7 @@ clients/<client_id>/index.md
 clients/<client_id>/profil.md               profil et ses données structurées
 clients/<client_id>/portefeuille-existant.md
 clients/<client_id>/journal.md              chaque réponse, avec sa provenance et sa date
+clients/<client_id>/<note>.md               notes écrites par A1 avec son skill (Profile Note), par exemple dimensions/horizon.md et synthese.md
 clients/<client_id>/traces/<horodatage>-<action>.json
 staging/<run_id>/<role>/<id>.json
 staging/<run_id>/<role>/_done.json
@@ -288,7 +289,7 @@ scenarios/...                               scénarios probabilistes, hors de la
 Chaque document `.md` est un document OKF : un frontmatter YAML puis un corps Markdown.
 
 ```yaml
-type: Investor Profile            # Investor Profile, Existing Portfolio, Profile Journal, News, Data Series, Methodology, Financial Concept, Company Fundamentals, Index
+type: Investor Profile            # Investor Profile, Existing Portfolio, Profile Journal, Profile Note, News, Data Series, Methodology, Financial Concept, Company Fundamentals, Index
 title: Profil investisseur
 description: Profil en cinq dimensions, niveau de connaissances et complétude.
 tags: [profil-investisseur]
@@ -303,6 +304,7 @@ data: {}                          # données structurées lues par le code (prof
 ```
 
 - Dans `profil.md`, un fait tiré d'un texte libre porte `confirmed: false` (`data.facts.<champ>`) jusqu'à la réponse à sa question `cf_`. Il n'entre ni dans `ProfileView`, ni dans la complétude, ni dans les scores. S'il remplace une valeur confirmée, il la garde dans `replaces` (`value`, `provenance`, `at`, facultatif) : elle reste en vigueur jusqu'à la réponse, et « non » la rétablit. Un fait sans la clé `confirmed` est confirmé.
+- Notes du client (`Profile Note`) : à la fin du questionnaire, le runtime `profile` invoque A1 avec le skill `app/agents/src/alphaforge/profile/skills/client-brain-init/SKILL.md`, qui fixe la structure des notes ; ensuite, `client-brain-update` les met à jour quand les faits confirmés ou les skills changent. Changer la structure dans le skill suffit : la mise à jour suivante réorganise chaque base. A1 écrit le chemin, le titre et le texte ; le code construit le frontmatter (`sources` tirées des champs cités, `data.skill`, `data.skills_version`, `data.cites`), vérifie l'OKF, refuse les chemins hors du dossier du client et les documents écrits par le code (`index.md`, `profil.md`, `journal.md`, `portefeuille-existant.md`, `traces/`), et n'y admet aucune valeur à confirmer. Le runtime n'a pas `s3:DeleteObject` : une note retirée est réécrite avec `data.retired: true`, et `kb.list` comme `index.md` l'omettent. L'état est dans `profil.md`, `data.brain` (`skills_version`, `values`, `documents`).
 - `journal.md` porte ses entrées dans `data.entries[]`, en ajout seulement, une entrée par événement : `{at, kind, provenance, ...}`.
   - `kind` vaut `answer` (`field`, `value`, `question_id`?, `option`?, `previous`?), `message` ou `stage` (`value`, `previous`, `note`).
   - `option` (facultatif) : identifiant de la tranche choisie quand une question à choix renseigne un champ numérique (`number`, `money`, `percent`). `value` est alors le nombre que le code a écrit dans le champ, tiré de `questionnaire.yaml` (option `number`) ou calculé par le code pour une relance.

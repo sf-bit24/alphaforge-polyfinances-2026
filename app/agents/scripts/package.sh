@@ -115,7 +115,8 @@ if [ -d "$stage/alphaforge/data/long" ]; then
     rm -rf -- "$stage/alphaforge/data/long/raw"
     find "$stage/alphaforge/data/long" -type f -name '*.parquet' -exec rm -f {} +
 fi
-for required in alphaforge/profile/questionnaire.yaml alphaforge/data/starter/assets_universe.csv \
+for required in alphaforge/profile/questionnaire.yaml alphaforge/profile/skills/client-brain-init/SKILL.md \
+    alphaforge/profile/skills/client-brain-update/SKILL.md alphaforge/data/starter/assets_universe.csv \
     alphaforge/data/starter/prices_daily.csv alphaforge/data/starter/fx_usdcad_daily.csv; do
     if [ ! -f "$stage/$required" ]; then
         echo "error: $required is missing from the package" >&2

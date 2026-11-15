@@ -2,7 +2,9 @@
 
 Les actions déterministes (``session.*``, ``base.answer``, ``portfolio.confirm``, ``portfolio.skip``,
 ``settings.update``, ``profile.get``, ``kb.*``) n'appellent aucun modèle. ``portfolio.submit`` appelle A2 et
-``followup.reply`` appelle A1, sauf ``stop: true``.
+``followup.reply`` appelle A1. À la fin du questionnaire (passage à ``complete``, y compris par ``stop: true``),
+le service invoque aussi A1 avec son skill de base du client (``brain.run_brain``) : ``client-brain-init``, puis
+``client-brain-update`` quand les faits ou les skills ont changé.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ from ..store import ConflictError, Store
 from ..trace import Emitter, Trace
 from . import a1 as a1_agent
 from . import a2 as a2_agent
-from . import kb, rules
+from . import brain, kb, rules
 from . import portfolio as pf
 from .questionnaire import InvalidValue, Questionnaire, default_questionnaire, reason_text
 from .state import ClientSession, is_client_id, load_journal_entries, portfolio_key, trace_key
@@ -74,6 +76,7 @@ class ProfileService:
         model_factory: ModelFactory | None = None,
         quote_fetcher: pf.QuoteFetcher | None = fetch_yahoo_chart,
         kb_search: kb.KnowledgeSearch | None = None,
+        write_client_brain: bool = True,
     ):
         self.settings = settings
         self.store = store
@@ -81,6 +84,8 @@ class ProfileService:
         self.model_factory = model_factory or bedrock_model_factory(settings)
         self.quote_fetcher = quote_fetcher
         self.kb_search = kb_search or kb.KnowledgeSearch(settings)
+        # À la fin du questionnaire, A1 écrit la base du client avec son skill (désactivable pour les tests).
+        self.write_client_brain = write_client_brain
         self.actions: dict[str, Callable[[Request], dict[str, Any]]] = {
             "health": self.health,
             "session.start": self.session_start,
@@ -737,6 +742,7 @@ class ProfileService:
             session.data["completion"] = {**(session.data.get("completion") or {}), "stopped": True}
             session.clear_pending()
             session.set_stage("complete", "settings", req.trace, reason="l'investisseur s'arrête")
+            self._client_brain(req, session)
             self._completeness_step(req, session)
             self._commit(req, session)
             return self._state(req, session, locale)
@@ -796,10 +802,38 @@ class ProfileService:
         if outcome.complete:
             session.data["completion"] = {**(session.data.get("completion") or {}), "a1_complete": True}
             session.set_stage("complete", f"a1:{turn}", req.trace, reason="A1 juge le profil complet")
+            self._client_brain(req, session)
         session.remember_message("A1", outcome.message, locale)
         self._completeness_step(req, session)
         self._commit(req, session)
         return self._state(req, session, locale, message=outcome.message, portfolio=portfolio_view)
+
+    def _client_brain(self, req: Request, session: ClientSession) -> None:
+        """Fin du questionnaire : A1 écrit ou met à jour la base du client avec son skill. Un échec n'empêche
+        pas le profil de passer à ``complete`` : il est seulement inscrit à la trace."""
+        if not self.write_client_brain:
+            return
+        try:
+            brain.run_brain(
+                self.q,
+                session,
+                self.store,
+                trace=req.trace,
+                model_factory=self.model_factory,
+                model_id=self.settings.model_id,
+                journal=load_journal_entries(self.store, session.client_id) + session.new_journal,
+                guardrail=self.settings.guardrail_enabled,
+            )
+        except Exception as exc:  # modèle, garde-fou ou magasin : le profil reste complet
+            if not isinstance(exc, AppError):
+                logger.exception("client brain failed")
+            req.trace.add(
+                "deterministic",
+                "A1",
+                req.trace.t("Base du client non écrite", "Client base not written"),
+                getattr(exc, "code", type(exc).__name__),
+                outputs={"error": getattr(exc, "code", type(exc).__name__)},
+            )
 
     def _confirm(
         self, session: ClientSession, field_id: str | None, value: Any, provenance: str, question_id: str

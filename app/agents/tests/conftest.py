@@ -118,11 +118,19 @@ def settings(tmp_path):
     )
 
 
-def make_service(settings, store, factory=None, quote_fetcher=None) -> ProfileService:
+def make_service(settings, store, factory=None, quote_fetcher=None, client_brain=False) -> ProfileService:
     def no_model(**_: Any):
         raise AssertionError("a deterministic action must not create a model")
 
-    return ProfileService(settings, store, model_factory=factory or no_model, quote_fetcher=quote_fetcher)
+    # La base du client écrite par A1 (fin du questionnaire) appelle un modèle de plus : désactivée par défaut
+    # pour que les scripts des autres tests restent alignés; tests/test_client_brain.py l'active.
+    return ProfileService(
+        settings,
+        store,
+        model_factory=factory or no_model,
+        quote_fetcher=quote_fetcher,
+        write_client_brain=client_brain,
+    )
 
 
 def answer_base(service: ProfileService, client_id: str, overrides: dict[str, Any] | None = None) -> dict[str, Any]:

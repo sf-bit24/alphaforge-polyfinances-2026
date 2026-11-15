@@ -58,6 +58,8 @@ def list_documents(store: Store, prefix: str) -> list[dict[str, Any]]:
             doc = okf.parse(obj.text)
         except okf.OkfError:
             return {"key": info.key, "title": None, "type": None, "description": None, "updated_at": info.last_modified}
+        if doc.data.get("retired") is True:
+            return None  # note retirée de la base du client (le runtime n'a pas s3:DeleteObject)
         summary = okf.summary(doc)
         return {
             "key": info.key,

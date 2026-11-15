@@ -15,13 +15,15 @@ const MAX_ROWS = 6;
 type Label = Record<Locale, string>;
 
 /**
- * Keys the runtime uses for any group: a missing sector or market (`Unknown`), cash, and the `other` key of the
- * mock. The contract keys stay the raw values; only the label shown changes.
+ * Keys the runtime uses for any group: a missing sector or market (`Unknown`, `other` in the mock) and cash. `other`
+ * is not labelled "Other", which names the folded tail (`rowsOf`). The contract keys stay the raw values; only the
+ * label shown changes.
  */
+const UNCLASSIFIED: Label = { fr: "Non classé", en: "Unclassified" };
 const COMMON_LABELS: Record<string, Label> = {
-  Unknown: { fr: "Non classé", en: "Unclassified" },
+  Unknown: UNCLASSIFIED,
+  other: UNCLASSIFIED,
   Cash: { fr: "Encaisse", en: "Cash" },
-  other: { fr: "Autre", en: "Other" },
 };
 
 /** `by_sector` keys: the GICS sectors and the fund categories of the starter universe (`assets_universe.csv`). */

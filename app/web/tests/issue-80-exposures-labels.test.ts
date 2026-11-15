@@ -15,9 +15,23 @@ const EXPOSURES: Exposures = {
   flags: [],
 };
 
-function rowNames(locale: "fr" | "en", group: "byMarket" | "bySector"): string[] {
+// The mock keys a missing sector `other`; with more than six sectors, the tail folds into an "Other" row.
+const MOCK_EXPOSURES: Exposures = {
+  ...EXPOSURES,
+  by_sector: {
+    other: 0.3,
+    Financials: 0.2,
+    Energy: 0.15,
+    Utilities: 0.12,
+    Industrials: 0.1,
+    "Health Care": 0.08,
+    "Consumer Staples": 0.05,
+  },
+};
+
+function rowNames(locale: "fr" | "en", group: "byMarket" | "bySector", exposures = EXPOSURES): string[] {
   const t = dictionaries[locale];
-  const found = exposureGroups(EXPOSURES, t, locale).find((entry) => entry.title === t.exposures[group]);
+  const found = exposureGroups(exposures, t, locale).find((entry) => entry.title === t.exposures[group]);
   return found?.rows.map((row) => row.name) ?? [];
 }
 
@@ -48,6 +62,15 @@ describe("sector and market labels of the exposures (issue #80)", () => {
     expect(rowNames("en", "byMarket")).toEqual(["TSX", "Cash", "NASDAQ"]);
   });
 
+  it("labels the mock's other key like Unknown, apart from the folded tail", () => {
+    const french = rowNames("fr", "bySector", MOCK_EXPOSURES);
+    expect(french).toEqual(["Non classé", "Services financiers", "Énergie", "Services publics", "Industrie", "Autre"]);
+    expect(new Set(french).size).toBe(french.length);
+    const english = rowNames("en", "bySector", MOCK_EXPOSURES);
+    expect(english).toEqual(["Unclassified", "Financials", "Energy", "Utilities", "Industrials", "Other"]);
+    expect(new Set(english).size).toBe(english.length);
+  });
+
   it("leaves the contract keys unchanged", () => {
     exposureGroups(EXPOSURES, dictionaries.fr, "fr");
     expect(Object.keys(EXPOSURES.by_sector)).toContain("Unknown");
@@ -70,7 +93,8 @@ describe("sector and market labels of the exposures (issue #80)", () => {
     expect(exposureLabel("market", "NYSE Arca", "fr")).toBe("NYSE Arca");
     expect(exposureLabel("market", "Crypto (24/7)", "fr")).toBe("Crypto (24 h/24, 7 j/7)");
     expect(exposureLabel("market", "Unknown", "fr")).toBe("Non classé");
-    expect(exposureLabel("market", "other", "en")).toBe("Other");
+    expect(exposureLabel("market", "other", "fr")).toBe("Non classé");
+    expect(exposureLabel("market", "other", "en")).toBe("Unclassified");
     expect(exposureLabel("sector", "Quantum Widgets", "fr")).toBe("Quantum Widgets");
     expect(exposureLabel("sector", "constructor", "fr")).toBe("constructor");
   });

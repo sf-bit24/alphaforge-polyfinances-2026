@@ -342,7 +342,7 @@ Accès S3, en motifs de clés exacts (comme `agentcore.tf`) :
 
 S'y ajoutent `polly:SynthesizeSpeech`, `states:StartExecution` sur la machine, `bedrock:Retrieve` et `bedrock:ApplyGuardrail`.
 
-Le bucket refuse tout accès sans TLS (`DenyInsecureTransport`), avec une seule exception : le rôle MediaConvert de tldoole sur `clients/*/tldoole/*`, où il ne peut que `GetObject` et `PutObject`. Les téléchargeurs d'incrustations et de polices de MediaConvert lisent sans TLS : sous la règle, les jobs échouaient (erreurs 1010 et 1404).
+Le rôle MediaConvert de tldoole a `GetObject`, `GetObjectVersion` et `PutObject` sur `clients/*/tldoole/*`. Le bucket est versionné, et les téléchargeurs d'incrustations et de polices de MediaConvert lisent une version précise de l'objet : sans `GetObjectVersion`, le job échoue (erreur 1404 sur la police, 1010 sur une image).
 
 Sessions AgentCore : `<client_id>-detect` pour `detect`, `<client_id>-<video_id>` pour `produce` et `finalize`, `<client_id>-feed` pour l'interface.
 

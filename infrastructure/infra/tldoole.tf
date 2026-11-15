@@ -46,13 +46,6 @@ locals {
   # (s3.tf, local.s3_kms_user_role_arns) : la cle ne delegue pas a IAM.
   tldoole_kms_user_role_arns = [aws_iam_role.tldoole_sfn.arn, aws_iam_role.tldoole_mediaconvert.arn]
 
-  # Fichiers de montage (ecrans, police, narration, sous-titres, MP4). Les
-  # telechargeurs d'incrustations et de polices de MediaConvert les lisent sans
-  # TLS : la bucket policy (s3.tf) exempte ce seul role de DenyInsecureTransport,
-  # et seulement sur ces objets.
-  tldoole_media_objects_arn            = "${aws_s3_bucket.this.arn}/clients/*/tldoole/*"
-  tldoole_insecure_transport_role_arns = [aws_iam_role.tldoole_mediaconvert.arn]
-
   tldoole_detect_max_polls  = ceil(var.tldoole_detect_timeout_seconds / var.tldoole_poll_seconds)
   tldoole_produce_max_polls = ceil(var.tldoole_produce_timeout_seconds / var.tldoole_poll_seconds)
 
@@ -464,10 +457,13 @@ resource "aws_iam_role" "tldoole_mediaconvert" {
 }
 
 data "aws_iam_policy_document" "tldoole_mediaconvert" {
+  # Le bucket est versionne : les telechargeurs d'incrustations (ImageInserter)
+  # et de polices de sous-titres lisent une version precise de l'objet. Sans
+  # s3:GetObjectVersion, le job echoue en 1404 (police) ou 1010 (image).
   statement {
     sid       = "VideoAssets"
-    actions   = ["s3:GetObject", "s3:PutObject"]
-    resources = [local.tldoole_media_objects_arn]
+    actions   = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"]
+    resources = ["${aws_s3_bucket.this.arn}/clients/*/tldoole/*"]
   }
 }
 

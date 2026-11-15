@@ -16,6 +16,9 @@
 #               lance lui-meme ses chercheurs (InvokeAgentRuntime)
 #   researcher  sous-agent de recherche, une session par mission ; appele par
 #               les experts seulement
+#   portfolio   construction du portefeuille simule (etape 0, A3, lentilles,
+#               Judge du volet finance), seulement si portfolio_enabled : son
+#               propre zip, avec le groupe uv finance (numpy, pandas, cvxpy)
 #
 # Le contrat des requetes et des reponses est dans app/CONTRACTS.md.
 # =============================================================================
@@ -35,7 +38,26 @@ locals {
   # code ni les entrees du job. Sinon, aucun droit sous scenarios/.
   agentcore_profile_scenarios_keys = var.scenarios_enabled ? ["scenarios/latest.json", "scenarios/output/*"] : []
 
-  agentcore_runtimes = {
+  # Runtime portfolio (app/CONTRACTS.md section 12) : seulement si
+  # portfolio_enabled (faux par defaut : le plan ne change rien). Memes droits
+  # S3 que profile (lit general/, lit et ecrit clients/ dont decisions/, et
+  # les scenarios seulement si scenarios_enabled), Knowledge Base et Guardrail.
+  # Le journal des decisions et le rejeu LLM (traceability.tf) passent par
+  # finance_trace_runtimes.
+  agentcore_portfolio_runtimes = {
+    for role, runtime in {
+      portfolio = {
+        description    = "Portefeuille simule : etape 0, A3, lentilles et Judge du volet finance (simulation seulement)."
+        s3_read        = concat(["general/*", "clients/*"], local.agentcore_profile_scenarios_keys)
+        s3_write       = ["clients/*"]
+        s3_list        = concat(["general/*", "clients/*"], local.agentcore_profile_scenarios_keys)
+        knowledge_base = true
+        guardrail      = true
+      }
+    } : role => runtime if var.portfolio_enabled
+  }
+
+  agentcore_runtimes = merge({
     profile = {
       description    = "Profil investisseur : questions de base deterministes, relances A1, portefeuille existant A2."
       s3_read        = concat(["general/*", "clients/*"], local.agentcore_profile_scenarios_keys)
@@ -98,7 +120,7 @@ locals {
       knowledge_base = false
       guardrail      = false
     }
-  }
+  }, local.agentcore_portfolio_runtimes)
 
   # Profil d'inference inter-regions (us.) et modele de fondation qu'il route.
   agentcore_foundation_model_id = replace(var.agentcore_model_id, "/^(us|global)\\./", "")
@@ -118,11 +140,39 @@ locals {
     ALPHAFORGE_GUARDRAIL_VERSION = aws_bedrock_guardrail_version.cadre.version
   }
 
+  # portfolio : celles de profile, puis la tracabilite du volet finance
+  # (traceability.tf) et le modele des roles du debat. finance/debate/roles.py
+  # lit ALPHAFORGE_MODEL_MAIN (A3) et ALPHAFORGE_MODEL_LENS (lentilles), Sonnet
+  # et Haiku par defaut : le role IAM n'autorise que var.agentcore_model_id
+  # (Opus 5.5), donc les deux y pointent. Le rejeu LLM (FileStore) ecrit sous
+  # /tmp, seul repertoire inscriptible sur lequel on compte dans la microVM.
+  agentcore_portfolio_env = merge(local.agentcore_profile_env, {
+    ALPHAFORGE_DECISIONS_TABLE = aws_dynamodb_table.trace["decisions"].name
+    ALPHAFORGE_LOG_GROUP       = aws_cloudwatch_log_group.finance_app.name
+    ALPHAFORGE_CLOUDWATCH_LOGS = "1"
+    ALPHAFORGE_OTLP_XRAY       = "1"
+    ALPHAFORGE_MODEL_MAIN      = var.agentcore_model_id
+    ALPHAFORGE_MODEL_LENS      = var.agentcore_model_id
+    ALPHAFORGE_LLM_STORE       = "/tmp/alphaforge-llm-records"
+  })
+
   # Variables propres a un role, fusionnees apres les variables communes.
   agentcore_role_env = {
-    profile = local.agentcore_profile_env
-    expert  = merge({ ALPHAFORGE_KB_ID = aws_bedrockagent_knowledge_base.general.id }, local.recherche_expert_env)
+    profile   = local.agentcore_profile_env
+    expert    = merge({ ALPHAFORGE_KB_ID = aws_bedrockagent_knowledge_base.general.id }, local.recherche_expert_env)
+    portfolio = local.agentcore_portfolio_env
   }
+
+  # Zip du runtime portfolio (package.sh, ALPHAFORGE_PACKAGE_PORTFOLIO=1). S'il
+  # manque alors que portfolio_enabled, le runtime prend le zip commun : health
+  # repond, build renvoie une erreur claire (moteur absent), et le bloc check
+  # ci-dessous avertit au plan, sans bloquer l'apply ni detruire le runtime.
+  agentcore_portfolio_zip       = "${path.module}/build/agents-portfolio.zip"
+  agentcore_portfolio_zip_files = var.portfolio_enabled ? fileset("${path.module}/build", "agents-portfolio.zip") : toset([])
+  agentcore_code_keys = merge(
+    { for role in keys(local.agentcore_runtimes) : role => aws_s3_object.agents_code.key },
+    { for o in aws_s3_object.agents_portfolio_code : "portfolio" => o.key },
+  )
 }
 
 # Code des runtimes. La cle porte le SHA du commit : un nouvel objet par
@@ -140,6 +190,30 @@ resource "aws_s3_object" "agents_code" {
   # l'ancien : aucun runtime ne pointe vers un objet supprime.
   lifecycle {
     create_before_destroy = true
+  }
+}
+
+# Code du runtime portfolio : meme schema de cle, un objet par commit.
+resource "aws_s3_object" "agents_portfolio_code" {
+  for_each = local.agentcore_portfolio_zip_files
+
+  bucket       = aws_s3_bucket.this.id
+  key          = "runtime/agents-portfolio-${var.release_id}.zip"
+  source       = local.agentcore_portfolio_zip
+  content_type = "application/zip"
+
+  depends_on = [aws_s3_bucket_server_side_encryption_configuration.this]
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Avertissement (pas une erreur) : portfolio_enabled sans le zip portfolio.
+check "agentcore_portfolio_code" {
+  assert {
+    condition     = !var.portfolio_enabled || length(local.agentcore_portfolio_zip_files) == 1
+    error_message = "portfolio_enabled = true mais infra/build/agents-portfolio.zip est absent : package.sh doit tourner avec ALPHAFORGE_PACKAGE_PORTFOLIO=1 (en CI : a brancher dans app.yml). Le runtime portfolio prend le zip commun, sans le moteur du volet finance : build echouera."
   }
 }
 
@@ -313,7 +387,7 @@ resource "aws_bedrockagentcore_agent_runtime" "this" {
       code {
         s3 {
           bucket = aws_s3_bucket.this.bucket
-          prefix = aws_s3_object.agents_code.key
+          prefix = local.agentcore_code_keys[each.key]
         }
       }
     }

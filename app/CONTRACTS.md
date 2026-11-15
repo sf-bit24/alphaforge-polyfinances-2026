@@ -20,6 +20,8 @@ Un seul zip de code (`app/agents`, Python 3.13, linux/arm64) alimente tous les r
 
 Chaque rôle n'a `s3:ListBucket` que sous ses propres préfixes. Pour un objet absent, S3 répond donc 403 (`AccessDenied`) et non 404 : le magasin vérifie alors l'absence par `ListObjectsV2` sur la clé exacte, et ne conclut à un refus que si l'objet existe.
 
+Ajout facultatif (section 12), seulement si `portfolio_enabled = true` : runtime `alphaforge_sandbox_portfolio` (`AGENT_ROLE=portfolio`), appelé par le serveur Next.js; mêmes droits S3 que `profile` (lit `general/`, lit et écrit `clients/`, dont `clients/<id>/decisions/`), Knowledge Base et Guardrail, plus le journal des décisions et le rejeu LLM (`finance_trace_runtimes`). Son zip est `runtime/agents-portfolio-<release>.zip` (groupe uv `finance` en plus).
+
 Ajout facultatif (section 10), seulement si `scenarios_enabled = true` : le rôle de `profile` lit aussi `scenarios/latest.json` et `scenarios/output/` (lecture et liste seulement), pour l'outil `scenario_risk` (état cible : l'outil n'est pas encore branché dans le runtime).
 
 Variables d'environnement posées par Terraform sur chaque runtime :
@@ -618,3 +620,14 @@ Construction du portefeuille simulé d'un client par le volet finance (section 9
 - Erreurs : `bad_request` (requête mal formée ou style inconnu, refusée avant tout calcul), `not_found` (pas de `profil.md`), `model_error` (Bedrock ou Strands), `conflict`, `internal`.
 - Réponse JSON seulement (pas de streaming en version 1); une construction en mode `llm` prend plusieurs appels de modèle.
 - Les traces OpenTelemetry du moteur sont configurées au premier `build` (`telemetry.setup`, X-Ray si `ALPHAFORGE_OTLP_XRAY=1`) et vidées après chaque construction.
+
+Déploiement (`infrastructure/infra/agentcore.tf`) : seulement si `portfolio_enabled = true` (faux par défaut, le plan ne change alors rien). Zip `runtime/agents-portfolio-<release>.zip`, construit par `package.sh` si `ALPHAFORGE_PACKAGE_PORTFOLIO=1` (roues `aarch64-manylinux_2_28`); s'il manque, le runtime prend le zip commun et `build` renvoie `internal` en le disant. Variables en plus de celles de `profile` :
+
+| Variable | Valeur posée par Terraform | Lue par |
+| --- | --- | --- |
+| `ALPHAFORGE_DECISIONS_TABLE` | `alphaforge-sandbox-decisions` (table gérée de `traceability.tf`) | `finance/observability/audit.py` |
+| `ALPHAFORGE_LOG_GROUP` | `/alphaforge-sandbox/finance` | `finance/observability/telemetry.py` (`log_event`) |
+| `ALPHAFORGE_CLOUDWATCH_LOGS` | `1` | idem : journaux structurés dans CloudWatch Logs |
+| `ALPHAFORGE_OTLP_XRAY` | `1` | idem : spans OTLP vers X-Ray (Transaction Search) |
+| `ALPHAFORGE_MODEL_MAIN` / `ALPHAFORGE_MODEL_LENS` | `var.agentcore_model_id` (Opus 5.5, seul profil autorisé par le rôle IAM) | `finance/debate/roles.py` (A3 et lentilles; Sonnet et Haiku par défaut hors AWS) |
+| `ALPHAFORGE_LLM_STORE` | `/tmp/alphaforge-llm-records` | `finance/debate/roles.py` (enregistrements du rejeu LLM, `FileStore`) |

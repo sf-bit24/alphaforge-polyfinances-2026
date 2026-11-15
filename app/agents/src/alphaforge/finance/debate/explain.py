@@ -11,8 +11,16 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass, field
 
 from alphaforge.finance.contracts.decision import Explanation, Statement
+from alphaforge.finance.policy.compiler import (
+    DollarRuleProtection,
+    GoalRef,
+    NoMandateCause,
+    ProfileChange,
+    ProtectionLevers,
+)
 from alphaforge.finance.strategy.labels import STYLE_FR, flag_fr, sector_fr
 
 from .facts import FactBook, fmt
@@ -324,3 +332,443 @@ def grounding_check(
         ],
     )
     return {"action": r.get("action"), "assessments": r.get("assessments")}
+
+
+# --------------------------------------------------------------------------- décision sans allocation
+
+MUST_HAVE_FR = {"investable_wealth": "le montant à investir", "goals.horizon": "l'horizon de placement"}
+PLANNING_LOSS_FR = "la plus petite perte de planification des portefeuilles possibles"
+SAME_VALUE = 1e-12
+NECESSARY_FR = " serait nécessaire pour qu'une allocation soit possible"
+# Libellé de l'objectif principal du questionnaire (from_profile_view) : « objectif : <code de l'option> », code
+# anglais brut (« retirement ») ; l'explication le nomme « votre objectif principal ».
+MAIN_GOAL_PREFIX = "objectif : "
+
+
+def no_allocation_explanation(
+    book: FactBook, kind: str, cause: NoMandateCause, missing_info: list[str], level_fid: str
+) -> Explanation:
+    """Explication d'une décision sans allocation (``protection``, ``incomplet`` ou ``position_attente``).
+
+    Elle nomme la cause que la compilation a inscrite dans sa trace (règle des dollars, statut du profil, champ
+    obligatoire absent, confiance) et le levier qui changerait la réponse. Chaque nombre écrit est la valeur formatée
+    d'un Fact cité, rattaché à l'étape de compilation (celle du Fact ``level``). « Compléter : … » n'apparaît que
+    pour un profil à qui il manque vraiment des informations.
+    """
+    data_used = [Statement(text_fr="Profil analysé selon les règles déterministes du mandat.", fact_ids=[level_fid])]
+    if kind == "protection":
+        return _protection_explanation(book, cause, missing_info, level_fid, data_used)
+    why, change = _incomplete_statements(book, kind, cause, missing_info, level_fid)
+    limits = [
+        Statement(text_fr="Aucune allocation n'est calculée tant que le profil n'est pas complété.", label="HYPOTHESE")
+    ]
+    return Explanation(data_used=data_used, why=why, limits=limits, what_would_change=change)
+
+
+def _incomplete_statements(
+    book: FactBook, kind: str, cause: NoMandateCause, missing_info: list[str], level_fid: str
+) -> tuple[list[Statement], list[Statement]]:
+    """Profil incomplet (``incomplet``) ou en attente (``position_attente``) : champs manquants, confiance."""
+    tid = book.facts[level_fid].trace_id
+    must = [MUST_HAVE_FR.get(name, name) for name in cause.must_have_missing]
+    if kind != "incomplet":
+        text = (
+            "Le profil n'est pas encore complet : une position d'attente prudente s'applique, sans allocation calculée."
+        )
+    elif must:
+        what = "une information indispensable" if len(must) == 1 else "des informations indispensables"
+        text = (
+            f"Le profil ne permet pas encore une proposition : il manque {what} au calcul ({', '.join(must)}) ; "
+            "aucune allocation n'est calculée."
+        )
+    else:
+        text = (
+            "Le profil ne permet pas encore une proposition : des informations manquent ; aucune allocation n'est "
+            "calculée."
+        )
+    why = [Statement(text_fr=text, fact_ids=[level_fid])]
+    change: list[Statement] = []
+    if cause.low_confidence:
+        src = cause.status_yaml_path or "risk_levels.yaml#status"
+        conf = book.add(
+            "attente.confidence",
+            "Confiance du profil",
+            cause.confidence,
+            "%",
+            dataset="profil : confidence",
+            trace_id=tid,
+        )
+        need = book.add(
+            "attente.completeness_min",
+            "Confiance minimale pour une proposition",
+            cause.completeness_min,
+            "%",
+            dataset=f"{src}.completeness_min",
+            trace_id=tid,
+        )
+        why.append(
+            Statement(
+                text_fr=f"La confiance du profil ({fmt(cause.confidence, '%')}) est sous le minimum requis pour une "
+                f"proposition ({fmt(cause.completeness_min, '%')}).",
+                fact_ids=[conf, need],
+            )
+        )
+        change.append(
+            Statement(
+                text_fr="Confirmer ou préciser les réponses du profil, pour que sa confiance atteigne au moins "
+                f"{fmt(cause.completeness_min, '%')}.",
+                fact_ids=[need],
+                label="HYPOTHESE",
+            )
+        )
+    missing = list(missing_info) or must
+    if missing or not change:  # sans cause connue, le statut INCOMPLETE vient du profil lui-même
+        change.insert(
+            0, Statement(text_fr="Compléter : " + ", ".join(missing or ["le profil"]) + ".", label="HYPOTHESE")
+        )
+    return why, change
+
+
+def _protection_explanation(
+    book: FactBook, cause: NoMandateCause, missing_info: list[str], level_fid: str, data_used: list[Statement]
+) -> Explanation:
+    """Mode protection : le profil le signale (statut PROTECTION), ou la règle des dollars ne laisse aucune part
+    d'actions dont la perte de planification tienne dans l*. Les deux causes peuvent s'additionner, et un profil en
+    protection peut aussi manquer d'informations : « Compléter : … » reste alors un levier."""
+    tid = book.facts[level_fid].trace_id
+    why: list[Statement] = []
+    change: list[Statement] = []
+    must = [MUST_HAVE_FR.get(name, name) for name in cause.must_have_missing]
+    missing = list(missing_info) or must
+    if missing:
+        change.append(Statement(text_fr="Compléter : " + ", ".join(missing) + ".", label="HYPOTHESE"))
+    limits = [
+        Statement(
+            text_fr=f"En mode protection, le niveau reste {fmt(book.facts[level_fid].value, 'niveau')} et aucune "
+            "allocation n'est calculée ; le mandat prévoit d'en parler avec une personne qualifiée.",
+            fact_ids=[level_fid],
+            label="HYPOTHESE",
+        )
+    ]
+    if cause.profile_protection:
+        fid = book.add(
+            "protection.profile_status",
+            "Statut transmis par le profil",
+            "PROTECTION",
+            "texte",
+            dataset=cause.status_yaml_path or "profil : status",
+            processing="statut du profil (signaux de vulnérabilité) ; status.PROTECTION : niveau N0, renvoi humain",
+            trace_id=tid,
+        )
+        why.append(
+            Statement(
+                text_fr="Votre profil signale une situation de vulnérabilité (statut PROTECTION) : par prudence, "
+                "aucune allocation n'est calculée.",
+                fact_ids=[fid],
+            )
+        )
+        change.append(
+            Statement(
+                text_fr="Revoir votre situation avec une personne qualifiée : tant que le profil signale une "
+                "vulnérabilité, aucune allocation n'est calculée.",
+                fact_ids=[fid],
+                label="HYPOTHESE",
+            )
+        )
+    if cause.dollar_rule is not None:
+        facts = _ProtectionFacts(book, cause.dollar_rule, cause.levers, tid)
+        data_used.append(facts.rule_statement())
+        why += facts.why()
+        change += facts.lever_statements(others=len(change))
+        limits.append(
+            Statement(
+                text_fr="Les pertes de planification viennent de l'historique (pire baisse observée, plus une marge) : "
+                "elles ne prédisent pas les pertes futures.",
+                label="HYPOTHESE",
+            )
+        )
+    if not cause.profile_protection and cause.dollar_rule is None:  # cause non inscrite (compilation externe)
+        why.append(
+            Statement(
+                text_fr="Le mode protection s'applique : le profil présente des signaux de vulnérabilité ; par "
+                "prudence, aucune allocation n'est calculée.",
+                fact_ids=[level_fid],
+            )
+        )
+        change.append(
+            Statement(
+                text_fr="Revoir votre situation avec une personne qualifiée avant toute proposition.", label="HYPOTHESE"
+            )
+        )
+    if must:
+        what = "une information indispensable" if len(must) == 1 else "des informations indispensables"
+        why.append(Statement(text_fr=f"Il manque aussi {what} au calcul ({', '.join(must)}).", fact_ids=[level_fid]))
+    return Explanation(data_used=data_used, why=why, limits=limits, what_would_change=change)
+
+
+def _duration(years: float) -> tuple[float, str]:
+    """Horizon affiché : en mois sous deux ans (« 12,0 mois »), en années au-delà."""
+    return (round(years * 12, 4), "mois") if years < 2 else (years, "ans")
+
+
+def _covered(book: FactBook, text: str, fact_ids: list[str]) -> bool:
+    """Vrai si chaque nombre du texte est la valeur d'un Fact cité : le libellé d'un objectif (« retraits prévus sous
+    12 mois ») peut alors être cité tel quel sans enfreindre la règle des nombres."""
+    values = {float(book.facts[fid].value) for fid in fact_ids if isinstance(book.facts[fid].value, int | float)}
+    values |= {float(n) for n in allowed_numbers(book, fact_ids)}
+    return all(float(n) in values for n in numbers(text))
+
+
+@dataclass
+class _ProtectionFacts:
+    """Facts de la règle des dollars en PROTECTION (``dollar_rule.protection``, ses entrées et ses leviers vérifiés),
+    rattachés à l'étape de compilation, et les phrases qui les citent."""
+
+    book: FactBook
+    rule: DollarRuleProtection
+    levers: ProtectionLevers | None
+    trace_id: str
+    star: str = field(init=False)  # Fact de l*
+    floor: str = field(init=False)  # Fact de min_L_plan
+    goal_facts: dict[str, str] = field(default_factory=dict)  # objectif -> Fact de son horizon
+
+    def __post_init__(self) -> None:
+        self.star = self.add(
+            "l_star",
+            "Perte maximale admissible retenue (l*)",
+            self.rule.l_star,
+            "%",
+            "l* = min(L_plan(e_max), l_declared, l_cap)",
+        )
+        self.floor = self.add(
+            "min_L_plan",
+            "Plus petite perte de planification des portefeuilles possibles (min L_plan)",
+            self.rule.min_planning_loss,
+            "%",
+            "minimum sur la grille des parts d'actions de L_plan(e) = ENV(e, mdd) + daily_buffer",
+        )
+
+    def add(self, key: str, label: str, value, unit: str, processing: str, dataset: str | None = None) -> str:
+        return self.book.add(
+            f"protection.{key}",
+            label,
+            value,
+            unit,
+            dataset=dataset or self.rule.yaml_path,
+            processing=processing,
+            currency="CAD" if unit == "CAD" else None,
+            trace_id=self.trace_id,
+        )
+
+    def loss(self, key: str, label: str, value: float, processing: str) -> str:
+        """Fact d'une perte entrée de l* ; celui de l* quand elle en est la valeur (l* est alors cité)."""
+        if abs(value - self.rule.l_star) <= SAME_VALUE:
+            return self.star
+        return self.add(key, label, value, "%", processing)
+
+    def v(self, fid: str) -> str:
+        fact = self.book.facts[fid]
+        return fmt(fact.value, fact.unit)
+
+    def below(self, said: str, ids: list[str]) -> Statement:
+        return Statement(
+            text_fr=f"{said} est sous {PLANNING_LOSS_FR} ({self.v(self.floor)}) : aucune allocation ne respecte cette "
+            "limite.",
+            fact_ids=[*ids, self.floor],
+        )
+
+    def rule_statement(self) -> Statement:
+        return Statement(
+            text_fr=f"Règle des dollars : la perte admissible retenue ({self.v(self.star)}) doit couvrir la perte de "
+            "planification d'un portefeuille, soit sa pire baisse historique plus une marge quotidienne. La plus "
+            f"petite, parmi les portefeuilles possibles, est de {self.v(self.floor)}.",
+            fact_ids=[self.star, self.floor],
+        )
+
+    # ------------------------------------------------------------------ pourquoi : chaque entrée de l* trop basse
+    def why(self) -> list[Statement]:
+        rule = self.rule
+        found = [
+            part
+            for part in (
+                self._declared() if rule.is_below(rule.declared_loss) else None,
+                self._horizon() if rule.is_below(rule.horizon_loss) else None,
+                self._withdrawals() if rule.is_below(rule.withdrawal_loss) else None,
+            )
+            if part is not None
+        ]
+        return found or [self.below(f"La perte admissible retenue ({self.v(self.star)})", [self.star])]
+
+    def _declared(self) -> Statement:
+        rule = self.rule
+        pct = self.loss(
+            "l_declared",
+            "Perte maximale déclarée, en part du montant (l_declared)",
+            rule.declared_loss,
+            "l_declared = min(max_acceptable_loss_pct, max_acceptable_loss_cad / W)",
+        )
+        if rule.declared_in_dollars:
+            cad = self.add(
+                "max_loss_cad",
+                "Perte maximale déclarée",
+                rule.declared_loss_cad,
+                "CAD",
+                "trace dollar_rule.l_declared",
+                dataset="profil : max_acceptable_loss_cad",
+            )
+            said = f"La perte que vous dites pouvoir absorber ({self.v(cad)}, soit {self.v(pct)} du montant)"
+            return self.below(said, [cad, pct])
+        return self.below(f"La perte que vous dites pouvoir absorber ({self.v(pct)} du montant)", [pct])
+
+    def _horizon(self) -> Statement:
+        rule = self.rule
+        loss = self.loss(
+            "horizon_loss",
+            "Perte que l'horizon permet d'absorber",
+            rule.horizon_loss,
+            "1 - (1 + mu_recovery)^-T, terme de l_cap",
+        )
+        value, unit = _duration(rule.horizon_years)
+        horizon = self.add(
+            "horizon",
+            "Horizon de placement retenu (T du seau risque)",
+            value,
+            unit,
+            "trace horizon.T_risk et dollar_rule.l_cap",
+        )
+        goal = self.levers.horizon_goal if self.levers else None
+        if goal is not None:
+            self.goal_facts[goal.goal_id] = horizon
+        name = _goal_words(self.book, goal, [horizon]) if goal is not None else None
+        if name is not None:
+            text = f"{name[0].upper()}{name[1:]} fixe l'horizon de placement à {self.v(horizon)}."
+        else:
+            text = f"L'horizon de placement retenu est de {self.v(horizon)}."
+        return Statement(
+            text_fr=f"{text} La perte que cet horizon permet d'absorber ({self.v(loss)}) est sous {PLANNING_LOSS_FR} "
+            f"({self.v(self.floor)}) : aucune allocation ne respecte cette limite.",
+            fact_ids=[horizon, loss, self.floor],
+        )
+
+    def _withdrawals(self) -> Statement:
+        rule = self.rule
+        loss = self.loss(
+            "withdrawal_loss",
+            "Perte que les retraits prévus permettent d'absorber",
+            rule.withdrawal_loss,
+            "1 - q / q_max, terme de l_cap",
+        )
+        rate = self.add(
+            "withdrawal_rate",
+            "Retraits prévus par an, en part du montant (q)",
+            rule.withdrawal_rate,
+            "%",
+            "trace dollar_rule.l_cap",
+        )
+        said = (
+            f"La perte que vos retraits prévus permettent d'absorber ({self.v(loss)}, pour des retraits de "
+            f"{self.v(rate)} du montant par an)"
+        )
+        return self.below(said, [loss, rate])
+
+    # ------------------------------------------------------------------ leviers vérifiés par compilation
+    def lever_statements(self, others: int) -> list[Statement]:
+        """Un énoncé par levier vérifié. Seul, il « rendrait une allocation possible » (la compilation du profil
+        modifié donne un mandat) ; avec d'autres causes, chacun « serait nécessaire »."""
+        levers = self.levers
+        if levers is None:  # leviers non calculés (profil absent) : la règle, sans chiffre
+            return [
+                Statement(
+                    text_fr="Une perte admissible plus élevée ou un horizon de placement plus long serait nécessaire "
+                    "pour qu'une allocation soit possible.",
+                    label="HYPOTHESE",
+                )
+            ]
+        parts = [self._required_lever(change) for change in levers.required]
+        alone = len(parts) + int(levers.horizon_short) + others == 1 and levers.allocation
+        tail = " rendrait une allocation possible" if alone else NECESSARY_FR
+        out = [Statement(text_fr=f"{subject}{tail}.", fact_ids=ids) for subject, ids in parts]
+        if levers.horizon_short:
+            out.append(self._horizon_lever(levers, tail))
+        if levers.allocation and not alone and others == 0:
+            out.append(
+                Statement(
+                    text_fr="Ensemble, ces changements rendraient une allocation possible : une nouvelle compilation "
+                    "du profil modifié le vérifie.",
+                )
+            )
+        return out
+
+    def _required_lever(self, change: ProfileChange) -> tuple[str, list[str]]:
+        verified = "seuil de la règle des dollars, vérifié par une nouvelle compilation du profil modifié"
+        if change.kind == "max_loss_cad":
+            fid = self.add("min_loss_cad", "Perte admissible minimale pour une allocation", change.value, "CAD",
+                           f"min_L_plan × W, arrondi au dollar supérieur ; {verified}")
+            return f"Une perte admissible d'au moins {self.v(fid)} sur ce montant", [fid]
+        if change.kind == "max_loss_pct":
+            fid = self.add("min_loss_pct", "Perte admissible minimale pour une allocation, en part du montant",
+                           change.value, "%", f"min_L_plan arrondi au dixième de point supérieur ; {verified}")
+            return f"Une perte admissible d'au moins {self.v(fid)} du montant", [fid]
+        fid = self.add("allowed_withdrawal_rate", "Retraits maximaux par an pour une allocation", change.value, "%",
+                       f"q_max × (1 - min_L_plan), arrondi au dixième de point inférieur ; {verified}")
+        return f"Un taux de retrait d'au plus {self.v(fid)} du montant par an", [fid]
+
+    def _horizon_lever(self, levers: ProtectionLevers, tail: str) -> Statement:
+        if not levers.horizon:
+            return Statement(
+                text_fr=f"Un horizon de placement plus long{tail} ; aucun changement d'un seul objectif ne suffit ici.",
+                label="HYPOTHESE",
+            )
+        texts, ids = [], []
+        for option in levers.horizon:
+            text, option_ids = self._horizon_option(option)
+            texts.append(text)
+            ids += option_ids
+        return Statement(
+            text_fr=f"Un horizon de placement plus long{tail}. Par exemple : " + " ; ou ".join(texts) + ".",
+            fact_ids=list(dict.fromkeys(ids)),
+        )
+
+    def _horizon_option(self, option: ProfileChange) -> tuple[str, list[str]]:
+        goal = option.goal
+        name, ids = self._goal_name(goal)
+        if option.kind == "without_goal":
+            after = self._horizon_after(option)
+            return f"sans {name}, l'horizon passerait à {self.v(after)}", [*ids, after]
+        target = self.add(f"lever.{goal.goal_id}.horizon", f"Horizon testé pour {_goal_title(goal)}",
+                          *_duration(option.value), "plus petit horizon testé qui lève la règle des dollars")
+        text = f"un horizon d'au moins {self.v(target)} pour {name}"
+        if _duration(option.horizon_after) != _duration(option.value):  # réserve de retraits : T ne vaut pas l'horizon
+            after = self._horizon_after(option)
+            text += f", l'horizon passerait à {self.v(after)}"
+            ids.append(after)
+        return text, [*ids, target]
+
+    def _horizon_after(self, option: ProfileChange) -> str:
+        return self.add(f"lever.{option.goal.goal_id}.horizon_after", "Horizon de placement après ce changement",
+                        *_duration(option.horizon_after), "trace horizon.T_risk de la compilation du profil modifié")
+
+    def _goal_name(self, goal: GoalRef) -> tuple[str, list[str]]:
+        """Nom de l'objectif (``_goal_words``), ou « votre objectif à 5,0 ans » si son libellé a des nombres non
+        sourcés."""
+        fid = self.goal_facts.get(goal.goal_id)
+        if fid is None:
+            fid = self.add(f"goal.{goal.goal_id}.horizon", f"Horizon de {_goal_title(goal)}",
+                           *_duration(goal.horizon_years), "trace horizon.T_risk")
+            self.goal_facts[goal.goal_id] = fid
+        return _goal_words(self.book, goal, [fid]) or f"votre objectif à {self.v(fid)}", [fid]
+
+
+def _goal_title(goal: GoalRef) -> str:
+    """Nom de l'objectif dans le libellé d'un Fact : « l'objectif principal » ou « l'objectif « libellé » »."""
+    return "l'objectif principal" if goal.label.startswith(MAIN_GOAL_PREFIX) else f"l'objectif « {goal.label} »"
+
+
+def _goal_words(book: FactBook, goal: GoalRef, fact_ids: list[str]) -> str | None:
+    """Nom de l'objectif dans une phrase : « votre objectif principal » pour celui du questionnaire (son libellé porte
+    le code brut de l'option), « votre objectif « libellé » » si chaque nombre du libellé est sourcé, sinon None."""
+    if goal.label.startswith(MAIN_GOAL_PREFIX):
+        return "votre objectif principal"
+    if _covered(book, goal.label, fact_ids):
+        return f"votre objectif « {goal.label} »"
+    return None

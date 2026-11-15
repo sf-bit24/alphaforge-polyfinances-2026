@@ -24,6 +24,7 @@ from alphaforge.finance.policy.compiler import DEFAULT_YAML, _bias_key
 from alphaforge.finance.policy.models import CompileResult
 
 from .config import LEVELS, STYLES, StrategyConfig, StyleId, load_strategy
+from .labels import style_fr
 
 
 @dataclass(frozen=True)
@@ -326,7 +327,7 @@ def derive_style(
     if flags.low_literacy and comp.level_from_R in P.high_tolerance_levels:
         contradictions.append("connaissance faible × tolérance agressive")
     if pref == "offensive" and comp.horizon_years is not None and comp.horizon_years < P.short_horizon_years:
-        contradictions.append("horizon court × préférence offensive")
+        contradictions.append("horizon court × préférence pour le style offensif")
 
     binds, _ = _capacity_binds(comp)
     refused: list[str] = []
@@ -360,7 +361,7 @@ def derive_style(
                     refused.append("montée plafonnée à un cran")
     style: StyleId = STYLES[_idx(base) + shift]
     if flags.low_literacy and _idx(style) > _idx(P.beginner_max_style):
-        refused.append(f"débutant ou faible littératie : style plafonné à {P.beginner_max_style}")
+        refused.append(f"débutant ou faible littératie : style plafonné à {style_fr(P.beginner_max_style)}")
         style = P.beginner_max_style
         shift = _idx(style) - _idx(base)
     tr.t(

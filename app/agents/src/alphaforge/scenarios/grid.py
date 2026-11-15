@@ -15,13 +15,13 @@ from .schema import BLOCKS, mix_id
 def _values(spec: Mapping[str, object]) -> list[int]:
     """``{"min": 0, "max": 60, "step": 10}`` ou ``{"values": [0, 5, 10]}`` (en %, multiples de 5)."""
     if "values" in spec:
-        values = [int(v) for v in spec["values"]]  # type: ignore[union-attr]
+        values = [int(value) for value in spec["values"]]  # type: ignore[union-attr]
     else:
-        lo, hi, step = int(spec["min"]), int(spec["max"]), int(spec["step"])  # type: ignore[call-overload]
+        low, high, step = int(spec["min"]), int(spec["max"]), int(spec["step"])  # type: ignore[call-overload]
         if step <= 0:
             raise ValueError("pas nul ou négatif")
-        values = list(range(lo, hi + 1, step))
-    if any(v % 5 or v < 0 or v > 100 for v in values):
+        values = list(range(low, high + 1, step))
+    if any(value % 5 or value < 0 or value > 100 for value in values):
         raise ValueError(f"valeurs hors grille de 5 % : {values}")
     return values
 
@@ -39,24 +39,24 @@ def enumerate_mixes(
     for block in ranges:
         if block not in BLOCKS:
             raise ValueError(f"bloc inconnu dans la grille : {block}")
-    active = [b for b in BLOCKS if b in blocks and b in ranges]
-    value_lists = [_values(ranges[b]) for b in active]  # type: ignore[arg-type]
+    active = [block for block in BLOCKS if block in blocks and block in ranges]
+    value_lists = [_values(ranges[block]) for block in active]  # type: ignore[arg-type]
     ids: list[str] = []
     seen: set[str] = set()
     for combo in itertools.product(*value_lists):
         if sum(combo) != 100:
             continue
-        mid = mix_id({b: v / 100.0 for b, v in zip(active, combo, strict=True)})
-        if mid not in seen:
-            seen.add(mid)
-            ids.append(mid)
+        identifier = mix_id({block: value / 100.0 for block, value in zip(active, combo, strict=True)})
+        if identifier not in seen:
+            seen.add(identifier)
+            ids.append(identifier)
     for anchor in anchors:
-        if any(float(w) > 0 and b not in blocks for b, w in anchor.items()):
+        if any(float(weight) > 0 and block not in blocks for block, weight in anchor.items()):
             continue
-        mid = mix_id({b: float(w) / 100.0 for b, w in anchor.items()})
-        if mid not in seen:
-            seen.add(mid)
-            ids.append(mid)
+        identifier = mix_id({block: float(weight) / 100.0 for block, weight in anchor.items()})
+        if identifier not in seen:
+            seen.add(identifier)
+            ids.append(identifier)
     if len(ids) > max_mixes:
         raise ValueError(f"grille trop grande : {len(ids)} mélanges > max_mixes={max_mixes}")
     return ids

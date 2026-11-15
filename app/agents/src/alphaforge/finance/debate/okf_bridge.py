@@ -7,6 +7,9 @@ Clés écrites (proposition, à ajouter à app/CONTRACTS.md §5) :
     clients/<client_id>/decisions/<decision_id>.json    Decision complète (Facts, contrôles, trace)
     clients/<client_id>/decisions/<decision_id>.policy.json   mandat (PolicySpec) appliqué
 
+Clé lue de la base du client en plus du profil : ``clients/<id>/portefeuille-existant.md`` (« Existing Portfolio »,
+écrit par A2), dont les positions évaluées deviennent ``InvestorProfile.holdings``.
+
 Clés lues de la base générale (``OkfMarketStore``, lot E) : ``general/societes/*.md`` (« Company Fundamentals ») et
 ``general/actualites/AAAA/MM/*.md`` (« News »).
 """
@@ -39,7 +42,7 @@ from alphaforge.finance.strategy.okf_facts import (
     parse_news,
 )
 from alphaforge.profile.questionnaire import Questionnaire
-from alphaforge.profile.state import ClientSession
+from alphaforge.profile.state import ClientSession, portfolio_key
 from alphaforge.profile.views import completeness_view, profile_view
 from alphaforge.store import Store
 
@@ -58,6 +61,8 @@ class OkfClientStore:
         self.store = store
         self.q = questionnaire or Questionnaire.load()
         self.locale = locale
+        # (clé → ETag) des documents du client lus en plus du profil, pour la version des données de la décision.
+        self.inputs: dict[str, str] = {}
 
     def view(self, client_id: str) -> tuple[dict[str, Any], dict[str, Any], ClientSession]:
         session = ClientSession.load(self.store, client_id)
@@ -65,10 +70,30 @@ class OkfClientStore:
             raise KeyError(f"profil introuvable : {client_id}")
         return profile_view(self.q, session, self.locale), completeness_view(self.q, session, self.locale), session
 
+    def existing_portfolio(self, client_id: str) -> dict[str, Any] | None:
+        """``data`` de ``portefeuille-existant.md`` (``None`` s'il est absent) ; sa clé et son ETag vont dans
+        ``inputs``. Un document illisible est ignoré et signalé dans le journal : la décision n'en dépend pas."""
+        key = portfolio_key(client_id)
+        obj = self.store.get(key)
+        if obj is None:
+            return None
+        self.inputs[key] = obj.etag.strip('"') or hashlib.sha256(obj.body).hexdigest()
+        try:
+            return okf.parse(obj.text).data
+        except okf.OkfError as exc:
+            log.warning("okf: %s illisible : %s", key, exc)
+            self.inputs[key] = f"illisible:{self.inputs[key]}"
+            return None
+
     def load_profile(self, client_id: str) -> InvestorProfile:
         view, comp, session = self.view(client_id)
         return investor_profile_from_view(
-            view, client_id, version=max(int(session.turn or 0), 1), created_utc=datetime.now(UTC), completeness=comp
+            view,
+            client_id,
+            version=max(int(session.turn or 0), 1),
+            created_utc=datetime.now(UTC),
+            completeness=comp,
+            existing_portfolio=self.existing_portfolio(client_id),
         )
 
     def save_decision(self, decision: Decision, policy: PolicySpec | None = None) -> str:
@@ -139,6 +164,7 @@ class OkfMarketStore:
         self.bucket = bucket if bucket is not None else getattr(store, "bucket", None)
         self.max_news = max_news
         self._lock = threading.RLock()
+        self.client_inputs: dict[str, str] = {}  # pas un cache : reset() ne l'efface pas
         self.reset()
 
     def reset(self) -> None:
@@ -258,12 +284,21 @@ class OkfMarketStore:
         return [news_fact(item, ticker, n) for n, item in enumerate(items[: self.max_news], start=1)]
 
     # ------------------------------------------------------------------ version des données
+    def note_client_inputs(self, inputs: dict[str, str]) -> None:
+        """Documents du client lus avec le profil (``OkfClientStore.inputs``, ex. le portefeuille existant) : ils
+        entrent dans la version des données, comme les fondamentaux."""
+        with self._lock:
+            self.client_inputs.update(inputs)
+
     def data_version(self, base: str | None) -> str:
-        """``base`` + empreinte courte des (clé, ETag) des fondamentaux lus. Charge ``general/societes/`` d'abord :
-        la version ne dépend donc pas des outils qu'un LLM a choisi d'appeler. Les actualités n'y entrent jamais."""
+        """``base`` + empreinte courte des (clé, ETag) des fondamentaux lus et des documents du client notés par
+        ``note_client_inputs``. Charge ``general/societes/`` d'abord : la version ne dépend donc pas des outils qu'un
+        LLM a choisi d'appeler. Les actualités n'y entrent jamais. Sans document du client, la version est la même
+        qu'avant leur prise en compte."""
         self.load_fundamentals()
         with self._lock:
-            digest = hashlib.sha256(json.dumps(sorted(self.inputs.items())).encode()).hexdigest()[:12]
+            items = sorted({**self.inputs, **self.client_inputs}.items())
+            digest = hashlib.sha256(json.dumps(items).encode()).hexdigest()[:12]
         return f"{base}+okf:{digest}" if base else f"okf:{digest}"
 
 

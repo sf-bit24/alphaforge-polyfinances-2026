@@ -179,9 +179,12 @@ def _norm_name(value: str) -> str:
     return re.sub(r"[^a-z0-9 ]+", " ", value.lower()).strip()
 
 
-def find_asset(ticker: str | None, name: str | None = None, currency: str | None = None) -> Asset | None:
-    """Cherche un titre de l'univers par symbole (variantes ``.TO``, préfixes de bourse) puis par nom."""
-    assets = universe()
+def find_asset(
+    ticker: str | None, name: str | None = None, currency: str | None = None, assets: dict[str, Asset] | None = None
+) -> Asset | None:
+    """Cherche un titre de l'univers par symbole (variantes ``.TO``, préfixes de bourse) puis par nom.
+    ``assets`` : univers à parcourir (par défaut celui du jeu de départ; ``alphaforge.market`` passe le sien)."""
+    assets = universe() if assets is None else assets
     symbol, hint = normalize_symbol(ticker)
     if symbol:
         if symbol in assets:

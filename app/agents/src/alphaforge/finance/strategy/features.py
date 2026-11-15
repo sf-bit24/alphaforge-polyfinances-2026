@@ -19,7 +19,7 @@ import math
 import statistics
 from datetime import date, timedelta
 
-from alphaforge import starter
+from alphaforge import market
 
 from .config import StrategyConfig, load_strategy
 
@@ -42,8 +42,8 @@ def _price_on_or_before(rows, iso: str):
 
 
 def weekly_returns(ticker: str, as_of: str, weeks: int, cad: bool = False) -> list[tuple[str, float]]:
-    rows = starter.daily(ticker, as_of)
-    asset = starter.universe().get(ticker)
+    rows = market.daily(ticker, as_of)
+    asset = market.universe().get(ticker)
     if not rows or asset is None:
         return []
     ccy = asset.currency
@@ -54,7 +54,7 @@ def weekly_returns(ticker: str, as_of: str, weeks: int, cad: bool = False) -> li
             continue
         px = r.adj_close
         if cad and ccy != "CAD":
-            fx = starter.usdcad_on_or_before(r.date)
+            fx = market.usdcad_on_or_before(r.date)
             if fx is None:
                 continue
             px *= fx
@@ -74,12 +74,12 @@ def volatility(ticker: str, as_of: str, cfg: StrategyConfig) -> float | None:
 
 
 def _daily_returns(ticker: str, as_of: str) -> dict[str, float]:
-    rows = starter.daily(ticker, as_of)
+    rows = market.daily(ticker, as_of)
     return {b.date: b.adj_close / a.adj_close - 1.0 for a, b in zip(rows, rows[1:], strict=False) if a.adj_close > 0}
 
 
 def beta(ticker: str, as_of: str, cfg: StrategyConfig) -> tuple[float | None, str]:
-    asset = starter.universe().get(ticker)
+    asset = market.universe().get(ticker)
     if asset is None:  # titre hors du jeu de départ (ex. ajouté par le data lake) : indicateur absent, pas d'erreur
         return None, "?"
     ccy = asset.currency
@@ -105,7 +105,7 @@ def corr_core(ticker: str, as_of: str, cfg: StrategyConfig) -> float | None:
 
 
 def max_drawdown(ticker: str, as_of: str, start: str | None = None) -> float | None:
-    rows = starter.daily(ticker, as_of, start)
+    rows = market.daily(ticker, as_of, start)
     if len(rows) < 2:
         return None
     peak, mdd = rows[0].adj_close, 0.0
@@ -118,7 +118,7 @@ def max_drawdown(ticker: str, as_of: str, start: str | None = None) -> float | N
 
 def momentum(ticker: str, as_of: str, cfg: StrategyConfig) -> float | None:
     long_m, skip_m = cfg.features.momentum_months
-    rows = starter.daily(ticker, as_of)
+    rows = market.daily(ticker, as_of)
     d = date.fromisoformat(as_of)
     start_iso = (d - timedelta(days=round(30.44 * long_m))).isoformat()
     if not rows or rows[0].date > start_iso:  # historique trop court : pas de momentum
@@ -138,12 +138,12 @@ def stock_features(ticker: str, as_of: str, cfg: StrategyConfig | None = None) -
         "vol": volatility(ticker, as_of, cfg),
         "beta": b,
         "corr_core": corr_core(ticker, as_of, cfg),
-        "dividend_yield": starter.dividend_yield_ttm(ticker, as_of),
-        "liquidity_cad": starter.median_dollar_volume_cad(ticker, as_of, cfg.features.liquidity_days),
+        "dividend_yield": market.dividend_yield_ttm(ticker, as_of),
+        "liquidity_cad": market.median_dollar_volume_cad(ticker, as_of, cfg.features.liquidity_days),
         "mdd_short": max_drawdown(ticker, as_of),
         "momentum": momentum(ticker, as_of, cfg),
     }
     status = {k: "FAIT" for k, v in vals.items() if v is not None}
-    first = starter.daily(ticker, as_of)
+    first = market.daily(ticker, as_of)
     details = {"beta_index": bench, "window_start": first[0].date if first else None, "as_of": as_of}
     return vals, status, details

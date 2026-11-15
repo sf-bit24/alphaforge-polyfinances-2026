@@ -1,10 +1,12 @@
 """Portefeuille existant : résolution des titres, prix, conversion USD/CAD, expositions et constats.
 
 Le modèle (A2) ne fait qu'extraire des lignes brutes. Tout le reste est calculé ici, par le code :
-- symbole cherché dans ``assets_universe.csv`` (variantes ``.TO``, préfixes de bourse, nom);
-- prix = dernière clôture (``close``) de ``prices_daily.csv``, ou graphique Yahoo Finance pour un titre hors
-  univers; chaque prix cite sa source et sa date;
-- conversion USD vers CAD au dernier taux de ``fx_usdcad_daily.csv`` (Banque du Canada, via le jeu de départ);
+- symbole cherché dans l'univers des données de marché (``data/market/universe.yaml``) : variantes ``.TO``,
+  préfixes de bourse, nom;
+- prix = dernière clôture (``close``) des données de marché (``alphaforge.market`` : parquets quotidiens, ou
+  ``prices_daily.csv`` du jeu de départ en repli), ou graphique Yahoo Finance pour un titre hors univers; chaque
+  prix cite sa source et sa date;
+- conversion USD vers CAD au dernier taux USD/CAD des mêmes données (Banque du Canada, FXUSDCAD);
 - expositions en parts de 0 à 1 de ``total_value_cad``, sur les positions évaluées seulement.
 
 Constats (seuils à relire par le volet finance de l'équipe larpathon) :
@@ -25,7 +27,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from .. import clock, starter
+from .. import clock, market
 from ..collect.fetchers import Quote
 
 ASSET_CLASSES = ("equity", "etf_equity", "etf_bond", "etf_commodity", "bond", "cash", "crypto", "fund", "other")
@@ -236,7 +238,7 @@ class Resolver:
         self.quote_fetcher = quote_fetcher
         self.max_remote_quotes = max_remote_quotes
         self.remote_calls = 0
-        self.fx_rate = starter.last_fx()
+        self.fx_rate = market.last_fx()
         self.sources: dict[str, dict[str, Any]] = {}
 
     def _source(self, entry: dict[str, Any]) -> str:
@@ -248,7 +250,7 @@ class Resolver:
             return 1.0
         if currency == "USD":
             self._source(
-                starter.source_entry(
+                market.source_entry(
                     "fx_usdcad_daily.csv",
                     "Jeu de départ, fx_usdcad_daily.csv (Banque du Canada, série FXUSDCAD)",
                     observed_at=self.fx_rate.date,
@@ -291,7 +293,7 @@ class Resolver:
             return "montant de l'encaisse manquant"
         return self._convert_to_cad(position, raw.market_value, position["currency"])
 
-    def _fill_from_universe(self, position: dict[str, Any], asset: starter.Asset) -> None:
+    def _fill_from_universe(self, position: dict[str, Any], asset: market.Asset) -> None:
         position.update(
             ticker=asset.ticker,
             name=asset.name,
@@ -300,12 +302,12 @@ class Resolver:
             market=asset.market,
             currency=asset.currency,
         )
-        self._source(starter.source_entry("assets_universe.csv", "Jeu de départ, assets_universe.csv"))
-        last_price = starter.last_prices().get(asset.ticker)
+        self._source(market.source_entry("assets_universe.csv", "Jeu de départ, assets_universe.csv"))
+        last_price = market.last_prices().get(asset.ticker)
         if last_price is not None:
             position.update(price=round(last_price.close, 4), price_date=last_price.date)
             position["price_source"] = self._source(
-                starter.source_entry(
+                market.source_entry(
                     "prices_daily.csv", "Jeu de départ, prices_daily.csv (Yahoo Finance)", observed_at=last_price.date
                 )
             )
@@ -335,11 +337,11 @@ class Resolver:
 
         Faux quand le titre n'est trouvé ni dans l'un ni dans l'autre.
         """
-        asset = starter.find_asset(raw.ticker, raw.name, raw.currency)
+        asset = market.find_asset(raw.ticker, raw.name, raw.currency)
         if asset is not None:
             self._fill_from_universe(position, asset)
             return True
-        symbol, hint = starter.normalize_symbol(raw.ticker)
+        symbol, hint = market.normalize_symbol(raw.ticker)
         quote = self._first_priced_quote(_listing_candidates(symbol, hint, raw.currency))
         if quote is not None:
             self._fill_from_quote(position, raw, quote)
@@ -494,7 +496,7 @@ def build_view(raws: list[RawPosition], *, status: str, quote_fetcher: QuoteFetc
         "exposures": exposures,
         "status": status,
         "sources": resolver.source_list(),
-        "fx": {"pair": "USDCAD", "rate": fx_rate.usdcad, "date": fx_rate.date, "source": "starter:fx_usdcad_daily.csv"},
+        "fx": {"pair": "USDCAD", "rate": fx_rate.usdcad, "date": fx_rate.date, "source": market.fx_resource()},
     }
 
 

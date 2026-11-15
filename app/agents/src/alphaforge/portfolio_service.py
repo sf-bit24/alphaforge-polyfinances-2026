@@ -45,10 +45,19 @@ class FinanceEngine:
     def load(self) -> dict[str, Any]:
         with self._lock:
             if self._loaded is None:
-                from .finance.debate import okf_bridge, pipeline
-                from .finance.observability import telemetry
-                from .finance.policy.from_profile_view import style_inputs_from_view
-                from .finance.strategy import STYLES
+                try:
+                    from .finance.debate import okf_bridge, pipeline
+                    from .finance.observability import telemetry
+                    from .finance.policy.from_profile_view import style_inputs_from_view
+                    from .finance.strategy import STYLES
+                except ImportError as exc:
+                    # Zip commun (sans le groupe finance) : Terraform s'y replie si agents-portfolio.zip manque.
+                    logger.error("finance engine unavailable: %s", exc)
+                    raise AppError(
+                        "internal",
+                        "Le moteur du volet finance n'est pas dans ce paquet (agents-portfolio.zip attendu).",
+                        {"missing_module": exc.name},
+                    ) from exc
 
                 try:
                     # Traces OpenTelemetry : X-Ray si ALPHAFORGE_OTLP_XRAY=1 (posée par Terraform). Idempotent.

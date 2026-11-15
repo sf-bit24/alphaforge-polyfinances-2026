@@ -1,0 +1,102 @@
+{
+  "schema_version": "0.1.0",
+  "profile_id": "demo-amira",
+  "version": 1,
+  "created_utc": "2026-11-14T00:00:00Z",
+  "status": "COMPLETE",
+  "mode": "persona",
+  "age": 29,
+  "province": null,
+  "language": "fr",
+  "plain_language": false,
+  "knowledge_level": "intermediaire",
+  "experience_note": null,
+  "goals": [
+    {
+      "goal_id": "long_terme",
+      "label": "croissance long terme",
+      "priority": "souhait",
+      "amount": null,
+      "currency": "CAD",
+      "target_date": null,
+      "horizon_years": 20.0,
+      "min_success_prob": null,
+      "beneficiary": null,
+      "legal_owner": null,
+      "recurring_withdrawal": null,
+      "indexed_to_inflation": null
+    }
+  ],
+  "household": [],
+  "household_rule": null,
+  "tolerance_declared": {
+    "value": 80.0,
+    "label": null,
+    "method": null,
+    "confidence": 0.7
+  },
+  "tolerance_tested": {
+    "value": 72.0,
+    "label": null,
+    "method": null,
+    "confidence": 0.8
+  },
+  "capacity_assessed": null,
+  "capacity_rationale": null,
+  "composure": {
+    "value": 60.0,
+    "label": null,
+    "method": null,
+    "confidence": null
+  },
+  "max_acceptable_loss_pct": null,
+  "max_acceptable_loss_cad": null,
+  "investable_wealth": 150000.0,
+  "monthly_expenses": 4000.0,
+  "emergency_fund_months": 4.0,
+  "income": {
+    "annual_amount": 95000.0,
+    "currency": "CAD",
+    "variability": "stable",
+    "monthly_calendar": null,
+    "sector": null,
+    "employer_ticker": null
+  },
+  "debts": [
+    {
+      "label": "pret etudiant",
+      "balance": 12000.0,
+      "annual_rate": 0.05,
+      "rate_type": null,
+      "tax_deductible": null
+    }
+  ],
+  "recurring_liabilities": [],
+  "pensions": [],
+  "illiquid_assets": [],
+  "employer_equity": [],
+  "future_inflows": [],
+  "holdings": [],
+  "accounts": [],
+  "preferences": {
+    "tilts": [
+      "crypto"
+    ],
+    "value_filters": [],
+    "esg_required": false,
+    "accept_indirect_exposure": null,
+    "reference_currency": "CAD"
+  },
+  "legal_constraints": [],
+  "user_rules": [],
+  "biases": [],
+  "claims": [],
+  "trusted_person_role": null,
+  "trusted_person_consent": false,
+  "unavailable_until": null,
+  "unauthorized_third_parties": [],
+  "consistency_flags": [],
+  "missing_info": [],
+  "confidence": null,
+  "reprofile_triggers": []
+}

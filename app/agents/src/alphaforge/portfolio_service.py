@@ -18,7 +18,9 @@ Simulation seulement : aucune transaction, aucun conseil personnalisé.
 from __future__ import annotations
 
 import logging
+import os
 import re
+import tempfile
 import threading
 from collections.abc import Callable
 from datetime import date
@@ -170,7 +172,15 @@ class PortfolioService:
             return AppError("bad_request", pick(locale, fr, en), details)
 
         client_id = payload.get("client_id")
-        if not is_client_id(client_id):
+        persona = payload.get("persona")
+        if persona is not None:
+            from .finance.personas import ids as persona_ids
+
+            if client_id is not None:
+                raise bad("client_id ou persona, pas les deux.", "client_id or persona, not both.")
+            if persona not in persona_ids():
+                raise bad("persona inconnu.", "Unknown persona.", allowed=persona_ids())
+        elif not is_client_id(client_id):
             raise bad("client_id doit être un UUID v4.", "client_id must be a UUID v4.")
         as_of = payload.get("as_of")
         if as_of is not None:
@@ -209,6 +219,7 @@ class PortfolioService:
                 )
         return {
             "client_id": client_id,
+            "persona": persona,
             "as_of": as_of,
             "mode": mode,
             "strategy": strategy,
@@ -233,14 +244,26 @@ class PortfolioService:
             self._questionnaire = Questionnaire.load()
         client_store = bridge.OkfClientStore(self.store, self._questionnaire, locale=locale)
         market_store = bridge.OkfMarketStore(self.store)
-        try:
-            profile = client_store.load_profile(args["client_id"])
-        except KeyError as exc:
-            raise AppError("not_found", pick(locale, "Profil introuvable.", "Profile not found.")) from exc
-        # Étape 0 : variables de style du profil court, lues comme dans finance/debate/app.py.
-        style_inputs = None
-        if args["strategy"]:
-            style_inputs = engine["style_inputs_from_view"](client_store.view(args["client_id"])[0])
+        persona_label = None
+        if args["persona"]:
+            # Persona FICTION de démonstration : profil de test du moteur, variables de style de demo.yaml.
+            from .finance.personas import load as load_persona
+
+            profile, style_inputs, demo_request, persona_label = load_persona(args["persona"])
+            if args["request"] is None and demo_request:
+                args["request"] = demo_request
+            if not args["strategy"]:
+                style_inputs = None
+            args["client_id"] = profile.profile_id
+        else:
+            try:
+                profile = client_store.load_profile(args["client_id"])
+            except KeyError as exc:
+                raise AppError("not_found", pick(locale, "Profil introuvable.", "Profile not found.")) from exc
+            # Étape 0 : variables de style du profil court, lues comme dans finance/debate/app.py.
+            style_inputs = None
+            if args["strategy"]:
+                style_inputs = engine["style_inputs_from_view"](client_store.view(args["client_id"])[0])
         as_of = args["as_of"] or pipeline.DEFAULT_AS_OF
         try:
             result = pipeline.build_portfolio(
@@ -263,8 +286,13 @@ class PortfolioService:
                 except Exception:
                     logger.exception("telemetry flush failed")
         decision_key = client_store.save_decision(result.decision, result.policy)
+        audit = self._audit(result.decision)
         return {
             "client_id": args["client_id"],
+            "persona": args["persona"],
+            "persona_label": persona_label,
+            "fiction": bool(args["persona"]),
+            "audit": audit,
             "as_of": as_of.isoformat(),
             "mode": args["mode"],
             "simulation_only": True,
@@ -282,3 +310,24 @@ class PortfolioService:
             "grounding": result.grounding,
             "strategy": result.strategy.summary() if result.strategy is not None else None,
         }
+
+    def _audit(self, decision: Any) -> dict[str, Any] | None:
+        """Chaîne d'audit (finance/observability/audit.py) : tête dans DynamoDB, décision dans le bucket de traces.
+        Seulement si Terraform a posé la table et le bucket ; un échec est rapporté sans annuler la simulation."""
+        table, bucket = os.environ.get("ALPHAFORGE_DECISIONS_TABLE"), os.environ.get("ALPHAFORGE_TRACE_BUCKET")
+        if not (table and bucket):
+            return None
+        try:
+            from .finance.observability import audit
+
+            root = os.path.join(tempfile.gettempdir(), "alphaforge-audit")
+            os.makedirs(root, exist_ok=True)
+            entry = audit.record_decision(
+                decision,
+                root,
+                aws={"region": self.settings.region, "bucket": bucket, "decisions_table": table},
+            )
+            return {k: entry.get(k) for k in ("seq", "record_hash", "prev_hash", "s3_key", "otel_trace_id")}
+        except Exception as exc:
+            logger.exception("audit record failed")
+            return {"error": type(exc).__name__}

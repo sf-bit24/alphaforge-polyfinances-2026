@@ -84,6 +84,9 @@ const COST_WORDS = /comptable|achat|book|cost|cout|moyen|average/;
 
 const DELIMITERS = [",", ";", "\t", "|"];
 
+/** A date in a header cell ("Valeur marchande au 2026-11-12"): the only digits a header row may hold. */
+const DATE = /\b(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\/\d{1,2}\/\d{2,4})\b/g;
+
 interface Columns {
   delimiter: string;
   index: Partial<Record<Column, number>>;
@@ -189,9 +192,9 @@ function columnOf(cell: string): Column | null {
   return COLUMNS.find(([, pattern]) => pattern.test(name))?.[0] ?? null;
 }
 
-/** The columns of a header row: a delimited line of words that names a security column and an amount column. */
+/** The columns of a header row: a delimited line of words, or dates, that names a security column and an amount column. */
 function readHeader(line: string): Columns | null {
-  if (!HEADER_WORDS.test(line) || /\d/.test(line)) return null;
+  if (!HEADER_WORDS.test(line) || /\d/.test(line.replace(DATE, ""))) return null;
   const delimiter = DELIMITERS.reduce((best, candidate) => (line.split(candidate).length > line.split(best).length ? candidate : best));
   const index: Columns["index"] = {};
   splitCells(line, delimiter).forEach((cell, position) => {

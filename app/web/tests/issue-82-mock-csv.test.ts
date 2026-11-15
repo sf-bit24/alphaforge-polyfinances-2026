@@ -151,6 +151,22 @@ describe("issue #82: cash without an amount", () => {
   });
 });
 
+describe("issue #82: a header with a date", () => {
+  it.each(["Valeur marchande au 2026-11-12", "Valeur marchande (12/11/2026)"])("reads the columns of a header with %j", (column) => {
+    const csv = `Symbole,Description,Quantité,Prix,${column},Devise\nXIU.TO,iShares S&P/TSX 60,150,38.20,5730.00,CAD`;
+    const { positions } = extractPositions({ files: [csvFile(csv)] }, "fr");
+    expect(positions).toEqual([expect.objectContaining({ ticker: "XIU.TO", quantity: 150, market_value: 5730, value_cad: 8182.5 })]);
+  });
+
+  it("does not take a free-text line with a quantity for a header", () => {
+    const { positions } = extractPositions({ text: "Titre RY.TO, quantité 100\n25 AAPL" }, "fr");
+    expect(positions.map((position) => [position.ticker, position.quantity])).toEqual([
+      ["RY.TO", 100],
+      ["AAPL", 25],
+    ]);
+  });
+});
+
 describe("issue #82: account numbers in the pasted text", () => {
   it("masks usual account numbers, and keeps the SIN masked", () => {
     const screened = screenMessage("Mon CELI chez Disnat, compte 123-45678-9 :");

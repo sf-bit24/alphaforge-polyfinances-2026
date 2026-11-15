@@ -43,9 +43,10 @@ def _price_on_or_before(rows, iso: str):
 
 def weekly_returns(ticker: str, as_of: str, weeks: int, cad: bool = False) -> list[tuple[str, float]]:
     rows = starter.daily(ticker, as_of)
-    if not rows:
+    asset = starter.universe().get(ticker)
+    if not rows or asset is None:
         return []
-    ccy = starter.universe()[ticker].currency
+    ccy = asset.currency
     pts = []
     for w in _wednesdays(as_of, weeks):
         r = _price_on_or_before(rows, w)
@@ -78,7 +79,10 @@ def _daily_returns(ticker: str, as_of: str) -> dict[str, float]:
 
 
 def beta(ticker: str, as_of: str, cfg: StrategyConfig) -> tuple[float | None, str]:
-    ccy = starter.universe()[ticker].currency
+    asset = starter.universe().get(ticker)
+    if asset is None:  # titre hors du jeu de départ (ex. ajouté par le data lake) : indicateur absent, pas d'erreur
+        return None, "?"
+    ccy = asset.currency
     bench = cfg.features.local_index.get(ccy, "SPY")
     a, b = _daily_returns(ticker, as_of), _daily_returns(bench, as_of)
     common = sorted(set(a) & set(b))[-cfg.features.beta_days :]

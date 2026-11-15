@@ -52,3 +52,10 @@ def test_features_are_deterministic_and_bounded():
 
 def test_max_drawdown_of_a_known_path():
     assert max_drawdown("SPY", AS_OF) >= 0.0
+
+
+def test_unknown_ticker_gives_missing_features_not_an_error():
+    from alphaforge.finance.strategy.features import beta
+
+    assert beta("BMO.TO", AS_OF, CFG) == (None, "?")
+    assert weekly_returns("BMO.TO", AS_OF, 52) == []

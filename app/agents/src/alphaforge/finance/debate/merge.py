@@ -126,11 +126,30 @@ def apply_amendments(
         except Exception as exc:  # contrat invalide
             reject(lens, a, f"mandat invalide après amendement : {exc}"[:300])
             continue
+        why_ok = "appliqué"
         if feasible is not None and not feasible(new):
-            reject(lens, a, "rendrait le mandat infaisable")
-            continue
+            relaxed = _relax_strategy_floors(new, feasible)
+            if relaxed is None:
+                reject(lens, a, "rendrait le mandat infaisable")
+                continue
+            # la prudence l'emporte sur le style : les planchers strat.* cèdent avant le resserrement
+            new, why_ok = relaxed, "appliqué ; planchers du style retirés pour rester faisable"
         cur = new
         log.append(
-            AppliedAmendment(lens=lens, amendment=a, status="applique", why_fr="appliqué", before=before, after=after)
+            AppliedAmendment(lens=lens, amendment=a, status="applique", why_fr=why_ok, before=before, after=after)
         )
     return cur, log
+
+
+def _relax_strategy_floors(policy: PolicySpec, feasible: Callable[[PolicySpec], bool]) -> PolicySpec | None:
+    """Retire les planchers strat.* (titres, puis part actions visée) jusqu'à ce que le mandat soit faisable."""
+    for drop in (("strat.floor.",), ("strat.floor.", "strat.growth_floor")):
+        lims = [lim for lim in policy.limits if not lim.rule_id.startswith(drop)]
+        if len(lims) == len(policy.limits):
+            continue
+        data = policy.model_dump()
+        data["limits"] = [lim.model_dump() for lim in lims]
+        cand = PolicySpec.model_validate(data)
+        if feasible(cand):
+            return cand
+    return None

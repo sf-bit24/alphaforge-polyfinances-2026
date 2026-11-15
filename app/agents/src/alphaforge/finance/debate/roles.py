@@ -60,8 +60,9 @@ def model(model_id: str, node_id: str, versions: dict | None = None):
 
 
 STRAT_NOTE = (
-    "limite de l'étape 0 (style), non bloquante : choix de composition à risque égal ; on peut baisser un plafond "
-    "strat.*, jamais relever un plancher strat.*"
+    "limite de l'étape 0 (style), non bloquante : choix de composition dans les budgets de perte du niveau (elle peut "
+    "augmenter le risque dans la bande, jamais au-delà des budgets) ; on peut baisser un plafond strat.*, jamais "
+    "relever un plancher strat.*"
 )
 
 

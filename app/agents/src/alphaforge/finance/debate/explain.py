@@ -68,7 +68,7 @@ def skeleton(
     counterfactual_stmts: list[Statement],
     request_fids: list[str] | None = None,
     limits_extra: list[str] | None = None,
-    strategy: bool = False,
+    strategy: dict | None = None,
 ) -> Explanation:
     f = book.facts
 
@@ -122,18 +122,18 @@ def skeleton(
     ]
     for t in limits_extra or []:
         limits.append(Statement(text_fr=t, fact_ids=[], label="HYPOTHESE"))
-    if strategy:
-        extra = strategy_statements(book)
+    if strategy is not None:
+        extra = strategy_statements(book, strategy)
         data_used += extra["data_used"]
         why += extra["why"]
         limits += extra["limits"]
     return Explanation(data_used=data_used, why=why, limits=limits, what_would_change=counterfactual_stmts)
 
 
-STYLE_FR = {"defensive": "défensive", "dynamique": "dynamique", "offensive": "offensive"}
+STYLE_FR = {"defensive": "défensif", "dynamique": "dynamique", "offensive": "offensif"}  # accordé à « style »
 
 
-def strategy_statements(book: FactBook) -> dict[str, list[Statement]]:
+def strategy_statements(book: FactBook, final: dict | None = None) -> dict[str, list[Statement]]:
     """Gabarits de l'étape 0 (style et sélection). Tout nombre écrit est la valeur formatée d'un Fact cité ;
     les règles citées (ACVM, FTSE…) restent dans les Facts, pas dans le texte, pour le vérificateur."""
     f = book.facts
@@ -148,7 +148,8 @@ def strategy_statements(book: FactBook) -> dict[str, list[Statement]]:
         Statement(
             text_fr=f"Style de composition retenu : {STYLE_FR.get(f['strat.style'].value, v('strat.style'))}. "
             "Il ne change ni le niveau de risque, ni la "
-            "part maximale d'actions, ni les budgets de perte.",
+            "part maximale d'actions, ni les budgets de perte ; il peut placer le portefeuille plus haut dans sa "
+            "bande, donc avec plus de risque, toujours sous ces budgets.",
             fact_ids=["strat.style"],
             label="HYPOTHESE",
         )
@@ -162,17 +163,32 @@ def strategy_statements(book: FactBook) -> dict[str, list[Statement]]:
                 label="HYPOTHESE",
             )
         )
-    if "strat.band_target" in f:
+    final = final or {}
+    band = final.get("band_target", "strat.band_target" if "strat.band_target" in f else None)
+    if band and band in f:
         out["why"].append(
             Statement(
-                text_fr=f"Part actions visée : {v('strat.band_target')}, entre {v('strat.e_min')} et "
+                text_fr=f"Part actions visée : {v(band)}, entre {v('strat.e_min')} et "
                 f"{v('strat.e_cap')}. La tolérance place le portefeuille dans sa bande, la capacité la plafonne.",
-                fact_ids=["strat.band_target", "strat.e_min", "strat.e_cap"],
+                fact_ids=[band, "strat.e_min", "strat.e_cap"],
                 label="HYPOTHESE",
             )
         )
-    for fid in [k for k in f if k.startswith("strat.floor.")]:
-        t = fid[len("strat.floor.") :]
+    if "strat.risk_cost" in f and "strat.base_risk" in f:
+        rc = f["strat.risk_cost"].value
+        out["why"].append(
+            Statement(
+                text_fr="Effet du style et de la sélection sur le risque minimisé (CVaR mensuelle) : "
+                f"{'hausse' if rc >= 0 else 'baisse'} de {fmt(abs(rc), '%')} par rapport au mandat de base "
+                f"({v('strat.base_risk')}), dans les budgets du niveau.",
+                fact_ids=["strat.risk_cost", "strat.base_risk"],
+                label="HYPOTHESE",
+            )
+        )
+    floors = final.get("floors") if final else None
+    if floors is None:
+        floors = {k[len("strat.floor.") :]: k for k in f if k.startswith("strat.floor.")}
+    for t, fid in floors.items():
         rank = f"strat.rank.{t}"
         ids = [fid, rank, "strat.n_candidates"]
         cad = f"strat.floor_cad.{t}"
@@ -210,6 +226,11 @@ def strategy_statements(book: FactBook) -> dict[str, list[Statement]]:
                 fact_ids=[fid],
                 label="HYPOTHESE",
             )
+        )
+    for fid in final.get("clamped", []) if final else []:
+        out["limits"].append(
+            Statement(text_fr="Le débat a abaissé ou retiré un choix du style : la prudence l'emporte.",
+                      fact_ids=[fid], label="HYPOTHESE")
         )
     for fid in [k for k in f if k.startswith("strat.fallback.")]:
         out["limits"].append(

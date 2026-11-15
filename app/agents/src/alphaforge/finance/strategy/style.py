@@ -310,7 +310,10 @@ def derive_style(
     tr.t("strategy.style_from_level", {"level": comp.level}, base, "level_to_style")
 
     pref, pref_src = None, None
-    if inputs.explicit_preference:
+    if inputs.explicit_preference and inputs.explicit_preference not in STYLES:
+        # préférence invalide (charge utile) : ignorée, jamais une erreur ; tracée pour l'explication
+        tr.t("strategy.preference_invalid", {"style_preference": inputs.explicit_preference}, None, "styles")
+    if inputs.explicit_preference in STYLES:
         pref, pref_src = inputs.explicit_preference, "paramètre style_preference"
     elif inputs.goal in cfg.preference.goal_to_preference:
         pref, pref_src = cfg.preference.goal_to_preference[inputs.goal], f"objective.goal={inputs.goal}"
@@ -326,6 +329,8 @@ def derive_style(
 
     binds, _ = _capacity_binds(comp)
     refused: list[str] = []
+    if inputs.explicit_preference and inputs.explicit_preference not in STYLES:
+        refused.append("préférence de style inconnue, ignorée")
     shift = 0
     if pref is not None:
         want = _idx(pref) - _idx(base)
@@ -376,6 +381,7 @@ def derive_style(
         # contradiction non résolue : la réponse la plus prudente l'emporte pour la position dans la bande
         pi = cfg.band.low_composure_pi_max
         pi_reason += " ; contradiction connaissance × tolérance : π plafonné (réponse la plus prudente)"
+        tr.t("strategy.band_position.capped", {"reason": "contradiction connaissance × tolérance"}, pi, "band")
     k, k_reason = k_rule(comp, style, inputs, flags, cfg)
     tr.t("strategy.k", {"style": style, "approach": inputs.approach}, k, "k")
     phi = cfg.floors.phi[style] * (cfg.floors.overconfidence_mult if flags.overconfidence else 1.0)

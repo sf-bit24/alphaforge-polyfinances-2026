@@ -11,7 +11,7 @@ SIMULATION ÉDUCATIVE SEULEMENT.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Any
 
@@ -331,7 +331,11 @@ def apply_strategy(
     with book.step("s0b.select", tool="strategy.select", inputs={"style": d.style, "k": d.k}):
         chosen = shortlist(ranked, d.k, cfg)
         floors, notes = _stock_floors(chosen, comp, d, inputs, cfg)
-        sel_tags = {t for r in chosen for t in by_t[r.ticker].tags if t in cfg.sectors.tags}
+        sel_tags = {t for tk in floors for t in by_t[tk].tags if t in cfg.sectors.tags}  # titres réellement gardés
+        for i, n in enumerate(notes):
+            add(
+                "result", f"strat.note.{i}", "titre retenu puis retiré (plancher trop petit)", n, "texte", path="floors"
+            )
         caps = sector_caps(comp, d.style, inputs, sel_tags, cfg)
         g = band_target(comp, d.pi, cfg)
         keep = set(floors) | set(protect)
@@ -350,6 +354,9 @@ def apply_strategy(
         if not ok:
             for label, p2 in degrade_steps(plan, float(g_lim.min or 0.0) if g_lim else 0.0, cfg.band.rounding):
                 fallback.append(f"{label} (violations : {sorted(new_viol) or 'optimiseur'})")
+                if inputs.amount_cad:  # le repli ne crée jamais de ligne sous le minimum en dollars
+                    lmin = cfg.eligibility.min_line_cad
+                    p2 = replace(p2, floors={t: f for t, f in p2.floors.items() if f * inputs.amount_cad >= lmin})
                 plan, policy = p2, apply_to_policy(base, p2, cfg)
                 ok, res, new_viol = feas(policy)
                 if ok:
@@ -407,6 +414,17 @@ def apply_strategy(
                 "%",
                 path="sectors",
                 processing=why,
+            )
+        if b_res.risk_value is not None:
+            add(
+                "result",
+                "strat.base_risk",
+                "risque minimisé du mandat sans l'étape 0",
+                round(b_res.risk_value, 6),
+                "%",
+                path="band",
+                status="FAIT",
+                processing="optimiseur F2 sur le mandat de base (CVaR mensuelle)",
             )
         if rc is not None:
             add(

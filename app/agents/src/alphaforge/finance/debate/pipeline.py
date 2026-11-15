@@ -78,7 +78,8 @@ def _opt_facts(book: FactBook, label: str, res, policy: PolicySpec) -> tuple[lis
     by_id = {lim.rule_id: lim for lim in policy.limits}
     for key, is_active in sorted(res.active.items(), key=lambda kv: -res.duals.get(kv[0], 0.0)):
         rid, _, side = key.partition(":")
-        lim = by_id.get(rid) or by_id.get(rid.split("[")[0])  # compile.py nomme « rule_id[actif] »
+        parent = rid.split("[")[0]  # compile.py nomme « rule_id[actif] » ; seul strat.* est rapporté ainsi
+        lim = by_id.get(rid) or (by_id.get(parent) if parent.startswith("strat.") else None)
         if not is_active or lim is None:
             continue
         bound = lim.max if side == "max" else lim.min
@@ -203,16 +204,24 @@ def build_portfolio(
     if strategy:
         from alphaforge.finance.strategy import apply_strategy
 
-        strat = apply_strategy(
-            comp,
-            profile,
-            as_of,
-            book,
-            inputs=style_inputs,
-            preference=style_preference,
-            protect=[request.ticker] if request else [],
-        )
-        base = strat.policy
+        try:
+            strat = apply_strategy(
+                comp,
+                profile,
+                as_of,
+                book,
+                inputs=style_inputs,
+                preference=style_preference,
+                protect=[request.ticker] if request else [],
+            )
+            base = strat.policy
+        except Exception as exc:  # l'étape 0 ne fait jamais échouer la décision : repli sur le mandat de base
+            strat = None
+            with book.step("s0b.strategy", tool="strategy.select", inputs={"error": type(exc).__name__}) as ev:
+                ev.status = "erreur"
+                ev.message = f"{type(exc).__name__}: {exc}"[:300]
+                book.add("strat.error", "étape 0 abandonnée : mandat de base conservé", type(exc).__name__, "texte",
+                         dataset="finance/strategy", status="HYPOTHESE")
 
     versions = {"policy": "risk_levels@0.2.0", "profile": f"{profile.profile_id}@{profile.version}"}
     versions["strategy"] = f"strategy.yaml@{strat.version}" if strat else "off"
@@ -273,6 +282,7 @@ def build_portfolio(
     # ---------------------------------------------------------------- Demande précise : avec / sans
     req_fids: list[str] = []
     final_w, final_policy = r2.weights, pol2
+    strat_final = _final_strategy_facts(book, strat, final_policy) if strat is not None else None
     kind = "proposition"
     if request is not None:
         w_req = request.as_weight(profile.investable_wealth)
@@ -386,7 +396,24 @@ def build_portfolio(
             )
 
         if strat is not None and strat.applied:
-            cf_stmts += _style_counterfactuals(book, comp, profile, as_of, strat, style_inputs, cfs)
+            cf_stmts += _style_counterfactuals(
+                book, comp, profile, as_of, strat, style_inputs, cfs, protect=[request.ticker] if request else []
+            )
+            if "strat.base_risk" in book.facts:
+                cfs.append(
+                    Counterfactual(
+                        change_fr="Sans le style ni la sélection (mandat de base)", result_fact_ids=["strat.base_risk"]
+                    )
+                )
+                cf_stmts.append(
+                    Statement(
+                        text_fr="Sans le style ni la sélection (mandat de base, avant les lentilles), le risque "
+                        "minimisé serait de "
+                        f"{fmt(book.facts['strat.base_risk'].value, '%')}.",
+                        fact_ids=["strat.base_risk"],
+                        label="HYPOTHESE",
+                    )
+                )
 
     # ---------------------------------------------------------------- Explication
     expl = skeleton(
@@ -403,7 +430,7 @@ def build_portfolio(
             for lens, v in verdicts.items()
             if v == "objection_maintenue"
         ],
-        strategy=strat is not None,
+        strategy=strat_final,
     )
     report: list[str] = []
     if rephrase_explanation if rephrase_explanation is not None else mode == "llm":
@@ -418,7 +445,9 @@ def build_portfolio(
         Position(
             asset_id=a,
             weight=w,
-            role="satellite" if (request and a == request.ticker) or a in singles or a in base.loss_bounds else "coeur",
+            role="satellite"
+            if (request and a == request.ticker) or a in singles or (strat is not None and a in base.loss_bounds)
+            else "coeur",
             rationale_fact_ids=[
                 f
                 for f in (f"r2.rc.{a}", f"strat.rank.{a}", f"strat.score.{a}", f"strat.floor.{a}")
@@ -458,7 +487,7 @@ def build_portfolio(
     )
 
 
-def _style_counterfactuals(book, comp, profile, as_of, strat, style_inputs, cfs) -> list[Statement]:
+def _style_counterfactuals(book, comp, profile, as_of, strat, style_inputs, cfs, protect=()) -> list[Statement]:
     """Style un cran plus prudent, et un cran plus offensif si la gouvernance l'admet : même calcul (mêmes
     indicateurs, mêmes données), autre style ; seule la part actions visée et le risque minimisé sont rapportés."""
     from alphaforge.finance.strategy import STYLES, StyleInputs, apply_strategy
@@ -474,7 +503,8 @@ def _style_counterfactuals(book, comp, profile, as_of, strat, style_inputs, cfs)
             continue
         alt_inputs = StyleInputs(**{**base_in.__dict__, "explicit_preference": STYLES[j]})
         scratch = FactBook(f"{book.decision_id}-cf-style-{label}")
-        alt = apply_strategy(comp, profile, as_of, scratch, inputs=alt_inputs, candidates=strat.candidates)
+        alt = apply_strategy(comp, profile, as_of, scratch, inputs=alt_inputs, candidates=strat.candidates,
+                             protect=list(protect))
         if alt.decision.style == cur:  # montée refusée par la gouvernance : pas de contrefactuel
             continue
         rr = optimize(alt.policy, as_of)
@@ -512,3 +542,35 @@ def _style_counterfactuals(book, comp, profile, as_of, strat, style_inputs, cfs)
         cfs.append(Counterfactual(change_fr=change, result_fact_ids=[f_risk]))
         stmts.append(Statement(text_fr=text + ".", fact_ids=ids, label="HYPOTHESE"))
     return stmts
+
+
+def _final_strategy_facts(book: FactBook, strat, final_policy: PolicySpec) -> dict:
+    """Valeurs de l'étape 0 dans le mandat FINAL (après les amendements des lentilles et le clamp) : l'explication
+    cite ces Facts-là, jamais les valeurs d'avant le débat."""
+    lims = {lim.rule_id: lim for lim in final_policy.limits if lim.rule_id.startswith("strat.")}
+    out: dict = {"band_target": None, "floors": {}, "clamped": []}
+    with book.step("s0b.final", tool="strategy.final", inputs={"n_strat_limits": len(lims)}):
+        g = lims.get("strat.growth_floor")
+        if g is not None and g.min is not None:
+            if strat.plan.growth_floor is not None and abs(g.min - strat.plan.growth_floor) < 1e-9:
+                out["band_target"] = "strat.band_target"
+            else:
+                out["band_target"] = book.add("strat.final.band_target", "part actions visée après le débat", g.min,
+                                              "%", dataset="mandat final", status="HYPOTHESE",
+                                              processing="plancher strat.growth_floor abaissé par la prudence")
+                out["clamped"].append(out["band_target"])
+        for t, f0 in strat.plan.floors.items():
+            lim = lims.get(f"strat.floor.{t}")
+            if lim is None or lim.min is None:
+                out["clamped"].append(book.add(f"strat.final.removed.{t}", f"plancher de {t} retiré au débat", t,
+                                               "texte", dataset="mandat final", status="HYPOTHESE"))
+                continue
+            if abs(lim.min - f0) < 1e-9:
+                out["floors"][t] = f"strat.floor.{t}"
+            else:
+                fid = book.add(f"strat.final.floor.{t}", f"plancher du satellite {t} après le débat", lim.min, "%",
+                               dataset="mandat final", status="HYPOTHESE",
+                               processing="plancher abaissé par la prudence (clamp)")
+                out["floors"][t] = fid
+                out["clamped"].append(fid)
+    return out

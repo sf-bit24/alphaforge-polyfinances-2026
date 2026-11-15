@@ -148,7 +148,6 @@ def investor_profile_from_view(
 
 
 # --------------------------------------------------------------------------- étape 0 (style et sélection)
-CONCENTRATION_SECTOR_SHARE = 0.40  # même seuil que profile/portfolio.py (constat concentration_sector)
 
 
 def _tuple(x) -> tuple[str, ...]:
@@ -174,10 +173,12 @@ def style_inputs_from_view(view: dict[str, Any], portfolio: dict[str, Any] | Non
     exposures = (port.get("exposures") or {}) if isinstance(port, dict) else {}
     flags = _tuple(g("context.portfolio_flags")) or _tuple(exposures.get("flags"))
     concentrated: tuple[str, ...] = ()
-    if "concentration_sector" in flags:
-        concentrated = tuple(
-            s for s, w in sorted((exposures.get("by_sector") or {}).items()) if (w or 0) >= CONCENTRATION_SECTOR_SHARE
-        )
+    if "concentration_sector" in flags and exposures.get("by_sector"):
+        # by_sector est une part du portefeuille entier, alors que le constat porte sur les titres individuels :
+        # on retient le secteur le plus lourd (celui qui a déclenché le constat), sans recalculer de seuil.
+        by = {k: (w or 0) for k, w in exposures["by_sector"].items() if k not in (None, "Unknown")}
+        if by:
+            concentrated = (max(sorted(by), key=lambda k: by[k]),)
     amount = g("context.amount_cad")
     esg = g("preferences.esg_importance")
     return StyleInputs(

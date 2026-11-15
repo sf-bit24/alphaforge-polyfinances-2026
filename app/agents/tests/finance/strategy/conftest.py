@@ -5,7 +5,13 @@ from __future__ import annotations
 
 from alphaforge.finance.backtest.paths import long_data_available
 
-NEEDS_DATA = {"test_scoring.py", "test_select.py", "test_pipeline_strategy.py", "test_okf_fundamentals_engine.py"}
+NEEDS_DATA = {
+    "test_scoring.py",
+    "test_select.py",
+    "test_pipeline_strategy.py",
+    "test_okf_fundamentals_engine.py",
+    "test_review_fixes.py",
+}
 
 
 def pytest_ignore_collect(collection_path, config):

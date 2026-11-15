@@ -146,10 +146,14 @@ function ExplanationQuestion({ section, statements }: { section: ExplanationSect
 /** The outcome of the Bedrock Guardrails contextual grounding check, when a guardrail ran. */
 function GroundingNote({ grounding }: { grounding: PortfolioBuildResponse["grounding"] }) {
   const { t } = useI18n();
-  if (!grounding?.action) return null;
+  const v = t.portfolioView.grounding;
+  const action = grounding?.action;
+  if (!action) return null;
+  const named = (Object.hasOwn(v.actions, action) ? v.actions[action] : undefined) ?? action;
+  // The raw action stays in the tooltip, for the audit.
   return (
-    <p className={cn(d.cap, p.block)}>
-      {t.portfolioView.grounding.title} · {t.portfolioView.grounding.action(grounding.action)}
+    <p className={cn(d.cap, p.block)} title={action}>
+      {v.title} · {v.action(named)}
     </p>
   );
 }

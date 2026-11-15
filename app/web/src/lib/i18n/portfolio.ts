@@ -199,6 +199,8 @@ export const portfolioFr = {
     rejected: "rejeté",
     amendments: "Amendements du premier tour",
     noAmendment: "Aucun amendement proposé.",
+    /** Title of the evidence ids an amendment cites that are not in the decision (audit detail). */
+    missingEvidence: "Preuves citées absentes de la décision",
   },
   trace: {
     title: "Trace d’exécution",
@@ -233,6 +235,8 @@ export const portfolioFr = {
   grounding: {
     title: "Ancrage vérifié par Bedrock Guardrails",
     action: ((action: string) => `Résultat : ${action}`) as Fn<[string]>,
+    /** `ApplyGuardrail` actions of Bedrock; an action not listed is shown as is. */
+    actions: { NONE: "aucune intervention", GUARDRAIL_INTERVENED: "le garde-fou est intervenu" } as Record<string, string>,
   },
   report: "Reformulation par le modèle",
 };
@@ -423,6 +427,7 @@ export const portfolioEn: PortfolioStrings = {
     rejected: "rejected",
     amendments: "First-round amendments",
     noAmendment: "No amendment proposed.",
+    missingEvidence: "Cited evidence missing from the decision",
   },
   trace: {
     title: "Execution trace",
@@ -457,6 +462,7 @@ export const portfolioEn: PortfolioStrings = {
   grounding: {
     title: "Grounding checked by Bedrock Guardrails",
     action: ((action: string) => `Outcome: ${action}`) as Fn<[string]>,
+    actions: { NONE: "no intervention", GUARDRAIL_INTERVENED: "the guardrail intervened" },
   },
   report: "Rephrasing by the model",
 };

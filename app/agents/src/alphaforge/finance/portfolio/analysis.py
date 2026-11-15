@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 import pandas as pd
@@ -269,6 +270,23 @@ class LongHistory:
     status: str                         # FAIT si aucun proxy ni borne, sinon HYPOTHESE
 
 
+@lru_cache(maxsize=4096)
+def _spliced(asset: str, proxy: str | None, end: pd.Timestamp, currency: str, data_sha: str | None
+             ) -> tuple[pd.Series, bool]:
+    """Série mensuelle d'un actif ≤ ``end``, raccordée à son proxy avant son lancement (mémoïsée).
+
+    ``data_sha`` fait partie de la clé : de nouvelles données invalident le cache. La série rendue est partagée :
+    les appelants ne la modifient pas (``pd.DataFrame(series)`` copie).
+    """
+    own = bt_data.load_returns([asset], end=end, currency=currency)[asset]
+    if proxy is not None:
+        prox = bt_data.load_returns([proxy], end=end, currency=currency)[proxy]
+        before = prox.loc[:own.index[0] - pd.offsets.MonthEnd(1)]
+        if len(before):
+            return pd.concat([before, own]), True
+    return own, False
+
+
 @traced_tool("portfolio.long_history_returns")
 def long_history_returns(weights: dict[str, float], policy: PolicySpec, as_of) -> LongHistory:
     """Historique le plus long possible ≤ as_of : chaque actif détenu, raccordé à son proxy déclaré
@@ -284,14 +302,11 @@ def long_history_returns(weights: dict[str, float], policy: PolicySpec, as_of) -
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         for a in kept:
-            own = bt_data.load_returns([a], end=end, currency=policy.currency)[a]
             hp = policy.history_proxies.get(a)
-            if hp is not None:
-                prox = bt_data.load_returns([hp.proxy], end=end, currency=policy.currency)[hp.proxy]
-                before = prox.loc[:own.index[0] - pd.offsets.MonthEnd(1)]
-                if len(before):
-                    own = pd.concat([before, own])
-                    used[a] = hp.proxy
+            own, proxied = _spliced(a, hp.proxy if hp is not None else None, end, policy.currency,
+                                    bt_data.data_version().get("data_sha256"))
+            if proxied:
+                used[a] = hp.proxy
             series[a] = own
     if not kept:
         return LongHistory(pd.Series(dtype=float), "", "", used, bound, excluded, "HYPOTHESE")

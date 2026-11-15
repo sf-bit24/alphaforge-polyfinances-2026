@@ -1,0 +1,162 @@
+{
+ "created_utc": "2026-11-15T00:29:35.956411+00:00",
+ "events": [
+  {
+   "messageStart": {
+    "role": "assistant"
+   }
+  },
+  {
+   "contentBlockStart": {
+    "contentBlockIndex": 0,
+    "start": {
+     "toolUse": {
+      "name": "cvar_portefeuille",
+      "toolUseId": "tooluse_hPpcgWIUdFamOwZlnT5W8o",
+      "type": "tool_use"
+     }
+    }
+   }
+  },
+  {
+   "contentBlockDelta": {
+    "contentBlockIndex": 0,
+    "delta": {
+     "toolUse": {
+      "input": ""
+     }
+    }
+   }
+  },
+  {
+   "contentBlockDelta": {
+    "contentBlockIndex": 0,
+    "delta": {
+     "toolUse": {
+      "input": "{\"nom\":"
+     }
+    }
+   }
+  },
+  {
+   "contentBlockDelta": {
+    "contentBlockIndex": 0,
+    "delta": {
+     "toolUse": {
+      "input": " \"demo\"}"
+     }
+    }
+   }
+  },
+  {
+   "contentBlockStop": {
+    "contentBlockIndex": 0
+   }
+  },
+  {
+   "messageStop": {
+    "stopReason": "tool_use"
+   }
+  },
+  {
+   "metadata": {
+    "metrics": {
+     "latencyMs": 1048
+    },
+    "usage": {
+     "inputTokens": 677,
+     "outputTokens": 55,
+     "totalTokens": 732
+    }
+   }
+  }
+ ],
+ "key": "249ac7506ee5809b7f5d6b013e098d20736626fe733d5c61c14a96d84e6c3137",
+ "request": {
+  "config": {
+   "additional_request_fields": {
+    "output_config": {
+     "effort": "low"
+    }
+   },
+   "max_tokens": 128000,
+   "model_id": "us.anthropic.claude-haiku-5-5"
+  },
+  "key_version": "1",
+  "kind": "strands_stream",
+  "messages": [
+   {
+    "content": [
+     {
+      "text": "Évalue le portefeuille 'demo'."
+     }
+    ],
+    "role": "user"
+   }
+  ],
+  "node_id": "lentille_risque",
+  "output_schema": null,
+  "round": 1,
+  "system_prompt": "Tu es la lentille Risque. Appelle l'outil, puis donne ton avis. Tu ne calcules aucun chiffre.",
+  "system_prompt_content": [
+   {
+    "text": "Tu es la lentille Risque. Appelle l'outil, puis donne ton avis. Tu ne calcules aucun chiffre."
+   }
+  ],
+  "tool_choice": null,
+  "tool_specs": [
+   {
+    "description": "Renvoie la CVaR mensuelle 95 % du portefeuille (calculée par le code, jamais par le modèle).",
+    "inputSchema": {
+     "json": {
+      "properties": {
+       "nom": {
+        "description": "Parameter nom",
+        "type": "string"
+       }
+      },
+      "required": [
+       "nom"
+      ],
+      "type": "object"
+     }
+    },
+    "name": "cvar_portefeuille"
+   },
+   {
+    "description": "IMPORTANT: This StructuredOutputTool should only be invoked as the last and final tool before returning the completed result to the caller. <description>Avis structured output tool</description>",
+    "inputSchema": {
+     "json": {
+      "properties": {
+       "motif": {
+        "description": "Property motif",
+        "title": "Motif",
+        "type": "string"
+       },
+       "verdict": {
+        "description": "Property verdict",
+        "enum": [
+         "soutien",
+         "objection"
+        ],
+        "title": "Verdict",
+        "type": "string"
+       }
+      },
+      "required": [
+       "verdict",
+       "motif"
+      ],
+      "title": "Avis",
+      "type": "object"
+     }
+    },
+    "name": "Avis"
+   }
+  ],
+  "versions": {
+   "data": "008f122d",
+   "policy": "demo"
+  }
+ }
+}

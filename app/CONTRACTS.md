@@ -436,3 +436,19 @@ flowchart LR
 
 - Page `/tldoole` : fil vertical (lecture muette automatique quand la vidéo est visible), boutons « J'ai compris » et « Encore flou », « Pourquoi ? » (les preuves d'A7), « Sources », quiz, concepts repérés et demande d'une vidéo.
 - Route `POST /api/tldoole` (`feed`, `feedback`, `request`) côté serveur. Elle suit le même `AGENT_MODE` : `mock` (simulateur en mémoire), `local` (`LOCAL_TLDOOLE_URL`, par défaut `http://localhost:8081/invocations`) ou `aws` (`InvokeAgentRuntime` sur `<ALPHAFORGE_PREFIX>_tldoole`, trouvé par son nom).
+
+## 9. Volet finance (proposition, hors version 1)
+
+Pour le portefeuille guidé (A3, agents d'analyse, Judge), à valider par l'équipe. Rien ne change pour les
+runtimes de la version 1. Les schémas Pydantic sont dans `app/agents/src/alphaforge/finance/contracts/` :
+
+| Contrat | Produit par | Lu par | Rôle |
+| --- | --- | --- | --- |
+| `InvestorProfile` (v0.1) | profil (A1, A2), via un adaptateur de la base OKF du client | compilateur F1 | la personne, sans aucun poids ni cible de performance |
+| `PolicySpec` (v0.2-draft) | F1 (`risk_levels.yaml`) | F2 optimiseur, F3 analyses, F4 Judge | le mandat : limites nommées (`rule_id`, `derived_from`) |
+| `Decision`, `Fact`, `TraceEvent`, `ConstraintCheck` (v0.1) | A3 et Judge | interface, explication, audit | tout nombre affiché est un `Fact` sourcé, relié à un `TraceEvent` ; un énoncé ne peut citer que des faits existants |
+
+- Le contrôle des plafonds (`alphaforge.finance.portfolio.check`) est déterministe et sans paramètre de dérogation.
+- Les appels LLM du volet finance passent par `alphaforge.finance.llm` (rejeu enregistré, clé sha256). Le Guardrail
+  est toujours référencé par une version numérotée, jamais `DRAFT`.
+- `TraceEvent.otel_trace_id` relie chaque étape à sa trace OpenTelemetry (X-Ray, JSONL local).

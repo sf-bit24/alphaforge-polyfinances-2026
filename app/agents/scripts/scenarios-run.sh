@@ -70,7 +70,12 @@ if [ -n "$request" ]; then
     job_args=$(python3 -I - "$request" <<'PY'
 import json, shlex, sys
 
-params = json.load(open(sys.argv[1], encoding="utf-8")).get("params") or {}
+doc = json.load(open(sys.argv[1], encoding="utf-8"))
+if isinstance(doc, str):  # ancien marqueur encode deux fois par Step Functions
+    doc = json.loads(doc)
+if not isinstance(doc, dict):
+    sys.exit("error: request.json is not a JSON object")
+params = doc.get("params") or {}
 options = {"config": "--config", "seed": "--seed", "fitted_through": "--fitted-through", "workers": "--workers"}
 unknown = sorted(set(params) - set(options))
 if unknown:

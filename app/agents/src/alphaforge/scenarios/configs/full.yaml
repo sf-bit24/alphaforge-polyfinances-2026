@@ -1,0 +1,74 @@
+# Configuration « full » : grille complète et 1e5 trajectoires, prévue pour SageMaker Processing.
+# Ne pas lancer sur un portable : voir README.md (« Taille du calcul »).
+seed: 20261114
+default_model: sbb_ca          # choix du volet C (VALIDATION.md)
+workers: 16                   # 4 pools × 5 modèles = 20 tâches, une par vCPU
+families: [CAD77, CAD71, USD1926]
+models: [sbb, iid, hmm_rs, sbb_ca, hmm_rs_ca]   # _ca = ancrage du niveau des taux sur les 12 derniers mois
+horizons: [1, 3, 5, 10, 15, 20, 30]
+fitted_through: null          # YYYY-MM pour un ajustement hors échantillon ; null = toute la fenêtre
+crypto:
+  enabled: true
+  families: [CAD77]           # pool séparé CAD77+CRYPTO (2014-10+), marqué hypothese=true
+simulation:
+  n_paths: 100000             # trajectoires de l'estimation ponctuelle
+  n_boot: 50                  # réplications du bootstrap externe (intervalles à 90 %)
+  n_paths_boot: 2000          # trajectoires par réplication
+  ci_level: 0.90
+  mem_budget_mb: 1024
+model_params:
+  sbb: {rule: max, include_squared: true, exclude_blocks: [CASH], min_block: 1, max_block: 24}
+  hmm_rs: {k_candidates: [1, 2, 3], exclude_blocks: [CASH], n_init: 6, initial_state: stationary}
+grid:
+  max_mixes: 2000
+  core:
+    CAD77:
+      CA_EQ: {min: 0, max: 50, step: 10}
+      US_MKT: {min: 0, max: 100, step: 10}
+      BONDS: {min: 0, max: 100, step: 10}
+      CASH: {min: 0, max: 100, step: 10}
+      GOLD: {values: [0, 10]}
+    default:                  # CAD71, USD1926 : US_MKT, BONDS, CASH seulement, pas de 5 %
+      US_MKT: {min: 0, max: 100, step: 5}
+      BONDS: {min: 0, max: 100, step: 5}
+      CASH: {min: 0, max: 100, step: 5}
+  crypto:
+    CAD77:
+      CA_EQ: {min: 0, max: 40, step: 10}
+      US_MKT: {min: 0, max: 95, step: 5}
+      BONDS: {min: 0, max: 90, step: 10}
+      CASH: {values: [0, 10]}
+      CRYPTO: {values: [5, 10]}
+  anchors: &anchors
+    CAD77:
+      - {CA_EQ: 35, US_MKT: 35, BONDS: 30}               # 70/30
+      - {CA_EQ: 30, US_MKT: 30, BONDS: 40}               # 60/40
+      - {CA_EQ: 20, US_MKT: 20, BONDS: 60}               # 40/60
+      - {BONDS: 100}                                     # 0/100
+      - {CA_EQ: 50, US_MKT: 50}                          # 100/0
+      - {CASH: 100}
+      - {CA_EQ: 15, US_MKT: 25, BONDS: 45, CASH: 10, GOLD: 5}
+    CAD71: &anchors_us
+      - {US_MKT: 70, BONDS: 30}
+      - {US_MKT: 60, BONDS: 40}
+      - {US_MKT: 40, BONDS: 60}
+      - {BONDS: 100}
+      - {US_MKT: 100}
+      - {CASH: 100}
+    USD1926: *anchors_us
+  anchors_crypto:
+    CAD77:
+      - {CA_EQ: 35, US_MKT: 30, BONDS: 30, CRYPTO: 5}
+      - {CA_EQ: 30, US_MKT: 30, BONDS: 30, CRYPTO: 10}
+      - {CA_EQ: 20, US_MKT: 15, BONDS: 60, CRYPTO: 5}
+sensitivity:
+  enabled: true
+  block_lengths: [1, 3, 6, 12, 24, 48]
+  n_paths: 20000
+  mixes: [ca35-us35-bd30-cs00-gd00, ca20-us20-bd60-cs00-gd00, ca00-us00-bd100-cs00-gd00, ca00-us70-bd30-cs00-gd00, ca00-us40-bd60-cs00-gd00, ca00-us100-bd00-cs00-gd00]
+  metrics: [ret_ann_p05, ret_ann_p50, wealth_p10, mdd_p90, cvar95_12m, p_loss_gt_10, p_loss_gt_20, p_mdd_gt_20, p_mdd_gt_30]
+runtime:                      # sous-ensemble compact lu par l'outil du runtime AgentCore
+  models: [sbb, hmm_rs, sbb_ca, hmm_rs_ca]
+  bases: [nominal, real]
+  metrics: null               # null = toutes
+  digits: 4

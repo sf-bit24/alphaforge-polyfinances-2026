@@ -39,6 +39,16 @@ dev = [
     "pytest>=8.3",
     "ruff>=0.8",
 ]
+# Volet B (scénarios probabilistes) : job de précalcul (local ou SageMaker Processing) et ses tests.
+# Groupe optionnel, hors du paquet AgentCore (package.sh exporte --no-dev sans ce groupe) : le runtime ne lit que
+# les tables précalculées. Installation : uv sync --group scenarios. Image SageMaker (Python 3.12) :
+# src/alphaforge/scenarios/requirements-job.txt (versions épinglées, y compris build_data.py).
+scenarios = [
+    "numpy>=2.1",
+    "pandas>=2.2",
+    "pyarrow>=18",
+    "pyyaml>=6.0.2",
+]
 
 [build-system]
 requires = ["hatchling"]

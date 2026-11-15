@@ -23,12 +23,15 @@ locals {
   #             absent d'un refus, S3 repondant 403 a un GetObject d'objet
   #             absent quand ListBucket est conditionne.
   # A6 n'ecrit jamais general/methodologie/, geree par Terraform.
+  # profile lit aussi la table precalculee des scenarios (outil scenario_risk,
+  # scenarios.tf), en lecture seule : scenarios/latest.json et
+  # scenarios/output/, jamais le code ni les entrees du job.
   agentcore_runtimes = {
     profile = {
       description    = "Profil investisseur : questions de base deterministes, relances A1, portefeuille existant A2."
-      s3_read        = ["general/*", "clients/*"]
+      s3_read        = ["general/*", "clients/*", "scenarios/latest.json", "scenarios/output/*"]
       s3_write       = ["clients/*"]
-      s3_list        = ["general/*", "clients/*"]
+      s3_list        = ["general/*", "clients/*", "scenarios/latest.json", "scenarios/output/*"]
       knowledge_base = true
       guardrail      = true
     }

@@ -8,6 +8,16 @@
 #                          ni raw/ de alphaforge/data/long) à la racine,
 #                          à côté des dépendances verrouillées (uv.lock), installées en roues aarch64-manylinux2014.
 #   <out_dir>/knowledge/   les fichiers **/*.md de app/knowledge/general/ (Terraform les envoie sous general/).
+#   <out_dir>/scenarios/   seulement si src/alphaforge/scenarios/job.py existe : bundle du job SageMaker Processing
+#                          des scénarios (image scikit-learn d'AWS, Python 3.12, linux/amd64), que Terraform envoie
+#                          sous scenarios/code/<release_id>/ (infrastructure/infra/scenarios.tf) :
+#                            run.sh          point d'entrée du conteneur (scripts/scenarios-run.sh)
+#                            scenarios.zip   alphaforge/__init__.py, alphaforge/scenarios/, le jeu de départ
+#                                            (alphaforge/data/starter/), research/backtest/ s'il existe (fichiers
+#                                            versionnés seulement : jamais data/raw/ ni les parquet, sous licence),
+#                                            et les dépendances du job (scenarios/requirements-job.txt figé par ==,
+#                                            sinon le groupe uv « scenarios » aux versions de uv.lock), en roues
+#                                            x86_64-manylinux_2_28 pour Python 3.12
 #
 # Le script échoue si une dépendance n'a pas de roue pour la plateforme visée (la plateforme n'est jamais
 # changée en silence), ou si le zip dépasse 250 Mo ou son contenu 750 Mo (limites d'AgentCore).
@@ -145,8 +155,111 @@ done
 set +f
 find "$out_dir/knowledge" -type d -exec chmod 755 {} +
 
+# 6. Job des scénarios (facultatif). Il ne tourne pas dans AgentCore : autre plateforme (linux/amd64, Python de
+#    l'image AWS), et seulement les dépendances du job, jamais celles des runtimes.
+SCEN_PLATFORM=x86_64-manylinux_2_28
+SCEN_PY_VERSION=3.12
+SCEN_MAX_ZIP_BYTES=200000000
+scen_src="$agents_dir/src/alphaforge/scenarios"
+scen_out="$out_dir/scenarios"
+repo_root=$(dirname -- "$(dirname -- "$agents_dir")")
+rm -rf -- "$scen_out"
+scen_summary="scenarios: skipped (no src/alphaforge/scenarios/job.py)"
+if [ -f "$scen_src/job.py" ]; then
+    # Dépendances du job : scenarios/requirements-job.txt s'il existe, sinon le groupe uv « scenarios » de
+    # pyproject.toml, aux versions de uv.lock.
+    scen_reqs="$scen_src/requirements-job.txt"
+    if [ ! -f "$scen_reqs" ]; then
+        scen_reqs="$work/scenarios-requirements.txt"
+        if ! (cd -- "$agents_dir" && uv export --frozen --only-group scenarios --no-hashes --no-emit-project --quiet \
+            -o "$scen_reqs"); then
+            echo "error: no requirements-job.txt and no 'scenarios' dependency group in uv.lock" >&2
+            exit 1
+        fi
+    fi
+    # Chaque dépendance est figée par == : le job doit être reproductible.
+    unpinned=$(sed -e 's/#.*//' -e 's/[[:space:]]//g' -- "$scen_reqs" | awk 'NF && !/==/' || true)
+    if [ -n "$unpinned" ]; then
+        echo "error: unpinned requirement(s) in $scen_reqs (use ==):" >&2
+        echo "$unpinned" >&2
+        exit 1
+    fi
+
+    scen_stage="$work/scenarios"
+    mkdir -p -- "$scen_stage/alphaforge" "$scen_out"
+    echo "Installing scenarios job dependencies for $SCEN_PLATFORM / Python $SCEN_PY_VERSION (wheels only)..."
+    if ! (cd -- "$agents_dir" && uv pip install --quiet \
+        --python-platform "$SCEN_PLATFORM" \
+        --python-version "$SCEN_PY_VERSION" \
+        --target "$scen_stage" \
+        --only-binary=:all: \
+        --no-compile-bytecode \
+        --no-installer-metadata \
+        -r "$scen_reqs") >"$work/scenarios-install.log" 2>&1; then
+        cat -- "$work/scenarios-install.log" >&2
+        echo "error: the scenarios job dependencies could not all be installed as wheels for $SCEN_PLATFORM / Python $SCEN_PY_VERSION." >&2
+        exit 1
+    fi
+    rm -rf -- "${scen_stage:?}/bin"
+    rm -f -- "$scen_stage/.lock"
+    if [ -e "$scen_stage/alphaforge/__init__.py" ] || [ -e "$scen_stage/alphaforge/scenarios" ]; then
+        echo "error: a dependency already provides alphaforge/ in the scenarios bundle" >&2
+        exit 1
+    fi
+    # Seulement le paquet du job et le jeu de départ : le job ne peut pas importer les modules des runtimes
+    # (Strands, AgentCore).
+    cp -- "$agents_dir/src/alphaforge/__init__.py" "$scen_stage/alphaforge/__init__.py"
+    cp -R -- "$scen_src" "$scen_stage/alphaforge/scenarios"
+    mkdir -p -- "$scen_stage/alphaforge/data"
+    cp -R -- "$agents_dir/src/alphaforge/data/starter" "$scen_stage/alphaforge/data/starter"
+    # Construction des données longues (research/backtest/data/build_data.py, importé tel quel) : seulement les
+    # fichiers versionnés, donc jamais data/raw/ ni data/processed/*.parquet (licences Yahoo, Moody's, OCDE).
+    backtest_count=0
+    if [ -f "$repo_root/research/backtest/data/build_data.py" ]; then
+        if ! command -v git >/dev/null 2>&1 || ! git -C "$repo_root" rev-parse --git-dir >/dev/null 2>&1; then
+            echo "error: research/backtest/ must be copied from a git checkout (versioned files only)" >&2
+            exit 1
+        fi
+        set -f
+        for rel in $(git -C "$repo_root" ls-files -- research/backtest); do
+            case "$rel" in
+                *[!A-Za-z0-9._/-]*)
+                    echo "error: unexpected character in research/backtest path: $rel" >&2
+                    exit 1
+                    ;;
+                *.parquet | research/backtest/data/raw/*) continue ;;
+            esac
+            mkdir -p -- "$scen_stage/$(dirname -- "$rel")"
+            cp -- "$repo_root/$rel" "$scen_stage/$rel"
+            backtest_count=$((backtest_count + 1))
+        done
+        set +f
+    fi
+    find "$scen_stage" -type d -name __pycache__ -prune -exec rm -rf {} +
+    find "$scen_stage" -type f \( -name '*.pyc' -o -name '*.pyo' -o -name '.DS_Store' \) -exec rm -f {} +
+    find "$scen_stage" -type d -exec chmod 755 {} +
+    find "$scen_stage" -type f -perm -100 -exec chmod 755 {} +
+    find "$scen_stage" -type f ! -perm -100 -exec chmod 644 {} +
+
+    scen_zip="$scen_out/scenarios.zip"
+    (cd -- "$scen_stage" && zip -q -r -X "$scen_zip" .)
+    scen_zip_bytes=$(wc -c <"$scen_zip" | tr -d ' ')
+    if [ "$scen_zip_bytes" -gt "$SCEN_MAX_ZIP_BYTES" ]; then
+        rm -rf -- "$scen_out"
+        echo "error: scenarios.zip is $scen_zip_bytes bytes, above $SCEN_MAX_ZIP_BYTES; bundle removed" >&2
+        exit 1
+    fi
+    cp -- "$script_dir/scenarios-run.sh" "$scen_out/run.sh"
+    chmod 644 "$scen_out/run.sh"
+
+    scen_summary=$(awk -v z="$scen_zip_bytes" -v n="$backtest_count" -v p="$scen_out" 'BEGIN {
+        printf "scenarios: %s (run.sh, scenarios.zip %.1f MB, %d research/backtest files)", p, z / 1e6, n
+    }')
+fi
+
 awk -v z="$zip_bytes" -v u="$unzipped_bytes" -v n="$file_count" -v k="$knowledge_count" -v p="$zip_path" \
     -v d="$out_dir/knowledge" 'BEGIN {
         printf "agents.zip: %s\n  %.1f MB zipped (limit 250 MB), %.1f MB unzipped (limit 750 MB), %d files\n", p, z / 1e6, u / 1e6, n
         printf "knowledge: %s (%d Markdown files)\n", d, k
     }'
+echo "$scen_summary"

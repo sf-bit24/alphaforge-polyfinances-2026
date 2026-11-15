@@ -13,6 +13,8 @@ Compte AWS Workshop Studio du Datathon, `us-east-1`, environnement `sandbox`, pr
 | Knowledge Base + Guardrail | `infra/bedrock.tf` | Knowledge Base sur S3 Vectors (Titan Text Embeddings V2) qui n'indexe que `general/`; Guardrail du cadre responsable (pas de transaction réelle, renseignements personnels bloqués ou masqués). |
 | Step Functions | `infra/stepfunctions.tf` | Collecte : A4 et A5 en parallèle, A6, puis ingestion de la Knowledge Base. |
 | EventBridge Scheduler | `infra/scheduler.tf` | Veille : lance la collecte toutes les 6 heures. |
+| SageMaker Processing + Step Functions | `infra/scenarios.tf` | Scénarios probabilistes (facultatif, `scenarios_enabled`) : un job sur l'image scikit-learn d'AWS calcule la table des scénarios hors du poste, de façon reproductible (image et code figés, entrées et sorties dans S3). Step Functions le lance (`.sync`), écrit `_done.json` puis `scenarios/latest.json`. |
+| Glue + Athena | `infra/scenarios.tf` | Table `scenarios` (parquet, projection de partition sur `run_id`) interrogeable en SQL pour la validation et la démo, sans base à gérer; résultats chiffrés par la clé du bucket. |
 
 ```mermaid
 flowchart LR
@@ -33,6 +35,11 @@ flowchart LR
     A4 --> M
     A5 --> M
     A6 --> M
+    SFS["Step Functions : scénarios"] -->|"createProcessingJob.sync"| SM["SageMaker Processing : image scikit-learn d'AWS"]
+    SM -->|"scenarios/output/"| S3
+    SFS -->|"scenarios/latest.json"| S3
+    P -->|"lit scenarios/"| S3
+    ATH["Athena + Glue"] -->|"scenarios/output/*/table/"| S3
 ```
 
 ## Pipeline
@@ -101,4 +108,8 @@ GITHUB_EVENT_NAME=push GITHUB_REF_NAME=master DEFAULT_BRANCH=master sh scripts/c
 - **Objet absent, réponse 403** : les rôles n'ont `s3:ListBucket` que sous leurs préfixes (condition `s3:prefix`). Pour un objet absent, S3 répond alors `AccessDenied` et non `NoSuchKey`. Step Functions sonde donc les marqueurs par `ListObjectsV2`, et le magasin Python vérifie l'existence par une liste avant de conclure.
 - **Clé KMS du bucket** : elle ne délègue pas à IAM. Tout nouveau rôle qui lit ou écrit le bucket doit figurer dans `local.s3_kms_user_role_arns` (`infra/s3.tf`).
 - **Workspace VCS** : HCP Terraform refuse le téléversement de configuration sur un workspace relié à un VCS; `larpathon` n'en a pas.
+- **Scénarios : bundle du job** : `package.sh` ne construit `infra/build/scenarios/` (`run.sh`, `scenarios.zip`) que si `app/agents/src/alphaforge/scenarios/job.py` existe, et exige alors `requirements-job.txt` figé par `==` (roues x86_64-manylinux_2_28, Python 3.12, celui de l'image). Sans bundle, un bloc `check` de `scenarios.tf` avertit au plan et une exécution échoue au démarrage du job.
+- **Scénarios : image AWS figée** : `scenarios_image_uri` refuse les étiquettes mobiles (`1.4-2-py312`); changer d'image demande de vérifier la version de Python et de reconstruire le bundle.
+- **Scénarios : journal SageMaker** : Terraform crée `/aws/sagemaker/ProcessingJobs` (clé des journaux, 14 jours). Si le groupe existe déjà dans le compte (job lancé à la main), l'apply échoue : l'importer ou le supprimer d'abord.
+- **Scénarios : démontage** : le bucket a `force_destroy`, donc les objets écrits par le job et la machine (toutes versions) partent avec lui; le groupe Athena a `force_destroy`; la base et la table Glue sont gérées par Terraform. Restent hors Terraform, sans coût : l'historique des jobs SageMaker (métadonnées) et la règle EventBridge gérée `StepFunctionsGetEventsForSageMakerProcessingJobsRule` créée par Step Functions. `scripts/destroy.sh` refuse `sandbox` : démontage par l'interface HCP Terraform, comme le reste de la pile.
 - **Compte supprimé le 2026-11-16** : exporter les bases des clients avant (voir le README racine).

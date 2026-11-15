@@ -112,10 +112,21 @@ def eligibility(
     cfg: StrategyConfig,
     employer_tickers: set[str] | None = None,
 ) -> tuple[bool, list[str]]:
+    """(éligible, raisons) dans cet ordre : exclusion du mandat, baisse maximale et liquidité, titre de l'employeur,
+    puis profil (secteur d'emploi, devise, exclusions de valeurs, secteur déjà concentré)."""
     why: list[str] = []
-    pc = cfg.profile_codes
     if c.ticker in excluded:
         why.append(f"exclu par le mandat : {excluded[c.ticker]}")
+    why += _market_reasons(c, cfg)
+    if employer_tickers and c.ticker in employer_tickers:
+        why.append("titre de l'employeur (concentration du capital humain)")
+    why += _profile_reasons(c, inputs, cfg)
+    return not why, why
+
+
+def _market_reasons(c: Candidate, cfg: StrategyConfig) -> list[str]:
+    """Baisse maximale longue au-delà de δ des titres individuels, ou liquidité insuffisante."""
+    why = []
     mdd = c.features.get("mdd_long")
     if mdd is None:
         why.append("baisse maximale longue inconnue")
@@ -126,8 +137,13 @@ def eligibility(
     liq = c.features.get("liquidity_cad")
     if liq is not None and liq < cfg.eligibility.min_median_dollar_volume_cad:
         why.append("liquidité insuffisante")
-    if employer_tickers and c.ticker in employer_tickers:
-        why.append("titre de l'employeur (concentration du capital humain)")
+    return why
+
+
+def _profile_reasons(c: Candidate, inputs: StyleInputs, cfg: StrategyConfig) -> list[str]:
+    """Secteur d'emploi, préférence de devise, exclusions de valeurs strictes, secteur déjà concentré."""
+    why = []
+    pc = cfg.profile_codes
     emp = inputs.employment_sector or ""
     if emp in cfg.sectors.employment_to_sector and (
         c.sector == cfg.sectors.employment_to_sector[emp] or cfg.sectors.employment_to_tag[emp] in c.tags
@@ -142,15 +158,16 @@ def eligibility(
             why.append(f"exclusion de valeurs : {exclusion_fr(ex)}")
     if c.sector in inputs.concentrated_sectors:
         why.append("secteur déjà concentré dans le portefeuille existant")
-    return not why, why
+    return why
 
 
-def rank_scores(
+def rank_scores(  # noqa: PLR0913 - signature publique : select.py et les tests passent employer_tickers par mot-clé
     cands: list[Candidate],
     style: StyleId,
     inputs: StyleInputs,
     excluded: dict[str, str],
     cfg: StrategyConfig | None = None,
+    *,
     employer_tickers: set[str] | None = None,
 ) -> list[Ranked]:
     cfg = cfg or load_strategy()
@@ -201,9 +218,9 @@ def sector_caps(
     """cap_t = e_cap·s_ref_t·(1+τ) + φ·l*/δ_t (généralisation de satellites.theme_tech) ; émis seulement s'il est
     plus strict que la limite de base sur le même tag. Capital humain : cap au poids du marché (sans satellite)."""
     cfg = cfg or load_strategy()
-    S = cfg.sectors
+    sectors = cfg.sectors
     e_cap, l_star = float(comp.e_cap or 0.0), float(comp.l_star or 0.0)
-    emp_tag = S.employment_to_tag.get(inputs.employment_sector or "")
+    emp_tag = sectors.employment_to_tag.get(inputs.employment_sector or "")
     abs_tags = set()
     pc = cfg.profile_codes
     if inputs.exclusion_strictness == pc["exclusion_strictness"]["absolute"]:
@@ -211,17 +228,17 @@ def sector_caps(
             if pc["exclusion_tags"].get(ex) == "fossil_fuel":
                 abs_tags.add("energy")
     out: dict[str, tuple[float, str]] = {}
-    for tag, spec in S.tags.items():
-        tau = S.tau[style].get(tag, 0.0)
+    for tag, spec in sectors.tags.items():
+        tau = sectors.tau[style].get(tag, 0.0)
         if tag == emp_tag or tag in abs_tags:
-            cap = floor_step(e_cap * spec.s_ref, S.rounding)
+            cap = floor_step(e_cap * spec.s_ref, sectors.rounding)
             why = (
                 "capital humain : exposition au poids du marché, sans satellite"
                 if tag == emp_tag
                 else "exclusion absolue : exposition indirecte au plus au poids du marché"
             )
         elif tau < 0 or tag in selected_tags:
-            cap = floor_step(e_cap * spec.s_ref * (1 + tau) + S.phi * l_star / spec.delta, S.rounding)
+            cap = floor_step(e_cap * spec.s_ref * (1 + tau) + sectors.phi * l_star / spec.delta, sectors.rounding)
             why = (
                 f"style {style_fr(style)} (τ = {tau:+g})".replace(".", ",")
                 if tau < 0
@@ -379,16 +396,44 @@ def _max_of(policy: PolicySpec, rule_id: str) -> float | None:
 
 def clamp_strategy_floors(policy: PolicySpec) -> tuple[PolicySpec, list[str]]:
     """Après un amendement qui baisse un plafond, abaisse les planchers liés : la prudence l'emporte sur le style."""
-    notes: list[str] = []
-    g_max, c_max = _max_of(policy, "alloc.growth"), _max_of(policy, "alloc.crypto") or 0.0
-    each, total = _max_of(policy, "conc.single_each"), _max_of(policy, "conc.single_total")
-    lims = []
     floors = {lim.rule_id: lim for lim in policy.limits if lim.rule_id.startswith("strat.floor.")}
-    asset_caps: dict[str, float] = {}
+    new_floor, notes = _clamped_stock_floors(policy, floors)
+    growth_cap = _growth_floor_cap(policy)
+    lims: list[Limit] = []
+    for lim in policy.limits:
+        if lim.rule_id in floors:
+            v = new_floor.get(lim.rule_id)
+            if v and v > 0:
+                lims.append(lim.model_copy(update={"min": round(v, 6)}))
+            continue
+        kept = lim
+        if lim.rule_id == "strat.growth_floor" and growth_cap is not None:
+            kept, why = _lowered_growth_floor(lim, growth_cap)
+            notes += why
+        if kept is not None:
+            lims.append(kept)
+    data = policy.model_dump()
+    data["limits"] = [lim.model_dump() for lim in lims]
+    return PolicySpec.model_validate(data), notes
+
+
+def _asset_caps(policy: PolicySpec) -> dict[str, float]:
+    """Plafond par actif le plus strict des limites ``asset_weight`` du mandat (hors ``strat.*``)."""
+    caps: dict[str, float] = {}
     for lim in policy.limits:
         if lim.kind == "asset_weight" and lim.max is not None and not lim.rule_id.startswith(STRAT):
             for a in lim.selector.assets:
-                asset_caps[a] = min(asset_caps.get(a, 1.0), float(lim.max))
+                caps[a] = min(caps.get(a, 1.0), float(lim.max))
+    return caps
+
+
+def _clamped_stock_floors(policy: PolicySpec, floors: dict[str, Limit]) -> tuple[dict[str, float], list[str]]:
+    """Planchers sous leurs plafonds (conc.single_each pour un titre, la limite liée pour le FNB d'un intérêt, et le
+    plafond de l'actif), puis ceux des titres ramenés ensemble sous conc.single_total ; un actif exclu perd son
+    plancher."""
+    each, total = _max_of(policy, "conc.single_each"), _max_of(policy, "conc.single_total")
+    asset_caps = _asset_caps(policy)
+    notes: list[str] = []
     new_floor: dict[str, float] = {}
     interest_rids: set[str] = set()
     for rid, lim in floors.items():
@@ -412,23 +457,21 @@ def clamp_strategy_floors(policy: PolicySpec) -> tuple[PolicySpec, list[str]]:
         k = total / s
         new_floor = {r: (v if r in interest_rids else floor_step(v * k, 0.0025)) for r, v in new_floor.items()}
         notes.append(f"planchers des titres ramenés sous conc.single_total ({total:g})")
-    for lim in policy.limits:
-        if lim.rule_id in floors:
-            v = new_floor.get(lim.rule_id)
-            if v and v > 0:
-                lims.append(lim.model_copy(update={"min": round(v, 6)}))
-            continue
-        if lim.rule_id == "strat.growth_floor" and g_max is not None:
-            cap = round(g_max - c_max, 6)
-            if lim.min is not None and lim.min > cap + 1e-12:
-                notes.append(f"strat.growth_floor abaissé de {lim.min:g} à {cap:g}")
-                if cap <= 0:
-                    continue
-                lim = lim.model_copy(update={"min": cap})
-        lims.append(lim)
-    data = policy.model_dump()
-    data["limits"] = [lim.model_dump() for lim in lims]
-    return PolicySpec.model_validate(data), notes
+    return new_floor, notes
+
+
+def _growth_floor_cap(policy: PolicySpec) -> float | None:
+    """Plus haut plancher d'actions hors crypto du mandat : alloc.growth − alloc.crypto (None sans plafond)."""
+    g_max, c_max = _max_of(policy, "alloc.growth"), _max_of(policy, "alloc.crypto") or 0.0
+    return None if g_max is None else round(g_max - c_max, 6)
+
+
+def _lowered_growth_floor(lim: Limit, cap: float) -> tuple[Limit | None, list[str]]:
+    """strat.growth_floor ramené à ``cap`` s'il le dépasse, retiré si ``cap`` est nul."""
+    if lim.min is not None and lim.min > cap + 1e-12:
+        note = [f"strat.growth_floor abaissé de {lim.min:g} à {cap:g}"]
+        return (None, note) if cap <= 0 else (lim.model_copy(update={"min": cap}), note)
+    return lim, []
 
 
 def degrade_steps(plan: Plan, e_min: float, rounding: float = 0.05) -> Iterator[tuple[str, Plan]]:

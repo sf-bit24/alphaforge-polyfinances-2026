@@ -23,7 +23,7 @@ import yaml
 from alphaforge.finance.policy.compiler import DEFAULT_YAML, _bias_key
 from alphaforge.finance.policy.models import CompileResult
 
-from .config import LEVELS, STYLES, StrategyConfig, StyleId, load_strategy
+from .config import LEVELS, STYLES, Preference, StrategyConfig, StyleId, load_strategy
 from .labels import style_fr
 
 
@@ -107,7 +107,8 @@ def _risk_levels(path: str) -> dict:
         return yaml.safe_load(fh)
 
 
-def level_R_range(level: str) -> tuple[float, float]:
+def level_r_range(level: str) -> tuple[float, float]:
+    """Intervalle de R du niveau (risk_levels.yaml#levels.<niveau>.R)."""
     lv = _risk_levels(str(DEFAULT_YAML))["levels"][level]
     lo, hi = lv["R"]
     return float(lo), float(hi)
@@ -126,11 +127,13 @@ def profile_biases(profile: Any) -> set[str]:
     return {k for k in (_bias_key(b.kind_label) for b in getattr(profile, "biases", []) or []) if k}
 
 
-class _T:
+class _RuleTrace:
+    """Trace des règles appliquées, une ligne par règle, comme ``compiler._Ctx`` (devient ``StyleDecision.trace``)."""
+
     def __init__(self, cfg: StrategyConfig):
         self.cfg, self.rows = cfg, []
 
-    def t(self, rule: str, inputs: dict, output: Any, path: str) -> Any:
+    def record(self, rule: str, inputs: dict, output: Any, path: str) -> Any:
         self.rows.append({"rule": rule, "inputs": inputs, "output": output, "yaml_path": self.cfg.src(path)})
         return output
 
@@ -141,94 +144,102 @@ class _T:
 def behavior_flags(
     inputs: StyleInputs, profile: Any = None, comp: CompileResult | None = None, cfg: StrategyConfig | None = None
 ) -> BehaviorFlags:
+    """Chaque signal est actif dès qu'il a au moins une preuve (réponse du profil court ou biais du profil)."""
     cfg = cfg or load_strategy()
     pc = cfg.profile_codes
-    ev: dict[str, list[str]] = {}
     biases = profile_biases(profile)
+    evidence = {
+        "overconfidence": _overconfidence_evidence(inputs, pc, biases),
+        "fomo": _fomo_evidence(inputs, pc, biases),
+        "attention": _attention_evidence(inputs, pc),
+        "low_composure": _low_composure_evidence(inputs, pc, biases, comp),
+        "low_literacy": _low_literacy_evidence(inputs, pc, profile),
+    }
+    return BehaviorFlags(
+        **{flag: bool(proof) for flag, proof in evidence.items()},
+        evidence={flag: proof for flag, proof in evidence.items() if proof},
+    )
 
+
+def _overconfidence_evidence(inputs: StyleInputs, pc: dict, biases: set[str]) -> list[str]:
+    """Auto-évaluation « avancée » contredite par le quiz, ou biais de surconfiance déclaré."""
     wrong = [q for q, ok in pc["quiz_correct"].items() if q in inputs.quiz and inputs.quiz[q] != ok]
-    over = inputs.self_assessment in pc["overconfident_self"] and bool(wrong)
-    if over:
-        ev["overconfidence"] = [
-            f"knowledge.self_assessment={inputs.self_assessment}",
-            *(f"knowledge.{q}" for q in wrong),
-        ]
+    proof = []
+    if inputs.self_assessment in pc["overconfident_self"] and wrong:
+        proof = [f"knowledge.self_assessment={inputs.self_assessment}", *(f"knowledge.{q}" for q in wrong)]
     if "surconfiance" in biases:
-        over = True
-        ev.setdefault("overconfidence", []).append("profile.biases[surconfiance]")
+        proof.append("profile.biases[surconfiance]")
+    return proof
 
-    fomo = inputs.hype_reaction in pc["fomo_hype_reaction"] or inputs.hype_position_share in pc["fomo_hype_share"]
-    if fomo:
-        ev["fomo"] = [
+
+def _fomo_evidence(inputs: StyleInputs, pc: dict, biases: set[str]) -> list[str]:
+    proof = []
+    if inputs.hype_reaction in pc["fomo_hype_reaction"] or inputs.hype_position_share in pc["fomo_hype_share"]:
+        proof = [
             f"behavior.hype_reaction={inputs.hype_reaction}",
             f"behavior.hype_position_share={inputs.hype_position_share}",
         ]
     if "FOMO" in biases:
-        fomo = True
-        ev.setdefault("fomo", []).append("profile.biases[FOMO]")
+        proof.append("profile.biases[FOMO]")
+    return proof
 
-    attention = inputs.news_frequency in pc["attention_news"] and inputs.hype_reaction in pc["attention_hype_reaction"]
-    if attention:
-        ev["attention"] = [
-            f"knowledge.news_frequency={inputs.news_frequency}",
-            f"behavior.hype_reaction={inputs.hype_reaction}",
-        ]
 
-    lc_ev = []
-    if inputs.drop_reaction in pc["low_composure_drop_reaction"]:
-        lc_ev.append(f"risk_tolerance.drop_reaction={inputs.drop_reaction}")
-    if inputs.past_drop_behavior in pc["low_composure_past"]:
-        lc_ev.append(f"risk_tolerance.past_drop_behavior={inputs.past_drop_behavior}")
-    if inputs.sell_threshold_pct in pc["low_composure_sell_threshold"]:
-        lc_ev.append(f"risk_tolerance.sell_threshold_pct={inputs.sell_threshold_pct}")
+def _attention_evidence(inputs: StyleInputs, pc: dict) -> list[str]:
+    if inputs.news_frequency in pc["attention_news"] and inputs.hype_reaction in pc["attention_hype_reaction"]:
+        return [f"knowledge.news_frequency={inputs.news_frequency}", f"behavior.hype_reaction={inputs.hype_reaction}"]
+    return []
+
+
+def _low_composure_evidence(inputs: StyleInputs, pc: dict, biases: set[str], comp: CompileResult | None) -> list[str]:
+    answers = (
+        ("drop_reaction", inputs.drop_reaction, "low_composure_drop_reaction"),
+        ("past_drop_behavior", inputs.past_drop_behavior, "low_composure_past"),
+        ("sell_threshold_pct", inputs.sell_threshold_pct, "low_composure_sell_threshold"),
+    )
+    proof = [f"risk_tolerance.{name}={value}" for name, value, codes in answers if value in pc[codes]]
     if "aversion_perte" in biases:
-        lc_ev.append("profile.biases[aversion_perte]")
+        proof.append("profile.biases[aversion_perte]")
     if comp is not None and limit(comp, "risk.cdar_m") is not None:
-        lc_ev.append("risk.cdar_m (aversion aux pertes ou composure < 40, risk_levels.yaml#biases)")
-    if lc_ev:
-        ev["low_composure"] = lc_ev
+        proof.append("risk.cdar_m (aversion aux pertes ou composure < 40, risk_levels.yaml#biases)")
+    return proof
 
-    kl = inputs.knowledge_level or (
+
+def _knowledge_level(inputs: StyleInputs, profile: Any) -> str | None:
+    """Niveau du profil court, sinon celui du profil complet (debutant | intermediaire | avance) traduit."""
+    return inputs.knowledge_level or (
         getattr(profile, "knowledge_level", None)
         and {"debutant": "beginner", "intermediaire": "intermediate", "avance": "advanced"}.get(
             str(getattr(profile.knowledge_level, "value", profile.knowledge_level))
         )
     )
-    lit_ev = []
-    if kl == "beginner":
-        lit_ev.append("knowledge.level=beginner")
+
+
+def _low_literacy_evidence(inputs: StyleInputs, pc: dict, profile: Any) -> list[str]:
+    proof = []
+    if _knowledge_level(inputs, profile) == "beginner":
+        proof.append("knowledge.level=beginner")
     if inputs.products_known and pc["products_stocks"] not in inputs.products_known:
-        lit_ev.append("knowledge.products_known sans « stocks »")
-    if lit_ev:
-        ev["low_literacy"] = lit_ev
-    return BehaviorFlags(
-        overconfidence=over,
-        fomo=fomo,
-        attention=attention,
-        low_composure=bool(lc_ev),
-        low_literacy=bool(lit_ev),
-        evidence=ev,
-    )
+        proof.append("knowledge.products_known sans « stocks »")
+    return proof
 
 
 # --------------------------------------------------------------------------- style
 
 
 def _capacity_binds(comp: CompileResult) -> tuple[bool, str]:
-    iL, iR = LEVELS.index(comp.level), LEVELS.index(comp.level_from_R)
-    if iL < iR:
+    if LEVELS.index(comp.level) < LEVELS.index(comp.level_from_R):
         return (
             True,
             f"niveau {comp.level} sous niveau(R) {comp.level_from_R} : un plafond (horizon, seau, statut, dollars) lie",
         )
-    T, C = float(comp.tolerance["T"]), float(comp.capacity["C"])
-    if C < T:
-        return True, f"capacité C={C:.1f} < tolérance T={T:.1f}"
-    return False, f"la tolérance T={T:.1f} lie (C={C:.1f})"
+    tolerance, capacity = float(comp.tolerance["T"]), float(comp.capacity["C"])
+    if capacity < tolerance:
+        return True, f"capacité C={capacity:.1f} < tolérance T={tolerance:.1f}"
+    return False, f"la tolérance T={tolerance:.1f} lie (C={capacity:.1f})"
 
 
 def band_position(
-    comp: CompileResult, flags: BehaviorFlags, cfg: StrategyConfig, tr: _T | None = None
+    comp: CompileResult, flags: BehaviorFlags, cfg: StrategyConfig, tr: _RuleTrace | None = None
 ) -> tuple[float, str, bool]:
     """π ∈ [0, 1] : 1 = e_cap (le plus haut que permettent tolérance ET capacité), 0 = e_min."""
     binds, why = _capacity_binds(comp)
@@ -237,13 +248,13 @@ def band_position(
     elif binds:
         pi, reason = 1.0, why
     else:
-        lo, hi = level_R_range(comp.level)
+        lo, hi = level_r_range(comp.level)
         pi = min(1.0, max(0.0, (float(comp.R) - lo) / (hi - lo))) if hi > lo else 1.0
         reason = f"{why} ; R={float(comp.R):.1f} dans [{lo:g}, {hi:g}] du niveau {comp.level}"
     if flags.low_composure and pi > cfg.band.low_composure_pi_max:
         pi, reason = cfg.band.low_composure_pi_max, reason + " ; faible sang-froid : π plafonné"
     if tr:
-        tr.t(
+        tr.record(
             "strategy.band_position",
             {
                 "level": comp.level,
@@ -301,70 +312,93 @@ def k_rule(
     return max(k, 0), reason
 
 
-def derive_style(
-    comp: CompileResult, inputs: StyleInputs | None = None, *, profile: Any = None, cfg: StrategyConfig | None = None
-) -> StyleDecision:
-    cfg = cfg or load_strategy()
-    inputs = inputs or StyleInputs()
-    tr = _T(cfg)
-    flags = behavior_flags(inputs, profile, comp, cfg)
-    base: StyleId = cfg.level_to_style[comp.level]
-    tr.t("strategy.style_from_level", {"level": comp.level}, base, "level_to_style")
+@dataclass(frozen=True)
+class _StyleChoice:
+    """Style retenu et ce qui l'explique (préférence, refus, contradictions), avant la position dans la bande."""
 
-    pref, pref_src = None, None
-    if inputs.explicit_preference and inputs.explicit_preference not in STYLES:
-        # préférence invalide (charge utile) : ignorée, jamais une erreur ; tracée pour l'explication
-        tr.t("strategy.preference_invalid", {"style_preference": inputs.explicit_preference}, None, "styles")
+    style: StyleId
+    from_level: StyleId
+    preference: StyleId | None
+    preference_source: str | None
+    shift: int
+    refused: list[str]
+    contradictions: list[str]
+    capacity_binds: bool
+
+
+def _is_unknown_style(preference: str | None) -> bool:
+    """Préférence invalide (charge utile) : ignorée, jamais une erreur ; tracée pour l'explication."""
+    return bool(preference) and preference not in STYLES
+
+
+def _preference(inputs: StyleInputs, cfg: StrategyConfig, tr: _RuleTrace) -> tuple[StyleId | None, str | None]:
+    """(préférence, source) : le paramètre d'appel l'emporte sur ``objective.goal``."""
+    if _is_unknown_style(inputs.explicit_preference):
+        tr.record("strategy.preference_invalid", {"style_preference": inputs.explicit_preference}, None, "styles")
     if inputs.explicit_preference in STYLES:
-        pref, pref_src = inputs.explicit_preference, "paramètre style_preference"
-    elif inputs.goal in cfg.preference.goal_to_preference:
-        pref, pref_src = cfg.preference.goal_to_preference[inputs.goal], f"objective.goal={inputs.goal}"
+        return inputs.explicit_preference, "paramètre style_preference"
+    if inputs.goal in cfg.preference.goal_to_preference:
+        return cfg.preference.goal_to_preference[inputs.goal], f"objective.goal={inputs.goal}"
+    return None, None
 
-    contradictions: list[str] = []
-    P = cfg.preference
-    if pref == "offensive" and comp.level_from_R in P.low_tolerance_levels:
-        contradictions.append("tolérance faible × préférence de croissance (règle des ACVM)")
-    if flags.low_literacy and comp.level_from_R in P.high_tolerance_levels:
-        contradictions.append("connaissance faible × tolérance agressive")
-    if pref == "offensive" and comp.horizon_years is not None and comp.horizon_years < P.short_horizon_years:
-        contradictions.append("horizon court × préférence pour le style offensif")
 
+def _contradictions(
+    comp: CompileResult, pref: StyleId | None, flags: BehaviorFlags, pref_rules: Preference
+) -> list[str]:
+    """Contradictions du profil (règles des ACVM) ; chacune bloque une montée de style."""
+    out: list[str] = []
+    if pref == "offensive" and comp.level_from_R in pref_rules.low_tolerance_levels:
+        out.append("tolérance faible × préférence de croissance (règle des ACVM)")
+    if flags.low_literacy and comp.level_from_R in pref_rules.high_tolerance_levels:
+        out.append("connaissance faible × tolérance agressive")
+    if pref == "offensive" and comp.horizon_years is not None and comp.horizon_years < pref_rules.short_horizon_years:
+        out.append("horizon court × préférence pour le style offensif")
+    return out
+
+
+def _upgrade_blocks(comp: CompileResult, flags: BehaviorFlags, *, binds: bool) -> list[str]:
+    """Ce qui interdit de monter d'un cran au-dessus du style du niveau (prudence)."""
+    checks = (
+        (comp.status != "COMPLETE", f"statut {comp.status}"),
+        (comp.level == "N0", "niveau N0"),
+        (flags.fomo, "signal FOMO"),
+        (flags.attention, "signal d'attention (actualité quotidienne et titre médiatisé)"),
+        (flags.low_composure, "faible sang-froid ou aversion aux pertes"),
+        (binds, "la capacité lie"),
+    )
+    return [why for hit, why in checks if hit]
+
+
+def _preference_shift(want: int, blocks: list[str], max_up: int) -> tuple[int, list[str]]:
+    """(décalage admis, raisons) : une descente est toujours admise, une montée bloquée ou plafonnée est expliquée."""
+    if want < 0:
+        return want, []
+    if want == 0:
+        return 0, []
+    if blocks:
+        return 0, [f"montée refusée : {b}" for b in blocks]
+    return min(want, max_up), ["montée plafonnée à un cran"] if want > max_up else []
+
+
+def _choose_style(
+    comp: CompileResult, inputs: StyleInputs, flags: BehaviorFlags, cfg: StrategyConfig, tr: _RuleTrace
+) -> _StyleChoice:
+    pref_rules = cfg.preference
+    base: StyleId = cfg.level_to_style[comp.level]
+    tr.record("strategy.style_from_level", {"level": comp.level}, base, "level_to_style")
+    pref, pref_src = _preference(inputs, cfg, tr)
+    contradictions = _contradictions(comp, pref, flags, pref_rules)
     binds, _ = _capacity_binds(comp)
-    refused: list[str] = []
-    if inputs.explicit_preference and inputs.explicit_preference not in STYLES:
-        refused.append("préférence de style inconnue, ignorée")
-    shift = 0
-    if pref is not None:
-        want = _idx(pref) - _idx(base)
-        if want < 0:
-            shift = want
-        elif want > 0:
-            blocks = []
-            if comp.status != "COMPLETE":
-                blocks.append(f"statut {comp.status}")
-            if comp.level == "N0":
-                blocks.append("niveau N0")
-            if flags.fomo:
-                blocks.append("signal FOMO")
-            if flags.attention:
-                blocks.append("signal d'attention (actualité quotidienne et titre médiatisé)")
-            if flags.low_composure:
-                blocks.append("faible sang-froid ou aversion aux pertes")
-            if binds:
-                blocks.append("la capacité lie")
-            blocks += contradictions
-            if blocks:
-                refused += [f"montée refusée : {b}" for b in blocks]
-            else:
-                shift = min(want, P.max_up)
-                if want > P.max_up:
-                    refused.append("montée plafonnée à un cran")
+    refused = ["préférence de style inconnue, ignorée"] if _is_unknown_style(inputs.explicit_preference) else []
+    want = 0 if pref is None else _idx(pref) - _idx(base)
+    shift, why = _preference_shift(want, _upgrade_blocks(comp, flags, binds=binds) + contradictions, pref_rules.max_up)
+    refused += why
     style: StyleId = STYLES[_idx(base) + shift]
-    if flags.low_literacy and _idx(style) > _idx(P.beginner_max_style):
-        refused.append(f"débutant ou faible littératie : style plafonné à {style_fr(P.beginner_max_style)}")
-        style = P.beginner_max_style
+    if flags.low_literacy and _idx(style) > _idx(pref_rules.beginner_max_style):
+        refused.append(f"débutant ou faible littératie : style plafonné à {style_fr(pref_rules.beginner_max_style)}")
+        style = pref_rules.beginner_max_style
         shift = _idx(style) - _idx(base)
-    tr.t(
+    tr.record(
         "strategy.style",
         {
             "from_level": base,
@@ -377,28 +411,49 @@ def derive_style(
         style,
         "preference",
     )
+    return _StyleChoice(style, base, pref, pref_src, shift, refused, contradictions, binds)
 
+
+def _capped_band_position(
+    comp: CompileResult, flags: BehaviorFlags, cfg: StrategyConfig, tr: _RuleTrace
+) -> tuple[float, str]:
+    """π et sa raison ; une contradiction connaissance × tolérance non résolue plafonne π (réponse la plus prudente)."""
     pi, pi_reason, _ = band_position(comp, flags, cfg, tr)
-    if flags.low_literacy and comp.level_from_R in P.high_tolerance_levels and pi > cfg.band.low_composure_pi_max:
-        # contradiction non résolue : la réponse la plus prudente l'emporte pour la position dans la bande
+    if (
+        flags.low_literacy
+        and comp.level_from_R in cfg.preference.high_tolerance_levels
+        and pi > cfg.band.low_composure_pi_max
+    ):
         pi = cfg.band.low_composure_pi_max
         pi_reason += " ; contradiction connaissance × tolérance : π plafonné (réponse la plus prudente)"
-        tr.t("strategy.band_position.capped", {"reason": "contradiction connaissance × tolérance"}, pi, "band")
-    k, k_reason = k_rule(comp, style, inputs, flags, cfg)
-    tr.t("strategy.k", {"style": style, "approach": inputs.approach}, k, "k")
-    phi = cfg.floors.phi[style] * (cfg.floors.overconfidence_mult if flags.overconfidence else 1.0)
+        tr.record("strategy.band_position.capped", {"reason": "contradiction connaissance × tolérance"}, pi, "band")
+    return pi, pi_reason
+
+
+def derive_style(
+    comp: CompileResult, inputs: StyleInputs | None = None, *, profile: Any = None, cfg: StrategyConfig | None = None
+) -> StyleDecision:
+    cfg = cfg or load_strategy()
+    inputs = inputs or StyleInputs()
+    tr = _RuleTrace(cfg)
+    flags = behavior_flags(inputs, profile, comp, cfg)
+    choice = _choose_style(comp, inputs, flags, cfg, tr)
+    pi, pi_reason = _capped_band_position(comp, flags, cfg, tr)
+    k, k_reason = k_rule(comp, choice.style, inputs, flags, cfg)
+    tr.record("strategy.k", {"style": choice.style, "approach": inputs.approach}, k, "k")
+    phi = cfg.floors.phi[choice.style] * (cfg.floors.overconfidence_mult if flags.overconfidence else 1.0)
     return StyleDecision(
-        style=style,
-        from_level=base,
-        preference=pref,
-        preference_source=pref_src,
-        shift=shift,
-        refused=tuple(refused),
-        contradictions=tuple(contradictions),
+        style=choice.style,
+        from_level=choice.from_level,
+        preference=choice.preference,
+        preference_source=choice.preference_source,
+        shift=choice.shift,
+        refused=tuple(choice.refused),
+        contradictions=tuple(choice.contradictions),
         flags=flags,
         pi=pi,
         pi_reason=pi_reason,
-        capacity_binds=binds,
+        capacity_binds=choice.capacity_binds,
         k=k,
         k_reason=k_reason,
         floor_fraction=phi,

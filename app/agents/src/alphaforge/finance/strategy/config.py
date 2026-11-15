@@ -133,7 +133,7 @@ class StrategyConfig(_Strict):
             raise ValueError(f"styles doit valoir {STYLES}")
         if set(self.level_to_style) != set(LEVELS):
             raise ValueError("level_to_style doit couvrir N0..N5")
-        idx = [STYLES.index(self.level_to_style[L]) for L in LEVELS]
+        idx = [STYLES.index(self.level_to_style[level]) for level in LEVELS]
         if idx != sorted(idx):
             raise ValueError("level_to_style doit être monotone (un niveau plus haut n'est jamais plus prudent)")
         for st, w in self.weights.items():

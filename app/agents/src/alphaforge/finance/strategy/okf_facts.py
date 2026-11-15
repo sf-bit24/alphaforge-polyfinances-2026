@@ -64,8 +64,12 @@ class OkfFactsError(ValueError):
     """Document de la base générale refusé : on le signale clairement, on ne devine jamais."""
 
 
-class WrongDocType(OkfFactsError):
+class WrongDocTypeError(OkfFactsError):
     """Document OKF d'un autre type connu (ex. un index sous ``general/societes/``) : ignoré, pas refusé."""
+
+
+# Ancien nom, encore importé par ``finance/debate/okf_bridge.py`` : à retirer quand ce module passera au nouveau nom.
+WrongDocType = WrongDocTypeError
 
 
 def canonical_ticker(ticker: Any) -> str:
@@ -349,7 +353,7 @@ def _frontmatter(doc_text: str, key: str, expected: str) -> okf.OkfDoc:
         raise OkfFactsError(f"{key} : {exc}") from exc
     if doc.type != expected:
         if doc.type in okf.DOC_TYPES:
-            raise WrongDocType(f"{key} : type {doc.type!r}, « {expected} » attendu")
+            raise WrongDocTypeError(f"{key} : type {doc.type!r}, « {expected} » attendu")
         raise OkfFactsError(f"{key} : type inconnu {doc.type!r}")
     problems = okf.validate(doc)
     if problems:
@@ -403,6 +407,23 @@ def _status(metric: Metric, *, converted: bool = False, derived: bool = False) -
     return "FAIT" if metric.gaap and not converted and not derived else "HYPOTHESE"
 
 
+@dataclass(frozen=True)
+class _Draft:
+    """Un Fact ``okf.fund.<TICKER>.<field_id>`` avant estampillage : valeur, unité, statut, dates et provenance
+    (``path`` dans le frontmatter, ``source_id`` de la publication de l'émetteur)."""
+
+    field_id: str
+    label: str
+    value: int | float
+    unit: str
+    currency: str | None
+    status: str
+    observed: date
+    published: date
+    path: str
+    source_id: str
+
+
 class _Builder:
     def __init__(self, cf: CompanyFundamentals, trace_id: str):
         self.cf, self.trace_id, self.out = cf, trace_id, []
@@ -419,19 +440,19 @@ class _Builder:
             ),
         ]
 
-    def add(self, field_id, label, value, unit, currency, status, observed, published, path, source_id) -> None:
+    def add(self, draft: _Draft) -> None:
         self.out.append(
             Fact(
-                fact_id=f"{FUND_FACT_PREFIX}{self.cf.ticker}.{field_id}",
-                label_fr=label,
-                value=value,
-                unit=unit,
-                currency=currency,
-                as_of=observed,
-                published=published,
-                status=status,
+                fact_id=f"{FUND_FACT_PREFIX}{self.cf.ticker}.{draft.field_id}",
+                label_fr=draft.label,
+                value=draft.value,
+                unit=draft.unit,
+                currency=draft.currency,
+                as_of=draft.observed,
+                published=draft.published,
+                status=draft.status,
                 trace_id=self.trace_id,
-                sources=self.sources(path, source_id),
+                sources=self.sources(draft.path, draft.source_id),
             )
         )
 
@@ -449,18 +470,8 @@ class _Builder:
             label += f" — mesure non {cf.accounting_standard} de l'émetteur"
             path += f" ; mesure non {cf.accounting_standard} définie par l'émetteur"
         value = p.values[field] if factor == 1.0 else round(p.values[field] * factor, 10)
-        self.add(
-            field,
-            label,
-            value,
-            unit,
-            cur,
-            _status(m, converted=factor != 1.0),
-            p.observed_at,
-            p.published_at,
-            path,
-            p.source,
-        )
+        status = _status(m, converted=factor != 1.0)
+        self.add(_Draft(field, label, value, unit, cur, status, p.observed_at, p.published_at, path, p.source))
         return p
 
     def balance_metric(self, sheets: list[BalanceSheet], field: str, field_id: str) -> None:
@@ -477,18 +488,8 @@ class _Builder:
             label += f" — mesure non {cf.accounting_standard} de l'émetteur"
             path += f" ; mesure non {cf.accounting_standard} définie par l'émetteur"
         value = b.values[field] if factor == 1.0 else round(b.values[field] * factor, 10)
-        self.add(
-            field_id,
-            label,
-            value,
-            unit,
-            cur,
-            _status(m, converted=factor != 1.0),
-            b.observed_at,
-            b.published_at,
-            path,
-            b.source,
-        )
+        status = _status(m, converted=factor != 1.0)
+        self.add(_Draft(field_id, label, value, unit, cur, status, b.observed_at, b.published_at, path, b.source))
 
 
 def fundamentals_facts(
@@ -502,20 +503,7 @@ def fundamentals_facts(
     b = _Builder(adm, trace_id)
     p = b.period_metric(adm.periods, "revenue")
     if p is not None and p.prior_year is not None and p.prior_year.values.get("revenue"):
-        prior = p.prior_year.values["revenue"]
-        base = f"data.periods[period='{p.period}']"
-        b.add(
-            "revenue_growth_yoy",
-            f"{adm.ticker} : croissance des produits sur un an ({p.period} contre la même période un an plus tôt)",
-            round(p.values["revenue"] / prior - 1, 10),
-            "%",
-            None,
-            "HYPOTHESE",  # valeur dérivée
-            p.observed_at,
-            p.published_at,
-            f"{base}.revenue / {base}.prior_year.revenue - 1 (prior_year publié avec sa période)",
-            p.source,
-        )
+        b.add(_revenue_growth(adm, p))
     b.period_metric(adm.periods, "operating_income")
     if b.period_metric(adm.periods, "net_income_attributable") is None:
         b.period_metric(adm.periods, "net_income")
@@ -523,20 +511,30 @@ def fundamentals_facts(
     b.balance_metric(adm.balance_sheets, "leverage_ratio", "leverage_ratio")
     b.balance_metric(adm.balance_sheets, "return_on_equity_pct", "return_on_equity")
     if adm.dividends:
-        d = max(adm.dividends, key=lambda x: x.declared_at)
-        b.add(
-            "dividend",
-            f"{adm.ticker} : dernier dividende déclaré le {d.declared_at.isoformat()}, en {d.currency} par action",
-            d.amount,
-            "par action",
-            d.currency,
-            "FAIT",
-            d.declared_at,
-            d.declared_at,
-            f"data.dividends[declared_at='{d.declared_at.isoformat()}'].amount (devise de l'entrée : {d.currency})",
-            d.source,
-        )
+        b.add(_last_dividend(adm))
     return b.out
+
+
+def _revenue_growth(cf: CompanyFundamentals, p: Period) -> _Draft:
+    """Croissance des produits sur un an : valeur dérivée (HYPOTHESE) ; ``prior_year`` est publié avec sa période."""
+    base = f"data.periods[period='{p.period}']"
+    label = f"{cf.ticker} : croissance des produits sur un an ({p.period} contre la même période un an plus tôt)"
+    path = f"{base}.revenue / {base}.prior_year.revenue - 1 (prior_year publié avec sa période)"
+    growth = round(p.values["revenue"] / p.prior_year.values["revenue"] - 1, 10)
+    return _Draft(
+        "revenue_growth_yoy", label, growth, "%", None, "HYPOTHESE", p.observed_at, p.published_at, path, p.source
+    )
+
+
+def _last_dividend(cf: CompanyFundamentals) -> _Draft:
+    """Dernier dividende déclaré, dans la devise de son entrée (publié à sa déclaration)."""
+    d = max(cf.dividends, key=lambda x: x.declared_at)
+    declared = d.declared_at.isoformat()
+    label = f"{cf.ticker} : dernier dividende déclaré le {declared}, en {d.currency} par action"
+    path = f"data.dividends[declared_at='{declared}'].amount (devise de l'entrée : {d.currency})"
+    return _Draft(
+        "dividend", label, d.amount, "par action", d.currency, "FAIT", d.declared_at, d.declared_at, path, d.source
+    )
 
 
 # ----------------------------------------------------------------------------------------- actualités
@@ -615,7 +613,7 @@ def news_fact(item: NewsItem, ticker: str, n: int, *, trace_id: str = TRACE_PLAC
     )
 
 
-def news_facts(
+def news_facts(  # noqa: PLR0913 - signature publique : le document comme parse_news, puis les options de news_fact
     doc_text: str,
     key: str,
     etag: str,
@@ -684,13 +682,13 @@ def _esg_value(raw: Any) -> float | str | None:
 
 def parse_esg(doc_text: str, key: str, etag: str) -> EsgItem:
     """Lit un fait ESG écrit par A6 (``research.checks.research_doc``). Un fait sans ``data.esg`` lève
-    ``WrongDocType`` (ce n'est pas une preuve ESG); un bloc ESG non conforme lève ``OkfFactsError``."""
+    ``WrongDocTypeError`` (ce n'est pas une preuve ESG); un bloc ESG non conforme lève ``OkfFactsError``."""
     doc = _frontmatter(doc_text, key, FACT_TYPE)
     data = doc.frontmatter.get("data")
     if not isinstance(data, dict):
         raise OkfFactsError(f"{key} : bloc data absent")
     if "esg" not in data:
-        raise WrongDocType(f"{key} : fait sans data.esg, pas une preuve ESG")
+        raise WrongDocTypeError(f"{key} : fait sans data.esg, pas une preuve ESG")
     problems = okf.esg_problems(data["esg"])
     if problems:
         raise OkfFactsError(f"{key} : bloc ESG refusé ({'; '.join(problems)})")

@@ -165,3 +165,23 @@ une limite `PROB_LOSS` exige que chaque actif de `universe` hors `excluded` ait 
   arrondis ci-dessus, jamais extrapolé.
 - La validation hors échantillon des modèles (volet C) doit être publiée dans le manifeste (`models[].validation`)
   pour être citée; sans elle, l'outil le dit dans les limites de l'explication.
+
+## 7. Intégration (2026-11-15, branche `feat/scenarios-prob-loss`)
+
+Implémentée de façon additive, sans valeur de α, L ou H : contrat (`contracts/policy.py`), évaluation
+(`finance/portfolio/scenario_risk.py`, appelée par `judge.check`), explication (`finance/debate/scenarios.py`).
+Écarts et précisions par rapport aux sections 2 et 3 :
+
+- `scenario_family` vaut `None` par défaut (CAD77 si le mandat est en CAD, USD1926 sinon) au lieu de `"CAD77"`.
+- `PolicySpec` n'exige pas `scenario_blocks` pour chaque actif : un rattachement prudent par défaut s'applique
+  (série même d'un bloc, ou `proxy_for_ticker` du catalogue qui est la série d'un bloc : XIU.TO, SPY, ESGV, XBB.TO,
+  ZST.TO, GLD en CAD77). Titres, secteurs, QQQ, AGG, TLT, ETH-USD… restent sans bloc : un seul détenu rend le
+  contrôle **non vérifiable** (donc violé), avec la raison.
+- Non vérifiable = violé dans tous les cas, y compris table absente, AccessDenied et `ALPHAFORGE_SCENARIOS=0`
+  (section 6 : activer PROB_LOSS seulement quand la table est publiée et lisible par le runtime).
+- Horizon hors grille sans valeur à l'horizon supérieur : non vérifiable.
+- Le Fact du contrôle porte la source de la table (`scenarios:<run_id>`, sha256), pas celle de la fenêtre
+  historique ; les Facts de l'outil gardent le `trace_id` de l'outil, dont le `TraceEvent` est un enfant du Judge
+  (`JudgeReport.child_traces`).
+- Explication dans le pipeline : par défaut seulement si le mandat final déclare une limite PROB_LOSS
+  (`build_portfolio(..., scenarios=None)`) ; sans elle, la décision est identique à celle d'avant l'intégration.

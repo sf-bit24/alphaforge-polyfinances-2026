@@ -209,7 +209,7 @@ def diversity_evidence(c: LensContext, tags=("tech", "energy", "financials")) ->
 
 def constraints_evidence(c: LensContext) -> list[str]:
     rep = check(_held(c.weights) or c.weights, c.policy, c.as_of, trace_id=f"{c.book.current}:judge")
-    ids = c.book.absorb(rep.facts, rep.trace)
+    ids = c.book.absorb_report(rep)
     b, p = c.book, c.label
     ids.append(
         b.add(

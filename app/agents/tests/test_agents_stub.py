@@ -5,6 +5,7 @@ import base64
 import pytest
 
 from alphaforge import okf
+from alphaforge.config import Settings
 from alphaforge.errors import AppError
 from alphaforge.profile import a2 as a2_agent
 from alphaforge.profile.questionnaire import default_questionnaire, numeric_choices
@@ -98,7 +99,7 @@ def test_a1_first_turn_records_facts_and_asks_questions(settings, store):
     confirm = response["questions"][0]
     assert confirm["source"] == "deterministic" and confirm["kind"] == "boolean" and confirm["field"] is None
     assert confirm["prompt"] == (
-        "J'ai compris : Précision de l'objectif = Une mise de fonds dans 12 ans. C'est bien ça ?"
+        "Précision de l'objectif : j'ai compris « Une mise de fonds dans 12 ans ». C'est bien ça ?"
     )
     assert confirm["dimension"] == "objective"
     assert all(q["source"] == "a1" for q in response["questions"][1:])
@@ -138,14 +139,11 @@ def test_a1_first_turn_records_facts_and_asks_questions(settings, store):
         "search_general_knowledge",
         "finish_turn",
     ]
-    # Seul le message de l'investisseur passe par le garde-fou (bloc guardContent); le contexte du code, non.
+    # Le message de l'investisseur a son propre bloc, séparé du contexte du code. Sans garde-fou configuré
+    # (ces réglages de test), c'est un bloc texte : Bedrock refuse guardContent sans guardrailConfig.
     blocks = model.calls[0]["messages"][0]["content"]
     assert '"missing_fields"' in blocks[0]["text"] and "mise de fonds" not in blocks[0]["text"]
-    assert blocks[1] == {
-        "guardContent": {
-            "text": {"text": "<investor_message>\nJe veux une mise de fonds dans 12 ans.\n</investor_message>"}
-        }
-    }
+    assert blocks[1] == {"text": "<investor_message>\nJe veux une mise de fonds dans 12 ans.\n</investor_message>"}
     assert len(model.calls) == 4  # l'outil finish_turn accepté arrête la boucle sans nouvel appel du modèle
     kinds = [s["kind"] for s in response["trace"]]
     assert "model" in kinds and "tool" in kinds and "agent" in kinds
@@ -253,7 +251,7 @@ def test_free_text_value_is_kept_only_after_yes(settings, store):
         {"action": "followup.reply", "client_id": client_id, "message": "Je compte ajouter 3 000 $ par mois."}
     )
     assert [q["id"] for q in first["questions"]] == ["cf_1_1", "a1_1_1"]
-    assert first["questions"][0]["prompt"] == "J'ai compris : Ajout mensuel prévu = 3\u202f000 $. C'est bien ça ?"
+    assert first["questions"][0]["prompt"] == "Ajout mensuel prévu : j'ai compris « 3\u202f000 $ ». C'est bien ça ?"
     assert MONTHLY not in first["profile"]["dimensions"]["constraints"]["fields"]
 
     # « Non » : la valeur est retirée, le champ redevient manquant et le journal garde la valeur précédente.
@@ -512,6 +510,28 @@ def test_a1_fallback_when_finish_turn_is_never_called(settings, store):
         }
     )
     assert {f["field"]: f["value"] for f in answered["profile"]["facts"]}["risk_capacity.max_loss_cad"] == 3000
+
+
+def test_with_a_guardrail_only_the_investor_message_is_a_guard_block(tmp_path, store):
+    settings = Settings.from_env(
+        {
+            "AGENT_ROLE": "profile",
+            "ALPHAFORGE_STORE": "local",
+            "ALPHAFORGE_LOCAL_DIR": str(tmp_path / "kb"),
+            "ALPHAFORGE_GUARDRAIL_ID": "gr-test",
+        }
+    )
+    factory = ScriptedFactory([[finish("Question.", [HORIZON_QUESTION])]])
+    service = make_service(settings, store, factory)
+    client_id = started(service)
+    response = service.handle({"action": "followup.reply", "client_id": client_id, "message": "Bonjour."})
+    assert response["ok"], response
+    assert factory.requests[0]["guardrail"] is True and factory.requests[0]["guard_tagged"] is True
+    blocks = factory.models[0].calls[0]["messages"][0]["content"]
+    assert "guardContent" not in blocks[0]
+    # A1 reçoit la complétude telle que l'interface l'affiche, pour ne pas écrire « 0.7478 ».
+    assert '"threshold_shown": "70\u00a0%"' in blocks[0]["text"]
+    assert blocks[1] == {"guardContent": {"text": {"text": "<investor_message>\nBonjour.\n</investor_message>"}}}
 
 
 def test_guardrail_block_keeps_answers_but_not_the_message(settings, store, monkeypatch):

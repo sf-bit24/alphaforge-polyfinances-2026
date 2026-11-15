@@ -9,7 +9,19 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/components/ui/cn";
 import { AnswerInput } from "./answer-input";
 
-function SourceBadge({ question, fallback }: { question: Question; fallback: boolean }) {
+/**
+ * A code-asked follow-up (CONTRACTS.md): `fb_` is a fallback, asked when A1 is unavailable; `cf_` confirms a
+ * value A1 took from free text. Null for a base question or an A1 follow-up.
+ */
+type FollowupKind = "fallback" | "confirmation" | null;
+
+function followupKind(question: Question, followup: boolean): FollowupKind {
+  if (!followup || question.source !== "deterministic") return null;
+  if (question.id.startsWith("cf_")) return "confirmation";
+  return question.id.startsWith("fb_") ? "fallback" : null;
+}
+
+function SourceBadge({ question, kind }: { question: Question; kind: FollowupKind }) {
   const { t } = useI18n();
   if (question.source === "a1") {
     return (
@@ -20,18 +32,19 @@ function SourceBadge({ question, fallback }: { question: Question; fallback: boo
   }
   return (
     <Badge tone="outline" icon={<ListChecks aria-hidden className="size-3" />}>
-      {fallback ? t.question.fallback : t.question.deterministic}
+      {kind ? t.question[kind] : t.question.deterministic}
     </Badge>
   );
 }
 
-function QuestionBadges({ question, fallback }: { question: Question; fallback: boolean }) {
+function QuestionBadges({ question, kind }: { question: Question; kind: FollowupKind }) {
   const { t } = useI18n();
+  const note = kind ? t.question[`${kind}Help`] : null;
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2">
       <Badge tone="brand">{t.dimensions[question.dimension]}</Badge>
-      <SourceBadge question={question} fallback={fallback} />
-      {fallback ? <span className="text-xs text-ink-500">{t.question.fallbackHelp}</span> : null}
+      <SourceBadge question={question} kind={kind} />
+      {note ? <span className="text-xs text-ink-500">{note}</span> : null}
       {!question.required ? <span className="text-xs text-ink-500">({t.common.optional})</span> : null}
     </div>
   );
@@ -59,7 +72,7 @@ interface QuestionFieldProps {
   size?: "lg" | "md";
   autoFocus?: boolean;
   headingLevel?: 2 | 3;
-  /** Asked during the follow-ups: a `deterministic` question there is a fallback, asked when A1 is unavailable. */
+  /** Asked during the follow-ups, where a `deterministic` question is a fallback (`fb_`) or a confirmation (`cf_`). */
   followup?: boolean;
 }
 
@@ -83,7 +96,7 @@ export function QuestionField({
   const Heading = headingLevel === 2 ? "h2" : "h3";
   return (
     <div role="group" aria-labelledby={legendId} className="min-w-0">
-      <QuestionBadges question={question} fallback={followup && question.source === "deterministic"} />
+      <QuestionBadges question={question} kind={followupKind(question, followup)} />
       <Heading
         id={legendId}
         className={cn(

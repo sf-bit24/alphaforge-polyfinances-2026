@@ -49,6 +49,24 @@ from .questionnaire import (
 )
 from .state import ClientSession
 
+
+def shown_percent(share: float, locale: str) -> str:
+    """Une part (0,7478) écrite comme l'interface l'affiche : « 75 % » en français, « 75% » en anglais."""
+    value = round(float(share) * 100)
+    return pick(locale, f"{value}\u00a0%", f"{value}%")
+
+
+def completeness_brief(score: dict[str, Any], locale: str) -> dict[str, Any]:
+    """La complétude vue par A1 : le score brut pour décider, le texte affiché pour l'écrire."""
+    return {
+        "score": score["score"],
+        "threshold": score["threshold"],
+        "ready": score["ready"],
+        "shown": shown_percent(score["displayed"], locale),
+        "threshold_shown": shown_percent(score["threshold"], locale),
+    }
+
+
 MAX_QUESTIONS = 3
 MAX_MESSAGE = 4000
 # Questions de confirmation des valeurs tirées d'un texte libre, ajoutées par le code à la fin d'un tour.
@@ -93,8 +111,10 @@ numbers, passwords).
 - Adapt vocabulary and precision to `knowledge_level`, never the facts or the numbers: beginner = everyday words, \
 one idea per sentence, define any financial term in plain language; intermediate = common terms with a brief \
 explanation; advanced = precise and concise vocabulary.
-- Only quote numbers that appear in the context or in a tool result (for example the completeness score or amounts \
-the investor gave). Do not compute new figures. Distinguish what the investor said (facts) from your assumptions.
+- Only quote numbers that appear in the context or in a tool result (for example the completeness or amounts \
+the investor gave). Do not compute new figures. To mention the completeness, copy `completeness.shown` and \
+`completeness.threshold_shown` exactly as written (for example 75 % and 70 %), never the raw `score` or \
+`threshold`, which are only for your decisions. Distinguish what the investor said (facts) from your assumptions.
 - The message is 2 to 5 sentences: acknowledge what was learned, then say why the next questions matter. No \
 greeting formulas, no lists of everything known.
 - You choose the variable to ask about: a field of missing_fields (heaviest first, unless the conversation makes \
@@ -321,7 +341,7 @@ def build_context(questionnaire: Questionnaire, session: ClientSession, turn_inp
         "locale": locale,
         "knowledge_level": rules.knowledge_level(questionnaire, frame.values) or "intermediate",
         "turn": turn_input.turn,
-        "completeness": {"score": score["score"], "threshold": score["threshold"], "ready": score["ready"]},
+        "completeness": completeness_brief(score, locale),
         "risk": rules.risk_profile(questionnaire, frame.values),
         "known_fields": [brief for field_id, brief in briefs.items() if field_id not in waiting],
         "missing_fields": [
@@ -954,9 +974,7 @@ class A1Turn:
     def _check_completeness(self) -> dict[str, Any]:
         score = self.frame.completeness()
         return {
-            "score": score["score"],
-            "threshold": score["threshold"],
-            "ready": score["ready"],
+            **completeness_brief(score, self.frame.locale),
             "missing_fields": [_field_brief(self.frame, field_id) for field_id in self.missing()],
             "to_confirm": self.to_confirm(),
         }
@@ -968,7 +986,7 @@ class A1Turn:
         score = self.frame.completeness()
         return {
             "results": results,
-            "completeness": {"score": score["score"], "ready": score["ready"]},
+            "completeness": completeness_brief(score, self.frame.locale),
             "note": "recorded values count once the investor confirms them (to_confirm)",
         }
 
@@ -1044,7 +1062,8 @@ class A1Turn:
                 f"the session budget of {self.frame.questionnaire.max_generated} generated questions is reached: "
                 "ask no question"
                 + ("; set profile_complete to true" if score["ready"] and not self.to_confirm() else "")
-                + f" (completeness {score['score']}, threshold {score['threshold']})"
+                + f" (completeness {shown_percent(score['displayed'], self.frame.locale)}, threshold "
+                f"{shown_percent(score['threshold'], self.frame.locale)})"
             )
         if len(questions) > left:
             return f"only {left} generated question(s) left in this session"
@@ -1269,8 +1288,8 @@ def _confirmation_question(question_id: str, spec: FieldSpec, shown: str, locale
         kind="boolean",
         prompt=pick(
             locale,
-            f"J'ai compris : {spec.label_text(locale)} = {shown}. C'est bien ça ?",
-            f"I understood: {spec.label_text(locale)} = {shown}. Is that right?",
+            f"{spec.label_text(locale)} : j'ai compris « {shown} ». C'est bien ça ?",
+            f"{spec.label_text(locale)}: I understood “{shown}”. Is that right?",
         ),
         help_text=pick(
             locale,
@@ -1306,7 +1325,8 @@ def confirmation_questions(
     )
     questions, targets = [], {}
     for index, field_id in enumerate(waiting[:MAX_CONFIRMATIONS], start=1):
-        shown = questionnaire.format_value(field_id, session.facts[field_id]["value"], locale)
+        # La valeur d'un texte libre finit souvent par un point : sans lui, pas de « .. » devant la question.
+        shown = str(questionnaire.format_value(field_id, session.facts[field_id]["value"], locale)).strip().rstrip(".")
         question_id = f"cf_{turn}_{index}"
         questions.append(_confirmation_question(question_id, fields[field_id], shown, locale))
         targets[question_id] = field_id

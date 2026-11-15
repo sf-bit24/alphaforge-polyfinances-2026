@@ -22,7 +22,7 @@ Chaque rôle n'a `s3:ListBucket` que sous ses propres préfixes. Pour un objet a
 
 Ajout facultatif (section 12), seulement si `portfolio_enabled = true` : runtime `alphaforge_sandbox_portfolio` (`AGENT_ROLE=portfolio`), appelé par le serveur Next.js; mêmes droits S3 que `profile` (lit `general/`, lit et écrit `clients/`, dont `clients/<id>/decisions/`), Knowledge Base et Guardrail, plus le journal des décisions et le rejeu LLM (`finance_trace_runtimes`). Son zip est `runtime/agents-portfolio-<release>.zip` (groupe uv `finance` en plus).
 
-Ajout facultatif (section 10), seulement si `scenarios_enabled = true` : le rôle de `profile` lit aussi `scenarios/latest.json` et `scenarios/output/` (lecture et liste seulement), pour l'outil `scenario_risk` (état cible : l'outil n'est pas encore branché dans le runtime).
+Ajout facultatif (section 10), seulement si `scenarios_enabled = true` : les rôles de `profile` et de `portfolio` (si `portfolio_enabled`) lisent aussi `scenarios/latest.json` et `scenarios/output/` (lecture et liste seulement), pour l'outil `scenario_risk` (état cible : l'outil n'est encore branché dans aucun runtime; le débat finance de `portfolio` en est l'appelant probable).
 
 Variables d'environnement posées par Terraform sur chaque runtime :
 
@@ -411,7 +411,7 @@ runtimes de la version 1. Les schémas Pydantic sont dans `app/agents/src/alphaf
 
 ## 10. Scénarios probabilistes (facultatif)
 
-Ajout facultatif à la version 1, activé par la variable Terraform `scenarios_enabled` (faux par défaut : avec `false`, le plan ne change rien pour les scénarios). Le bundle du job n'est construit que si `ALPHAFORGE_PACKAGE_SCENARIOS=1` (en CI : ajouter `ALPHAFORGE_PACKAGE_SCENARIOS: ${{ vars.ALPHAFORGE_PACKAGE_SCENARIOS || '0' }}` à l'étape `package.sh` de `.github/workflows/app.yml`, pas encore fait car le jeton de l'équipe n'a pas le droit `workflow`; absente, la variable vaut 0), à poser avec `scenarios_enabled = true`. Simulation seulement : la table décrit l'incertitude du risque selon un modèle, ce n'est pas une prévision. Infra : `infrastructure/infra/scenarios.tf`; code : `app/agents/src/alphaforge/scenarios/`.
+Ajout facultatif à la version 1, activé par la variable Terraform `scenarios_enabled` (faux par défaut : avec `false`, le plan ne change rien pour les scénarios; vrai dans `infrastructure/deploy/envs/sandbox.tfvars`). Ce tfvars est la seule source de vérité : `package.sh` y lit `scenarios_enabled` (fichier `deploy/envs/<DEPLOY_ENV>.tfvars`, `sandbox` par défaut, commentaires et espaces ignorés) et construit le bundle du job si la valeur est `true`, sans rien changer à `.github/workflows/`. `ALPHAFORGE_PACKAGE_SCENARIOS` (`0` ou `1`), posée et non vide, l'emporte (essais locaux, ou retrait d'urgence); une autre valeur, ou une ligne `scenarios_enabled` illisible ou en double, fait échouer `package.sh`. Simulation seulement : la table décrit l'incertitude du risque selon un modèle, ce n'est pas une prévision. Infra : `infrastructure/infra/scenarios.tf`; code : `app/agents/src/alphaforge/scenarios/`.
 
 ```mermaid
 flowchart LR
@@ -422,7 +422,7 @@ flowchart LR
     SM -->|"sources publiques (Internet)"| WEB["FRED, Ken French, Shiller, or, Yahoo Finance"]
     SM -->|"écrit output/<run_id>/"| S3
     SF -->|"_done.json, puis latest.json"| S3
-    P["Runtime profile : outil scenario_risk (état cible, pas encore branché)"] -.->|"lit latest.json et output/"| S3
+    P["Runtimes profile et portfolio : outil scenario_risk (état cible, pas encore branché)"] -.->|"lit latest.json et output/"| S3
     A["Athena : alphaforge-sandbox-scenarios"] -->|"table Glue, projection run_id"| S3
 ```
 
@@ -477,7 +477,7 @@ scenarios/athena-results/                           Athena, expire après 7 jour
 ```
 
 - Hors `general/` : la Knowledge Base n'indexe jamais les scénarios.
-- Le job n'écrit que sous `scenarios/output/` et jamais `_done.json` (refus explicite dans son rôle IAM). Le runtime `profile` lit seulement `scenarios/latest.json` et `scenarios/output/`.
+- Le job n'écrit que sous `scenarios/output/` et jamais `_done.json` (refus explicite dans son rôle IAM). Les runtimes `profile` et `portfolio` lisent seulement `scenarios/latest.json` et `scenarios/output/`.
 - Le dossier `table/` ne doit contenir que des fichiers parquet : Athena lit tout ce qui s'y trouve.
 - Les données construites par `alphaforge.finance.backtest.build_data` (sources sous licence : Yahoo Finance, Moody's, OCDE) restent dans le volume du job; elles ne sont ni versionnées, ni dans le bundle de code, ni dans les sorties.
 - L'outil `scenario_risk` refuse une table dont le sha256 n'est pas déclaré par le manifeste, et un run figé (`run_id` fixé) dont `_done.json` n'a pas `status: "ok"`.

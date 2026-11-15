@@ -32,10 +32,13 @@ locals {
   #             absent d'un refus, S3 repondant 403 a un GetObject d'objet
   #             absent quand ListBucket est conditionne.
   # A6 n'ecrit jamais general/methodologie/, geree par Terraform.
-  # Si scenarios_enabled, profile lit aussi la table precalculee des scenarios
-  # (outil scenario_risk, scenarios.tf ; pas encore branche dans le runtime),
-  # en lecture seule : scenarios/latest.json et scenarios/output/, jamais le
-  # code ni les entrees du job. Sinon, aucun droit sous scenarios/.
+  # Si scenarios_enabled, profile et portfolio lisent aussi la table
+  # precalculee des scenarios (outil scenario_risk, scenarios.tf), en lecture
+  # et liste seulement : scenarios/latest.json et scenarios/output/, jamais le
+  # code ni les entrees du job, aucune ecriture. L'outil n'est encore branche
+  # dans aucun runtime : le debat finance de portfolio en est l'appelant
+  # probable ; profile, appelant prevu a l'origine, garde le droit tant que le
+  # branchement n'est pas tranche. Sinon, aucun droit sous scenarios/.
   agentcore_profile_scenarios_keys = var.scenarios_enabled ? ["scenarios/latest.json", "scenarios/output/*"] : []
 
   # Runtime portfolio (app/CONTRACTS.md section 12) : seulement si

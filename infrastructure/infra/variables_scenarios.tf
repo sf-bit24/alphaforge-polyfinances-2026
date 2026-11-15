@@ -3,7 +3,7 @@
 # Step Functions, Glue, Athena). Voir scenarios.tf.
 # =============================================================================
 variable "scenarios_enabled" {
-  description = "Deploie la chaine des scenarios (role SageMaker, machine Step Functions, table Glue, groupe Athena). false retire tout sauf les donnees deja ecrites dans le bucket. Desactive par defaut tant que l'equipe n'a pas valide : une fusion dans master declenche un apply automatique (infra.yml)."
+  description = "Deploie la chaine des scenarios (role SageMaker, machine Step Functions, table Glue, groupe Athena). false retire tout sauf les donnees deja ecrites dans le bucket. Desactive par defaut tant que l'equipe n'a pas valide : une fusion dans master declenche un apply automatique (infra.yml). Le sandbox l'active dans deploy/envs/sandbox.tfvars, que package.sh lit aussi pour construire le bundle du job."
   type        = bool
   default     = false
 }

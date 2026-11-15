@@ -8,6 +8,7 @@ Principe : « le code calcule, le modèle explique, chaque nombre cite sa source
   la validation refuse une explication qui s'appuie sur un chiffre inexistant (fidélité par construction).
 - La webapp affiche ces objets tels quels ; elle n'effectue aucun calcul financier.
 """
+
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -27,33 +28,34 @@ Label = Literal["FAIT", "HYPOTHESE", "FICTION"]
 
 
 class Source(_Strict):
-    dataset: str                               # ex. « fred:DGS10 », « starter:prices_daily »
+    dataset: str  # ex. « fred:DGS10 », « starter:prices_daily »
     url: str | None = None
     licence: str | None = None
     retrieved_utc: datetime | None = None
     sha256: str | None = None
-    processing: str | None = None              # ex. « adj_close -> rendements mensuels CAD »
+    processing: str | None = None  # ex. « adj_close -> rendements mensuels CAD »
 
 
 class Fact(_Strict):
     """Un nombre calculé, avec sa provenance complète."""
+
     fact_id: str
     label_fr: str
     value: float | int | str | None
-    unit: str                                  # « % », « CAD », « ratio », « années »...
+    unit: str  # « % », « CAD », « ratio », « années »...
     currency: Literal["CAD", "USD", "EUR"] | None = None
-    as_of: date | None = None                  # date d'observation
-    published: date | None = None              # date de publication si différente
+    as_of: date | None = None  # date d'observation
+    published: date | None = None  # date de publication si différente
     status: Label = "FAIT"
     sources: list[Source] = Field(min_length=1)
-    trace_id: str                              # TraceEvent qui l'a produit
+    trace_id: str  # TraceEvent qui l'a produit
 
 
 class TraceEvent(_Strict):
     trace_id: str
     parent_id: str | None = None
-    agent: str                                 # « quant_data », « governance », « explainability »...
-    tool: str | None = None                    # nom de la fonction @tool
+    agent: str  # « quant_data », « governance », « explainability »...
+    tool: str | None = None  # nom de la fonction @tool
     inputs: dict[str, Any] = Field(default_factory=dict)
     output_summary: str | None = None
     fact_ids: list[str] = Field(default_factory=list)
@@ -61,31 +63,31 @@ class TraceEvent(_Strict):
     ended_utc: datetime | None = None
     status: Literal["ok", "erreur", "refus"] = "ok"
     message: str | None = None
-    data_version: str | None = None            # hash de la couche de données
-    code_version: str | None = None            # git SHA
+    data_version: str | None = None  # hash de la couche de données
+    code_version: str | None = None  # git SHA
     seed: int | None = None
-    model_id: str | None = None                # modèle Bedrock si un LLM est intervenu
-    otel_trace_id: str | None = None           # lien vers la trace OpenTelemetry (X-Ray / JSONL)
+    model_id: str | None = None  # modèle Bedrock si un LLM est intervenu
+    otel_trace_id: str | None = None  # lien vers la trace OpenTelemetry (X-Ray / JSONL)
     otel_span_id: str | None = None
 
 
 class Position(_Strict):
     asset_id: str
     weight: float = Field(ge=0, le=1)
-    goal_id: str | None = None                 # seau / objectif servi
-    role: str | None = None                    # « coeur », « satellite », « reserve »
+    goal_id: str | None = None  # seau / objectif servi
+    role: str | None = None  # « coeur », « satellite », « reserve »
     rationale_fact_ids: list[str] = Field(default_factory=list)
 
 
 class ConstraintCheck(_Strict):
     rule_id: str
     description_fr: str
-    derived_from: str                          # champ du profil ou règle (YAML) qui la justifie
+    derived_from: str  # champ du profil ou règle (YAML) qui la justifie
     limit: float | None = None
     value_fact_id: str | None = None
-    active: bool = False                       # contrainte saturée à l'optimum
+    active: bool = False  # contrainte saturée à l'optimum
     violated: bool = False
-    shadow_price: float | None = None          # multiplicateur dual (coût de la contrainte)
+    shadow_price: float | None = None  # multiplicateur dual (coût de la contrainte)
     blocking: bool = True
 
 
@@ -97,6 +99,7 @@ class Statement(_Strict):
 
 class Explanation(_Strict):
     """Les 4 questions de l'atelier NBDB."""
+
     data_used: list[Statement]
     why: list[Statement]
     limits: list[Statement]
@@ -104,7 +107,7 @@ class Explanation(_Strict):
 
 
 class Counterfactual(_Strict):
-    change_fr: str                             # « si la perte tolérée passait de 10 % à 20 % »
+    change_fr: str  # « si la perte tolérée passait de 10 % à 20 % »
     result_fact_ids: list[str] = Field(min_length=1)
 
 
@@ -127,36 +130,38 @@ class Decision(_Strict):
 
     @model_validator(mode="after")
     def _integrity(self) -> Decision:
-        fact_ids = {f.fact_id for f in self.facts}
+        fact_ids = {fact.fact_id for fact in self.facts}
         if len(fact_ids) != len(self.facts):
             raise ValueError("fact_id en double")
-        trace_ids = {t.trace_id for t in self.trace}
-        for f in self.facts:
-            if f.trace_id not in trace_ids:
-                raise ValueError(f"fact {f.fact_id}: trace_id {f.trace_id} absent de la trace")
-
-        cited: set[str] = set()
-        for section in (self.explanation.data_used, self.explanation.why,
-                        self.explanation.limits, self.explanation.what_would_change):
-            for st in section:
-                cited.update(st.fact_ids)
-        for p in self.positions:
-            cited.update(p.rationale_fact_ids)
-        for c in self.counterfactuals:
-            cited.update(c.result_fact_ids)
-        for c in self.constraints:
-            if c.value_fact_id:
-                cited.add(c.value_fact_id)
-        unknown = cited - fact_ids
+        trace_ids = {event.trace_id for event in self.trace}
+        for fact in self.facts:
+            if fact.trace_id not in trace_ids:
+                raise ValueError(f"fact {fact.fact_id}: trace_id {fact.trace_id} absent de la trace")
+        unknown = self._cited_fact_ids() - fact_ids
         if unknown:
             raise ValueError(f"chiffres cités sans Fact correspondant : {sorted(unknown)}")
-
         if self.kind == "proposition":
-            if not self.positions:
-                raise ValueError("une proposition doit contenir des positions")
-            total = sum(p.weight for p in self.positions)
-            if abs(total - 1.0) > WEIGHT_TOLERANCE:
-                raise ValueError(f"les poids somment à {total:.6f}, pas à 1")
-            if any(c.violated and c.blocking for c in self.constraints):
-                raise ValueError("proposition avec contrainte bloquante violée : utiliser refus_encadre")
+            self._check_proposition()
         return self
+
+    def _cited_fact_ids(self) -> set[str]:
+        explanation = self.explanation
+        cited: set[str] = set()
+        for section in (explanation.data_used, explanation.why, explanation.limits, explanation.what_would_change):
+            for statement in section:
+                cited.update(statement.fact_ids)
+        for position in self.positions:
+            cited.update(position.rationale_fact_ids)
+        for counterfactual in self.counterfactuals:
+            cited.update(counterfactual.result_fact_ids)
+        cited.update(check.value_fact_id for check in self.constraints if check.value_fact_id)
+        return cited
+
+    def _check_proposition(self) -> None:
+        if not self.positions:
+            raise ValueError("une proposition doit contenir des positions")
+        total = sum(position.weight for position in self.positions)
+        if abs(total - 1.0) > WEIGHT_TOLERANCE:
+            raise ValueError(f"les poids somment à {total:.6f}, pas à 1")
+        if any(check.violated and check.blocking for check in self.constraints):
+            raise ValueError("proposition avec contrainte bloquante violée : utiliser refus_encadre")

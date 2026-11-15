@@ -82,7 +82,7 @@ def test_contradiction_low_tolerance_growth_goal():
     comp = make_comp(level="N1", level_from_R="N1", R=20, T=20, C=90, e_min=0.10, e_cap=0.25)
     d = derive_style(comp, StyleInputs(goal="growth"))
     assert d.style == "defensive" and d.shift == 0
-    assert any("CSA 31-342" in c for c in d.contradictions)
+    assert any("tolérance faible" in c for c in d.contradictions)
 
 
 def test_contradiction_short_horizon():

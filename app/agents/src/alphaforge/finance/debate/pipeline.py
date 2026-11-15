@@ -57,6 +57,7 @@ class BuildResult:
     policy: PolicySpec | None = None
     explanation_report: list[str] = field(default_factory=list)
     grounding: dict | None = None
+    strategy: object | None = None  # finance.strategy.select.StrategyResult quand l'étape 0 est active
 
 
 def _opt_facts(book: FactBook, label: str, res, policy: PolicySpec) -> tuple[list[str], list[str]]:
@@ -77,7 +78,7 @@ def _opt_facts(book: FactBook, label: str, res, policy: PolicySpec) -> tuple[lis
     by_id = {lim.rule_id: lim for lim in policy.limits}
     for key, is_active in sorted(res.active.items(), key=lambda kv: -res.duals.get(kv[0], 0.0)):
         rid, _, side = key.partition(":")
-        lim = by_id.get(rid)
+        lim = by_id.get(rid) or by_id.get(rid.split("[")[0])  # compile.py nomme « rule_id[actif] »
         if not is_active or lim is None:
             continue
         bound = lim.max if side == "max" else lim.min
@@ -126,6 +127,9 @@ def build_portfolio(
     guardrail_id: str | None = None,
     guardrail_version: str | None = None,
     decision_id: str | None = None,
+    strategy: bool = False,
+    style_preference: str | None = None,
+    style_inputs=None,
 ) -> BuildResult:
     if compile_fn is None:
         from alphaforge.finance.policy import compile_profile as compile_fn
@@ -194,7 +198,24 @@ def build_portfolio(
             feas_cache[k] = optimize(p, as_of).status == "optimal"
         return feas_cache[k]
 
+    # ---------------------------------------------------------------- S0b étape 0 : style et sélection
+    strat = None
+    if strategy:
+        from alphaforge.finance.strategy import apply_strategy
+
+        strat = apply_strategy(
+            comp,
+            profile,
+            as_of,
+            book,
+            inputs=style_inputs,
+            preference=style_preference,
+            protect=[request.ticker] if request else [],
+        )
+        base = strat.policy
+
     versions = {"policy": "risk_levels@0.2.0", "profile": f"{profile.profile_id}@{profile.version}"}
+    versions["strategy"] = f"strategy.yaml@{strat.version}" if strat else "off"
 
     # ---------------------------------------------------------------- Tour 1
     with book.step("s2.optimize", tool="optimize", inputs={"round": 1}):
@@ -305,7 +326,7 @@ def build_portfolio(
         for key, dual in r2.duals.items():
             rid, _, side = key.partition(":")
             lim = by_id.get(rid)
-            if not r2.active.get(key) or lim is None or rid.startswith("request."):
+            if not r2.active.get(key) or lim is None or rid.startswith(("request.", "strat.")):
                 continue
             if side == "max" and lim.max:  # un plafond à 0 (exclusion) n'est pas un levier
                 cands.append((dual, rid, side, lim))
@@ -364,6 +385,9 @@ def build_portfolio(
                 )
             )
 
+        if strat is not None and strat.applied:
+            cf_stmts += _style_counterfactuals(book, comp, profile, as_of, strat, style_inputs, cfs)
+
     # ---------------------------------------------------------------- Explication
     expl = skeleton(
         book,
@@ -375,10 +399,11 @@ def build_portfolio(
         counterfactual_stmts=cf_stmts,
         request_fids=req_fids,
         limits_extra=[
-            f"Objection maintenue par la lentille « {lens} » au tour 2."
+            f"Objection maintenue par la lentille « {lens} » au second tour."
             for lens, v in verdicts.items()
             if v == "objection_maintenue"
         ],
+        strategy=strat is not None,
     )
     report: list[str] = []
     if rephrase_explanation if rephrase_explanation is not None else mode == "llm":
@@ -388,12 +413,17 @@ def build_portfolio(
             report = [f"reformulation abandonnée : {type(exc).__name__}"]
     grounding = grounding_check(book, expl, guardrail_id, guardrail_version) if guardrail_id else None
 
+    singles = set(strat.shortlist) | {c.ticker for c in strat.candidates} if strat else set()
     positions = [
         Position(
             asset_id=a,
             weight=w,
-            role="satellite" if request and a == request.ticker else "coeur",
-            rationale_fact_ids=[f for f in (f"r2.rc.{a}",) if f in book.facts],
+            role="satellite" if (request and a == request.ticker) or a in singles or a in base.loss_bounds else "coeur",
+            rationale_fact_ids=[
+                f
+                for f in (f"r2.rc.{a}", f"strat.rank.{a}", f"strat.score.{a}", f"strat.floor.{a}")
+                if f in book.facts
+            ],
         )
         for a, w in sorted(final_w.items(), key=lambda kv: -kv[1])
         if w > 1e-4
@@ -419,5 +449,66 @@ def build_portfolio(
         trace=book.trace,
     )
     return BuildResult(
-        decision=decision, rounds=[round1, round2], policy=final_policy, explanation_report=report, grounding=grounding
+        decision=decision,
+        rounds=[round1, round2],
+        policy=final_policy,
+        explanation_report=report,
+        grounding=grounding,
+        strategy=strat,
     )
+
+
+def _style_counterfactuals(book, comp, profile, as_of, strat, style_inputs, cfs) -> list[Statement]:
+    """Style un cran plus prudent, et un cran plus offensif si la gouvernance l'admet : même calcul (mêmes
+    indicateurs, mêmes données), autre style ; seule la part actions visée et le risque minimisé sont rapportés."""
+    from alphaforge.finance.strategy import STYLES, StyleInputs, apply_strategy
+
+    from .explain import STYLE_FR
+
+    stmts: list[Statement] = []
+    cur = strat.decision.style
+    i = STYLES.index(cur)
+    base_in = style_inputs or StyleInputs()
+    for label, j in (("down", i - 1), ("up", i + 1)):
+        if not 0 <= j < len(STYLES):
+            continue
+        alt_inputs = StyleInputs(**{**base_in.__dict__, "explicit_preference": STYLES[j]})
+        scratch = FactBook(f"{book.decision_id}-cf-style-{label}")
+        alt = apply_strategy(comp, profile, as_of, scratch, inputs=alt_inputs, candidates=strat.candidates)
+        if alt.decision.style == cur:  # montée refusée par la gouvernance : pas de contrefactuel
+            continue
+        rr = optimize(alt.policy, as_of)
+        if rr.status != "optimal" or rr.risk_value is None:
+            continue
+        f_style = book.add(
+            f"cf.style.{label}.style", "Style testé", alt.decision.style, "texte", dataset="contrefactuel"
+        )
+        f_risk = book.add(
+            f"cf.style.{label}.risk",
+            f"Risque minimisé avec le style {alt.decision.style}",
+            rr.risk_value,
+            "%",
+            dataset="optimizer:F2",
+            processing="même calcul de l'étape 0, autre style ; réoptimisation, mêmes données",
+        )
+        f_n = book.add(
+            f"cf.style.{label}.n_titres",
+            "Titres retenus avec le style testé",
+            len(alt.shortlist),
+            "titres",
+            dataset="contrefactuel",
+        )
+        ids = [f_style, f_risk, f_n]
+        text = (
+            f"Avec un style {STYLE_FR[alt.decision.style]}, le risque minimisé serait de {fmt(rr.risk_value, '%')} "
+            f"avec {len(alt.shortlist)} titres retenus"
+        )
+        if alt.plan.growth_floor is not None:
+            f_g = book.add(f"cf.style.{label}.band_target", "Part actions visée avec le style testé",
+                           alt.plan.growth_floor, "%", dataset="contrefactuel")
+            ids.append(f_g)
+            text += f" et une part actions visée de {fmt(alt.plan.growth_floor, '%')}"
+        change = f"Si le style était {STYLE_FR[alt.decision.style]}"
+        cfs.append(Counterfactual(change_fr=change, result_fact_ids=[f_risk]))
+        stmts.append(Statement(text_fr=text + ".", fact_ids=ids, label="HYPOTHESE"))
+    return stmts

@@ -386,6 +386,18 @@ def apply_strategy(
                 path="floors",
                 processing="min(φ·min(w_each, w_total/K), f_abs)",
             )
+        if inputs.amount_cad:
+            for t, f in plan.floors.items():
+                add(
+                    "result",
+                    f"strat.floor_cad.{t}",
+                    f"plancher du satellite {t} en dollars",
+                    round(f * inputs.amount_cad, 2),
+                    "CAD",
+                    path="floors",
+                    processing="plancher × context.amount_cad",
+                    currency="CAD",
+                )
         for tag, (cap, why) in plan.sector_caps.items():
             add(
                 "result",

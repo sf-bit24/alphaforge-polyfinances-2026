@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from alphaforge.finance.contracts.policy import Limit, PolicySpec, Selector
+from alphaforge.finance.strategy.rules import clamp_strategy_floors
 
 from .schemas import PRIORITY, AppliedAmendment, LensReport
 
@@ -77,6 +78,9 @@ def apply_amendments(
             lim.max = a.value
         elif a.kind == "require_min_group":
             lim = _limit(new, a.target)
+            if a.target.startswith("strat."):
+                reject(lens, a, "un plancher de style (strat.*) ne peut que baisser : le relever ajouterait du risque")
+                continue
             if lim is None or lim.kind != "group_weight":
                 reject(lens, a, f"limite de groupe inconnue : {a.target}")
                 continue
@@ -116,6 +120,9 @@ def apply_amendments(
             new.risk_measure = tgt
         try:
             new = PolicySpec.model_validate(new.model_dump())
+            if any(lim.rule_id.startswith("strat.") for lim in new.limits):
+                # la prudence l'emporte sur le style : un plafond abaissé abaisse les planchers strat.* liés
+                new, _ = clamp_strategy_floors(new)
         except Exception as exc:  # contrat invalide
             reject(lens, a, f"mandat invalide après amendement : {exc}"[:300])
             continue

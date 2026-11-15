@@ -318,11 +318,11 @@ def derive_style(
     contradictions: list[str] = []
     P = cfg.preference
     if pref == "offensive" and comp.level_from_R in P.low_tolerance_levels:
-        contradictions.append("tolérance faible × préférence de croissance (CSA 31-342)")
+        contradictions.append("tolérance faible × préférence de croissance (règle des ACVM)")
     if flags.low_literacy and comp.level_from_R in P.high_tolerance_levels:
         contradictions.append("connaissance faible × tolérance agressive")
     if pref == "offensive" and comp.horizon_years is not None and comp.horizon_years < P.short_horizon_years:
-        contradictions.append(f"horizon {comp.horizon_years:g} ans < {P.short_horizon_years:g} × préférence offensive")
+        contradictions.append("horizon court × préférence offensive")
 
     binds, _ = _capacity_binds(comp)
     refused: list[str] = []
@@ -351,7 +351,7 @@ def derive_style(
             else:
                 shift = min(want, P.max_up)
                 if want > P.max_up:
-                    refused.append(f"montée plafonnée à {P.max_up} cran")
+                    refused.append("montée plafonnée à un cran")
     style: StyleId = STYLES[_idx(base) + shift]
     if flags.low_literacy and _idx(style) > _idx(P.beginner_max_style):
         refused.append(f"débutant ou faible littératie : style plafonné à {P.beginner_max_style}")

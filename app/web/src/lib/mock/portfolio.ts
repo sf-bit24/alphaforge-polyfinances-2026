@@ -84,10 +84,9 @@ interface PositionRow extends Holding {
 function positionFromAsset(row: PositionRow, asset: StarterAsset, locale: Locale): Position {
   const { quantity, marketValue } = row;
   // Without a quantity, the declared value is in the currency the line gives, else in the listing currency.
-  const value =
-    quantity === null
-      ? valueInCad(null, null, marketValue, row.currency ?? asset.currency)
-      : valueInCad(quantity, asset.close, null, asset.currency);
+  // The position carries that currency, so a confirmation without a change converts the value the same way.
+  const currency = quantity === null ? (row.currency ?? asset.currency) : asset.currency;
+  const value = valueInCad(quantity, asset.close, quantity === null ? marketValue : null, currency);
   let notes: string | null = null;
   if (quantity === null && marketValue !== null) notes = NOTES.value_declared[locale];
   if (quantity === null && marketValue === null) notes = NOTES.quantity_missing[locale];
@@ -99,7 +98,7 @@ function positionFromAsset(row: PositionRow, asset: StarterAsset, locale: Locale
     asset_class: asset.asset_class,
     sector: asset.sector,
     market: asset.market,
-    currency: asset.currency,
+    currency,
     quantity,
     market_value: marketValue,
     account_type: row.account ?? "unknown",

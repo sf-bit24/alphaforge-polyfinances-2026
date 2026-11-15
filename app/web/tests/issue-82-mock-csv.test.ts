@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { AgentRequestInput } from "@/lib/contract/requests";
-import { AgentRequest } from "@/lib/contract/requests";
+import { AgentRequest, PositionInput } from "@/lib/contract/requests";
 import { ClientState, type AnswerValue, type Position } from "@/lib/contract/schemas";
 import { screenMessage } from "@/lib/mock/agents";
 import { computeExposures, extractPositions, normalizeConfirmed } from "@/lib/mock/portfolio";
@@ -85,6 +85,28 @@ describe("issue #82: a broker CSV with a header", () => {
     const { positions } = extractPositions({ files: [csvFile(CSV)] }, "en");
     const cash = byRaw(positions, "CASH");
     expect(cash && normalizeConfirmed(cash, "en")).toMatchObject({ asset_class: "cash", value_cad: 1200, resolved: true, notes: null });
+  });
+});
+
+/** What `portfolio.confirm` makes of the review sent back unchanged. */
+const confirmedUnchanged = (positions: Position[]) => positions.map((position) => normalizeConfirmed(PositionInput.parse(position), "fr"));
+
+describe("issue #82: confirming the review without a change keeps every value", () => {
+  it.each([
+    ["the issue's file", CSV],
+    ["a value declared in CAD for a USD listing", "Symbole,Description,Quantité,Prix,Valeur marchande,Devise\nAAPL,Apple Inc.,,,2315.00,CAD"],
+    ["a value declared in USD for a CAD listing", "Symbole,Description,Quantité,Prix,Valeur marchande,Devise\nXIU.TO,iShares,,,5730,USD"],
+  ])("%s", (_case, csv) => {
+    const { positions } = extractPositions({ files: [csvFile(csv)] }, "fr");
+    const confirmed = confirmedUnchanged(positions);
+    expect(confirmed.map((position) => position.value_cad)).toEqual(positions.map((position) => position.value_cad));
+    expect(confirmed.map((position) => position.currency)).toEqual(positions.map((position) => position.currency));
+  });
+
+  it("values a declared value in the currency the line gives", () => {
+    const csv = "Symbole,Description,Quantité,Prix,Valeur marchande,Devise\nAAPL,Apple Inc.,,,2315.00,CAD";
+    const [apple] = extractPositions({ files: [csvFile(csv)] }, "fr").positions;
+    expect(apple).toMatchObject({ ticker: "AAPL", quantity: null, market_value: 2315, currency: "CAD", value_cad: 2315 });
   });
 });
 

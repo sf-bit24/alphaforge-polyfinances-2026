@@ -23,3 +23,4 @@ analysis/*/data_ext/
 # run traces are large (~650 MB) and reproducible: only the per-analysis summaries are versioned
 results/*
 !results/*_analysis/
+!results/decisions/

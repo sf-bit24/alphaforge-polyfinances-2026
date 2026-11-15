@@ -1,0 +1,245 @@
+{
+ "disclaimer": "SIMULATION ONLY - historical reconstruction, not a forecast nor advice",
+ "part_a_gold_stats": {
+  "USD": {
+   "period": [
+    "1975-01-31",
+    "2026-10-31"
+   ],
+   "maxdd_nominal": 0.621,
+   "maxdd_nominal_peak_trough": [
+    "1980-01-31",
+    "1999-07-31"
+   ],
+   "months_to_recover_nominal": 316,
+   "maxdd_real": 0.831,
+   "maxdd_real_peak_trough": [
+    "1980-01-31",
+    "2001-04-30"
+   ],
+   "months_to_recover_real": 541,
+   "real_return_by_decade": {
+    "1975-1984": -0.0153,
+    "1985-1994": -0.0181,
+    "1995-2004": -0.0086,
+    "2005-2014": 0.0821,
+    "2015-2024": 0.0507
+   }
+  },
+  "CAD": {
+   "period": [
+    "1975-01-31",
+    "2026-10-31"
+   ],
+   "maxdd_nominal": 0.513,
+   "maxdd_nominal_peak_trough": [
+    "1980-09-30",
+    "1999-06-30"
+   ],
+   "months_to_recover_nominal": 326,
+   "maxdd_real": 0.782,
+   "maxdd_real_peak_trough": [
+    "1980-01-31",
+    "2001-04-30"
+   ],
+   "months_to_recover_real": 487,
+   "real_return_by_decade": {
+    "1975-1984": 0.0041,
+    "1985-1994": -0.0111,
+    "1995-2004": -0.0198,
+    "2005-2014": 0.0829,
+    "2015-2024": 0.0776
+   }
+  },
+  "correlations_monthly": {
+   "USD": {
+    "gold_vs_us_mkt_1977_2026": -0.024,
+    "gold_vs_ca_eq_1977_2026": 0.148,
+    "gld_vs_spy_2021_11_2026": 0.173,
+    "gld_vs_xiu_2021_11_2026": 0.334,
+    "n_months_tickers": 60
+   },
+   "CAD": {
+    "gold_vs_us_mkt_1977_2026": -0.09,
+    "gold_vs_ca_eq_1977_2026": -0.051,
+    "gld_vs_spy_2021_11_2026": 0.016,
+    "gld_vs_xiu_2021_11_2026": 0.138,
+    "n_months_tickers": 60
+   }
+  }
+ },
+ "part_b_mateo_gold_cap": {
+  "mateo_cad_esg": {
+   "risk_parity_iv36": {
+    "00": {
+     "n_windows": 40,
+     "p10_real": 0.0309,
+     "median_real": 0.0625,
+     "worst_maxdd": 0.127,
+     "breach_rate": 0.0,
+     "gold_weight_mean": 0.0,
+     "equity_weight_mean": 0.41,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_gold00/20261115T012936Z_rolling_h10.json"
+    },
+    "05": {
+     "n_windows": 40,
+     "p10_real": 0.0345,
+     "median_real": 0.0604,
+     "worst_maxdd": 0.119,
+     "breach_rate": 0.0,
+     "gold_weight_mean": 0.048,
+     "equity_weight_mean": 0.412,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_gold05/20261115T012937Z_rolling_h10.json"
+    },
+    "10": {
+     "n_windows": 40,
+     "p10_real": 0.0368,
+     "median_real": 0.0597,
+     "worst_maxdd": 0.118,
+     "breach_rate": 0.0,
+     "gold_weight_mean": 0.087,
+     "equity_weight_mean": 0.409,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_gold10/20261115T012938Z_rolling_h10.json"
+    },
+    "nocap": {
+     "n_windows": 40,
+     "p10_real": 0.0381,
+     "median_real": 0.0602,
+     "worst_maxdd": 0.118,
+     "breach_rate": 0.0,
+     "gold_weight_mean": 0.103,
+     "equity_weight_mean": 0.409,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_goldnocap/20261115T012939Z_rolling_h10.json"
+    }
+   },
+   "static_eq60_gold": {
+    "00": {
+     "n_windows": 40,
+     "p10_real": 0.0359,
+     "median_real": 0.0748,
+     "worst_maxdd": 0.212,
+     "breach_rate": 0.425,
+     "gold_weight_mean": 0.0,
+     "equity_weight_mean": 0.675,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_gold00/20261115T012936Z_rolling_h10.json"
+    },
+    "05": {
+     "n_windows": 40,
+     "p10_real": 0.0399,
+     "median_real": 0.071,
+     "worst_maxdd": 0.194,
+     "breach_rate": 0.15,
+     "gold_weight_mean": 0.049,
+     "equity_weight_mean": 0.64,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_gold05/20261115T012937Z_rolling_h10.json"
+    },
+    "10": {
+     "n_windows": 40,
+     "p10_real": 0.0415,
+     "median_real": 0.0678,
+     "worst_maxdd": 0.178,
+     "breach_rate": 0.15,
+     "gold_weight_mean": 0.099,
+     "equity_weight_mean": 0.605,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_gold10/20261115T012938Z_rolling_h10.json"
+    },
+    "nocap": {
+     "n_windows": 40,
+     "p10_real": 0.0415,
+     "median_real": 0.0678,
+     "worst_maxdd": 0.178,
+     "breach_rate": 0.15,
+     "gold_weight_mean": 0.099,
+     "equity_weight_mean": 0.605,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_cad_esg_goldnocap/20261115T012939Z_rolling_h10.json"
+    }
+   }
+  },
+  "mateo_usd_gold_esg": {
+   "risk_parity_iv36": {
+    "00": {
+     "n_windows": 42,
+     "p10_real": 0.0238,
+     "median_real": 0.051,
+     "worst_maxdd": 0.163,
+     "breach_rate": 0.0,
+     "gold_weight_mean": 0.0,
+     "equity_weight_mean": 0.41,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_gold00/20261115T012940Z_rolling_h10.json"
+    },
+    "05": {
+     "n_windows": 42,
+     "p10_real": 0.0254,
+     "median_real": 0.0506,
+     "worst_maxdd": 0.162,
+     "breach_rate": 0.0,
+     "gold_weight_mean": 0.011,
+     "equity_weight_mean": 0.41,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_gold05/20261115T012941Z_rolling_h10.json"
+    },
+    "10": {
+     "n_windows": 42,
+     "p10_real": 0.0254,
+     "median_real": 0.0506,
+     "worst_maxdd": 0.162,
+     "breach_rate": 0.0,
+     "gold_weight_mean": 0.012,
+     "equity_weight_mean": 0.41,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_gold10/20261115T012943Z_rolling_h10.json"
+    },
+    "nocap": {
+     "n_windows": 42,
+     "p10_real": 0.0254,
+     "median_real": 0.0506,
+     "worst_maxdd": 0.162,
+     "breach_rate": 0.0,
+     "gold_weight_mean": 0.012,
+     "equity_weight_mean": 0.41,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_goldnocap/20261115T012944Z_rolling_h10.json"
+    }
+   },
+   "static_eq60_gold": {
+    "00": {
+     "n_windows": 42,
+     "p10_real": 0.0359,
+     "median_real": 0.0712,
+     "worst_maxdd": 0.321,
+     "breach_rate": 0.786,
+     "gold_weight_mean": 0.0,
+     "equity_weight_mean": 0.672,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_gold00/20261115T012940Z_rolling_h10.json"
+    },
+    "05": {
+     "n_windows": 42,
+     "p10_real": 0.0383,
+     "median_real": 0.0709,
+     "worst_maxdd": 0.297,
+     "breach_rate": 0.762,
+     "gold_weight_mean": 0.049,
+     "equity_weight_mean": 0.639,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_gold05/20261115T012941Z_rolling_h10.json"
+    },
+    "10": {
+     "n_windows": 42,
+     "p10_real": 0.0405,
+     "median_real": 0.0689,
+     "worst_maxdd": 0.273,
+     "breach_rate": 0.667,
+     "gold_weight_mean": 0.099,
+     "equity_weight_mean": 0.606,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_gold10/20261115T012943Z_rolling_h10.json"
+    },
+    "nocap": {
+     "n_windows": 42,
+     "p10_real": 0.0405,
+     "median_real": 0.0689,
+     "worst_maxdd": 0.273,
+     "breach_rate": 0.667,
+     "gold_weight_mean": 0.099,
+     "equity_weight_mean": 0.606,
+     "trace": "/mnt/c/Users/User/Desktop/ecole/hackoton/github_repo/alphaforge-polyfinances-2026/research/backtest/results/dec_mateo_usd_gold_esg_goldnocap/20261115T012944Z_rolling_h10.json"
+    }
+   }
+  }
+ }
+}

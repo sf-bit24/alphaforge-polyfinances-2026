@@ -155,6 +155,49 @@ def test_curate_writes_okf_documents_and_honours_editorial_rejections(store):
     assert again["written"] == [] and all("doublon" in r["reason"] or "revue" in r["reason"] for r in again["rejected"])
 
 
+def _sidecar(store, key):
+    meta = store.get_json(okf.kb_metadata_key(key))
+    assert meta is not None, key
+    return {name: entry["value"] for name, entry in meta["metadataAttributes"].items()}
+
+
+def test_curate_writes_a_knowledge_base_sidecar_next_to_each_document(store):
+    store.put_json("staging/run3/press/news-1.json", news(tickers=["shop.to", "RY.TO"]))
+    store.put_json("staging/run3/data/series-1.json", series())
+    quote = series(
+        "quote-btc-usd-2026-11-12",
+        kind="quote",
+        title="Clôture de BTC-USD",
+        url="https://query1.finance.yahoo.com/v8/finance/chart/BTC-USD",
+        source="Yahoo Finance",
+        published_at="2026-11-12T23:59:00Z",
+        tickers=["BTC-USD"],
+        data={"symbol": "BTC-USD", "closes": [{"date": "2026-11-12", "value": 1.0}], "currency": "USD"},
+    )
+    store.put_json("staging/run3/data/quote-1.json", quote)
+    factory = ScriptedFactory([[("tool", "review_items", {"decisions": []})], [("tool", "finish", {})]])
+    result = supervisor.curate(run_id="run3", store=store, trace=Trace(), model_factory=factory, model_id="m")
+    assert len(result["written"]) == 3
+    news_key = next(k for k in result["written"] if "actualites" in k)
+    assert _sidecar(store, news_key) == {
+        "type": {"type": "STRING", "stringValue": "News"},
+        "ticker": {"type": "STRING", "stringValue": "SHOP.TO"},
+        "kind": {"type": "STRING", "stringValue": "news"},
+        "published_epoch": {"type": "NUMBER", "numberValue": okf.published_epoch("2026-11-12T15:30:00Z")},
+    }
+    series_meta = _sidecar(store, "general/donnees/v39079/2026-11-12.md")
+    assert "ticker" not in series_meta and series_meta["kind"]["stringValue"] == "series"
+    quote_meta = _sidecar(store, "general/donnees/btc-usd/2026-11-12.md")
+    assert quote_meta["ticker"]["stringValue"] == "BTC-USD" and quote_meta["kind"]["stringValue"] == "quote"
+    assert store.get_json("general/index.md.metadata.json") is None  # l'index n'a pas de compagnon
+    index = okf.parse(store.get("general/index.md").text)
+    assert index.data["counts"]["actualites"] == 1 and index.data["counts"]["donnees"] == 2
+    assert ".metadata.json" not in index.body
+    # Les compagnons ne comptent pas comme documents existants : la collecte suivante voit les mêmes doublons.
+    existing = supervisor._existing_index(store)
+    assert all(key.endswith(".md") for key in existing["news_keys"] | existing["data_keys"])
+
+
 def test_curate_with_nothing_staged_writes_nothing(store):
     def no_model(**_):
         raise AssertionError("no model without candidates")

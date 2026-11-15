@@ -18,3 +18,9 @@ variable "agentcore_max_session_lifetime" {
   type        = number
   default     = 28800
 }
+
+variable "portfolio_enabled" {
+  description = "Deploie le runtime AgentCore portfolio (A3, lentilles, Judge du volet finance), avec son zip runtime/agents-portfolio-<release>.zip construit par package.sh si ALPHAFORGE_PACKAGE_PORTFOLIO=1. Desactive par defaut tant que l'equipe n'a pas valide : une fusion dans master declenche un apply automatique (infra.yml)."
+  type        = bool
+  default     = false
+}

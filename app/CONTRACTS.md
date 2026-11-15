@@ -20,6 +20,8 @@ Un seul zip de code (`app/agents`, Python 3.13, linux/arm64) alimente tous les r
 
 Chaque rôle n'a `s3:ListBucket` que sous ses propres préfixes. Pour un objet absent, S3 répond donc 403 (`AccessDenied`) et non 404 : le magasin vérifie alors l'absence par `ListObjectsV2` sur la clé exacte, et ne conclut à un refus que si l'objet existe.
 
+Ajout facultatif (section 12), seulement si `portfolio_enabled = true` : runtime `alphaforge_sandbox_portfolio` (`AGENT_ROLE=portfolio`), appelé par le serveur Next.js; mêmes droits S3 que `profile` (lit `general/`, lit et écrit `clients/`, dont `clients/<id>/decisions/`), Knowledge Base et Guardrail, plus le journal des décisions et le rejeu LLM (`finance_trace_runtimes`). Son zip est `runtime/agents-portfolio-<release>.zip` (groupe uv `finance` en plus).
+
 Ajout facultatif (section 10), seulement si `scenarios_enabled = true` : le rôle de `profile` lit aussi `scenarios/latest.json` et `scenarios/output/` (lecture et liste seulement), pour l'outil `scenario_risk` (état cible : l'outil n'est pas encore branché dans le runtime).
 
 Variables d'environnement posées par Terraform sur chaque runtime :
@@ -265,12 +267,18 @@ general/notions/<slug>.md                   seed versionné : une notion financi
 general/societes/<ticker>.md                seed versionné : chiffres publiés d'une société absente d'EDGAR (ATD, CSU), relevés à la main
 general/actualites/<AAAA>/<MM>/<slug>.md    écrit par A6
 general/donnees/<serie>/<slug>.md           écrit par A6
+general/donnees/features/<ticker-slug>/<as_of>.md   Stock Features : caractéristiques d'un titre à une date, écrites
+                                            par le code du volet finance via A6 (write_stock_features), en ajout seulement
+general/**/<document>.md.metadata.json      métadonnées filtrables de la Knowledge Base (section 5.1), écrites avec le document
 clients/<client_id>/index.md
 clients/<client_id>/profil.md               profil et ses données structurées
 clients/<client_id>/portefeuille-existant.md
 clients/<client_id>/journal.md              chaque réponse, avec sa provenance et sa date
 clients/<client_id>/<note>.md               notes écrites par A1 avec son skill (Profile Note), par exemple dimensions/horizon.md et synthese.md
 clients/<client_id>/traces/<horodatage>-<action>.json
+clients/<client_id>/decisions/<decision_id>.md         Portfolio Decision : résumé OKF d'une décision simulée (runtime portfolio)
+clients/<client_id>/decisions/<decision_id>.json       Decision complète (Facts, contrôles, trace)
+clients/<client_id>/decisions/<decision_id>.policy.json   mandat (PolicySpec) appliqué
 staging/<run_id>/<role>/<id>.json
 staging/<run_id>/<role>/_done.json
 general/faits/<libellé>/<AAAA-MM-JJ>-<hash>.md        écrit par A6 (section 11)
@@ -289,7 +297,7 @@ scenarios/...                               scénarios probabilistes, hors de la
 Chaque document `.md` est un document OKF : un frontmatter YAML puis un corps Markdown.
 
 ```yaml
-type: Investor Profile            # Investor Profile, Existing Portfolio, Profile Journal, Profile Note, News, Data Series, Methodology, Financial Concept, Company Fundamentals, Index
+type: Investor Profile            # Investor Profile, Existing Portfolio, Profile Journal, Profile Note, News, Data Series, Methodology, Financial Concept, Company Fundamentals, Index, Fact, Market Signal, Regulatory Filing, Research Brief (section 11), Stock Features, Portfolio Decision
 title: Profil investisseur
 description: Profil en cinq dimensions, niveau de connaissances et complétude.
 tags: [profil-investisseur]
@@ -312,6 +320,47 @@ data: {}                          # données structurées lues par le code (prof
   - Une requête écrit le journal au plus une fois.
 - La base générale ne contient rien d'un client; une base de client ne recopie pas la base générale.
 - Chaque document d'actualité ou de données garde sa date d'observation et sa date de publication.
+- `Stock Features` (`general/donnees/features/<ticker-slug>/<as_of>.md`, `ticker-slug` = `shop-to` pour `SHOP.TO`) : un document par titre et par date `as_of` (`AAAA-MM-JJ`), jamais réécrit (une seconde écriture donne `conflict`). Les définitions des caractéristiques appartiennent au volet finance; A6 ne calcule rien, il valide et écrit. `data` :
+
+  ```yaml
+  data:
+    ticker: SHOP.TO                   # forme canonique (section 5.1)
+    as_of: "2026-11-12"
+    feature_set: core-v1              # nom versionné du jeu de caractéristiques (volet finance)
+    features:
+      vol_252d:                       # nom : [a-z][a-z0-9_]*
+        value: 0.41                   # nombre, ou null si status n'est pas ok
+        unit: ratio
+        currency: null                # devise à trois lettres, ou null
+        status: ok
+        observed_at: "2026-11-12"     # date de la dernière donnée utilisée
+        published_at: "2026-11-12T21:00:00Z"   # pas après la fin du jour as_of (aucune anticipation)
+        formula: "écart type annualisé des rendements quotidiens (adj_close), 252 séances"
+        source_key: "starter:prices_daily.csv"
+        source_sha256: "<64 caractères hexadécimaux>"
+    missing: [beta_252d]              # caractéristiques demandées mais non calculables, jamais dans features
+    inputs: [{ key: "starter:prices_daily.csv", etag: "\"<etag>\"" }]
+  ```
+
+- `Portfolio Decision` (`clients/<client_id>/decisions/<decision_id>.md`) : écrit par `finance/debate/okf_bridge.py`, statut `draft`, `data.simulation_only: true`, positions et nombre de faits et de contrôles; la `Decision` complète est dans le `.json` voisin.
+
+### 5.1 Métadonnées de la Knowledge Base
+
+À côté de chaque document qu'il écrit (`general/actualites/`, `general/donnees/`, et ceux de la recherche de la section 11 : `general/faits/`, `general/signaux/`, `general/depots/`, `general/recherches/`), A6 écrit d'abord `<clé du document>.metadata.json` (règle de nommage de Bedrock : `2026-11-12.md.metadata.json`), puis le document (`okf.kb_metadata`). Format S3 de Bedrock Knowledge Bases, attributs filtrables et hors embedding (`includeForEmbedding: false`) :
+
+```json
+{ "metadataAttributes": {
+    "type":            { "value": { "type": "STRING", "stringValue": "News" }, "includeForEmbedding": false },
+    "ticker":          { "value": { "type": "STRING", "stringValue": "SHOP.TO" }, "includeForEmbedding": false },
+    "kind":            { "value": { "type": "STRING", "stringValue": "news" }, "includeForEmbedding": false },
+    "published_epoch": { "value": { "type": "NUMBER", "numberValue": 1794497400 }, "includeForEmbedding": false } } }
+```
+
+- `type` : type OKF. `kind` : `data.kind` (`news`, `series`, `quote`), `features` pour Stock Features.
+- `ticker` : forme canonique, en majuscules, suffixe de bourse avec un point (`SHOP.TO`). Elle est tirée de `data.ticker`, `data.symbol` ou du premier de `data.tickers` (étiquette `shop.to` et slug `shop-to` donnent aussi `SHOP.TO`; `BTC-USD` garde son tiret). Une actualité qui cite plusieurs titres n'est filtrable que par le premier. Absent pour une série macroéconomique.
+- `published_epoch` : date de publication en **secondes UTC depuis l'époque Unix** (entier; une date seule vaut minuit UTC). Pour Stock Features, la plus récente des `published_at` de ses caractéristiques. Absent si la date est inconnue : un filtre `lessThanOrEquals` l'écarte alors, ce qui évite toute anticipation.
+- Filtres possibles sur S3 Vectors : `equals`, `notEquals`, `in`, `notIn`, comparaisons numériques, `andAll`, `orAll`. Jamais `startsWith` ni `stringContains`.
+- Les seeds `general/methodologie/`, `general/notions/` et `general/societes/` n'ont pas encore de fichier compagnon; Terraform enverrait ceux qui seraient versionnés dans `app/knowledge/general/` (`**/*.metadata.json`).
 
 ## 6. Step Functions de collecte
 
@@ -558,3 +607,27 @@ flowchart LR
 - La planification `alphaforge-sandbox-recherche` (jours ouvrables, 17 h 30 HE, mode `sweep`) est désactivée par
   défaut (`recherche_schedule_enabled`).
 
+## 12. Runtime `portfolio` (facultatif)
+
+Construction du portefeuille simulé d'un client par le volet finance (section 9 : étape 0 de style et de sélection, A3 avocat, quatre lentilles, Judge), derrière `AGENT_ROLE=portfolio`. Le service (`app/agents/src/alphaforge/portfolio_service.py`) est mince : il valide la requête, lit le profil par `finance/debate/okf_bridge.py`, appelle `finance.debate.pipeline.build_portfolio`, puis écrit la décision. Le moteur (numpy, pandas, scipy, cvxpy) n'est importé qu'au premier `build`; les autres rôles ne le chargent jamais. Simulation seulement : aucune transaction, aucun conseil personnalisé.
+
+| Action | Entrée (en plus de `action`) | Réponse |
+| --- | --- | --- |
+| `health` | — | `{"ok": true, "role": "portfolio", "release", "env"}`, sans charger le moteur |
+| `build` | `client_id` (UUID v4), `as_of` facultatif (`AAAA-MM-JJ`, par défaut `DEFAULT_AS_OF` du moteur), `strategy` facultatif (booléen, `true` par défaut : étape 0 active), `style_preference` facultatif (`defensive`, `dynamique` ou `offensive`, `finance.strategy.STYLES`), `request` facultatif (`{ticker, amount_cad?, weight?}`, demande précise de l'investisseur), `mode` facultatif (`llm` par défaut, `rules` pour le repli déterministe), `locale` facultatif (`fr`, `en`) | `{"client_id", "as_of", "mode", "simulation_only": true, "decision_key": "clients/<id>/decisions/<decision_id>.md", "decision": Decision, "rounds": [{"round", "verdicts", "amendments"}], "explanation_report", "grounding", "strategy": StrategyResult.summary() \| null}` |
+
+- Étape 0 (`strategy: true`) : les variables de style viennent du profil court (`style_inputs_from_view` sur `OkfClientStore.view`), comme `finance/debate/app.py`; `style_preference` est prioritaire sur l'objectif du profil. `strategy` vaut `null` dans la réponse quand l'étape 0 est désactivée.
+- Erreurs : `bad_request` (requête mal formée ou style inconnu, refusée avant tout calcul), `not_found` (pas de `profil.md`), `model_error` (Bedrock ou Strands), `conflict`, `internal`.
+- Réponse JSON seulement (pas de streaming en version 1); une construction en mode `llm` prend plusieurs appels de modèle.
+- Les traces OpenTelemetry du moteur sont configurées au premier `build` (`telemetry.setup`, X-Ray si `ALPHAFORGE_OTLP_XRAY=1`) et vidées après chaque construction.
+
+Déploiement (`infrastructure/infra/agentcore.tf`) : seulement si `portfolio_enabled = true` (faux par défaut, le plan ne change alors rien). Zip `runtime/agents-portfolio-<release>.zip`, construit par `package.sh` si `ALPHAFORGE_PACKAGE_PORTFOLIO=1` (roues `aarch64-manylinux_2_28`); s'il manque, le runtime prend le zip commun et `build` renvoie `internal` en le disant. Variables en plus de celles de `profile` :
+
+| Variable | Valeur posée par Terraform | Lue par |
+| --- | --- | --- |
+| `ALPHAFORGE_DECISIONS_TABLE` | `alphaforge-sandbox-decisions` (table gérée de `traceability.tf`) | `finance/observability/audit.py` |
+| `ALPHAFORGE_LOG_GROUP` | `/alphaforge-sandbox/finance` | `finance/observability/telemetry.py` (`log_event`) |
+| `ALPHAFORGE_CLOUDWATCH_LOGS` | `1` | idem : journaux structurés dans CloudWatch Logs |
+| `ALPHAFORGE_OTLP_XRAY` | `1` | idem : spans OTLP vers X-Ray (Transaction Search) |
+| `ALPHAFORGE_MODEL_MAIN` / `ALPHAFORGE_MODEL_LENS` | `var.agentcore_model_id` (Opus 5.5, seul profil autorisé par le rôle IAM) | `finance/debate/roles.py` (A3 et lentilles; Sonnet et Haiku par défaut hors AWS) |
+| `ALPHAFORGE_LLM_STORE` | `/tmp/alphaforge-llm-records` | `finance/debate/roles.py` (enregistrements du rejeu LLM, `FileStore`) |

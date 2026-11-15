@@ -11,7 +11,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 # "router", "expert", "researcher" : recherche par experts de sujet (alphaforge.research, CONTRACTS.md section 11).
-ROLES = ("profile", "press", "data", "supervisor", "router", "expert", "researcher")
+# "portfolio" : construction du portefeuille simulé (volet finance, section 12), déployé seulement si portfolio_enabled.
+ROLES = ("profile", "press", "data", "supervisor", "router", "expert", "researcher", "portfolio")
 DEFAULT_MODEL_ID = "us.anthropic.claude-opus-5-5"
 DEFAULT_REGION = "us-east-1"
 

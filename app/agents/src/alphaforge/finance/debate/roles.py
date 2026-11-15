@@ -59,17 +59,27 @@ def model(model_id: str, node_id: str, versions: dict | None = None):
         return BedrockModel(**kw)
 
 
+STRAT_NOTE = (
+    "limite de l'étape 0 (style), non bloquante : choix de composition dans les budgets de perte du niveau (elle peut "
+    "augmenter le risque dans la bande, jamais au-delà des budgets) ; on peut baisser un plafond strat.*, jamais "
+    "relever un plancher strat.*"
+)
+
+
 def _limits_view(policy) -> list[dict]:
-    return [
-        {
+    out = []
+    for lim in policy.limits:
+        row = {
             "rule_id": lim.rule_id,
             "kind": lim.kind,
             "min": lim.min,
             "max": lim.max,
             "selector": lim.selector.model_dump(exclude_defaults=True),
         }
-        for lim in policy.limits
-    ]
+        if lim.rule_id.startswith("strat."):  # seulement si l'étape 0 est active (rejeux existants inchangés)
+            row.update(blocking=lim.blocking, derived_from=lim.derived_from, note=STRAT_NOTE)
+        out.append(row)
+    return out
 
 
 def _profile_view(profile) -> dict:

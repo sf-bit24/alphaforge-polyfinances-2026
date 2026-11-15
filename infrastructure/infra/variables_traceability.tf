@@ -26,5 +26,5 @@ variable "xray_indexing_percentage" {
 variable "finance_trace_runtimes" {
   description = "Runtimes AgentCore autorises a ecrire le rejeu LLM et le journal des decisions (les collecteurs press et data n'y ont pas acces)."
   type        = list(string)
-  default     = ["supervisor"]
+  default     = ["supervisor", "portfolio"]
 }

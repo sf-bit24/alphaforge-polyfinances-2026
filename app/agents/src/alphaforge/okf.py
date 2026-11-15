@@ -2,15 +2,21 @@
 
 ``parse`` et ``render`` font un aller-retour sans perte : les dates sont gardées en chaînes ISO,
 et une date YAML non citée (écrite à la main dans un seed) est relue comme chaîne.
+
+``kb_metadata`` donne le fichier compagnon ``<clé>.metadata.json`` qu'indexe la Knowledge Base (attributs
+filtrables ``type``, ``ticker``, ``kind``, ``published_epoch``; CONTRACTS.md, section 5.1).
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
 import yaml
+
+from . import clock
 
 DOC_TYPES = (
     "Investor Profile",
@@ -28,6 +34,10 @@ DOC_TYPES = (
     "Market Signal",
     "Regulatory Filing",
     "Research Brief",
+    # Volet finance : caractéristiques calculées d'un titre (general/donnees/features/) et décision simulée
+    # (clients/<id>/decisions/, écrite par finance/debate/okf_bridge.py).
+    "Stock Features",
+    "Portfolio Decision",
 )
 REQUIRED_KEYS = ("type", "title", "description", "tags", "status", "owners", "sensitivity", "generated", "sources")
 KEY_ORDER = (*REQUIRED_KEYS[:8], "stale_after", "sources", "data")
@@ -193,4 +203,110 @@ def summary(doc: OkfDoc) -> dict[str, Any]:
         "type": meta.get("type"),
         "description": meta.get("description"),
         "generated_at": generated.get("at") if generated else None,
+    }
+
+
+# --------------------------------------------------------------------------- métadonnées de la Knowledge Base
+
+KB_METADATA_SUFFIX = ".metadata.json"
+# Suffixes de bourse canadiens de Yahoo Finance : un slug ``shop-to`` redevient ``SHOP.TO``.
+_EXCHANGE_SLUG = re.compile(r"^([A-Z0-9][A-Z0-9-]*)-(TO|V|NE|CN)$")
+_TICKER = re.compile(r"^[A-Z0-9^][A-Z0-9.=^-]{0,19}$")
+# Type de document -> ``kind`` quand ``data.kind`` est absent.
+_DEFAULT_KINDS = {"Stock Features": "features"}
+
+
+def canonical_ticker(value: Any) -> str | None:
+    """Forme canonique d'un symbole : majuscules, suffixe de bourse avec un point (``SHOP.TO``).
+
+    Accepte ``SHOP.TO``, l'étiquette d'actualité ``shop.to`` et le slug de données ``shop-to``. Un tiret qui ne
+    précède pas un suffixe canadien est gardé (``BTC-USD``, ``BRK-B``). ``None`` si la valeur n'est pas un symbole.
+    """
+    if not isinstance(value, str):
+        return None
+    text = value.strip().upper()
+    if "." not in text:
+        match = _EXCHANGE_SLUG.match(text)
+        if match:
+            text = f"{match.group(1)}.{match.group(2)}"
+    return text if _TICKER.match(text) else None
+
+
+def kb_metadata_key(doc_key: str) -> str:
+    """Clé du fichier compagnon : la clé du document suivie de ``.metadata.json`` (règle de Bedrock)."""
+    return doc_key + KB_METADATA_SUFFIX
+
+
+def published_epoch(value: Any) -> int | None:
+    """Date de publication en secondes UTC depuis l'époque Unix (une date seule vaut minuit UTC)."""
+    parsed = clock.parse_datetime(value) if isinstance(value, str) else None
+    return int(parsed.timestamp()) if parsed is not None else None
+
+
+def _doc_ticker(data: dict[str, Any]) -> str | None:
+    for candidate in (data.get("ticker"), data.get("symbol")):
+        ticker = canonical_ticker(candidate)
+        if ticker:
+            return ticker
+    tickers = data.get("tickers")
+    if isinstance(tickers, list):
+        # Une actualité peut citer plusieurs titres : seul le premier (celui de la recherche) est filtrable.
+        for candidate in tickers:
+            ticker = canonical_ticker(candidate)
+            if ticker:
+                return ticker
+    return None
+
+
+def _doc_published_epoch(doc_type: str, data: dict[str, Any]) -> int | None:
+    if doc_type == "Stock Features":
+        # Le document n'est connu qu'une fois publiée la plus récente de ses entrées.
+        features = data.get("features") if isinstance(data.get("features"), dict) else {}
+        epochs = [
+            published_epoch(feature.get("published_at")) for feature in features.values() if isinstance(feature, dict)
+        ]
+        known = [epoch for epoch in epochs if epoch is not None]
+        return max(known) if known else None
+    return published_epoch(data.get("published_at"))
+
+
+def kb_metadata(doc_key: str, frontmatter: dict[str, Any]) -> dict[str, Any]:
+    """Contenu de ``<doc_key>.metadata.json`` au format S3 de Bedrock Knowledge Bases.
+
+    Attributs (tous filtrables, aucun n'entre dans l'embedding) :
+    - ``type`` (STRING) : type OKF du document;
+    - ``ticker`` (STRING) : symbole canonique (``canonical_ticker``) de ``data.ticker``, ``data.symbol`` ou du
+      premier de ``data.tickers``; absent pour une série macroéconomique;
+    - ``kind`` (STRING) : ``data.kind`` (``news``, ``series``, ``quote``), ``features`` pour Stock Features;
+    - ``published_epoch`` (NUMBER) : date de publication en secondes UTC (``data.published_at``; pour Stock
+      Features, la plus récente des ``published_at`` de ses caractéristiques). Absent si inconnue : un filtre
+      ``lessThanOrEquals`` sur cet attribut écarte alors le document, ce qui évite toute anticipation.
+    Seuls ``equals``, ``in`` et les comparaisons numériques sont permis sur S3 Vectors (pas ``startsWith``).
+    """
+    if not isinstance(doc_key, str) or not doc_key.startswith("general/") or not doc_key.endswith(".md"):
+        raise OkfError(f"only general/*.md documents are indexed: {doc_key!r}")
+    doc_type = frontmatter.get("type")
+    if doc_type not in DOC_TYPES:
+        raise OkfError(f"unknown type {doc_type!r}")
+    data = frontmatter.get("data") if isinstance(frontmatter.get("data"), dict) else {}
+    attributes: dict[str, Any] = {"type": doc_type}
+    ticker = _doc_ticker(data)
+    if ticker:
+        attributes["ticker"] = ticker
+    kind = data.get("kind") if isinstance(data.get("kind"), str) and data.get("kind") else _DEFAULT_KINDS.get(doc_type)
+    if kind:
+        attributes["kind"] = kind
+    epoch = _doc_published_epoch(doc_type, data)
+    if epoch is not None:
+        attributes["published_epoch"] = epoch
+
+    def typed(value: Any) -> dict[str, Any]:
+        if isinstance(value, int):
+            return {"type": "NUMBER", "numberValue": value}
+        return {"type": "STRING", "stringValue": value}
+
+    return {
+        "metadataAttributes": {
+            name: {"value": typed(value), "includeForEmbedding": False} for name, value in attributes.items()
+        }
     }

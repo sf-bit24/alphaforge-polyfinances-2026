@@ -914,6 +914,7 @@ def _profile_status(profile: InvestorProfile, missing_must_have: list[str], cont
             "profile_status": profile.status.value,
             "must_have_missing": missing_must_have,
             "confidence": profile.confidence,
+            "completeness_min": context.risk_levels["status"]["completeness_min"],
         },
         status,
         "status",
@@ -1810,3 +1811,138 @@ def compile_profile(  # noqa: PLR0913 (signature publique figee : les appelants 
         knowledge=_knowledge_level(adapted, context),
     )
     return _compile_mandate(inputs, context, request=request, questionnaire=questionnaire, emphasis_path=emphasis_path)
+
+
+# --------------------------------------------------------------------------- cause d'une decision sans mandat
+
+
+@dataclass(frozen=True)
+class DollarRuleProtection:
+    """Regle des dollars en PROTECTION : aucune part d'actions de la grille dont L_plan tient dans l*.
+
+    Valeurs lues dans la trace de la compilation (``dollar_rule.protection``, ``dollar_rule.l_star``,
+    ``dollar_rule.l_declared`` et ``dollar_rule.l_cap``). Les termes de l_cap et les seuils des leviers en derivent
+    par les formules de risk_levels.yaml#dollar_rule.
+    """
+
+    l_star: float  # l* = min(L_plan(e_max), l_declared, l_cap)
+    min_planning_loss: float  # min_L_plan : plus petite L_plan(e) de la grille
+    yaml_path: str
+    declared_loss: float | None = None  # l_declared = min(pct, cad / W)
+    declared_loss_pct: float | None = None
+    declared_loss_cad: float | None = None
+    wealth: float | None = None  # W
+    loss_capacity: float | None = None  # l_cap = min(1 - q / q_max, 1 - (1 + mu_recovery)^-T)
+    withdrawal_rate: float | None = None  # q
+    withdrawal_rate_max: float | None = None  # q_max
+    horizon_years: float | None = None  # T du seau risque
+    mu_recovery: float | None = None
+
+    def is_below(self, loss: float | None) -> bool:
+        """Vrai si cette entree de l* est sous min_L_plan : il faut la relever pour qu'une allocation existe."""
+        return loss is not None and loss < self.min_planning_loss - EPSILON
+
+    @property
+    def declared_in_dollars(self) -> bool:
+        """Vrai si l_declared vient de la perte declaree en dollars (cad / W) plutot que du pourcentage."""
+        if self.declared_loss is None or self.declared_loss_cad is None or not self.wealth:
+            return False
+        return abs(self.declared_loss_cad / self.wealth - self.declared_loss) <= EPSILON
+
+    @property
+    def horizon_loss(self) -> float | None:
+        """Terme d'horizon de l_cap : 1 - (1 + mu_recovery)^-T."""
+        if self.horizon_years is None or self.mu_recovery is None:
+            return None
+        return 1 - (1 + self.mu_recovery) ** (-self.horizon_years)
+
+    @property
+    def withdrawal_loss(self) -> float | None:
+        """Terme de retrait de l_cap : 1 - q / q_max."""
+        if self.withdrawal_rate is None or not self.withdrawal_rate_max:
+            return None
+        return 1 - self.withdrawal_rate / self.withdrawal_rate_max
+
+    def required_horizon_years(self) -> float | None:
+        """T minimal pour que le terme d'horizon de l_cap atteigne min_L_plan."""
+        if self.mu_recovery is None or not 0 < self.min_planning_loss < 1:
+            return None
+        return math.log(1 / (1 - self.min_planning_loss)) / math.log(1 + self.mu_recovery)
+
+    def allowed_withdrawal_rate(self) -> float | None:
+        """q maximal pour que le terme de retrait de l_cap atteigne min_L_plan."""
+        if not self.withdrawal_rate_max:
+            return None
+        return self.withdrawal_rate_max * (1 - self.min_planning_loss)
+
+
+@dataclass(frozen=True)
+class NoMandateCause:
+    """Causes inscrites par la compilation pour une decision sans allocation (``incomplet``, ``protection``,
+    ``position_attente``) : statut transmis par le profil, regle des dollars, champs obligatoires, confiance."""
+
+    decision_kind: DecisionKind | None
+    profile_status: str | None  # statut du profil, avant la regle des dollars
+    status_yaml_path: str | None
+    must_have_missing: list[str]
+    confidence: float | None
+    completeness_min: float | None
+    dollar_rule: DollarRuleProtection | None
+
+    @property
+    def profile_protection(self) -> bool:
+        """Vrai si le profil lui-meme impose la protection (signaux de vulnerabilite)."""
+        return self.profile_status == ProfileStatus.PROTECTION.value
+
+    @property
+    def low_confidence(self) -> bool:
+        """Vrai si la confiance du profil est sous status.completeness_min."""
+        return (
+            self.confidence is not None
+            and self.completeness_min is not None
+            and self.confidence < self.completeness_min
+        )
+
+
+def _last_record(trace: list[dict[str, Any]], rule: str) -> dict[str, Any] | None:
+    return next((entry for entry in reversed(trace) if entry.get("rule") == rule), None)
+
+
+def _dollar_rule_protection(trace: list[dict[str, Any]]) -> DollarRuleProtection | None:
+    protection = _last_record(trace, "dollar_rule.protection")
+    if protection is None:
+        return None
+    loss_budget = (_last_record(trace, "dollar_rule.l_star") or {}).get("inputs", {})
+    declared = (_last_record(trace, "dollar_rule.l_declared") or {}).get("inputs", {})
+    loss_capacity = (_last_record(trace, "dollar_rule.l_cap") or {}).get("inputs", {})
+    return DollarRuleProtection(
+        l_star=protection["inputs"]["l_star"],
+        min_planning_loss=protection["inputs"]["min_L_plan"],
+        yaml_path=protection["yaml_path"],
+        declared_loss=loss_budget.get("l_declared"),
+        declared_loss_pct=declared.get("pct"),
+        declared_loss_cad=declared.get("cad"),
+        wealth=declared.get("W"),
+        loss_capacity=loss_budget.get("l_cap"),
+        withdrawal_rate=loss_capacity.get("q"),
+        withdrawal_rate_max=loss_capacity.get("q_max"),
+        horizon_years=loss_capacity.get("T"),
+        mu_recovery=loss_capacity.get("mu_recovery"),
+    )
+
+
+def no_mandate_cause(result: CompileResult) -> NoMandateCause:
+    """Cause enregistree d'une decision sans allocation, lue dans ``result.trace`` (regles ``status``,
+    ``dollar_rule.*`` et ``decision_kind``) : l'explication la cite au lieu d'un texte generique."""
+    status = _last_record(result.trace, "status") or {}
+    status_inputs = status.get("inputs", {})
+    kind = _last_record(result.trace, "decision_kind") or {}
+    return NoMandateCause(
+        decision_kind=result.decision_kind,
+        profile_status=status_inputs.get("profile_status"),
+        status_yaml_path=status.get("yaml_path"),
+        must_have_missing=list(kind.get("inputs", {}).get("must_have_missing") or []),
+        confidence=status_inputs.get("confidence"),
+        completeness_min=status_inputs.get("completeness_min"),
+        dollar_rule=_dollar_rule_protection(result.trace),
+    )

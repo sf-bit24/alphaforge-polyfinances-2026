@@ -605,3 +605,16 @@ flowchart LR
 - La planification `alphaforge-sandbox-recherche` (jours ouvrables, 17 h 30 HE, mode `sweep`) est désactivée par
   défaut (`recherche_schedule_enabled`).
 
+## 12. Runtime `portfolio` (facultatif)
+
+Construction du portefeuille simulé d'un client par le volet finance (section 9 : étape 0 de style et de sélection, A3 avocat, quatre lentilles, Judge), derrière `AGENT_ROLE=portfolio`. Le service (`app/agents/src/alphaforge/portfolio_service.py`) est mince : il valide la requête, lit le profil par `finance/debate/okf_bridge.py`, appelle `finance.debate.pipeline.build_portfolio`, puis écrit la décision. Le moteur (numpy, pandas, scipy, cvxpy) n'est importé qu'au premier `build`; les autres rôles ne le chargent jamais. Simulation seulement : aucune transaction, aucun conseil personnalisé.
+
+| Action | Entrée (en plus de `action`) | Réponse |
+| --- | --- | --- |
+| `health` | — | `{"ok": true, "role": "portfolio", "release", "env"}`, sans charger le moteur |
+| `build` | `client_id` (UUID v4), `as_of` facultatif (`AAAA-MM-JJ`, par défaut `DEFAULT_AS_OF` du moteur), `strategy` facultatif (booléen, `true` par défaut : étape 0 active), `style_preference` facultatif (`defensive`, `dynamique` ou `offensive`, `finance.strategy.STYLES`), `request` facultatif (`{ticker, amount_cad?, weight?}`, demande précise de l'investisseur), `mode` facultatif (`llm` par défaut, `rules` pour le repli déterministe), `locale` facultatif (`fr`, `en`) | `{"client_id", "as_of", "mode", "simulation_only": true, "decision_key": "clients/<id>/decisions/<decision_id>.md", "decision": Decision, "rounds": [{"round", "verdicts", "amendments"}], "explanation_report", "grounding", "strategy": StrategyResult.summary() \| null}` |
+
+- Étape 0 (`strategy: true`) : les variables de style viennent du profil court (`style_inputs_from_view` sur `OkfClientStore.view`), comme `finance/debate/app.py`; `style_preference` est prioritaire sur l'objectif du profil. `strategy` vaut `null` dans la réponse quand l'étape 0 est désactivée.
+- Erreurs : `bad_request` (requête mal formée ou style inconnu, refusée avant tout calcul), `not_found` (pas de `profil.md`), `model_error` (Bedrock ou Strands), `conflict`, `internal`.
+- Réponse JSON seulement (pas de streaming en version 1); une construction en mode `llm` prend plusieurs appels de modèle.
+- Les traces OpenTelemetry du moteur sont configurées au premier `build` (`telemetry.setup`, X-Ray si `ALPHAFORGE_OTLP_XRAY=1`) et vidées après chaque construction.

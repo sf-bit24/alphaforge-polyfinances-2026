@@ -352,7 +352,7 @@ def no_allocation_explanation(
     """
     data_used = [Statement(text_fr="Profil analysé selon les règles déterministes du mandat.", fact_ids=[level_fid])]
     if kind == "protection":
-        return _protection_explanation(book, cause, level_fid, data_used)
+        return _protection_explanation(book, cause, missing_info, level_fid, data_used)
     why, change = _incomplete_statements(book, kind, cause, missing_info, level_fid)
     limits = [
         Statement(text_fr="Aucune allocation n'est calculée tant que le profil n'est pas complété.", label="HYPOTHESE")
@@ -425,13 +425,18 @@ def _incomplete_statements(
 
 
 def _protection_explanation(
-    book: FactBook, cause: NoMandateCause, level_fid: str, data_used: list[Statement]
+    book: FactBook, cause: NoMandateCause, missing_info: list[str], level_fid: str, data_used: list[Statement]
 ) -> Explanation:
     """Mode protection : le profil le signale (statut PROTECTION), ou la règle des dollars ne laisse aucune part
-    d'actions dont la perte de planification tienne dans l*. Les deux causes peuvent s'additionner."""
+    d'actions dont la perte de planification tienne dans l*. Les deux causes peuvent s'additionner, et un profil en
+    protection peut aussi manquer d'informations : « Compléter : … » reste alors un levier."""
     tid = book.facts[level_fid].trace_id
     why: list[Statement] = []
     change: list[Statement] = []
+    must = [MUST_HAVE_FR.get(name, name) for name in cause.must_have_missing]
+    missing = list(missing_info) or must
+    if missing:
+        change.append(Statement(text_fr="Compléter : " + ", ".join(missing) + ".", label="HYPOTHESE"))
     limits = [
         Statement(
             text_fr=f"En mode protection, le niveau reste {fmt(book.facts[level_fid].value, 'niveau')} et aucune "
@@ -477,7 +482,7 @@ def _protection_explanation(
                 label="HYPOTHESE",
             )
         )
-    if not why:  # cause non inscrite dans la trace (compilation externe) : le mode protection, sans chiffre
+    if not cause.profile_protection and cause.dollar_rule is None:  # cause non inscrite (compilation externe)
         why.append(
             Statement(
                 text_fr="Le mode protection s'applique : le profil présente des signaux de vulnérabilité ; par "
@@ -485,12 +490,14 @@ def _protection_explanation(
                 fact_ids=[level_fid],
             )
         )
-    if not change:
         change.append(
             Statement(
                 text_fr="Revoir votre situation avec une personne qualifiée avant toute proposition.", label="HYPOTHESE"
             )
         )
+    if must:
+        what = "une information indispensable" if len(must) == 1 else "des informations indispensables"
+        why.append(Statement(text_fr=f"Il manque aussi {what} au calcul ({', '.join(must)}).", fact_ids=[level_fid]))
     return Explanation(data_used=data_used, why=why, limits=limits, what_would_change=change)
 
 

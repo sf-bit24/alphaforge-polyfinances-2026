@@ -382,6 +382,43 @@ def test_low_confidence_names_the_threshold_instead_of_the_profile():
     _assert_number_rule(book, expl)
 
 
+def test_protection_with_a_missing_must_have_keeps_complete_and_a_necessary_lever():
+    """Bande lt3 sans montant : la règle des dollars (horizon de 12 mois) passe avant « incomplet ». Le levier
+    d'horizon lève la règle des dollars, mais le profil reste incomplet : il est nécessaire, pas suffisant."""
+    profile = _profile(amount=None, band="lt3")
+    assert profile.missing_info == ["context.amount_cad"]
+    comp, book, expl = _explain(profile)
+    assert comp.decision_kind == "protection"
+    assert _texts(expl, "why")[-1] == "Il manque aussi une information indispensable au calcul (le montant à investir)."
+    changes = _texts(expl, "what_would_change")
+    assert changes[0] == "Compléter : context.amount_cad."
+    assert changes[1] == (
+        "Un horizon de placement plus long serait nécessaire pour qu'une allocation soit possible. Par exemple : un "
+        "horizon d'au moins 3,6 ans pour l'objectif « objectif : growth »."
+    )
+    assert len(changes) == 2  # ni « rendrait une allocation possible », ni « Ensemble »
+    levers = no_mandate_cause(comp, profile, AS_OF).levers
+    assert levers.lifted and not levers.allocation
+    assert compile_profile(_apply(profile, *levers.horizon), AS_OF).decision_kind == "incomplet"
+    _assert_number_rule(book, expl)
+
+
+def test_protection_with_missing_info_keeps_complete():
+    """Fonds d'urgence inconnu (statut INCOMPLETE) et perte de 250 $ : la perte reste un levier nécessaire."""
+    profile = _profile(emergency=None)
+    comp, book, expl = _explain(profile)
+    assert comp.decision_kind == "protection"
+    changes = _texts(expl, "what_would_change")
+    assert changes == [
+        "Compléter : risk_capacity.emergency_fund.",
+        "Une perte admissible d'au moins 1 299 $ sur ce montant serait nécessaire pour qu'une allocation soit "
+        "possible.",
+    ]
+    levers = no_mandate_cause(comp, profile, AS_OF).levers
+    assert compile_profile(_apply(profile, *levers.required), AS_OF).decision_kind == "position_attente"
+    _assert_number_rule(book, expl)
+
+
 def test_incomplete_and_protection_texts_stay_distinct():
     _, _, protection = _explain(_profile())
     _, _, incomplete = _explain(_profile(amount=None))

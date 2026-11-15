@@ -54,6 +54,10 @@ def build_service(settings: Settings, app: Any, store: Store | None = None) -> A
         from .collect.service import CollectorService
 
         return CollectorService(settings, store, app)
+    if settings.role == "tldoole":
+        from .tldoole.service import TldooleService
+
+        return TldooleService(settings, store, app)
     raise ValueError(f"AGENT_ROLE must be one of {ROLES}, got {settings.role!r}")
 
 

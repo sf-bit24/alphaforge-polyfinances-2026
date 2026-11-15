@@ -12,6 +12,9 @@ Règles :
 5. Garde ESG : un amendement autre que ``flag_only`` qui cite une preuve ESG (``okf.esg.*``) n'est appliqué que si
    l'investisseur a des exclusions ou une préférence ESG (``esg_preference``). Un ``exclude_asset`` qui cite une
    preuve ESG doit en citer une du titre visé.
+6. Garde des dépôts : même règle que pour les actualités pour un dépôt réglementaire (``okf.filing.*``). Son
+   existence est un fait, mais son contenu n'est pas lu : il peut être signalé, jamais justifier un changement du
+   mandat.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from alphaforge.finance.contracts.policy import Limit, PolicySpec, Selector
-from alphaforge.finance.strategy.okf_facts import ESG_FACT_PREFIX, NEWS_FACT_PREFIX
+from alphaforge.finance.strategy.okf_facts import ESG_FACT_PREFIX, FILING_FACT_PREFIX, NEWS_FACT_PREFIX
 from alphaforge.finance.strategy.rules import clamp_strategy_floors
 
 from .schemas import PRIORITY, AppliedAmendment, LensReport
@@ -28,6 +31,7 @@ FLOOR_RATIO = 0.6
 NEWS_REJECT_FR = "une actualité ne justifie jamais un changement du mandat (rumeur ≠ fait)"
 ESG_NO_PREFERENCE_FR = "une preuve ESG ne change le mandat que si l'investisseur a des exclusions ou une préférence ESG"
 ESG_OTHER_ASSET_FR = "la preuve ESG citée concerne un autre titre que celui à exclure"
+FILING_REJECT_FR = "un dépôt réglementaire est signalé, jamais une preuve de changement du mandat (contenu non lu)"
 _MEASURE_ORDER = {"VARIANCE": 0, "CVAR": 1, "CDAR": 2}  # CDaR = plus prudente (drawdown)
 
 
@@ -68,6 +72,9 @@ def apply_amendments(
             and not any(f.startswith(f"{ESG_FACT_PREFIX}{a.target}.") for f in esg_ids)
         ):
             reject(lens, a, ESG_OTHER_ASSET_FR)
+            continue
+        if a.kind != "flag_only" and any(f.startswith(FILING_FACT_PREFIX) for f in a.evidence_fact_ids):
+            reject(lens, a, FILING_REJECT_FR)
             continue
         missing = [f for f in a.evidence_fact_ids if f not in known_fact_ids]
         if missing:

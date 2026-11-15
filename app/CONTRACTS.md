@@ -13,7 +13,7 @@ Un seul zip de code (`app/agents`, Python 3.13, linux/arm64) alimente tous les r
 | `alphaforge_sandbox_profile` | `profile` | serveur Next.js | lit `general/`, lit et écrit `clients/` |
 | `alphaforge_sandbox_press` | `press` | Step Functions | lit et écrit `staging/<run_id>/press/` |
 | `alphaforge_sandbox_data` | `data` | Step Functions | lit et écrit `staging/<run_id>/data/` |
-| `alphaforge_sandbox_supervisor` | `supervisor` | Step Functions | lit `staging/`, `general/` et `archive/`; écrit `staging/<run_id>/supervisor/`, `general/actualites/`, `general/donnees/`, `general/faits/`, `general/signaux/`, `general/depots/`, `general/recherches/` et `general/index.md`, jamais `general/methodologie/` ni `general/societes/` (gérés par Terraform). L'ingestion de la Knowledge Base est lancée par Step Functions, pas par A6. |
+| `alphaforge_sandbox_supervisor` | `supervisor` | Step Functions | lit `staging/`, `general/` et `archive/`; écrit `staging/<run_id>/supervisor/`, `general/actualites/`, `general/donnees/`, `general/faits/`, `general/signaux/`, `general/depots/`, `general/recherches/`, `general/societes/` (fondamentaux EDGAR, jamais un seed : refus explicite par IAM sur les clés des seeds, et refus du code) et `general/index.md`, jamais `general/methodologie/` (géré par Terraform). L'ingestion de la Knowledge Base est lancée par Step Functions, pas par A6. |
 | `alphaforge_sandbox_router` | `router` | Step Functions (`recherche`) | lit `staging/<run_id>/router/` et `staging/<run_id>/experts/`; écrit `staging/<run_id>/router/` (section 11) |
 | `alphaforge_sandbox_expert` | `expert` | Step Functions (`recherche`) | lit `staging/<run_id>/experts/` et `staging/<run_id>/researchers/`; écrit `staging/<run_id>/experts/`; Knowledge Base; `InvokeAgentRuntime` sur le runtime `researcher` seulement (section 11) |
 | `alphaforge_sandbox_researcher` | `researcher` | runtime `expert` | lit et écrit `staging/<run_id>/researchers/`; écrit `archive/` (section 11) |
@@ -40,7 +40,7 @@ Variables d'environnement posées par Terraform sur chaque runtime :
 | `ALPHAFORGE_GUARDRAIL_ID` / `ALPHAFORGE_GUARDRAIL_VERSION` | `abc123` / `1` | Guardrail du cadre responsable, appliqué aux agents du runtime `profile` (vide en local). |
 | `ALPHAFORGE_RESEARCHER_NAME` | `alphaforge_sandbox_researcher` | Runtime `expert` : nom du runtime des chercheurs, dont l'ARN est trouvé par `ListAgentRuntimes`. `ALPHAFORGE_RESEARCHER_ARN` le remplace s'il est posé; sans l'un ni l'autre (local), les chercheurs tournent dans des fils. |
 | `ALPHAFORGE_RESEARCHER_MODEL_ID` | (vide) | Facultatif : modèle des chercheurs; par défaut `ALPHAFORGE_MODEL_ID`. Le rôle IAM n'autorise que `ALPHAFORGE_MODEL_ID`. |
-| `ALPHAFORGE_CONTACT_EMAIL` | (vide) | Facultatif : courriel ajouté au User-Agent pour la SEC seulement (accès équitable d'EDGAR); sans lui, la SEC répond 403 et ses hôtes sont déclarés bloqués. Posé par Terraform (`sec_contact_email`) sur `press`, `data` et `researcher` seulement. |
+| `ALPHAFORGE_CONTACT_EMAIL` | (vide) | Facultatif : courriel ajouté au User-Agent pour la SEC seulement (accès équitable d'EDGAR); sans lui, la SEC répond 403 et ses hôtes sont déclarés bloqués, et A5 ne lit pas les fondamentaux EDGAR (avertissement dans son marqueur). Posé par Terraform (`sec_contact_email`) sur `press`, `data` et `researcher` seulement. |
 
 Transport : `POST /invocations`, corps JSON, réponse JSON (`application/json`), ou SSE (`text/event-stream`) quand la requête contient `"stream": true` (section 3.4). `GET /ping` est servi par `BedrockAgentCoreApp`.
 
@@ -258,6 +258,8 @@ Les trois collecteurs acceptent leur tâche aussitôt, travaillent en arrière-p
 - Quand la revue éditoriale d'A6 est indisponible ou sans décision, A6 écrit quand même les données, dont le texte vient du code, mais retient les actualités en disant pourquoi. La collecte suivante les reproposera.
 - Élément collecté (`staging/<run_id>/<role>/<id>.json`) : `{"id", "kind": "news" | "series" | "quote", "title", "url", "source", "published_at", "observed_at", "retrieved_at", "language", "tickers": [], "summary", "data": {}}`. `published_at` est la date de publication; `observed_at`, la date de référence d'une donnée (par exemple le mois d'un IPC). Pour une série, `published_at` est l'heure de récupération, une borne supérieure sûre (`data.published_at_basis = "retrieved_at_upper_bound"`). Pour une cotation, c'est l'heure du dernier cours donnée par Yahoo Finance (`regularMarketTime`).
 - A6 rejette un élément sans source, sans date de publication, publié après sa date de récupération, ou en double d'un document existant, et dit pourquoi.
+- Fondamentaux EDGAR (`kind: "fundamentals"`, `collect.edgar`) : A5 les construit **par le code, sans modèle**, avant son agent, pour les actions de l'univers présentes dans EDGAR (`company_tickers.json` puis `companyfacts`, jamais `frames`; CN sous `CNI`; ancien CIK d'ExxonMobil lu en plus du nouveau). `data.fundamentals` est exactement le bloc `data` d'un document `Company Fundamentals` (`finance/strategy/okf_facts.py`), `data.sources` ses sources (un dépôt par entrée). Point dans le temps : une période ou un bilan vient du premier dépôt qui le publie (date `filed`), ses comparatifs `prior_year` du même dépôt; formulaires 10-Q, 10-K, 20-F, 40-F et 6-K, jamais leurs amendements; taxonomie `ifrs-full` si l'émetteur l'utilise, `us-gaap` sinon; un concept dans une autre unité que la devise des résultats est ignoré (`data.skipped`), jamais converti. Ce type n'est jamais produit par un agent ni par la recherche, et ne passe pas par la revue éditoriale d'A6.
+- A6 relit chaque élément `fundamentals` avec `okf_facts.parse_company_fundamentals`, puis écrit `general/societes/<ticker>.md` (`RY.TO` → `ry.md`) seulement si `data` a changé (sinon la clé va dans `unchanged` du marqueur), et n'écrase jamais un document qu'il n'a pas écrit (`generated.by` ≠ `agent:A6` : les seeds ATD et CSU).
 
 ## 5. Magasin OKF (S3 ou local)
 
@@ -265,7 +267,8 @@ Les trois collecteurs acceptent leur tâche aussitôt, travaillent en arrière-p
 general/index.md                            écrit par A6 seulement, absent avant la première collecte
 general/methodologie/<slug>.md              seed versionné dans app/knowledge/general/, poussé par Terraform
 general/notions/<slug>.md                   seed versionné : une notion financière par fichier (Financial Concept)
-general/societes/<ticker>.md                seed versionné : chiffres publiés d'une société absente d'EDGAR (ATD, CSU), relevés à la main
+general/societes/<ticker>.md                seed versionné : chiffres publiés d'une société absente d'EDGAR (ATD, CSU), relevés à la main;
+                                            écrit par A6 pour les autres actions de l'univers, à partir d'EDGAR (section 4)
 general/actualites/<AAAA>/<MM>/<slug>.md    écrit par A6
 general/donnees/<serie>/<slug>.md           écrit par A6
 general/donnees/features/<ticker-slug>/<as_of>.md   Stock Features : caractéristiques d'un titre à une date, écrites
@@ -353,7 +356,7 @@ data: {}                          # données structurées lues par le code (prof
 
 ### 5.1 Métadonnées de la Knowledge Base
 
-À côté de chaque document qu'il écrit (`general/actualites/`, `general/donnees/`, et ceux de la recherche de la section 11 : `general/faits/`, `general/signaux/`, `general/depots/`, `general/recherches/`), A6 écrit d'abord `<clé du document>.metadata.json` (règle de nommage de Bedrock : `2026-11-12.md.metadata.json`), puis le document (`okf.kb_metadata`). Format S3 de Bedrock Knowledge Bases, attributs filtrables et hors embedding (`includeForEmbedding: false`) :
+À côté de chaque document qu'il écrit (`general/actualites/`, `general/donnees/`, `general/societes/` pour EDGAR, et ceux de la recherche de la section 11 : `general/faits/`, `general/signaux/`, `general/depots/`, `general/recherches/`), A6 écrit d'abord `<clé du document>.metadata.json` (règle de nommage de Bedrock : `2026-11-12.md.metadata.json`), puis le document (`okf.kb_metadata`). Format S3 de Bedrock Knowledge Bases, attributs filtrables et hors embedding (`includeForEmbedding: false`) :
 
 ```json
 { "metadataAttributes": {
@@ -365,7 +368,7 @@ data: {}                          # données structurées lues par le code (prof
 
 - `type` : type OKF. `kind` : `data.kind` (`news`, `series`, `quote`), `features` pour Stock Features.
 - `ticker` : forme canonique, en majuscules, suffixe de bourse avec un point (`SHOP.TO`). Elle est tirée de `data.ticker`, `data.symbol` ou du premier de `data.tickers` (étiquette `shop.to` et slug `shop-to` donnent aussi `SHOP.TO`; `BTC-USD` garde son tiret). Une actualité qui cite plusieurs titres n'est filtrable que par le premier. Absent pour une série macroéconomique.
-- `published_epoch` : date de publication en **secondes UTC depuis l'époque Unix** (entier; une date seule vaut minuit UTC). Pour Stock Features, la plus récente des `published_at` de ses caractéristiques. Absent si la date est inconnue : un filtre `lessThanOrEquals` l'écarte alors, ce qui évite toute anticipation.
+- `published_epoch` : date de publication en **secondes UTC depuis l'époque Unix** (entier; une date seule vaut minuit UTC). Pour Stock Features, la plus récente des `published_at` de ses caractéristiques; pour Company Fundamentals, la plus récente des `published_at` de ses périodes et de ses bilans. Absent si la date est inconnue : un filtre `lessThanOrEquals` l'écarte alors, ce qui évite toute anticipation.
 - Filtres possibles sur S3 Vectors : `equals`, `notEquals`, `in`, `notIn`, comparaisons numériques, `andAll`, `orAll`. Jamais `startsWith` ni `stringContains`.
 - Les seeds `general/methodologie/`, `general/notions/` et `general/societes/` n'ont pas encore de fichier compagnon; Terraform enverrait ceux qui seraient versionnés dans `app/knowledge/general/` (`**/*.metadata.json`).
 

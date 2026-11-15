@@ -45,12 +45,15 @@ from alphaforge.finance.contracts.decision import Fact, Source
 FUNDAMENTALS_PREFIX = "general/societes/"
 NEWS_PREFIX = "general/actualites/"
 FACTS_PREFIX = "general/faits/"
+FILINGS_PREFIX = "general/depots/"
 FUND_FACT_PREFIX = "okf.fund."
 NEWS_FACT_PREFIX = "okf.news."
 ESG_FACT_PREFIX = "okf.esg."
+FILING_FACT_PREFIX = "okf.filing."
 FUNDAMENTALS_TYPE = "Company Fundamentals"
 NEWS_TYPE = "News"
 FACT_TYPE = "Fact"
+FILING_TYPE = "Regulatory Filing"
 TRACE_PLACEHOLDER = "okf.general"  # l'appelant ré-estampille chaque Fact avec l'étape tracée qui le lit
 
 Currency = Literal["CAD", "USD", "EUR"]
@@ -748,6 +751,88 @@ def esg_fact(item: EsgItem, ticker: str, n: int, *, trace_id: str = TRACE_PLACEH
                 sha256=item.sha256,
                 processing="frontmatter : data.esg, data.value (lue au localisateur, relue par A6), "
                 "data.published_at, data.tickers",
+            )
+        ],
+    )
+
+
+# ----------------------------------------------------------------------------------------- dépôts réglementaires
+class FilingItem(BaseModel):
+    """Dépôt réglementaire écrit par A6 (recherche, ``general/depots/<titre>/<numéro>.md``) : formulaire, numéro,
+    date de dépôt et titres concernés. Contexte seulement : un dépôt est signalé, jamais une preuve d'amendement."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    key: StrictStr
+    sha256: StrictStr
+    title: StrictStr = Field(min_length=1)
+    form: StrictStr = Field(min_length=1)
+    accession: StrictStr = Field(min_length=1)
+    published_at: datetime
+    observed_at: date | None = None
+    url: StrictStr | None = None
+    tickers: tuple[str, ...]
+
+    def admissible(self, as_of: date | datetime | str) -> bool:
+        return self.published_at.astimezone(UTC).date() <= as_date(as_of)
+
+
+def _filing_tickers(data: dict[str, Any], key: str) -> tuple[str, ...]:
+    """``data.tickers`` si présent; sinon le dossier de la clé (``general/depots/enb-to/…`` → ``ENB.TO``)."""
+    raw = data.get("tickers")
+    if isinstance(raw, list) and raw:
+        return tuple(dict.fromkeys(canonical_ticker(t) for t in raw))
+    folder = key.removeprefix(FILINGS_PREFIX).split("/", 1)[0]
+    head, sep, tail = folder.rpartition("-")
+    guess = f"{head}.{tail}" if sep and tail in ("to", "v", "ne") else folder
+    return (canonical_ticker(guess),)
+
+
+def parse_filing(doc_text: str, key: str, etag: str) -> FilingItem:
+    """Lit un document « Regulatory Filing » (``research.checks.research_doc``); lève ``OkfFactsError`` sinon."""
+    doc = _frontmatter(doc_text, key, FILING_TYPE)
+    data = doc.frontmatter.get("data")
+    if not isinstance(data, dict):
+        raise OkfFactsError(f"{key} : bloc data absent")
+    values = data.get("values") if isinstance(data.get("values"), dict) else {}
+    published = clock.parse_datetime(data.get("published_at"))
+    if published is None:
+        raise OkfFactsError(f"{key} : data.published_at absent ou illisible ({data.get('published_at')!r})")
+    observed = clock.parse_datetime(data.get("observed_at")) if data.get("observed_at") else None
+    try:
+        return FilingItem(
+            key=key,
+            sha256=etag,
+            title=doc.title,
+            form=str(values.get("form") or ""),
+            accession=str(values.get("accession") or values.get("accessionNumber") or ""),
+            published_at=published,
+            observed_at=observed.date() if observed else None,
+            url=data.get("url"),
+            tickers=_filing_tickers(data, key),
+        )
+    except (ValidationError, OkfFactsError) as exc:
+        detail = _errors(exc) if isinstance(exc, ValidationError) else str(exc)
+        raise OkfFactsError(f"{key} : dépôt refusé ({detail})") from exc
+
+
+def filing_fact(item: FilingItem, ticker: str, n: int, *, trace_id: str = TRACE_PLACEHOLDER) -> Fact:
+    """Fact ``okf.filing.<TICKER>.<n>`` : « formulaire, numéro, date de dépôt ». Contexte, jamais une preuve."""
+    published = item.published_at.astimezone(UTC).date()
+    return Fact(
+        fact_id=f"{FILING_FACT_PREFIX}{canonical_ticker(ticker)}.{n}",
+        label_fr=f"Dépôt réglementaire {item.form} du {published.isoformat()} (numéro {item.accession})",
+        value=item.title[:300],
+        unit="texte",
+        as_of=item.observed_at or published,
+        published=published,
+        status="FAIT",
+        trace_id=trace_id,
+        sources=[
+            Source(
+                dataset=f"okf-filing:{item.key}",
+                url=item.url,
+                sha256=item.sha256,
+                processing="frontmatter : title, data.values.form, data.values.accession, data.published_at",
             )
         ],
     )

@@ -29,20 +29,24 @@ from alphaforge.finance.contracts import Decision, Fact, InvestorProfile, Policy
 from alphaforge.finance.policy.from_profile_view import investor_profile_from_view
 from alphaforge.finance.strategy.okf_facts import (
     FACTS_PREFIX,
+    FILINGS_PREFIX,
     FUNDAMENTALS_PREFIX,
     NEWS_PREFIX,
     CompanyFundamentals,
     EsgItem,
+    FilingItem,
     NewsItem,
     OkfFactsError,
     WrongDocType,
     as_date,
     canonical_ticker,
     esg_fact,
+    filing_fact,
     fundamentals_facts,
     news_fact,
     parse_company_fundamentals,
     parse_esg,
+    parse_filing,
     parse_news,
 )
 from alphaforge.profile.questionnaire import Questionnaire
@@ -157,6 +161,9 @@ class OkfMarketStore:
     - ``esg`` : faits ESG de ``general/faits/`` (« Fact » portant ``data.esg``, écrits par A6 après relecture de la
       valeur dans l'archive) dont ``data.tickers`` contient le titre, publiés au plus tard à ``as_of`` → Facts
       ``okf.esg.*`` au statut FAIT, les plus récents d'abord. Ils entrent dans la version des données.
+    - ``filings`` : documents « Regulatory Filing » de ``general/depots/`` (recherche par experts) qui concernent
+      le titre → Facts ``okf.filing.*`` (formulaire, numéro, date de dépôt), les plus récents d'abord. Contexte :
+      comme une actualité, un dépôt peut être signalé (``flag_only``), jamais justifier un changement du mandat.
 
     Une instance = un lot d'appels (une décision : ``app.py`` en crée une par invocation). Les listes et les
     documents sont lus une fois puis gardés en cache ; ``reset()`` force une relecture. ``inputs`` garde
@@ -183,6 +190,8 @@ class OkfMarketStore:
             self._news_keys: list[str] | None = None
             self._news: dict[str, NewsItem | None] = {}
             self._esg_items: list[EsgItem] | None = None
+            self.filing_inputs: dict[str, str] = {}
+            self._filings: list[FilingItem] | None = None
 
     # ------------------------------------------------------------------ lecture
     def evidence(self, ticker: str, topic: str, as_of) -> list[Fact]:
@@ -198,7 +207,33 @@ class OkfMarketStore:
             return self._news_facts(t, d)
         if topic == "esg":
             return self._esg(t, d)
+        if topic == "filings":
+            return self._filing_facts(t, d)
         raise ValueError(f"sujet de preuve inconnu : {topic!r}")
+
+    def load_filings(self) -> list[FilingItem]:
+        """Lit une fois tout ``general/depots/`` (clé → ETag dans ``filing_inputs``, hors version des données)."""
+        with self._lock:
+            if self._filings is not None:
+                return self._filings
+            found: list[FilingItem] = []
+            for key in self._list(FILINGS_PREFIX, self.filing_inputs):
+                got = self._read(key, self.filing_inputs)
+                if got is None:
+                    continue
+                try:
+                    found.append(parse_filing(got[1], key, got[0]))
+                except WrongDocType:
+                    continue
+                except OkfFactsError as exc:
+                    self.rejected[key] = str(exc)
+            self._filings = found
+            return found
+
+    def _filing_facts(self, ticker: str, as_of: date) -> list[Fact]:
+        items = [i for i in self.load_filings() if ticker in i.tickers and i.admissible(as_of)]
+        items.sort(key=lambda i: (-i.published_at.timestamp(), i.key))
+        return [filing_fact(item, ticker, n) for n, item in enumerate(items[: self.max_news], start=1)]
 
     def _esg(self, ticker: str, as_of: date) -> list[Fact]:
         """Preuves ESG datées d'un titre : rien s'il n'y en a pas, on n'invente aucune controverse."""

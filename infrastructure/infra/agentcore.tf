@@ -88,12 +88,16 @@ locals {
     }
     # A6 relit aussi archive/ : chaque valeur d'un expert y est verifiee avant
     # d'ecrire faits, signaux, depots et syntheses (recherche.tf).
+    # general/societes/ : fondamentaux EDGAR (collect/edgar.py). Les seeds de
+    # Terraform sous ce prefixe (ATD, CSU) sont proteges par un refus explicite
+    # (statement ProtectKnowledgeSeeds, plus bas), en plus du refus du code.
     supervisor = {
       description = "A6, superviseur OKF : valide staging/ et ecrit la base generale."
       s3_read     = ["staging/*", "general/*", "archive/*"]
       s3_write = [
         "staging/*/supervisor/*", "general/actualites/*", "general/donnees/*", "general/index.md",
         "general/faits/*", "general/signaux/*", "general/depots/*", "general/recherches/*",
+        "general/societes/*",
       ]
       s3_list        = ["staging/*", "general/*", "archive/*"]
       knowledge_base = false
@@ -361,6 +365,18 @@ data "aws_iam_policy_document" "agentcore" {
     sid       = "WriteObjects"
     actions   = ["s3:PutObject"]
     resources = [for k in each.value.s3_write : "${aws_s3_bucket.this.arn}/${k}"]
+  }
+
+  # Seeds de la base generale (s3.tf, knowledge_seed) sous un prefixe ou A6
+  # ecrit : refus explicite, qui l'emporte sur WriteObjects.
+  dynamic "statement" {
+    for_each = each.key == "supervisor" && length(local.knowledge_seed_supervisor_keys) > 0 ? [1] : []
+    content {
+      sid       = "ProtectKnowledgeSeeds"
+      effect    = "Deny"
+      actions   = ["s3:PutObject", "s3:DeleteObject"]
+      resources = [for k in local.knowledge_seed_supervisor_keys : "${aws_s3_bucket.this.arn}/${k}"]
+    }
   }
 
   dynamic "statement" {

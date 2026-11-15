@@ -50,7 +50,7 @@ def test_fundamentals_tool_added_to_diversity_and_constraints_only(market):
     got = {lens: _names(lens, ctx) for lens in BEFORE}
     assert got["timeline"] == BEFORE["timeline"] and got["risk"] == BEFORE["risk"]
     for lens in ("diversity", "constraints"):
-        assert got[lens] == [*BEFORE[lens], "fundamentals_evidence"]
+        assert got[lens] == [*BEFORE[lens], "fundamentals_evidence", "filings_evidence"]
 
 
 def test_tool_absorbs_restamped_facts(market):

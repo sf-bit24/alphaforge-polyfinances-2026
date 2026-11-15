@@ -309,7 +309,8 @@ describe("issue #82: a SIN is refused like in the real runtime, other personal d
     const error = await failure(runtime, { action: "followup.reply", client_id: id, message });
     expect(error).toEqual({ code: SIN_REFUSAL.code, message: SIN_REFUSAL.message[locale], details: SIN_REFUSAL.details });
     const journal = KbGetResponse.parse(await runtime.handle(AgentRequest.parse({ action: "kb.get", key: `clients/${id}/journal.md`, client_id: id })));
-    expect(journal.content).not.toContain("046");
+    // The full SIN, with or without separators: the journal holds timestamps, whose digits can contain « 046 ».
+    expect(journal.content).not.toMatch(/046\D?454\D?286/);
   });
 
   it("refuses a SIN in portfolio.submit, and keeps the existing-portfolio step", async () => {

@@ -4,6 +4,7 @@
  * Messages are produced in both languages at once, so a locale change re-renders them.
  */
 import type { Exposures, KnowledgeLevel, Locale } from "@/lib/contract/schemas";
+import { MockError } from "./envelope";
 import { formatMoney, formatPercent } from "./profile";
 import type { L, QuestionDef } from "./questions";
 import { PRICE_DATE } from "./starter";
@@ -23,20 +24,46 @@ export interface Screening {
   offTopic: boolean;
 }
 
+/** Personal data masked by the guardrail; amounts, quantities, prices and dates stay as they are. */
 const PII_PATTERNS: RegExp[] = [
+  // Email address.
   /[\w.+-]+@[\w-]+\.[\w.]+/g,
+  // Account numbers, before the phone pattern can take a part of them.
+  // Digit groups joined by dashes: 123-45678-9, transit-institution-account 12345-003-1234567.
+  /\b\d{3,5}-\d{3,5}-\d{1,12}\b/g,
+  // Digits after an account word with its number marker, on the same line: "compte no 123 45678 9",
+  // "no de compte : 12345", "account #12345", "transit 12345". Without the marker ("mon compte : 50 000",
+  // "compte 2 500 parts"), the number is an amount or a quantity; only the 123 45678 9 form may hold spaces.
+  /(?<=\b(?:(?:compte|account|acct)[ \t]*(?:n[o°º]\.?|#|num[ée]ro|number)|(?:n[o°º]\.?|num[ée]ro)[ \t]*(?:de[ \t]*)?compte|transit|folio)[ \t]*:?[ \t]*)(?:\d{3} \d{5} \d\b|\d[\d-]{3,}\d)(?!\d|[,.]\d)/gi,
+  // Social insurance number (NAS) not written in three separated groups (123456789); those are refused (SIN_PATTERN).
   /\b\d{3}[ -]?\d{3}[ -]?\d{3}\b/g,
+  // Phone number.
   /\b\d{3}[ .-]?\d{3}[ .-]?\d{4}\b/g,
-  /\b\d{7,}\b/g,
+  // Any other long number, unless it is an amount ("1500000 $").
+  /(?<!\$\s?)\b\d{7,}\b(?![.,]\d|\s?\$)/g,
 ];
+
+/**
+ * A SIN in three groups of three digits, refused instead of masked, like in the real runtime: the "nas-canadien"
+ * regex of the guardrail (bedrock.tf) and `SIN_PATTERN` of agentkit.py, which answers `personal_data_error`.
+ */
+const SIN_PATTERN = /\b\d{3}[ -]\d{3}[ -]\d{3}\b/;
+const SIN_REFUSAL: L = {
+  fr: "Votre message contient un renseignement personnel (NAS) : retirez-le, puis renvoyez-le.",
+  en: "Your message contains personal information (SIN): remove it, then send it again.",
+};
 
 const ADVICE = /(dois-je|devrais-je|est-ce que je (dois|devrais)|faut-il (que j'|acheter|vendre)|recommandez|conseillez|should i|do you recommend|would you recommend|tell me (what|which) to)[^.?!]{0,80}(achet|vend|invest|plac|buy|sell|invest)/i;
 const TRANSACTION = /(passe[rz]? (un |l'|des )?ordres?|ex[ée]cute[rz]? (la |une )?transaction|ach[eè]te[rz]?[^.?!]{0,30}pour moi|vend[sz]?[^.?!]{0,30}pour moi|place (an |the )?order|execute (a |the )?trade|buy [^.?!]{0,30}for me|sell [^.?!]{0,30}for me)/i;
 const ON_TOPIC = /(argent|placement|investi|épargne|epargne|retraite|maison|risque|bourse|action|fonds|dette|revenu|urgence|compte|celi|reer|money|invest|saving|retire|house|home|risk|stock|fund|debt|income|emergency|account|tfsa|rrsp|portfolio|portefeuille)/i;
 const OFF_TOPIC = /(météo|meteo|weather|recette|recipe|blague|joke|sport|hockey|film|movie|série télé|tv show)/i;
 
-/** Guardrail on the investor's free text: mask personal data, flag advice requests. */
+/**
+ * Guardrail on the investor's free text: refuse a SIN (`guardrail_blocked`, before anything is read or written),
+ * mask the other personal data, flag advice requests.
+ */
 export function screenMessage(message: string): Screening {
+  if (SIN_PATTERN.test(message)) throw new MockError("guardrail_blocked", SIN_REFUSAL, { reason: "personal_data", entity: "CA_SIN" });
   let text = message;
   let masked = 0;
   for (const pattern of PII_PATTERNS) {

@@ -208,3 +208,34 @@ def test_stress_2022_control_only():
     assert res.status == "optimal" and not any(k.startswith("s2022") for k in res.duals)
     rep = check({"SPY": 0.6, "XBB.TO": 0.4}, p, AS_OF)     # 60/40 a perdu plus de 5 % en 2022
     assert "s2022:max" in rep.blocking_violations
+
+
+# ---------------------------------------------------------------- régressions (revue Devin, PR #2)
+
+def test_all_bounded_portfolio_uses_aggregate_bound():
+    p = policy(universe=["BTC-USD", "ZST.TO"], loss_bounds={"BTC-USD": 0.9}, loss_bounds_source="demo",
+               exposure_overrides={}, limits=[Limit(**lim("c12", "risk", {"measure": "CVAR12M"}, max=0.1))])
+    rep = check({"BTC-USD": 1.0}, p, AS_OF)
+    assert "c12:max" in rep.blocking_violations
+    fact = next(f for f in rep.facts if f.fact_id.endswith("c12:max"))
+    assert fact.value == pytest.approx(0.9)
+
+
+def test_short_outside_universe_is_rejected():
+    rep = check({"SPY": 0.6, "ZST.TO": 0.4, "OUTSIDE": -0.5}, policy(), AS_OF)
+    assert not rep.approved
+    assert "positivite" in rep.blocking_violations and "univers[OUTSIDE]" in rep.blocking_violations
+
+
+def test_forced_liquidation_counts_in_turnover():
+    p = policy(excluded={"NVDA": "demo"}, max_turnover=0.6)
+    res = optimize(p, AS_OF, prev_weights={"NVDA": 0.5, "XBB.TO": 0.5})
+    assert res.status == "infeasible"          # vendre NVDA (0,5) + rééquilibrer dépasse 0,6
+
+
+def test_single_asset_reports_do_not_crash():
+    p = policy(universe=["XBB.TO", "SPY"], excluded={"SPY": "demo"}, exposure_overrides={}, limits=[])
+    win = returns_window(p, AS_OF)
+    rr = risk_report({"XBB.TO": 1.0}, win)
+    assert rr.contrib_vol["XBB.TO"] == pytest.approx(rr.vol_ann, rel=1e-6)
+    assert diversification_report({"XBB.TO": 1.0}, win).effective_n_weights == pytest.approx(1.0)

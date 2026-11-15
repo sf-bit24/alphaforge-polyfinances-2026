@@ -96,15 +96,25 @@ class ReplayModel(BedrockModel):
             if mode == "replay":
                 raise ReplayMiss(f"aucune réponse enregistrée pour le nœud {self.node_id} ({key[:12]})")
 
-        events = []
-        async for ev in super().stream(messages, tool_specs, system_prompt, tool_choice=tool_choice,
-                                       system_prompt_content=system_prompt_content,
-                                       cancel_signal=cancel_signal,
-                                       structured_output_model=structured_output_model, **kwargs):
-            events.append(json.loads(_canon(ev)))      # sérialisable et fidèle à ce qui est rejoué
-            yield ev
+        upstream = super().stream(messages, tool_specs, system_prompt, tool_choice=tool_choice,
+                                  system_prompt_content=system_prompt_content, cancel_signal=cancel_signal,
+                                  structured_output_model=structured_output_model, **kwargs)
         self.last_replayed = False
         _sp.set_attribute("alphaforge.replay.replayed", False)
-        if mode == "record":
-            self.store.put_once(key, {"key": key, "created_utc": datetime.now(UTC).isoformat(),
-                                      "request": canon, "events": events})
+        if mode == "live":
+            async for ev in upstream:
+                yield ev
+            return
+        # record : on bufferise, on publie (écriture unique), puis on émet la version ENREGISTRÉE.
+        # Si un appel concurrent de même clé a gagné, on émet la sienne : la décision et le rejeu
+        # portent alors exactement la même réponse.
+        events = [json.loads(_canon(ev)) async for ev in upstream]
+        rec = {"key": key, "created_utc": datetime.now(UTC).isoformat(), "request": canon, "events": events}
+        if not self.store.put_once(key, rec):
+            winner = self.store.get(key)
+            if winner is not None:
+                events = winner["events"]
+                self.last_replayed = True
+                _sp.set_attribute("alphaforge.replay.replayed", True)
+        for ev in events:
+            yield ev

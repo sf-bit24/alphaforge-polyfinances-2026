@@ -120,14 +120,38 @@ class FileStore:
             return None
 
     def put_once(self, key: str, record: dict) -> bool:
+        """Écrit dans un fichier temporaire, puis publie par lien dur (atomique, sans écrasement) :
+        un lecteur ne voit jamais un fichier à moitié écrit."""
         path = self._path(key)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        try:
-            with open(path, "x", encoding="utf-8") as f:
-                json.dump(record, f, ensure_ascii=False, indent=1, sort_keys=True)
-            return True
-        except FileExistsError:
+        if os.path.exists(path):
             return False
+        tmp = f"{path}.{os.getpid()}.{time.monotonic_ns()}.tmp"
+        try:
+            with open(tmp, "x", encoding="utf-8") as f:
+                json.dump(record, f, ensure_ascii=False, indent=1, sort_keys=True)
+                f.flush()
+                os.fsync(f.fileno())
+            try:
+                os.link(tmp, path)               # échoue si path existe : pas d'écrasement
+                return True
+            except FileExistsError:
+                return False
+            except OSError:                      # système de fichiers sans lien dur
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+                os.close(fd)
+                os.replace(tmp, path)
+                return True
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+
+
+def _meta(record: dict, field: str) -> str:
+    """Champ d'index commun aux enregistrements llm_call (à plat) et ReplayModel (sous « config »)."""
+    req = record.get("request") or {}
+    val = req.get(field) or (req.get("config") or {}).get(field)
+    return str(val) if val is not None else "inconnu"
 
 
 class DynamoS3Store:
@@ -148,6 +172,8 @@ class DynamoS3Store:
         return json.loads(obj["Body"].read())
 
     def put_once(self, key: str, record: dict) -> bool:
+        if self.get(key) is not None:
+            return False
         s3_key = f"{self.prefix}{key[:2]}/{key}.json"
         put = self.s3.put_object(Bucket=self.bucket, Key=s3_key, ContentType="application/json",
                                  Body=json.dumps(record, ensure_ascii=False, sort_keys=True).encode())
@@ -156,8 +182,8 @@ class DynamoS3Store:
                               Item={"pk": {"S": key}, "s3_key": {"S": s3_key},
                                     "s3_version": {"S": put.get("VersionId", "null")},
                                     "created_utc": {"S": record["created_utc"]},
-                                    "model_id": {"S": record["request"]["model_id"]},
-                                    "node_id": {"S": record["request"]["node_id"]}})
+                                    "model_id": {"S": _meta(record, "model_id")},
+                                    "node_id": {"S": _meta(record, "node_id")}})
             return True
         except self.ddb.exceptions.ConditionalCheckFailedException:
             return False

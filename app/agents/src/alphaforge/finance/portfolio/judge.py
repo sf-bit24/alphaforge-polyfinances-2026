@@ -102,17 +102,24 @@ def check(weights: dict[str, float], policy: PolicySpec, as_of,
         if violated and blocking_flag:
             blocking.append(rule_id)
 
-    # 1. Structure : actifs connus, exclusions, positivité, somme = 1
-    stray = sorted(a for a, x in weights.items() if x > TOL and a not in comp.assets)
+    # 1. Structure, sur TOUS les poids fournis (y compris hors univers) : finitude, actifs connus,
+    #    exclusions, positivité, somme = 1. Le vecteur investissable ne sert qu'après.
+    all_w = {a: float(x) for a, x in weights.items()}
+    nonfinite = sorted(a for a, x in all_w.items() if not np.isfinite(x))
+    for a in nonfinite:
+        add(f"fini[{a}]", f"Poids non numérique pour {a}", "définition d'un portefeuille", 0.0, -1.0, "poids",
+            True, False, True, "poids proposé")
+    finite = {a: x for a, x in all_w.items() if np.isfinite(x)}
+    stray = sorted(a for a, x in finite.items() if abs(x) > TOL and a not in comp.assets)
     for a in stray:
         reason = policy.excluded.get(a, "hors univers investissable")
         add(f"univers[{a}]", f"{a} n'est pas investissable : {reason}", "policy.universe/excluded",
-            0.0, weights[a], "poids", True, False, True, "poids proposé")
-    w = np.array([float(weights.get(a, 0.0)) for a in comp.assets])
-    neg = float(min(w.min(), 0.0))
+            0.0, finite[a], "poids", True, False, True, "poids proposé")
+    w = np.array([finite.get(a, 0.0) for a in comp.assets])
+    w_min = min(finite.values()) if finite else 0.0
     add("positivite", "Aucune vente à découvert (poids minimal)", "simulation long-only", 0.0,
-        float(w.min()), "poids", neg < -TOL, False, True, "min des poids")
-    total = float(w.sum() + sum(weights.get(a, 0.0) for a in stray))
+        float(w_min), "poids", w_min < -TOL, False, True, "min de tous les poids fournis")
+    total = float(sum(finite.values()))
     add("somme_poids", "Somme des poids", "définition d'un portefeuille", 1.0, total, "poids",
         abs(total - 1) > TOL, True, True, "somme des poids")
 
@@ -151,12 +158,16 @@ def check(weights: dict[str, float], policy: PolicySpec, as_of,
         violated_override = None
         if rr.measure == "CVAR12M":       # contrôle seulement, sur l'historique long
             lh = long_hist()
-            val = cvar_rolling(lh.returns.to_numpy(), 12, policy.cvar_beta) + lh.excluded_bound
+            series = lh.returns.to_numpy()
+            # Portefeuille entièrement couvert par des bornes : la borne agrégée est la mesure.
+            base_val = 0.0 if series.size == 0 else cvar_rolling(series, 12, policy.cvar_beta)
+            val = base_val + lh.excluded_bound
             what = f"CVaR {policy.cvar_beta:.0%} des rendements composés 12 mois glissants"
             status, proc = lh.status, long_desc(lh, what)
         elif rr.measure == "MDD" and policy.history_proxies:
             lh = long_hist()
-            val = bt_metrics.max_drawdown(lh.returns.to_numpy()) + lh.excluded_bound
+            series = lh.returns.to_numpy()
+            val = (0.0 if series.size == 0 else bt_metrics.max_drawdown(series)) + lh.excluded_bound
             status, proc = lh.status, long_desc(lh, "drawdown maximal composé")
         elif rr.measure == "STRESS_2022":
             v2022, proc = loss_2022(held_w, policy.currency)
@@ -167,6 +178,9 @@ def check(weights: dict[str, float], policy: PolicySpec, as_of,
         else:
             val = _risk_value(rr.measure, r, policy.cvar_beta)
             proc = f"{rr.measure} historique {win.start.date()}–{win.end.date()} ({win.n_obs} mois)"
+        if violated_override is None and not np.isfinite(val):
+            violated_override = True       # mesure indisponible sur une limite = refus prudent
+            proc += " ; MESURE INDISPONIBLE (historique insuffisant) : refus prudent"
         viol = violated_override if violated_override is not None else val > rr.hi + TOL
         add(f"{rr.rule_id}:max", rr.limit.description_fr or f"{rr.measure} maximal", rr.limit.derived_from,
             rr.hi, val if val == val else -1.0, "perte (fraction)" if rr.measure != "VOL" else "volatilité annualisée",

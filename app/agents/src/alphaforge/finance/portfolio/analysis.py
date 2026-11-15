@@ -79,7 +79,7 @@ def risk_report(weights: dict[str, float], win: ReturnWindow, beta: float = 0.95
     r = (R @ w).to_numpy()
     var_m, cvar_m = bt_metrics.var_cvar(r, alpha=1 - beta)
 
-    cov = np.cov(R.to_numpy(), rowvar=False, ddof=1)
+    cov = np.atleast_2d(np.cov(R.to_numpy(), rowvar=False, ddof=1))
     sigma_m = float(np.sqrt(w @ cov @ w))
     mrc = cov @ w / sigma_m if sigma_m > 0 else np.zeros_like(w)
     contrib_vol = {a: float(w[i] * mrc[i] * np.sqrt(P)) for i, a in enumerate(assets)}
@@ -115,7 +115,7 @@ def diversification_report(weights: dict[str, float], win: ReturnWindow,
     R = win.returns
     assets = list(R.columns)
     w = _w(weights, assets)
-    cov = np.cov(R.to_numpy(), rowvar=False, ddof=1)
+    cov = np.atleast_2d(np.cov(R.to_numpy(), rowvar=False, ddof=1))
     sig = np.sqrt(np.diag(cov))
     sp = float(np.sqrt(w @ cov @ w))
     share = (w * (cov @ w)) / (sp ** 2) if sp > 0 else np.zeros_like(w)

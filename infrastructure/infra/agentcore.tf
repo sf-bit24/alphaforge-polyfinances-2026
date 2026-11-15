@@ -56,6 +56,16 @@ locals {
       knowledge_base = false
       guardrail      = false
     }
+    # tldoole (tldoole.tf) : A7 lit le journal et le portefeuille, A8 ecrit les
+    # elements des videos sous clients/<id>/tldoole/.
+    tldoole = {
+      description    = "tldoole : A7 detecte les concepts mal compris, A8 scenarise les videos (Polly, MediaConvert par Step Functions)."
+      s3_read        = ["clients/*/profil.md", "clients/*/journal.md", "clients/*/portefeuille-existant.md", "clients/*/tldoole/*"]
+      s3_write       = ["clients/*/tldoole/*"]
+      s3_list        = ["clients/*/profil.md", "clients/*/journal.md", "clients/*/portefeuille-existant.md", "clients/*/tldoole/*"]
+      knowledge_base = true
+      guardrail      = true
+    }
   }
 
   # Profil d'inference inter-regions (us.) et modele de fondation qu'il route.
@@ -74,6 +84,12 @@ locals {
     ALPHAFORGE_KB_ID             = aws_bedrockagent_knowledge_base.general.id
     ALPHAFORGE_GUARDRAIL_ID      = aws_bedrock_guardrail.cadre.guardrail_id
     ALPHAFORGE_GUARDRAIL_VERSION = aws_bedrock_guardrail_version.cadre.version
+  }
+
+  # Variables propres a un role, fusionnees apres les variables communes.
+  agentcore_role_env = {
+    profile = local.agentcore_profile_env
+    tldoole = merge(local.agentcore_profile_env, local.tldoole_runtime_env)
   }
 }
 
@@ -274,7 +290,7 @@ resource "aws_bedrockagentcore_agent_runtime" "this" {
   environment_variables = merge(
     local.agentcore_common_env,
     { AGENT_ROLE = each.key },
-    each.key == "profile" ? local.agentcore_profile_env : {},
+    try(local.agentcore_role_env[each.key], {}),
   )
 
   network_configuration {

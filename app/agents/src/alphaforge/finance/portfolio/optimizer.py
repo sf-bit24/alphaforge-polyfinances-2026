@@ -87,7 +87,7 @@ def _mu(policy: PolicySpec, win: ReturnWindow) -> tuple[np.ndarray | None, str]:
 # --------------------------------------------------------------------------- problème
 
 def _build(policy: PolicySpec, comp: CompiledPolicy, R: np.ndarray, mu: np.ndarray,
-           prev: np.ndarray | None, skip: set[str]):
+           prev: np.ndarray | None, skip: set[str], prev_outside: float = 0.0):
     t, n = R.shape
     w = cp.Variable(n, name="w")
     named: dict[str, cp.Constraint] = {}
@@ -103,7 +103,7 @@ def _build(policy: PolicySpec, comp: CompiledPolicy, R: np.ndarray, mu: np.ndarr
         if row.lo is not None:
             named[f"{row.rule_id}:min"] = x >= row.lo
 
-    sample_cov = np.cov(R, rowvar=False, ddof=1)
+    sample_cov = np.atleast_2d(np.cov(R, rowvar=False, ddof=1))
     for rr in comp.risk_rows:
         if rr.rule_id in skip or rr.measure in CONTROL_ONLY_MEASURES:
             continue          # CVAR12M : contrôlée par le Judge, resserrer la CVaR mensuelle si besoin
@@ -124,7 +124,9 @@ def _build(policy: PolicySpec, comp: CompiledPolicy, R: np.ndarray, mu: np.ndarr
 
     turnover = None
     if prev is not None:
-        turnover = cp.norm1(w - prev)
+        # prev_outside : poids détenus hors de l'univers investissable (exclus ou retirés),
+        # forcément vendus : ils comptent dans la rotation et dans les frais.
+        turnover = cp.norm1(w - prev) + prev_outside
         if policy.max_turnover is not None:
             named["max_turnover:max"] = turnover <= policy.max_turnover
     cost = (policy.transaction_cost_bps / 1e4) * turnover if turnover is not None else 0
@@ -175,19 +177,20 @@ def optimize(policy: PolicySpec, as_of, prev_weights: dict[str, float] | None = 
     win = window or returns_window(policy, as_of, comp.assets)
     R = win.returns[comp.assets].to_numpy()
     mu, mu_src = _mu(policy, win)
-    prev = None
+    prev, prev_outside = None, 0.0
     if prev_weights is not None:
         prev = np.array([float(prev_weights.get(a, 0.0)) for a in comp.assets])
+        prev_outside = float(sum(abs(float(x)) for a, x in prev_weights.items() if a not in comp.assets))
 
     base = dict(objective=policy.objective, risk_measure=policy.risk_measure, mu_source=mu_src,
                 warnings=list(comp.warnings), as_of=str(win.as_of.date()),
                 window=(str(win.start.date()), str(win.end.date())), n_obs=win.n_obs,
                 data_version=win.data_version)
 
-    prob, w, risk, named = _build(policy, comp, R, mu, prev, skip=set())
+    prob, w, risk, named = _build(policy, comp, R, mu, prev, skip=set(), prev_outside=prev_outside)
     solver = _solve(prob)
     if prob.status not in ("optimal", "optimal_inaccurate") or w.value is None:
-        culprits = _diagnose(policy, comp, R, mu, prev)
+        culprits = _diagnose(policy, comp, R, mu, prev, prev_outside)
         return OptimizationResult(status="infeasible" if prob.status == "infeasible" else "error",
                                   weights={}, risk_value=None, expected_return_ann=None,
                                   infeasible_rules=culprits, solver=solver,
@@ -211,13 +214,13 @@ def optimize(policy: PolicySpec, as_of, prev_weights: dict[str, float] | None = 
                               message=None if prob.status == "optimal" else prob.status, **base)
 
 
-def _diagnose(policy, comp, R, mu, prev) -> list[str]:
+def _diagnose(policy, comp, R, mu, prev, prev_outside: float = 0.0) -> list[str]:
     """Règles dont le retrait (une à une) rend le problème réalisable."""
     rules = sorted({r.parent_rule_id for r in comp.rows}
                    | {r.rule_id for r in comp.risk_rows if r.measure not in CONTROL_ONLY_MEASURES})
     culprits = []
     for rid in rules:
-        prob, w, _, _ = _build(policy, comp, R, mu, prev, skip={rid})
+        prob, w, _, _ = _build(policy, comp, R, mu, prev, skip={rid}, prev_outside=prev_outside)
         _solve(prob)
         if prob.status in ("optimal", "optimal_inaccurate"):
             culprits.append(rid)

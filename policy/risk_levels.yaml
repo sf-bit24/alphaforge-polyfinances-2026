@@ -1,0 +1,267 @@
+# policy/risk_levels.yaml — AlphaForge AI, v0.2.0 RECONCILIEE (simulation seulement, jamais un conseil)
+# Fusion : architecture profil -> R de la v0.1 (PhD1, research/calibration/review (proposition théorique v0.1, non versionnée))
+#          + budgets EMPIRIQUES (PhD2, research/calibration/out/*.csv, data_sha256 008f122d5da4f8f7, dernier mois 2026-09).
+# Conforme a contracts/policy.py (PolicySpec 0.2.0-draft) : chaque entree de limits_template -> 1 Limit par niveau.
+# Conventions : pertes en fraction positive (0.31 = -31 %), base CAD, rendements MENSUELS (engine/metrics).
+# Abreviations des sources :
+#   G5  = research/calibration/out/calib_grid5.csv   (familles CAD77_main, CAD71_USeq, USD46 ; grille 5 %)
+#   HC  = research/calibration/out/halfcash_env.csv  (CAD77_hc, CAD71_hc, USD46_hc ; revenu fixe 50/50 obligations/T-bills)
+#   TM  = research/calibration/out/tails_monthly.csv ; TD = tails_daily_starter.csv
+#   ENV(e, col) = max sur les 3 familles de la colonne col a la part actions e (G5 si e > 10, HC si e <= 10)
+#   Script de recalcul : research/calibration/review/v02.py (budgets), research/calibration/review/persona_v02.py (personas)
+version: "0.2.0"
+schema: "PolicySpec 0.2.0-draft"
+supersedes: "0.1.0 (PhD1) + bandes PhD2"
+
+# ---------------------------------------------------------------------------------------------
+# 1. MESURES (identiques a engine/metrics ; qui optimise, qui controle)
+# ---------------------------------------------------------------------------------------------
+measurement:
+  CVAR:    {horizon: monthly, beta: 0.95, used_by: [optimizer, judge],
+            scenarios: "historique mensuel raccorde aux history_proxies, 1977-01 -> dernier mois (lookback_months: 597)"}
+            # Si l'optimiseur garde lookback_months=120 sur tickers reels : CVaR mensuelle ~0.93x celle du long
+            # historique (e60 : 4.64 % vs 4.97 %, research/calibration/review/check.py) -> la contrainte est un peu laxiste ; le Judge rattrape (CVAR12M).
+  CVAR12M: {horizon: "12 mois glissants chevauchants, rendements composes", beta: 0.95, used_by: [judge], blocking: true,
+            series: "portefeuille a poids constants, reequilibre mensuel, raccorde aux proxys, CAD, depuis max(1971-02, debut des proxys)",
+            no_proxy_rule: "actifs sans proxy (crypto) EXCLUS de la serie ; borne ajoutee : + sum_j w_j * delta_j (sous-additivite et homogeneite de la CVaR, perte <= delta_j p.s.)"}
+            # NE PAS calculer sur l'intersection des dates : BTC tronquerait l'echantillon a 2014-10 (perte de 1973-74, 2000-02, 2008).
+            # Pas d'heuristique b/sqrt(t) : ENV CVaR12m/CVaRm = 1.95 a 2.67 selon e (G5), pas sqrt(12)=3.46, et non constant.
+  MDD:     {used_by: [judge], blocking: true, series: "meme serie raccordee que CVAR12M ; mensuel (fin de mois)",
+            no_proxy_rule: "+ sum_j w_j * delta_j (approximation prudente ; la MDD n'est pas sous-additive en general)"}
+  VOL:     {annualized: true, ddof: 1, used_by: [judge], blocking: false}   # redondante avec CVAR ; affichage/coherence seulement
+  rounding: {vol: 0.005, cvar_m: 0.001, cvar_12m: 0.005, mdd: 0.005, s2022: 0.005, rule: "arrondi SUPERIEUR de ENV(e_max)"}
+  # Choix : budget = ENV(e_max) arrondi au-dessus => le portefeuille de reference a e_max est faisable, la bande d'actions
+  # est la contrainte qui lie ; les limites de risque sont des garde-fous de COMPOSITION (duree, concentration, crypto).
+  # Pas de decote supplementaire sur les budgets : ENV = pire de 3 histoires (dont USD 1946+, plus dure que le vecu CAD) ;
+  # bootstrap par blocs 24 m (CAD77, e60) : CVaR12m IC90 % = [5.4 %, 13.7 %], ENV = 13.5 % est deja au bord superieur.
+  # La decote (survivance, suivi quotidien) est appliquee cote DOLLARS : voir dollar_rule.daily_buffer.
+
+reference_portfolios:
+  N0: "e actions (50 % CA_EQ / 50 % US_MKT), (1-e) = 50 % CA_GOV_10Y + 50 % CA_TBILL"   # HC ; calib3.py
+  N1_N5: "e actions (50/50 CA_EQ/US_MKT ou 100 % US_MKT pour CAD71/USD46), (1-e) = 75 % gov 10 ans + 25 % T-bills, reequilibre mensuel"  # G5 ; calib.py FAM
+stress_informational: {usd_1929_32_mdd: {e40: 0.44, e60: 0.62, e80: 0.75, e100: 0.84}}   # calib_all.csv USD26 dd_1929_32 ; affiche, jamais un budget
+
+# ---------------------------------------------------------------------------------------------
+# 2. NIVEAUX (6) : coupures sur R, bande d'actions, budgets
+#    actions = groupe "croissance" = classes equity_us, equity_ca, etf_equity, sector_us, equity_single, crypto
+# ---------------------------------------------------------------------------------------------
+levels:
+  hysteresis: 3            # PhD1, conserve
+  R_cutoffs: [15, 30, 45, 60, 75]   # PhD1, conserve (ordinal, non calibre : voir hypotheses ouvertes)
+  N0: {label: "Preservation", R: [0, 15], equity: [0.00, 0.10], cash_like_min: 0.50,
+       vol: 0.040,     # HC vol @e10 = 0.0357 (CAD77_hc 0.036)
+       cvar_m: 0.015,  # HC cvar95_m @e10 = 0.0144
+       cvar_12m: 0.025,# HC cvar95_12m @e10 = 0.0246 (CAD77_hc/CAD71_hc)
+       mdd: 0.090,     # HC mdd @e10 = 0.0899 (CAD71_hc)
+       s2022: 0.060,   # HC -y2022 @e10 = 0.0557 (USD46_hc)
+       L_plan: 0.130}  # mdd ENV + daily_buffer (0.0899 + 0.04)
+  N1: {label: "Prudent", R: [15, 30], equity: [0.10, 0.25],
+       vol: 0.055, cvar_m: 0.027, cvar_12m: 0.055, mdd: 0.140, s2022: 0.100, L_plan: 0.178}
+       # G5 @e25 : vol 0.0545 (CAD77_main) | cvar95_m 0.0267 | cvar95_12m 0.0522 | mdd 0.1378 | y2022 0.0984 (USD46)
+  N2: {label: "Prudent-modere", R: [30, 45], equity: [0.25, 0.40],
+       vol: 0.070, cvar_m: 0.036, cvar_12m: 0.085, mdd: 0.215, s2022: 0.120, L_plan: 0.254}
+       # G5 @e40 : 0.0676 | 0.0355 | 0.0812 | 0.2135 | 0.1178
+  N3: {label: "Equilibre", R: [45, 60], equity: [0.40, 0.60],
+       vol: 0.095, cvar_m: 0.054, cvar_12m: 0.140, mdd: 0.310, s2022: 0.145, L_plan: 0.349}
+       # G5 @e60 : 0.0916 | 0.0535 | 0.1354 | 0.3087 (CAD71_USeq, 1973-74) | 0.1443
+  N4: {label: "Croissance", R: [60, 75], equity: [0.60, 0.80],
+       vol: 0.120, cvar_m: 0.073, cvar_12m: 0.195, mdd: 0.415, s2022: 0.175, L_plan: 0.451}
+       # G5 @e80 : 0.1198 | 0.0725 | 0.1907 | 0.4110 | 0.1715
+  N5: {label: "Croissance elevee", R: [75, 100], equity: [0.80, 1.00],
+       vol: 0.150, cvar_m: 0.092, cvar_12m: 0.245, mdd: 0.505, s2022: 0.200, L_plan: 0.543}
+       # G5 @e100 : 0.1488 | 0.0917 | 0.2447 | 0.5031 | 0.1992
+  # Controle externe : CAD 1971-02, 60 % US_MKT / 40 % CA_GOV_10Y -> CVaR95-12m 13.0 % (implementeur 13.3 % a 2026-10) <= N3 0.140 ;
+  # 100 % US_MKT -> 23.4 % (impl. 23.6 %) <= N5 0.245. Recalcul : research/calibration/review/s2.py.
+  budgets_when_capped: "si e_cap < e_max(niveau) : budgets = arrondi_sup(ENV(e_cap)) (meme regle, meme fichier)"
+
+# Plafond d'horizon (NOUVEAU) : T = annees avant le 1er retrait du seau risque.
+# Regle : niveau max tel que ENV ploss_{h}y (probabilite de perte NOMINALE sur h ans, G5) <= 10 % a e_max, h <= T.
+horizon_cap:
+  - {T_lt: 1,  level_max: N0}
+  - {T_lt: 3,  level_max: N1}   # N1 @e25 ploss_1y 0.094
+  - {T_lt: 5,  level_max: N2}   # N2 @e40 ploss_3y 0.046 (N3 @e60 ploss_3y 0.101 > 0.10)
+  - {T_lt: 10, level_max: N4}   # N3 @e60 ploss_5y 0.023 ; N4 @e80 ploss_5y 0.097
+  - {T_lt: null, level_max: N5} # N5 @e100 ploss_10y 0.077 (ploss_5y 0.135)
+  # Afficher aussi la probabilite de perte REELLE (ploss_real_*, ~0.27 a 1 an pour tout e) : plus honnete.
+
+# ---------------------------------------------------------------------------------------------
+# 3. PROFIL -> R (PhD1 conserve tel quel, sauf le plafond d'horizon ci-dessus)
+# ---------------------------------------------------------------------------------------------
+capacity:   # C = 100 * prod_k max(c_k, 0.05)^a_k ; NB : partiellement compensatoire (0.05^0.30 = 0.41), d'ou horizon_cap
+  weights: {H: 0.30, A: 0.20, E: 0.15, D: 0.15, I: 0.10, L: 0.10}
+  horizon: {T_zero: 2, T_full: 15}
+  emergency_req_months: {stable: 3, saisonnier: 6, variable: 6, erratique: 12, retraite_ou_55plus: 6}
+  withdrawal: {q_max: 0.045, phi_dep: 0.8}            # HYPOTHESE (Bengen, a verifier pour le Canada)
+  income_stability: {stable: 1.0, saisonnier: 0.75, variable: 0.55, erratique: 0.30, missing: 0.30, retired: "0.3 + 0.7*pi"}
+  employer_equity_haircut: 0.85
+  debt: {high_cost_rate: 0.08, high_cost_cap: 40}
+  absorption_full: 0.40
+  hard_caps: {emergency_lt_1_month: 30, besoin_underfunded: 15}
+  never_exceed_capacity_assessed: true
+tolerance:   # PhD1 conserve ; parametres non calibres psychometriquement (HYPOTHESE)
+  w_declared: 1.0
+  w_tested: 2.0
+  disagreement: {free: 10, full: 40}
+  conservative_prior: 25
+  default_confidence: {declared: 0.5, tested: 0.8}
+  composure: {slack: 15, slope: 0.5, missing_penalty: 5}
+  flag_penalty: {per_flag: 5, max: 15}
+  low_composure_cdar: {threshold: 40, action: "emettre risk.cdar_m (meme regle que biases.aversion_perte)"}
+R: "min(T3, C) - penalites ; niveau = min(niveau(R), horizon_cap(T), plafonds de seau, plafonds de statut)"
+
+# ---------------------------------------------------------------------------------------------
+# 4. REGLE DES DOLLARS (remplace le scaling x l*/crash_L de la v0.1)
+# ---------------------------------------------------------------------------------------------
+dollar_rule:
+  daily_buffer: 0.04       # TD understate_pp : 0.6 a 5.3 pts (SPY CAD 3.6, TSLA 5.1) ; question a trancher (ouverte)
+  L_plan: "L_plan(e) = ENV(e, mdd) + daily_buffer"        # perte sommet-creux de planification, comparable a la question posee
+  l_declared: "min(max_acceptable_loss_pct, max_acceptable_loss_cad / W)"
+  l_cap: "min(1 - q/q_max, 1 - (1+mu_recovery)^(-T_risk))" # PhD1, mu_recovery 0.04 (HYPOTHESE)
+  l_star: "min(L_plan(e_max(niveau)), l_declared, l_cap)"
+  e_cap: "max{e dans {0,5,...,e_max(niveau)} : L_plan(e) <= l_star}"     # inversion de la courbe empirique
+  level_after: "niveau dont la bande contient e_cap (e_min < e_cap <= e_max ; e_cap = 0 -> N0)"
+  protection: "si L_plan(0) = 0.144 > l_star : statut PROTECTION, renvoi humain"
+  months_display: true     # afficher l_star * W / M (mois de depenses) et la perte 1929-32 informative
+
+# ---------------------------------------------------------------------------------------------
+# 5. SATELLITES : w_j <= floor_0.25%( min(cap_abs, phi_j * l_star / delta_j) ) ; delta = MDD de planification
+# ---------------------------------------------------------------------------------------------
+satellites:
+  single_name: {delta: 0.80, phi: 0.10, cap_abs: 0.05, min_level: N1, total_phi: 0.25}
+    # delta : p75 des MDD mensuelles longues des 16 actions du starter = 0.78 (TM ; mediane 0.63, max AMZN 0.93) + daily
+    # cap_abs 5 % : PhD2 ; total = floor(total_phi * l_star / delta) (somme des titres individuels)
+  crypto: {delta: 0.90, phi: 0.04, cap_abs: {N4: 0.020, N5: 0.025}, min_level: N4, requires_tilt: true,
+           cvar_m_proxy: 0.55}
+    # Borne comonotone (pire cas) : 2 % de crypto a N4 retire 1.1 pt de cvar_m (0.073 -> 0.062) et 1.8 pt de cvar_12m,
+    # soit ~6 a 13 pts d'actions coeur. Prix explicite de l'absence de proxy (hypothese ouverte : proxy stresse).
+    # delta : ETH MDD 0.898, BTC 0.744 (weight_caps.csv mdd_used) ; cvar_m_proxy = pire mois ETH -0.533 (TM worst_month)
+    # => w_crypto * delta <= 1.8 a 2.2 pts de W ; PhD2 1-2.5 % ; min_level N4 (pas N2/N3) : CVaR12m BTC 0.64 / ETH 0.80
+  sandbox: {delta: 0.90, phi: 0.05, cap_abs: 0.03, months_cap: 3, min_level: N1, cooldown_days: 3}
+    # w <= min(3 %, 3*M/W, phi*l_star/delta) ; un titre du bac a sable respecte AUSSI single_name
+  theme_tech: {s_ref: 0.44, delta: 0.80, phi: 0.10, familiarity_phi: 0.05}
+    # cap = e_cap * s_ref + phi * l_star / delta ; s_ref = look-through tech US_MKT 0.4355 (assets.csv, 2026-09)
+    # (v0.1 s_bench 0.25 rendait SPY seul infaisable) ; delta = MDD US_IND_BUSEQ 0.777 / QQQ 0.794 (TM)
+exposure_overrides:   # requis : sans eux QQQ et XIU.TO comptent 0 tech (README backtest, point 5)
+  QQQ:    {tech: {value: 0.60, status: HYPOTHESE, source: "a remplacer par fiche Invesco datee"}}
+  XIU.TO: {tech: {value: 0.10, status: HYPOTHESE, source: "a remplacer par fiche iShares datee"}}
+
+# ---------------------------------------------------------------------------------------------
+# 6. COMPOSITION (anti-concentration du min_risk) — HYPOTHESES DE CONSTRUCTION, formules deterministes
+# ---------------------------------------------------------------------------------------------
+composition:
+  etf_equity_each_max: "max(0.10, 0.6 * e_cap)"                 # force >= 2 FNB actions ; reference 50/50 CA/US
+  etf_bond_each_max:   "ceil_5%(0.65 * (1 - e_min))"            # XBB.TO, AGG, TLT (pas ZST.TO) ; ref. e_max faisable
+  cash_like_max:       "N0: 1.0 ; sinon 0.5 * (1 - e_min)"      # ~2x la part T-bills de reference ; evite la barre actions+cash
+  long_duration_max:   {N0: 0.0, N1: 0.05, N2: 0.10, N3: 0.10, N4: 0.10, N5: 0.10}  # TLT~UST_20Y : MDD 0.416, 2022 -0.209 CAD (s2.py)
+  gold_max:            {N0: 0.05, N1: 0.05, N2: 0.10, N3: 0.10, N4: 0.10, N5: 0.10} # GOLD CAD 1971+ MDD 0.513, CVaR12m 0.263
+  forbidden_all: [leveraged_etf, inverse_etf, options, margin, short]
+
+buckets:   # PhD1 conserve (seaux par objectif ; CVaR sous-additive => somme des budgets = borne)
+  rules:
+    - {priority: besoin, T_max: 3, level_cap: N0}
+    - {priority: besoin, T_max: 5, level_cap: N1}
+    - {priority: envie,  T_max: 3, level_cap: N1}
+    - {priority: envie,  T_max: 5, level_cap: N2}
+  withdrawal_reserve_years: 3      # 3 ans de retraits nets debutant dans <= 5 ans -> seau N1
+knowledge:
+  debutant: {single_name_cap: 0.02, sandbox_mult: 0.5, crypto_mult: 0.5, crypto_vehicle: etf_only}
+  intermediaire: {}
+  avance: {}
+  missing: debutant
+status:
+  completeness_min: 0.70
+  must_have: [goals.horizon, investable_wealth]
+  INCOMPLETE: {level_cap: N2, single_name: 0, crypto: 0, sandbox: 0}
+  PROTECTION: {level: N0, single_name: 0, crypto: 0, sandbox: 0, decision_kind: protection, human_referral: true}
+household: {min_tolerance: "min des membres", par_objectif: "min des decideurs du seau", capacity: "faits du menage agreges"}
+biases:    # resserrer seulement (test de monotonie)
+  FOMO: {sandbox_only: true, cooldown_days: 3, repeat_request_30d: no_increase}
+  surconfiance: {w_tested: 3.0, declared_confidence_mult: 0.5}
+  aversion_perte: {add_measure: CDAR, cdar_m_max: "cvar_m"}   # CDaR mensuelle <= cvar_m du niveau (HYPOTHESE, non calibree)
+  familiarite: {employer_ticker_cap_mult: 0.5, theme_phi: 0.05}
+
+# ---------------------------------------------------------------------------------------------
+# 7. PROXYS D'HISTORIQUE (PolicySpec.history_proxies ; status HYPOTHESE pour tous)
+#    Source : research/backtest/README.md "Proxys et couverture" + data/processed/assets.csv (proxy_for_ticker, universe_tickers)
+#    Choix : actions individuelles -> industrie Ken French (queue plus dure que CA_EQ) ; CA_EQ = repli.
+# ---------------------------------------------------------------------------------------------
+history_proxies:
+  XIU.TO:  {proxy: CA_EQ,        source: "assets.csv proxy_for_ticker ; corr 0.9835 (README)"}
+  SPY:     {proxy: US_MKT,       source: "assets.csv proxy_for_ticker ; corr 0.9874"}
+  ESGV:    {proxy: US_MKT,       source: "assets.csv ; sans filtre ESG avant 2018-10"}
+  QQQ:     {proxy: US_IND_BUSEQ, source: "assets.csv 'US_IND_BUSEQ(partial);US_MKT' ; choix prudent, corr 0.9819"}
+  XBB.TO:  {proxy: CA_GOV_10Y,   source: "assets.csv ; corr 0.5843, volatilite du proxy sous-estimee (taux moyens mensuels)"}
+  ZST.TO:  {proxy: CA_TBILL,     source: "assets.csv ; corr 0.4866"}
+  AGG:     {proxy: UST_5Y,       source: "assets.csv 'UST_5Y;CORP_AAA' ; poche credit ignoree"}
+  TLT:     {proxy: UST_20Y,      source: "assets.csv ; corr 0.9870"}
+  GLD:     {proxy: GOLD,         source: "assets.csv ; non informatif avant 1975 (README point 3)"}
+  RY.TO:   {proxy: US_IND_MONEY, source: "README 'US_IND_MONEY / CA_EQ'"}
+  TD.TO:   {proxy: US_IND_MONEY, source: "README"}
+  MFC.TO:  {proxy: US_IND_MONEY, source: "README"}
+  ENB.TO:  {proxy: US_IND_ENRGY, source: "README 'US_IND_ENRGY, US_IND_UTILS / CA_EQ' (energie = plus prudent)"}
+  CNQ.TO:  {proxy: US_IND_ENRGY, source: "README"}
+  CNR.TO:  {proxy: US_IND_OTHER, source: "README"}
+  FTS.TO:  {proxy: US_IND_UTILS, source: "README"}
+  ATD.TO:  {proxy: US_IND_SHOPS, source: "README"}
+  SHOP.TO: {proxy: US_IND_BUSEQ, source: "README"}
+  CSU.TO:  {proxy: US_IND_BUSEQ, source: "README"}
+  AAPL:    {proxy: US_IND_BUSEQ, source: "README"}
+  MSFT:    {proxy: US_IND_BUSEQ, source: "README"}
+  NVDA:    {proxy: US_IND_BUSEQ, source: "README"}
+  GOOGL:   {proxy: US_IND_BUSEQ, source: "README"}
+  AMZN:    {proxy: US_IND_SHOPS, source: "README"}
+  TSLA:    {proxy: US_IND_DURBL, source: "README"}
+  JPM:     {proxy: US_IND_MONEY, source: "README"}
+  JNJ:     {proxy: US_IND_HLTH,  source: "README"}
+  PG:      {proxy: US_IND_NODUR, source: "README"}
+  XOM:     {proxy: US_IND_ENRGY, source: "README"}
+  # BTC-USD, ETH-USD : AUCUN proxy (README "aucun") -> exclus de la serie CVAR12M/MDD, borne w*delta ajoutee (measurement)
+no_proxy: [BTC-USD, ETH-USD]
+policy_defaults: {lookback_months: 597, cvar_beta: 0.95, risk_measure: CVAR, objective: min_risk}
+  # min_risk => l'optimiseur se pose a e_min de la bande ; si la cible doit etre le milieu, max_utility (hypothese ouverte)
+
+# ---------------------------------------------------------------------------------------------
+# 8. EMISSION 1:1 EN Limit (contracts/policy.py). {x} = valeur du niveau effectif (apres e_cap).
+#    rule_id = "<famille>.<objet>" ; derived_from = champ du profil ; source = "risk_levels.yaml@0.2.0#<chemin>"
+# ---------------------------------------------------------------------------------------------
+limits_template:
+  - {rule_id: alloc.growth,        kind: group_weight, selector: {classes: [equity_us, equity_ca, etf_equity, sector_us, equity_single, crypto]},
+     min: "{equity[0]}", max: "{e_cap}", blocking: true, derived_from: "profile->R->level ; dollar_rule.e_cap", source: "#levels.<L>.equity"}
+  - {rule_id: alloc.cash_like,     kind: group_weight, selector: {tags_any: [cash_like, cash]},
+     min: "{cash_like_min|None}", max: "{cash_like_max}", derived_from: "level", source: "#composition.cash_like_max ; #levels.N0.cash_like_min"}
+  - {rule_id: alloc.long_duration, kind: group_weight, selector: {tags_any: [long_duration]}, max: "{long_duration_max}", derived_from: "level", source: "#composition.long_duration_max"}
+  - {rule_id: alloc.gold,          kind: group_weight, selector: {classes: [commodity]}, max: "{gold_max}", derived_from: "level", source: "#composition.gold_max"}
+  - {rule_id: alloc.crypto,        kind: group_weight, selector: {classes: [crypto]}, max: "{w_crypto}", derived_from: "level ; profile.preferences.crypto ; profile.knowledge", source: "#satellites.crypto"}
+  - {rule_id: conc.etf_equity_each, kind: asset_weight, selector: {classes: [etf_equity]}, max: "{etf_equity_each_max}", derived_from: "level", source: "#composition.etf_equity_each_max"}
+  - {rule_id: conc.etf_bond_each,  kind: asset_weight, selector: {assets: [XBB.TO, AGG, TLT]}, max: "{etf_bond_each_max}", derived_from: "level", source: "#composition.etf_bond_each_max"}
+  - {rule_id: conc.single_each,    kind: asset_weight, selector: {classes: [equity_single]}, max: "{w_single}", derived_from: "level ; dollar_rule.l_star ; profile.knowledge", source: "#satellites.single_name"}
+  - {rule_id: conc.single_total,   kind: group_weight, selector: {classes: [equity_single]}, max: "{w_single_total}", derived_from: "dollar_rule.l_star", source: "#satellites.single_name.total_phi"}
+  - {rule_id: sat.sandbox,         kind: group_weight, selector: {assets: "{profile.sandbox_requests}"}, max: "{w_sandbox}", derived_from: "profile.requests ; profile.biases[FOMO]", source: "#satellites.sandbox"}   # emise seulement si demande
+  - {rule_id: exp.tech,            kind: exposure, selector: {exposure_tag: tech}, max: "{tech_cap}", derived_from: "level ; profile.biases[familiarite]", source: "#satellites.theme_tech"}
+  - {rule_id: risk.cvar_m,         kind: risk, selector: {measure: CVAR},    max: "{cvar_m} - w_crypto*0.55", blocking: true, derived_from: "level", source: "#levels.<L>.cvar_m"}
+  - {rule_id: risk.cvar_12m,       kind: risk, selector: {measure: CVAR12M}, max: "{cvar_12m}", blocking: true, derived_from: "level", source: "#levels.<L>.cvar_12m"}
+  - {rule_id: risk.mdd,            kind: risk, selector: {measure: MDD},     max: "{mdd}", blocking: true, derived_from: "level", source: "#levels.<L>.mdd"}
+  - {rule_id: risk.vol,            kind: risk, selector: {measure: VOL},     max: "{vol}", blocking: false, derived_from: "level", source: "#levels.<L>.vol"}
+  - {rule_id: risk.cdar_m,         kind: risk, selector: {measure: CDAR},    max: "{cvar_m}", blocking: true, derived_from: "profile.biases[aversion_perte] | composure<40", source: "#biases.aversion_perte"}  # conditionnelle
+  - {rule_id: risk.stress_2022,    kind: risk, selector: {measure: STRESS_2022}, max: "{s2022}", blocking: true, derived_from: "level", source: "#levels.<L>.s2022"}  # Judge seulement : rendement civil 2022 en CAD, tickers REELS ; non vérifiable = refus prudent
+# Actifs sans proxy long : exclus de la série raccordée, borne + sum_j w_j * delta_j sur CVAR12M et MDD (PolicySpec.loss_bounds).
+loss_bounds: {BTC-USD: 0.90, ETH-USD: 0.90}
+loss_bounds_source: "planification : pires baisses observées BTC 0.744, ETH 0.898 (research/calibration/out/tails_monthly.csv) arrondies à 0.90"
+
+# Exemple developpe (N3 plein, l_star = 0.349, sans crypto, pas de sandbox) — valeurs que l'emetteur doit produire :
+example_N3:
+  alloc.growth: [0.40, 0.60]
+  alloc.cash_like: [null, 0.30]
+  alloc.long_duration: 0.10
+  alloc.gold: 0.10
+  alloc.crypto: 0.0
+  conc.etf_equity_each: 0.36
+  conc.etf_bond_each: 0.40
+  conc.single_each: 0.0425       # floor_0.25%(0.10*0.349/0.80 = 0.0436)
+  conc.single_total: 0.1075      # floor_0.25%(0.25*0.349/0.80 = 0.1091)
+  exp.tech: 0.3075               # floor_0.25%(0.60*0.44 + 0.10*0.349/0.80 = 0.3076)
+  risk.cvar_m: 0.054
+  risk.cvar_12m: 0.140
+  risk.mdd: 0.310
+  risk.vol: 0.095
+  risk.stress_2022: 0.145

@@ -13,12 +13,14 @@ import type {
   Stage,
   TraceKind,
 } from "@/lib/contract/schemas";
+import { portfolioEn, portfolioFr } from "./portfolio";
 import { screensEn, screensFr } from "./screens";
 
 type Fn<A extends unknown[]> = (...args: A) => string;
 
 const fr = {
   ...screensFr,
+  portfolioView: portfolioFr,
   meta: {
     title: "AlphaForge AI : aide à la décision d’investissement explicable",
     description:
@@ -589,6 +591,7 @@ export type Dictionary = typeof fr;
 
 const en: Dictionary = {
   ...screensEn,
+  portfolioView: portfolioEn,
   meta: {
     title: "AlphaForge AI: explainable investment decision aid",
     description:

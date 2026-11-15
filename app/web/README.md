@@ -13,6 +13,7 @@ Le contrat avec les runtimes Python et l'infrastructure est `app/CONTRACTS.md` :
 | `/` | **Parcours du profil** : un personnage marche le long d'un chemin et s'arrête à un panneau par question de base (le runtime choisit la suivante, embranchements compris). Touches 1 à 9 pour répondre, « Pourquoi cette question ? » tiré de `help`. Un panneau à mallette accueille le portefeuille existant (A2 : texte collé ou fichiers, puis vérification des positions). La maison affiche la première version du profil et mène au tableau de bord. Boutons Trace et Profil : la trace complète et le profil détaillé (faits, provenance, documents OKF) s'ouvrent dans un panneau latéral. |
 | `/dashboard` | **Tableau de bord** : tuiles d'indicateurs et assistant. L'assistant s'ouvre sur un paysage (personnage, volée d'oiseaux qui réagit au pointeur et à la saisie), puis devient la conversation avec A1 (`followup.reply`) : relances, questions structurées, arrêt dès 70 %. Chaque réponse porte ses sources et « Comment j'ai répondu », la trace de la requête. |
 | `/details` | **Détails du portefeuille** : valeur, rendements quotidiens, retraite, volatilité, comparaison avec XIU.TO, répartition, gouvernance, stress test 2022, rendements mensuels, journal des décisions, les quatre questions de l'atelier BNCD, positions. |
+| `/portfolio` | **Portefeuille simulé** : la `Decision` du runtime `portfolio` (CONTRACTS.md, section 12), affichée telle quelle pour un profil de démonstration FICTION (Amira, Mateo, Robert) ou, hors mode `mock`, pour son propre profil. Positions cœur et satellite, style et bande de part actions de l'étape 0, classement des titres individuels (momentum en sensibilité seulement), les quatre questions avec l'étiquette FAIT, HYPOTHÈSE ou FICTION de chaque énoncé et ses faits cliquables (valeur, source, étape de trace), contrefactuels, verdicts des lentilles, contrôles du Judge, trace. Bandeau permanent « Simulation éducative — aucun conseil, aucune transaction ». |
 | `/knowledge` | Base de connaissances générale et collecte (A4, A5, A6). |
 | `/tldoole` | tldoole : vidéos verticales d’environ une minute sur les concepts que l’investisseur ne comprend pas encore (CONTRACTS.md, section 8). |
 | `/settings` | Réglages (langue, niveau de connaissances, session). |
@@ -78,6 +79,16 @@ Simulateur en mémoire du contrat, sans aucun appel réseau : questions de base 
 AGENT_MODE=mock npm run dev
 ```
 
+### Portefeuille simulé (`/portfolio`)
+
+L'interface ne calcule rien : chaque nombre est la valeur d'un `Fact` du moteur, un poids de `positions[]` ou une limite du Judge, mis en forme par `src/lib/portfolio/format.ts`, port exact de `fmt` (`finance/debate/facts.py`) : « 12,3 % », « 31 300 $ », arrondi au pair comme Python. Un test vérifie que chaque nombre écrit par le moteur dans une explication est la valeur ainsi formatée d'un fait qu'elle cite.
+
+- `mock` : les réponses de `build` sont de vraies décisions du moteur (mode `rules`), enregistrées dans `src/lib/fixtures/portfolio-<persona>.json`. Aucun chiffre n'y est écrit à la main. Pour les régénérer : `cd app/agents && ALPHAFORGE_BT_DATA=<données longues> uv run --group finance python scripts/finance/export_web_fixtures.py`.
+- `local` : `LOCAL_PORTFOLIO_URL` (runtime `portfolio` lancé avec `AGENT_ROLE=portfolio PORT=8081 ALPHAFORGE_STORE=local uv run --group finance python main.py`).
+- `aws` : `InvokeAgentRuntime` sur `${ALPHAFORGE_PREFIX}_portfolio` (déployé seulement avec `portfolio_enabled = true`), `runtimeSessionId = client_id`, ou une session stable par profil de démonstration.
+
+Le moteur se choisit hors `mock` : règles (déterministe, rapide) ou lentilles LLM (Bedrock, plusieurs minutes). Pour Robert, l'interface envoie sa demande (`request` : 50 000 $ dans TSLA), que le Judge refuse et encadre.
+
 ### `local`
 
 Le serveur Next.js transmet chaque requête au runtime `profile` lancé sur le poste :
@@ -110,7 +121,7 @@ Permissions IAM nécessaires pour l'identité du poste :
 
 | Service | Actions |
 | --- | --- |
-| Bedrock AgentCore | `bedrock-agentcore:ListAgentRuntimes`, `bedrock-agentcore:InvokeAgentRuntime` |
+| Bedrock AgentCore | `bedrock-agentcore:ListAgentRuntimes`, `bedrock-agentcore:InvokeAgentRuntime` (runtimes `profile` et, pour `/portfolio`, `portfolio`) |
 | Step Functions | `states:ListStateMachines`, `states:StartExecution`, `states:ListExecutions`, `states:DescribeExecution` |
 
 ## Variables d'environnement
@@ -121,6 +132,7 @@ Permissions IAM nécessaires pour l'identité du poste :
 | --- | --- | --- |
 | `AGENT_MODE` | `mock` | `mock`, `local` ou `aws`. |
 | `LOCAL_AGENT_URL` | `http://127.0.0.1:8080/invocations` | Runtime `profile` local (mode `local`). |
+| `LOCAL_PORTFOLIO_URL` | `http://127.0.0.1:8081/invocations` | Runtime `portfolio` local (mode `local`, page `/portfolio`). |
 | `AWS_REGION` | `us-east-1` | Région des runtimes et de la machine de collecte. |
 | `ALPHAFORGE_PREFIX` | `alphaforge_sandbox` | Préfixe des runtimes AgentCore. |
 | `ALPHAFORGE_STATE_MACHINE` | `alphaforge-sandbox-collecte` | Nom de la machine Step Functions de collecte. |
@@ -131,6 +143,7 @@ Permissions IAM nécessaires pour l'identité du poste :
 | Route | Rôle |
 | --- | --- |
 | `POST /api/agent` | Une action du contrat (`session.start`, `base.answer`, `portfolio.submit`, `followup.reply`, `kb.list`, etc.). Validée par zod, puis transmise au mode choisi. Avec `"stream": true`, `portfolio.submit` et `followup.reply` répondent en `text/event-stream`. |
+| `POST /api/portfolio` | L'action `build` du runtime `portfolio` : `{ "client_id"? , "persona"?: "amira" \| "mateo" \| "robert", "as_of"?, "strategy"?, "style_preference"?, "request"?, "mode"?, "locale"? }`, `client_id` ou `persona` requis. JSON seulement; la `Decision` est validée par zod dans le navigateur (`src/lib/contract/portfolio.ts`). |
 | `GET /api/health` | Mode courant, santé du runtime et, en mode `aws`, runtime résolu. |
 | `GET /api/collect` | Collectes récentes, avec le statut de chaque collecteur (`collected.press`, `collected.data`). `?execution_arn=` donne le détail d'une exécution de la machine configurée. |
 | `POST /api/collect` | Lance une collecte : `{ "since"?: "AAAA-MM-JJ", "tickers"?: ["RY.TO"] }`. |
@@ -150,6 +163,9 @@ src/
   lib/server/           passerelle : configuration, modes local et aws, erreurs, SSE
   lib/mock/             simulateur du contrat (mode mock)
   lib/sample/           portefeuille et réponses d'exemple des maquettes (mode mock seulement)
+  lib/fixtures/         réponses de `build` produites par le moteur (mode mock de /portfolio)
+  lib/portfolio/        formats du moteur, lecture des faits d'une Decision, scénarios de démonstration
+  components/portfolio/ portefeuille simulé : décision, faits cliquables, panneau des sources
   lib/journey/          chemin du parcours (panneaux, maison, reprise d'une session)
   lib/client/           appels à la passerelle, session (localStorage), état de l'interface
   lib/i18n/             dictionnaire typé FR (par défaut) et EN; screens.ts pour les écrans des maquettes

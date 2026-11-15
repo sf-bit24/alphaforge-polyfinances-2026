@@ -1,9 +1,19 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { PortfolioBuildRequest } from "@/lib/contract/portfolio";
 import { AGENT_ACTIONS, AgentRequest, CollectRequest, MAX_BODY_BYTES, UPLOAD_LIMITS } from "@/lib/contract/requests";
 import { HealthResponse, type GatewayHealth, type Locale } from "@/lib/contract/schemas";
+import { mockPortfolioBuild } from "@/lib/mock/decisions";
 import { getMockRuntime } from "@/lib/mock/runtime";
-import { describeExecution, invokeAws, listExecutions, resolveProfileRuntime, startExecution, stateMachineInfo } from "./aws";
+import {
+  describeExecution,
+  invokeAws,
+  invokePortfolioAws,
+  listExecutions,
+  resolveProfileRuntime,
+  startExecution,
+  stateMachineInfo,
+} from "./aws";
 import { ConfigError, getConfig, profileRuntimeName, type GatewayConfig } from "./config";
 import { GatewayError, jsonResponse, localeOf, statusOfEnvelope, toGatewayError } from "./errors";
 import { invokeLocal } from "./local";
@@ -131,6 +141,85 @@ export async function handleAgent(request: Request): Promise<Response> {
         { fr: "Réponse du runtime hors contrat (enveloppe absente).", en: "Runtime response outside the contract (no envelope)." },
         502,
         { upstream_status: upstream.status, body: JSON.stringify(upstream.body).slice(0, 500) },
+      );
+    }
+    return jsonResponse(statusOfEnvelope(upstream.body, upstream.status), upstream.body);
+  } catch (error) {
+    return errorResponse(error, locale);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Portfolio runtime (CONTRACTS.md 12)                                 */
+/* ------------------------------------------------------------------ */
+
+/** A build request is a few fields: anything larger is not one. */
+const MAX_PORTFOLIO_BODY_BYTES = 16 * 1024;
+/** A build in `llm` mode makes several model calls (A3, four lenses, two rounds). */
+const PORTFOLIO_TIMEOUT_MS = 600_000;
+
+export function validatePortfolioRequest(raw: unknown): PortfolioBuildRequest {
+  if (!isRecord(raw)) {
+    throw new GatewayError("bad_request", { fr: "Le corps doit être un objet JSON.", en: "The body must be a JSON object." }, 400);
+  }
+  if (raw.action !== undefined && raw.action !== "build") {
+    throw new GatewayError(
+      "unknown_action",
+      { fr: `Action inconnue : ${String(raw.action)}`, en: `Unknown action: ${String(raw.action)}` },
+      400,
+      { action: raw.action, allowed: ["build"] },
+    );
+  }
+  const parsed = PortfolioBuildRequest.safeParse(raw);
+  if (!parsed.success) {
+    throw new GatewayError("bad_request", { fr: "Requête build invalide.", en: "Invalid build request." }, 400, {
+      action: "build",
+      issues: parsed.error.issues.slice(0, 10).map((issue) => ({ path: issue.path.join("."), message: issue.message })),
+    });
+  }
+  return parsed.data;
+}
+
+async function callPortfolio(config: GatewayConfig, request: PortfolioBuildRequest, locale: Locale, signal: AbortSignal): Promise<Upstream> {
+  switch (config.AGENT_MODE) {
+    case "mock":
+      return { kind: "json", status: 200, body: mockPortfolioBuild(request, request.locale ?? locale) };
+    case "local":
+      return invokeLocal(config.LOCAL_PORTFOLIO_URL, request, false, signal, { role: "portfolio", timeoutMs: PORTFOLIO_TIMEOUT_MS });
+    case "aws":
+      return invokePortfolioAws(config, request, signal);
+  }
+}
+
+/**
+ * `POST /api/portfolio`: validate a `build` request, call the `portfolio` runtime of the configured mode
+ * (fixtures of the engine in `mock`), pass the JSON envelope through. The browser validates the Decision.
+ */
+export async function handlePortfolio(request: Request): Promise<Response> {
+  const locale = localeOf(request);
+  try {
+    const config = configOrThrow();
+    const length = Number(request.headers.get("content-length") ?? "0");
+    if (length > MAX_PORTFOLIO_BODY_BYTES) {
+      throw new GatewayError("bad_request", { fr: "Requête trop volumineuse.", en: "Request too large." }, 413, {
+        limit_bytes: MAX_PORTFOLIO_BODY_BYTES,
+        content_length: length,
+      });
+    }
+    let raw: unknown;
+    try {
+      raw = await request.json();
+    } catch {
+      throw new GatewayError("bad_request", { fr: "Corps JSON invalide.", en: "Invalid JSON body." }, 400);
+    }
+    const build = validatePortfolioRequest(raw);
+    const upstream = await callPortfolio(config, build, locale, request.signal);
+    if (upstream.kind === "stream" || !isRecord(upstream.body) || typeof upstream.body.ok !== "boolean") {
+      throw new GatewayError(
+        "internal",
+        { fr: "Réponse du runtime portfolio hors contrat (enveloppe absente).", en: "Portfolio runtime response outside the contract (no envelope)." },
+        502,
+        upstream.kind === "json" ? { upstream_status: upstream.status, body: JSON.stringify(upstream.body).slice(0, 500) } : { kind: "stream" },
       );
     }
     return jsonResponse(statusOfEnvelope(upstream.body, upstream.status), upstream.body);

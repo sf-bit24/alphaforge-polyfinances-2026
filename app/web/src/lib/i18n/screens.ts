@@ -9,6 +9,7 @@ export const screensFr = {
   appNav: {
     dashboard: "Tableau de bord",
     details: "Détails",
+    portfolio: "Portefeuille simulé",
     profile: "Mon profil",
     knowledge: "Base de connaissances",
     simulation: "Simulation · aucune transaction réelle",
@@ -266,6 +267,7 @@ export const screensEn: Screens = {
   appNav: {
     dashboard: "Dashboard",
     details: "Details",
+    portfolio: "Simulated portfolio",
     profile: "My profile",
     knowledge: "Knowledge base",
     simulation: "Simulation · no real transaction",

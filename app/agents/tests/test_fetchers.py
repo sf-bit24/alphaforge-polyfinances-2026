@@ -215,3 +215,14 @@ def test_declared_user_agent_and_fred_fallback(monkeypatch):
     with pytest.raises(FetchError) as refused:
         http_get("https://www.bankofcanada.ca/valet/y")
     assert refused.value.status == 429 and len(seen) == 4
+
+
+def test_sec_user_agent_uses_the_documented_name_and_email_format(monkeypatch):
+    # La SEC refuse (403) « AlphaForgeResearchBot/0.1 (+https://…) courriel » et accepte « nom courriel ».
+    monkeypatch.setenv("ALPHAFORGE_CONTACT_EMAIL", "contact@example.org")
+    agent = http.user_agent_for("www.sec.gov")
+    assert agent == "AlphaForge AI Research contact@example.org"
+    assert "/" not in agent and "(" not in agent
+    assert http.user_agent_for("www.bankofcanada.ca") == http.USER_AGENT
+    monkeypatch.delenv("ALPHAFORGE_CONTACT_EMAIL")
+    assert http.user_agent_for("data.sec.gov") == http.USER_AGENT

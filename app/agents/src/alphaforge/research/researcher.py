@@ -129,7 +129,9 @@ RECORD_FINDING_DESCRIPTION = (
     "form, accession). The code reads every value and date. ESG evidence (funds-sustainability hosts only, "
     "kind fact): esg_kind (emissions, incident, index_exclusion, sector_activity), esg_metric (snake_case; "
     "for sector_activity one of tobacco, weapons, fossil_fuels, gambling, alcohol), esg_period (YYYY, "
-    "YYYY-MM or YYYY-MM-DD; defaults to the observation date)."
+    "YYYY-MM or YYYY-MM-DD; defaults to the observation date). A finding about emissions, incidents, index "
+    "exclusions or sector activity is ESG evidence only with esg_kind: always set it for those, and record the "
+    "measured value itself (a total, a count), never a dataset's metadata such as its modification date."
 )
 RECORD_FINDING_SCHEMA = {
     "json": {

@@ -49,9 +49,9 @@ def model(model_id: str, node_id: str, versions: dict | None = None):
     kw = dict(model_id=model_id, region_name=REGION, additional_request_fields={"output_config": {"effort": "medium"}})
     try:
         from alphaforge.finance.llm import FileStore  # type: ignore
-        from alphaforge.finance.llm.strands_replay import ReplayModel  # research/finance/llm (équipe finance)
+        from alphaforge.finance.llm.strands_replay import ReplayModel  # alphaforge.finance.llm (équipe finance)
 
-        store = FileStore(os.environ.get("ALPHAFORGE_LLM_STORE", "research/finance/llm_records"))
+        store = FileStore(os.environ.get("ALPHAFORGE_LLM_STORE", "llm_records"))
         return ReplayModel(node_id=node_id, store=store, mode=None, versions=versions or {}, **kw)
     except ImportError:
         from strands.models import BedrockModel

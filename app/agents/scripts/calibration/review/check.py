@@ -1,10 +1,8 @@
 # ruff: noqa: E402  # script de recherche : sys.path avant les imports, import * voulu
-import sys
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, __import__("os").environ.get("BACKTEST_DIR", "research/backtest"))
 pd.set_option("display.width", 250)
 O = __import__("os").environ.get("CALIB_OUT", "app/agents/tests/finance/fixtures/calibration").rstrip("/") + "/"  # noqa: E741
 g = pd.read_csv(O + "calib_grid5.csv")
@@ -120,7 +118,7 @@ sing = [
 s = tl[tl.asset.isin(sing)].mdd
 print("single-name MDD n=%d median %.3f p75 %.3f max %.3f" % (len(s), s.median(), s.quantile(0.75), s.max()))  # noqa: UP031
 # engine-based checks
-from engine.data import load_returns
+from alphaforge.finance.backtest.data import load_returns
 
 
 def roll(r, n):

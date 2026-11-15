@@ -1,4 +1,4 @@
-"""Integration avec F2 (research/finance/portfolio, lecture seule) : le mandat emis est optimisable.
+"""Integration avec F2 (alphaforge.finance.portfolio, lecture seule) : le mandat emis est optimisable.
 
 ~1 s par mandat sur le starter (fenetre limitee par ESGV, 2018-10 -> 2026-09) : pas marque slow.
 """

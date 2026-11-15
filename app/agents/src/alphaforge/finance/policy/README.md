@@ -229,6 +229,5 @@ Vérifiées dans `/mnt/c/Users/User/Desktop/ecole/hackoton/analyse/relation-prof
 ## Lancer les tests
 
 ```bash
-cd github_repo/alphaforge-polyfinances-2026
-PYTHONPATH=.:research/finance:<worktree>/research/finance python -m pytest <worktree>/research/finance/policy_compiler/tests -q -p no:cacheprovider
+cd app/agents && uv sync --group dev --group finance && uv run pytest tests/finance/policy -q
 ```

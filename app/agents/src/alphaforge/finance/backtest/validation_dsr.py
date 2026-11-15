@@ -9,6 +9,7 @@ Références (formules reprises de mémoire, à relire avant citation dans la do
 Conventions : rendements **mensuels** simples ; PSR et DSR utilisent le Sharpe **par période** (non annualisé) et
 le nombre d'observations ; ``kurt`` est la kurtosis brute (3 pour une loi normale).
 """
+
 from __future__ import annotations
 
 import math
@@ -57,12 +58,15 @@ def expected_max_sharpe(n_trials: int, var_sr: float) -> float:
     if n_trials <= 1 or var_sr <= 0:
         return 0.0
     n = float(n_trials)
-    return float(math.sqrt(var_sr) * ((1 - EULER_GAMMA) * stats.norm.ppf(1 - 1 / n)
-                                      + EULER_GAMMA * stats.norm.ppf(1 - 1 / (n * math.e))))
+    return float(
+        math.sqrt(var_sr)
+        * ((1 - EULER_GAMMA) * stats.norm.ppf(1 - 1 / n) + EULER_GAMMA * stats.norm.ppf(1 - 1 / (n * math.e)))
+    )
 
 
-def deflated_sharpe(sr: float, n_trials: int, n_obs: int, skew: float = 0.0, kurt: float = 3.0,
-                    var_trials_sr: float = 0.0) -> float:
+def deflated_sharpe(  # noqa: PLR0913 - signature publique gelée : overlays/gate.py passe les six par position
+    sr: float, n_trials: int, n_obs: int, skew: float = 0.0, kurt: float = 3.0, var_trials_sr: float = 0.0
+) -> float:
     """DSR = PSR(SR* = E[max SR] des N essais) ; Sharpe et variance des Sharpe des essais par période."""
     return probabilistic_sharpe(sr, expected_max_sharpe(n_trials, var_trials_sr), n_obs, skew, kurt)
 
@@ -70,11 +74,10 @@ def deflated_sharpe(sr: float, n_trials: int, n_obs: int, skew: float = 0.0, kur
 def _block_sharpe(x: np.ndarray) -> np.ndarray:
     sd = x.std(axis=0, ddof=1)
     with np.errstate(divide="ignore", invalid="ignore"):
-        s = np.where(sd > 0, x.mean(axis=0) / sd, 0.0)
-    return s
+        return np.where(sd > 0, x.mean(axis=0) / sd, 0.0)
 
 
-def pbo_cscv(perf_matrix: np.ndarray, S: int = 16) -> float:
+def pbo_cscv(perf_matrix: np.ndarray, S: int = 16) -> float:  # noqa: N803 - paramètre public gelé (tests : S=…)
     """Probabilité de sur-ajustement par validation croisée combinatoire symétrique (CSCV) [non vérifié].
 
     ``perf_matrix`` : T × N (rendements par période de N stratégies). Les T lignes sont coupées en S blocs
@@ -85,21 +88,21 @@ def pbo_cscv(perf_matrix: np.ndarray, S: int = 16) -> float:
     m = np.asarray(perf_matrix, dtype=float)
     if m.ndim != 2 or m.shape[1] < 2 or m.shape[0] < 4:
         return float("nan")
-    T, N = m.shape
-    S = int(min(S, T // 2))
-    S -= S % 2
-    if S < 2:
+    n_rows, n_strategies = m.shape
+    n_blocks = int(min(S, n_rows // 2))
+    n_blocks -= n_blocks % 2
+    if n_blocks < 2:
         return float("nan")
-    m = m[: (T // S) * S]
-    blocks = np.array_split(np.arange(m.shape[0]), S)
+    m = m[: (n_rows // n_blocks) * n_blocks]
+    blocks = np.array_split(np.arange(m.shape[0]), n_blocks)
     lambdas = []
-    for is_idx in combinations(range(S), S // 2):
-        oos_idx = [b for b in range(S) if b not in is_idx]
+    for is_idx in combinations(range(n_blocks), n_blocks // 2):
+        oos_idx = [b for b in range(n_blocks) if b not in is_idx]
         is_rows = np.concatenate([blocks[b] for b in is_idx])
         oos_rows = np.concatenate([blocks[b] for b in oos_idx])
         sr_is, sr_oos = _block_sharpe(m[is_rows]), _block_sharpe(m[oos_rows])
         best = int(np.argmax(sr_is))
-        rank = float(stats.rankdata(sr_oos)[best])            # 1 = pire … N = meilleur
-        omega = rank / (N + 1)
+        rank = float(stats.rankdata(sr_oos)[best])  # 1 = pire … N = meilleur
+        omega = rank / (n_strategies + 1)
         lambdas.append(math.log(omega / (1 - omega)))
     return float(np.mean(np.asarray(lambdas) <= 0))

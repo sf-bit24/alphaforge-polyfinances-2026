@@ -17,6 +17,7 @@ from typing import Any
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
+from . import otel
 from .config import ROLES, Settings
 from .store import Store, make_store
 
@@ -81,7 +82,13 @@ def create_app(
 
     app.state.alphaforge_service = handler
     app.state.alphaforge_settings = settings
-    logger.info("alphaforge runtime ready: role=%s env=%s store=%s", settings.role, settings.env, settings.store)
+    logger.info(
+        "alphaforge runtime ready: role=%s env=%s store=%s otel=%s",
+        settings.role,
+        settings.env,
+        settings.store,
+        "on" if otel.state["active"] else "off",
+    )
     return app
 
 
@@ -93,7 +100,8 @@ def serve(app: BedrockAgentCoreApp) -> None:
 
 
 def configure_logging() -> None:
-    level = os.environ.get("ALPHAFORGE_LOG_LEVEL", "INFO").upper()
-    logging.basicConfig(
-        level=getattr(logging, level, logging.INFO), format="%(asctime)s %(levelname)s %(name)s %(message)s"
-    )
+    level = getattr(logging, os.environ.get("ALPHAFORGE_LOG_LEVEL", "INFO").upper(), logging.INFO)
+    logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    # Sous ADOT (alphaforge/otel.py), l'instrumentation des journaux a déjà posé le format (avec trace_id et span_id) :
+    # basicConfig ne fait alors rien, d'où le niveau posé à part.
+    logging.getLogger().setLevel(level)

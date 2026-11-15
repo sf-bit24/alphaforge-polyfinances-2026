@@ -13,6 +13,7 @@ Conventions (toutes en décimal, mois de 12 périodes par an) :
 
 Le passé décrit le passé : aucune de ces mesures n'est une prévision. SIMULATION SEULEMENT.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -28,6 +29,7 @@ _EPS = 1e-12
 
 
 # --------------------------------------------------------------------------- rendements
+
 
 def twr_from_returns(r: Sequence[float]) -> float:
     """TWR cumulé : ``Π(1 + r_t) - 1`` (0 si aucune période)."""
@@ -54,8 +56,14 @@ def _npv(i: float, cf: np.ndarray, t: np.ndarray) -> float:
     return float(np.sum(cf / (1.0 + i) ** t))
 
 
-def mwr(cashflows_by_month: Sequence[float], final_value: float, lo: float = -0.99, hi: float = 10.0,
-        tol: float = 1e-12, max_iter: int = 500) -> float | None:
+def mwr(  # noqa: PLR0913 - signature publique : les bornes de la bissection se passent par mot-clé
+    cashflows_by_month: Sequence[float],
+    final_value: float,
+    lo: float = -0.99,
+    hi: float = 10.0,
+    tol: float = 1e-12,
+    max_iter: int = 500,
+) -> float | None:
     """TRI mensuel annualisé (rendement pondéré par les capitaux).
 
     Convention : ``cashflows_by_month[k]`` est l'**apport net dans le portefeuille** au temps ``k``
@@ -68,11 +76,11 @@ def mwr(cashflows_by_month: Sequence[float], final_value: float, lo: float = -0.
     l'intervalle (TRI indéfini ou non unique dans la plage).
     """
     c = np.asarray(cashflows_by_month, dtype=float)
-    T = c.size
-    if T < P:
+    n_months = c.size
+    if n_months < P:
         return None
     cf = np.concatenate([-c, [float(final_value)]])
-    t = np.arange(T + 1, dtype=float)
+    t = np.arange(n_months + 1, dtype=float)
     f_lo, f_hi = _npv(lo, cf, t), _npv(hi, cf, t)
     if f_lo == 0:
         return float((1 + lo) ** P - 1)
@@ -95,6 +103,7 @@ def mwr(cashflows_by_month: Sequence[float], final_value: float, lo: float = -0.
 
 
 # --------------------------------------------------------------------------- drawdowns
+
 
 def twr_index(r: Sequence[float], base: float = 1.0) -> np.ndarray:
     """Indice TWR ``[base, base(1+r_1), ...]`` (longueur ``len(r) + 1``, la base comprise)."""
@@ -143,8 +152,13 @@ def months_underwater(index: Sequence[float]) -> tuple[int, int]:
 
 # --------------------------------------------------------------------------- frictions
 
-def cash_drag(weights_path: Sequence[Mapping[str, float]], cash_assets: Sequence[str],
-              r_portfolio: Sequence[float], r_cash: Sequence[float]) -> float | None:
+
+def cash_drag(
+    weights_path: Sequence[Mapping[str, float]],
+    cash_assets: Sequence[str],
+    r_portfolio: Sequence[float],
+    r_cash: Sequence[float],
+) -> float | None:
     """Coût annualisé approximatif de la liquidité : ``poids moyen en liquidités × (moyenne r_portefeuille -
     moyenne r_liquidités) × 12``.
 
@@ -163,6 +177,7 @@ def cash_drag(weights_path: Sequence[Mapping[str, float]], cash_assets: Sequence
 
 # --------------------------------------------------------------------------- risque
 
+
 def risk_contributions(weights: Mapping[str, float], returns_window, beta: float = 0.95) -> dict[str, dict[str, float]]:
     """Contributions au risque (vol d'Euler et CVaR) via ``portfolio.analysis.risk_report``.
 
@@ -175,13 +190,18 @@ def risk_contributions(weights: Mapping[str, float], returns_window, beta: float
     from ..portfolio.market import ReturnWindow
 
     if isinstance(returns_window, pd.DataFrame):
-        returns_window = ReturnWindow(returns=returns_window, as_of=pd.Timestamp(returns_window.index[-1]),
-                                      currency="CAD", data_version="inconnue")
+        returns_window = ReturnWindow(
+            returns=returns_window,
+            as_of=pd.Timestamp(returns_window.index[-1]),
+            currency="CAD",
+            data_version="inconnue",
+        )
     rep = risk_report(dict(weights), returns_window, beta=beta)
     return {"vol": dict(rep.contrib_vol), "cvar": dict(rep.contrib_cvar)}
 
 
 # --------------------------------------------------------------------------- suivi incrémental
+
 
 class PerfTracker:
     """Accumule mois par mois les mesures d'une trajectoire et produit un ``PerfSnapshot``.
@@ -205,9 +225,17 @@ class PerfTracker:
         self.turnover_oneway_cum = 0.0
         self.costs_cad_cum = 0.0
 
-    def update(self, month: date, r_portfolio: float, value_end: float, flow_cad: float = 0.0,
-               turnover_oneway: float = 0.0, cost_cad: float = 0.0, weights: Mapping[str, float] | None = None,
-               r_cash: float | None = None) -> None:
+    def update(  # noqa: PLR0913 - signature gardée : le tick passe un mois complet, champ par champ
+        self,
+        month: date,
+        r_portfolio: float,
+        value_end: float,
+        flow_cad: float = 0.0,
+        turnover_oneway: float = 0.0,
+        cost_cad: float = 0.0,
+        weights: Mapping[str, float] | None = None,
+        r_cash: float | None = None,
+    ) -> None:
         if self.months_seen and month <= self.months_seen[-1]:
             raise ValueError(f"mois non croissant : {month} après {self.months_seen[-1]}")
         self.months_seen.append(month)

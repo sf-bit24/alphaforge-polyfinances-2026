@@ -57,8 +57,10 @@ Reprise après un arrêt (crash, délai dépassé) entre deux écritures :
 SIMULATION SEULEMENT : chaque mouvement est un « événement de rééquilibrage illustratif », jamais un ordre ni un
 conseil personnalisé. Aucun LLM ici.
 """
+
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import math
@@ -66,6 +68,7 @@ import os
 import re
 from collections import Counter
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -95,14 +98,14 @@ CLIENT_ID = re.compile(r"^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 DEFAULT_REPLAY_MONTHS = 12
-MARKET_SOURCE_ENV = "ALPHAFORGE_MARKET_SOURCE"     # "parquet" (moteur) ou "csv" (export .csv.gz)
-MARKET_URI_ENV = "ALPHAFORGE_MARKET_URI"           # s3://<bucket>/<clé>, clé du magasin ou fichier local
+MARKET_SOURCE_ENV = "ALPHAFORGE_MARKET_SOURCE"  # "parquet" (moteur) ou "csv" (export .csv.gz)
+MARKET_URI_ENV = "ALPHAFORGE_MARKET_URI"  # s3://<bucket>/<clé>, clé du magasin ou fichier local
 
 _OPTIONAL = ("value_cad", "monthly_flow_cad", "overlays", "persona_label", "persona")
 TICK_KEYS = frozenset({"action", "client_id", "run_id", "month", *_OPTIONAL})
 REPLAY_KEYS = frozenset({"action", "client_id", "run_id", "start", "end", *_OPTIONAL})
 SUMMARY_KEYS = frozenset({"action", "client_id", "run_id", "persona"})
-PERSONA_PREFIX = "demo-"      # client_id d'une persona de démonstration : demo-<persona> (FICTION)
+PERSONA_PREFIX = "demo-"  # client_id d'une persona de démonstration : demo-<persona> (FICTION)
 
 ProfileLoader = Callable[[str], InvestorProfile]
 
@@ -246,14 +249,27 @@ def _is_number(v: Any) -> bool:
 
 
 def _parse(payload: Any, action: str, allowed: frozenset[str], required: tuple[str, ...]) -> _Req:
+    """Validation stricte, dans cet ordre : enveloppe, persona, champs requis, identifiants, options."""
     if not isinstance(payload, Mapping):
         raise AppError("bad_request", "Le corps doit être un objet JSON.")
     unknown = sorted(str(k) for k in payload if k not in allowed)
     if unknown:
-        raise AppError("bad_request", f"Clés inconnues : {', '.join(unknown)}.",
-                       {"unknown": unknown, "allowed": sorted(allowed)})
+        raise AppError(
+            "bad_request", f"Clés inconnues : {', '.join(unknown)}.", {"unknown": unknown, "allowed": sorted(allowed)}
+        )
     if "action" in payload and payload["action"] != action:
         raise AppError("bad_request", f"action doit valoir {action}.", {"action": payload["action"]})
+    payload = _resolve_persona(payload)
+    for k in required:
+        if k not in payload or payload[k] is None:
+            raise AppError("bad_request", f"{k} est requis.", {"field": k})
+    _check_ids(payload)
+    _check_options(payload)
+    return _Req(payload)
+
+
+def _resolve_persona(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Complète ``client_id`` depuis ``persona`` (``demo-<persona>``), ou ``persona`` depuis un tel ``client_id``."""
     persona = payload.get("persona")
     if persona is not None:
         if payload.get("client_id") is not None:
@@ -261,26 +277,35 @@ def _parse(payload: Any, action: str, allowed: frozenset[str], required: tuple[s
         known = _persona_ids()
         if not isinstance(persona, str) or persona not in known:
             raise AppError("bad_request", "persona inconnue.", {"field": "persona", "allowed": known})
-        payload = {**payload, "client_id": f"{PERSONA_PREFIX}{persona}"}
-    elif isinstance(payload.get("client_id"), str) and payload["client_id"].startswith(PERSONA_PREFIX):
+        return {**payload, "client_id": f"{PERSONA_PREFIX}{persona}"}
+    if isinstance(payload.get("client_id"), str) and payload["client_id"].startswith(PERSONA_PREFIX):
         # « demo-<persona> » venant de la machine Step Functions (qui ne transmet qu'un client_id)
-        name = payload["client_id"][len(PERSONA_PREFIX):]
+        name = payload["client_id"][len(PERSONA_PREFIX) :]
         if name in _persona_ids():
-            payload = {**payload, "persona": name}
-    for k in required:
-        if k not in payload or payload[k] is None:
-            raise AppError("bad_request", f"{k} est requis.", {"field": k})
+            return {**payload, "persona": name}
+    return payload
+
+
+def _check_ids(payload: Mapping[str, Any]) -> None:
+    """Identifiants et mois : ``client_id``, ``run_id``, ``month`` / ``start`` / ``end``."""
     cid = payload["client_id"]
     if not isinstance(cid, str) or not cid.strip():
         raise AppError("bad_request", "client_id doit être une chaîne non vide.", {"field": "client_id"})
     if not CLIENT_ID.match(cid):
-        raise AppError("bad_request", "client_id doit suivre ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$, sans « .. ».",
-                       {"field": "client_id"})
+        raise AppError(
+            "bad_request",
+            "client_id doit suivre ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$, sans « .. ».",
+            {"field": "client_id"},
+        )
     if "run_id" in payload and (not isinstance(payload["run_id"], str) or not RUN_ID.match(payload["run_id"])):
         raise AppError("bad_request", "run_id doit suivre ^[A-Za-z0-9_-]{1,64}$.", {"run_id": payload["run_id"]})
     for k in ("month", "start", "end"):
         if k in payload and (not isinstance(payload[k], str) or not MONTH.match(payload[k])):
             raise AppError("bad_request", f"{k} doit suivre AAAA-MM.", {k: payload[k]})
+
+
+def _check_options(payload: Mapping[str, Any]) -> None:
+    """Champs facultatifs de la trajectoire : valeur, flux, overlays, libellé."""
     if "value_cad" in payload and not (_is_number(payload["value_cad"]) and payload["value_cad"] > 0):
         raise AppError("bad_request", "value_cad doit être un nombre strictement positif.", {"field": "value_cad"})
     if "monthly_flow_cad" in payload and not _is_number(payload["monthly_flow_cad"]):
@@ -290,11 +315,11 @@ def _parse(payload: Any, action: str, allowed: frozenset[str], required: tuple[s
     if "persona_label" in payload:
         lab = payload["persona_label"]
         if not isinstance(lab, str) or not lab.strip() or len(lab) > 120:
-            raise AppError("bad_request", "persona_label doit être une chaîne de 1 à 120 caractères.",
-                           {"field": "persona_label"})
-    if "monthly_flow_cad" in payload and "value_cad" in payload:     # tôt : ni profil ni données touchés
+            raise AppError(
+                "bad_request", "persona_label doit être une chaîne de 1 à 120 caractères.", {"field": "persona_label"}
+            )
+    if "monthly_flow_cad" in payload and "value_cad" in payload:  # tôt : ni profil ni données touchés
         _check_flow(float(payload["monthly_flow_cad"]), float(payload["value_cad"]))
-    return _Req(payload)
 
 
 def _persona_ids() -> list[str]:
@@ -311,9 +336,12 @@ def _check_flow(flow: float, value: float) -> None:
     tôt quand les deux champs sont fournis, puis sur les paramètres effectifs de la trajectoire (valeur venant du
     profil ou de ``trajectoire.json``)."""
     if flow < 0 and -flow > value:
-        raise AppError("bad_request", f"monthly_flow_cad ({flow:,.2f}) : un retrait mensuel supérieur à la valeur "
-                       f"initiale ({value:,.2f} CAD) n'est pas pris en charge (v0.1).",
-                       {"field": "monthly_flow_cad", "monthly_flow_cad": flow, "value_cad": value})
+        raise AppError(
+            "bad_request",
+            f"monthly_flow_cad ({flow:,.2f}) : un retrait mensuel supérieur à la valeur "
+            f"initiale ({value:,.2f} CAD) n'est pas pris en charge (v0.1).",
+            {"field": "monthly_flow_cad", "monthly_flow_cad": flow, "value_cad": value},
+        )
 
 
 def _ym(d) -> str:
@@ -325,13 +353,20 @@ def _initial_value(req: _Req, profile: InvestorProfile) -> float:
         return req.value_cad
     if profile.investable_wealth:
         return float(profile.investable_wealth)
-    raise AppError("bad_request", "Valeur initiale inconnue : fournir value_cad (le profil n'a pas d'avoir "
-                   "investissable).", {"field": "value_cad"})
+    raise AppError(
+        "bad_request",
+        "Valeur initiale inconnue : fournir value_cad (le profil n'a pas d'avoir investissable).",
+        {"field": "value_cad"},
+    )
 
 
-def _params(origin: str, value_cad: float, monthly_flow_cad: float, overlays: bool) -> dict[str, Any]:
-    return {"origin": origin, "value_cad": float(value_cad), "monthly_flow_cad": float(monthly_flow_cad),
-            "overlays": bool(overlays)}
+def _params(origin: str, value_cad: float, monthly_flow_cad: float, *, overlays: bool) -> dict[str, Any]:
+    return {
+        "origin": origin,
+        "value_cad": float(value_cad),
+        "monthly_flow_cad": float(monthly_flow_cad),
+        "overlays": bool(overlays),
+    }
 
 
 _PARAM_FIELDS = ("origin", "value_cad", "monthly_flow_cad", "overlays")
@@ -346,9 +381,11 @@ def _check_overrides(req: _Req, params: Mapping[str, Any]) -> None:
     given = {"value_cad": req.value_cad, "monthly_flow_cad": req.monthly_flow_cad, "overlays": req.overlays}
     diff = [k for k, v in given.items() if k in req.provided and params.get(k) != v]
     if diff:
-        raise AppError("conflict", f"Paramètres différents de la trajectoire enregistrée : {', '.join(diff)}.",
-                       {"reason": "trajectory_params", "fields": diff,
-                        "stored": {k: params.get(k) for k in _PARAM_FIELDS}})
+        raise AppError(
+            "conflict",
+            f"Paramètres différents de la trajectoire enregistrée : {', '.join(diff)}.",
+            {"reason": "trajectory_params", "fields": diff, "stored": {k: params.get(k) for k in _PARAM_FIELDS}},
+        )
 
 
 def _load_params(ctx: _Ctx, client_id: str) -> dict[str, Any] | None:
@@ -357,10 +394,15 @@ def _load_params(ctx: _Ctx, client_id: str) -> dict[str, Any] | None:
 
 
 def _trajectory_exists(stored: Mapping[str, Any], requested: Mapping[str, Any]) -> AppError:
-    return AppError("conflict", "Une autre trajectoire est déjà enregistrée pour ce client (origine, valeur, flux "
-                    "ou overlays différents).", {"reason": "trajectory_exists",
-                                                 "stored": {k: stored.get(k) for k in _PARAM_FIELDS},
-                                                 "requested": dict(requested)})
+    return AppError(
+        "conflict",
+        "Une autre trajectoire est déjà enregistrée pour ce client (origine, valeur, flux ou overlays différents).",
+        {
+            "reason": "trajectory_exists",
+            "stored": {k: stored.get(k) for k in _PARAM_FIELDS},
+            "requested": dict(requested),
+        },
+    )
 
 
 def _ensure_params(ctx: _Ctx, client_id: str, params: Mapping[str, Any], run_id: str) -> None:
@@ -394,14 +436,20 @@ def _stored_versions(hist: HistoryStore) -> list[PortfolioVersion]:
 
 
 def _drift(expected: str, got: str) -> AppError:
-    return AppError("conflict", "Dérive de l'historique : le rejeu ne régénère pas les versions stockées (profil, "
-                    "données ou configuration modifiés).", {"reason": "history_drift", "stored_digest": expected,
-                                                           "replayed_digest": got})
+    return AppError(
+        "conflict",
+        "Dérive de l'historique : le rejeu ne régénère pas les versions stockées (profil, "
+        "données ou configuration modifiés).",
+        {"reason": "history_drift", "stored_digest": expected, "replayed_digest": got},
+    )
 
 
 def _append_refused(version: PortfolioVersion, exc: Exception) -> AppError:
-    return AppError("conflict", f"Version refusée par l'historique : {exc}.",
-                    {"reason": "history_append", "version_id": version.version_id})
+    return AppError(
+        "conflict",
+        f"Version refusée par l'historique : {exc}.",
+        {"reason": "history_append", "version_id": version.version_id},
+    )
 
 
 def _append(hist: HistoryStore, version: PortfolioVersion) -> bool:
@@ -433,10 +481,17 @@ def _repair_index(hist: HistoryStore, version: PortfolioVersion, orphan: Any) ->
     key = version_key(version)
     stored_hash, replayed_hash = canonical_hash(orphan), canonical_hash(version.model_dump(mode="json"))
     if stored_hash != replayed_hash:
-        raise AppError("conflict", "Dérive de l'historique : une version déjà écrite, absente de l'index, diffère de "
-                       "celle que régénère le rejeu.", {"reason": "history_drift", "version_key": key,
-                                                         "stored_version_hash": stored_hash,
-                                                         "replayed_version_hash": replayed_hash})
+        raise AppError(
+            "conflict",
+            "Dérive de l'historique : une version déjà écrite, absente de l'index, diffère de "
+            "celle que régénère le rejeu.",
+            {
+                "reason": "history_drift",
+                "version_key": key,
+                "stored_version_hash": stored_hash,
+                "replayed_version_hash": replayed_hash,
+            },
+        )
     store = hist.store
     idx_obj = store.get(hist.index_key)
     scratch = MemoryStore()
@@ -449,10 +504,8 @@ def _repair_index(hist: HistoryStore, version: PortfolioVersion, orphan: Any) ->
     md_key = key.removesuffix(".json") + ".md"
     md = scratch.get(md_key)
     if md is not None and not store.exists(md_key):
-        try:
+        with contextlib.suppress(ConflictError):  # écrit entre-temps par un écrivain concurrent : on le garde
             store.put_text(md_key, md.text, if_none_match=True)
-        except ConflictError:
-            pass                                 # écrit entre-temps par un écrivain concurrent : on le garde
     idx = json.loads(idx_obj.text) if idx_obj is not None else []
     cond: dict[str, Any] = {"if_match": idx_obj.etag} if idx_obj is not None else {"if_none_match": True}
     try:
@@ -493,17 +546,18 @@ def _write_marker(ctx: _Ctx, key: str | None, doc: dict[str, Any]) -> None:
             cur = ctx.store.get(key)
             if cur is not None and _marker_status(cur) == "ok":
                 if doc.get("status") != "ok":
-                    logger.warning("marqueur ok conservé : %s (erreur d'une invocation en double : %s)", key,
-                                   doc.get("error"))
+                    logger.warning(
+                        "marqueur ok conservé : %s (erreur d'une invocation en double : %s)", key, doc.get("error")
+                    )
                 return
             cond: dict[str, Any] = {"if_match": cur.etag} if cur is not None else {"if_none_match": True}
             try:
                 ctx.store.put_json(key, body, **cond)
                 return
             except ConflictError:
-                continue                         # écrit entre-temps : relire avant de réessayer
+                continue  # écrit entre-temps : relire avant de réessayer
         logger.error("marqueur non écrit après %d essais (écritures concurrentes) : %s", _MARKER_ATTEMPTS, key)
-    except Exception:  # noqa: BLE001 - un marqueur manquant se voit par le délai de la machine, pas par une exception
+    except Exception:  # un marqueur manquant se voit par le délai de la machine, pas par une exception
         logger.exception("marqueur non écrit : %s", key)
 
 
@@ -523,8 +577,12 @@ def write_error_marker(payload: Any, store: Store | None, code: str, message: st
     action = payload.get("action")
     marker = tick_marker_key(run_id, month) if action == ACTION_TICK and month else replay_marker_key(run_id)
     ident = {"run_id": run_id, "client_id": _hint(payload, "client_id", CLIENT_ID)}
-    _fail(_Ctx(store, None, None), marker, AppError(code if code in ("internal", "bad_request") else "internal",
-                                                    message), ident)
+    _fail(
+        _Ctx(store, None, None),
+        marker,
+        AppError(code if code in ("internal", "bad_request") else "internal", message),
+        ident,
+    )
 
 
 def _run(ctx: _Ctx, marker: str | None, ident: dict[str, Any], fn: Callable[[], dict[str, Any]]) -> dict[str, Any]:
@@ -532,7 +590,7 @@ def _run(ctx: _Ctx, marker: str | None, ident: dict[str, Any], fn: Callable[[], 
         body = fn()
     except AppError as exc:
         return _fail(ctx, marker, exc, ident)
-    except Exception as exc:  # noqa: BLE001 - toute erreur devient une enveloppe et un marqueur d'erreur
+    except Exception as exc:  # toute erreur devient une enveloppe et un marqueur d'erreur
         logger.exception("action d'évolution en échec")
         return _fail(ctx, marker, AppError("internal", f"{type(exc).__name__}: {str(exc)[:300]}"), ident)
     return _tag(ok_response(_release(), **body))
@@ -548,8 +606,14 @@ def _done(ctx: _Ctx, marker: str) -> dict[str, Any] | None:
 
 
 # ----------------------------------------------------------------------------------------------- tick
-def handle_tick(payload: dict, *, store: Store | None = None, pit: PitReturns | None = None,
-                profile_loader: ProfileLoader | None = None, cfg: EvolutionConfig | None = None) -> dict:
+def handle_tick(
+    payload: dict,
+    *,
+    store: Store | None = None,
+    pit: PitReturns | None = None,
+    profile_loader: ProfileLoader | None = None,
+    cfg: EvolutionConfig | None = None,
+) -> dict:
     """``evolution.tick`` : un mois de plus pour la trajectoire enregistrée du client (rejouer pour reprendre).
 
     Sans historique, la trajectoire s'ouvre à ``month − 1`` (origine) et le mois demandé devient la version 0.
@@ -575,68 +639,39 @@ def _tick(req: _Req, ctx: _Ctx, cfg: EvolutionConfig, marker: str) -> dict[str, 
     hist = HistoryStore(cid, ctx.store)
     stored = _stored_versions(hist)
     params = _load_params(ctx, cid)
-    if stored:
-        last_m = month_end(stored[-1].as_of)
-        if m == last_m:
-            rkey = tick_result_key(cid, req.month)
-            body = _tick_body(req, stored[-1], stored, rkey if ctx.store.exists(rkey) else None, already=True)
-            _write_marker(ctx, marker, {"status": "ok", "error": None, **body})
-            return body
-        if m != last_m + pd.offsets.MonthEnd(1):
-            raise AppError("bad_request", f"month doit être {_ym(last_m + pd.offsets.MonthEnd(1))}, le mois qui suit "
-                           f"la dernière version ({_ym(last_m)}).", {"month": req.month, "last": _ym(last_m)})
-        if params is None:
-            raise AppError("conflict", "Historique sans paramètres de trajectoire : reprise impossible.",
-                           {"reason": "trajectory_params_missing"})
-        _check_overrides(req, params)
-        origin = month_end(params["origin"])
-        if month_end(stored[0].as_of) != origin + pd.offsets.MonthEnd(1):
-            raise AppError("conflict", "Dérive de l'historique : la première version ne suit pas l'origine "
-                           "enregistrée.", {"reason": "history_drift", "origin": _ym(origin),
-                                            "first_version": _ym(stored[0].as_of)})
-    else:
-        origin = m - pd.offsets.MonthEnd(1)
-        if params is not None:
-            # paramètres écrits par une invocation arrêtée avant le premier ajout : repris s'ils sont identiques
-            if month_end(params["origin"]) != origin:
-                raise AppError("conflict", "Paramètres de trajectoire déjà enregistrés (sans version) pour une autre "
-                               f"origine : le premier mois attendu est "
-                               f"{_ym(month_end(params['origin']) + pd.offsets.MonthEnd(1))}.",
-                               {"reason": "trajectory_params", "fields": ["origin"],
-                                "stored": {k: params.get(k) for k in _PARAM_FIELDS}})
-            _check_overrides(req, params)
+    if stored and m == month_end(stored[-1].as_of):
+        return _tick_already_done(req, ctx, stored, marker)
+    origin = _resume_origin(req, stored, params, m) if stored else _first_origin(req, params, m)
 
     profile = ctx.load_profile(cid, persona=req.persona)
     write_params = params is None
     if params is None:
-        params = _params(_ym(origin), _initial_value(req, profile), req.monthly_flow_cad, req.overlays)
+        params = _params(_ym(origin), _initial_value(req, profile), req.monthly_flow_cad, overlays=req.overlays)
     _check_flow(params["monthly_flow_cad"], params["value_cad"])
     pit = ctx.pit
     _check_window(pit, origin, m)
 
     # rejeu déterministe de [origine, mois demandé], sans écrire ; le mois demandé passe par le même tick
-    res, _ = replay(profile, cid, req.persona_label, origin, m, params["value_cad"], pit=pit, cfg=cfg,
-                    monthly_flow=params["monthly_flow_cad"], overlays=params["overlays"], history=None,
-                    run_id=req.run_id)
-    n = len(stored)
-    if len(res.versions) != n + 1:
-        raise AppError("conflict", f"Le rejeu rend {len(res.versions)} versions, attendu {n + 1} (mois manquants "
-                       "dans les données).", {"reason": "history_drift"})
-    if n and _digest(res.versions[:n]) != _digest(stored):
-        raise _drift(_digest(stored), _digest(res.versions[:n]))
-    new = res.versions[n]
-    if write_params:                             # avant le premier ajout (reprise sans trajectory_params_missing)
+    res, _ = replay(
+        profile,
+        cid,
+        req.persona_label,
+        origin,
+        m,
+        params["value_cad"],
+        pit=pit,
+        cfg=cfg,
+        monthly_flow=params["monthly_flow_cad"],
+        overlays=params["overlays"],
+        history=None,
+        run_id=req.run_id,
+    )
+    new = _next_version(res, stored)
+    if write_params:  # avant le premier ajout (reprise sans trajectory_params_missing)
         _ensure_params(ctx, cid, params, req.run_id)
     _append(hist, new)
 
-    ev = new.event
-    exp = res.explanations.get(ev.event_id)
-    month_prefix = f"ev.{new.as_of:%Y%m}."
-    cited = set(ev.fact_ids) | {i for sec in ((exp.data_used, exp.why, exp.limits, exp.what_would_change)
-                                              if exp else ()) for s in sec for i in s.fact_ids}
-    result = TickResult(version=new, perf=res.perf, explanation=exp,
-                        facts=[f for f in res.facts if f.fact_id.startswith(month_prefix) or f.fact_id in cited],
-                        reprofile_triggers_fired=[t.code for t in ev.triggers if t.blocking])
+    result = _tick_result(res, new)
     rkey = tick_result_key(cid, req.month)
     ctx.store.put_json(rkey, result.model_dump(mode="json"))
     body = _tick_body(req, new, [*stored, new], rkey, already=False)
@@ -644,19 +679,126 @@ def _tick(req: _Req, ctx: _Ctx, cfg: EvolutionConfig, marker: str) -> dict[str, 
     return {**body, "result": result.model_dump(mode="json")}
 
 
-def _tick_body(req: _Req, v: PortfolioVersion, chain: list[PortfolioVersion], result_key: str | None,
-               *, already: bool) -> dict[str, Any]:
+def _tick_already_done(req: _Req, ctx: _Ctx, stored: list[PortfolioVersion], marker: str) -> dict[str, Any]:
+    """Même mois que la dernière version : rien n'est recalculé, le marqueur ``ok`` est (ré)écrit."""
+    rkey = tick_result_key(req.client_id, req.month)
+    body = _tick_body(req, stored[-1], stored, rkey if ctx.store.exists(rkey) else None, already=True)
+    _write_marker(ctx, marker, {"status": "ok", "error": None, **body})
+    return body
+
+
+def _resume_origin(
+    req: _Req, stored: list[PortfolioVersion], params: dict[str, Any] | None, m: pd.Timestamp
+) -> pd.Timestamp:
+    """Origine d'une trajectoire qui a déjà des versions : ``m`` doit suivre la dernière, les paramètres
+    enregistrés doivent exister et égaler les champs fournis, la première version doit suivre l'origine."""
+    last_m = month_end(stored[-1].as_of)
+    if m != last_m + pd.offsets.MonthEnd(1):
+        raise AppError(
+            "bad_request",
+            f"month doit être {_ym(last_m + pd.offsets.MonthEnd(1))}, le mois qui suit "
+            f"la dernière version ({_ym(last_m)}).",
+            {"month": req.month, "last": _ym(last_m)},
+        )
+    if params is None:
+        raise AppError(
+            "conflict",
+            "Historique sans paramètres de trajectoire : reprise impossible.",
+            {"reason": "trajectory_params_missing"},
+        )
+    _check_overrides(req, params)
+    origin = month_end(params["origin"])
+    if month_end(stored[0].as_of) != origin + pd.offsets.MonthEnd(1):
+        raise AppError(
+            "conflict",
+            "Dérive de l'historique : la première version ne suit pas l'origine enregistrée.",
+            {"reason": "history_drift", "origin": _ym(origin), "first_version": _ym(stored[0].as_of)},
+        )
+    return origin
+
+
+def _first_origin(req: _Req, params: dict[str, Any] | None, m: pd.Timestamp) -> pd.Timestamp:
+    """Origine d'une trajectoire sans version : ``m − 1``. Des paramètres écrits par une invocation arrêtée avant
+    le premier ajout sont repris s'ils sont identiques (même origine, mêmes champs fournis)."""
+    origin = m - pd.offsets.MonthEnd(1)
+    if params is None:
+        return origin
+    if month_end(params["origin"]) != origin:
+        raise AppError(
+            "conflict",
+            "Paramètres de trajectoire déjà enregistrés (sans version) pour une autre "
+            f"origine : le premier mois attendu est "
+            f"{_ym(month_end(params['origin']) + pd.offsets.MonthEnd(1))}.",
+            {"reason": "trajectory_params", "fields": ["origin"], "stored": {k: params.get(k) for k in _PARAM_FIELDS}},
+        )
+    _check_overrides(req, params)
+    return origin
+
+
+def _next_version(res: ReplayResult, stored: list[PortfolioVersion]) -> PortfolioVersion:
+    """Version du mois demandé : le rejeu doit rendre une version de plus que la chaîne stockée, et régénérer
+    celle-ci à l'identique (même digest)."""
+    n = len(stored)
+    if len(res.versions) != n + 1:
+        raise AppError(
+            "conflict",
+            f"Le rejeu rend {len(res.versions)} versions, attendu {n + 1} (mois manquants dans les données).",
+            {"reason": "history_drift"},
+        )
+    if n and _digest(res.versions[:n]) != _digest(stored):
+        raise _drift(_digest(stored), _digest(res.versions[:n]))
+    return res.versions[n]
+
+
+def _tick_result(res: ReplayResult, new: PortfolioVersion) -> TickResult:
+    """``TickResult`` du mois : la version, la performance, l'explication et les faits du mois ou cités."""
+    ev = new.event
+    exp = res.explanations.get(ev.event_id)
+    month_prefix = f"ev.{new.as_of:%Y%m}."
+    cited = set(ev.fact_ids) | {
+        i
+        for sec in ((exp.data_used, exp.why, exp.limits, exp.what_would_change) if exp else ())
+        for s in sec
+        for i in s.fact_ids
+    }
+    return TickResult(
+        version=new,
+        perf=res.perf,
+        explanation=exp,
+        facts=[f for f in res.facts if f.fact_id.startswith(month_prefix) or f.fact_id in cited],
+        reprofile_triggers_fired=[t.code for t in ev.triggers if t.blocking],
+    )
+
+
+def _tick_body(
+    req: _Req, v: PortfolioVersion, chain: list[PortfolioVersion], result_key: str | None, *, already: bool
+) -> dict[str, Any]:
     return {
-        "run_id": req.run_id, "client_id": req.client_id, "month": req.month, "version_id": v.version_id,
-        "seq": v.seq, "action": v.event.action, "level": v.level, "value_cad": v.value_cad,
-        "n_versions": len(chain), "digest": _digest(chain),   # digest de toute la chaîne = celui d'un rejeu complet
-        "version_key": version_key(v), "result_key": result_key, "already_done": already,
+        "run_id": req.run_id,
+        "client_id": req.client_id,
+        "month": req.month,
+        "version_id": v.version_id,
+        "seq": v.seq,
+        "action": v.event.action,
+        "level": v.level,
+        "value_cad": v.value_cad,
+        "n_versions": len(chain),
+        "digest": _digest(chain),  # digest de toute la chaîne = celui d'un rejeu complet
+        "version_key": version_key(v),
+        "result_key": result_key,
+        "already_done": already,
     }
 
 
 # ----------------------------------------------------------------------------------------------- rejeu
-def handle_replay(payload: dict, *, store: Store | None = None, pit: PitReturns | None = None,
-                  profile_loader: ProfileLoader | None = None, cfg: EvolutionConfig | None = None) -> dict:
+def handle_replay(
+    payload: dict,
+    *,
+    store: Store | None = None,
+    pit: PitReturns | None = None,
+    profile_loader: ProfileLoader | None = None,
+    cfg: EvolutionConfig | None = None,
+) -> dict:
     """``evolution.replay`` : rejeu point-in-time de ``[start, end]`` ; écrit les versions dans l'historique du
     client, le ``ReplayResult`` complet sous ``rejeux/<run_id>.json``, puis le marqueur.
 
@@ -684,12 +826,63 @@ def _replay(req: _Req, ctx: _Ctx, cfg: EvolutionConfig, marker: str) -> dict[str
     stored = _stored_versions(hist)
     params = _load_params(ctx, cid)
     if stored and params is None:
-        raise AppError("conflict", "Historique sans paramètres de trajectoire.",
-                       {"reason": "trajectory_params_missing"})
+        raise AppError(
+            "conflict", "Historique sans paramètres de trajectoire.", {"reason": "trajectory_params_missing"}
+        )
 
     profile = ctx.load_profile(cid, persona=req.persona)
-    # une trajectoire enregistrée fournit les valeurs par défaut des champs absents (origine comprise) ; des
-    # paramètres sans version (invocation arrêtée avant le premier ajout) la définissent tout autant
+    plan = _replay_plan(req, ctx, profile, params)
+    new_params = plan.params()
+    if params is not None and not _same_params(params, new_params):
+        raise _trajectory_exists(params, new_params)
+
+    res, _ = replay(
+        profile,
+        cid,
+        req.persona_label,
+        plan.start,
+        plan.end,
+        plan.value,
+        pit=ctx.pit,
+        cfg=cfg,
+        monthly_flow=plan.flow,
+        overlays=plan.overlays,
+        history=None,
+        run_id=run_id,
+    )
+    k = min(len(stored), len(res.versions))
+    if _digest(stored[:k]) != _digest(res.versions[:k]):
+        raise _drift(_digest(stored[:k]), _digest(res.versions[:k]))
+    appended = res.versions[len(stored) :]
+    if appended and params is None:  # avant le premier ajout (params absents ⇒ historique vide)
+        _ensure_params(ctx, cid, new_params, run_id)
+    for v in appended:
+        _append(hist, v)
+    rkey = replay_result_key(cid, run_id)
+    ctx.store.put_json(rkey, res.model_dump(mode="json"))
+    body = _replay_body(res, rkey, n_history=len(stored) + len(appended), appended=len(appended))
+    _write_marker(ctx, marker, {"status": "ok", "error": None, **body})
+    return body
+
+
+@dataclass(frozen=True)
+class _ReplayPlan:
+    """Fenêtre et paramètres effectifs d'un rejeu."""
+
+    start: pd.Timestamp
+    end: pd.Timestamp
+    value: float
+    flow: float
+    overlays: bool
+
+    def params(self) -> dict[str, Any]:
+        return _params(_ym(self.start), self.value, self.flow, overlays=self.overlays)
+
+
+def _replay_plan(req: _Req, ctx: _Ctx, profile: InvestorProfile, params: dict[str, Any] | None) -> _ReplayPlan:
+    """Une trajectoire enregistrée fournit les valeurs par défaut des champs absents (origine comprise) ; des
+    paramètres sans version (invocation arrêtée avant le premier ajout) la définissent tout autant. Sans ``end`` :
+    dernier mois des données ; sans ``start`` ni trajectoire : ``DEFAULT_REPLAY_MONTHS`` mois avant ``end``."""
     known = params or {}
     value = req.value_cad if req.value_cad is not None else known.get("value_cad") or _initial_value(req, profile)
     flow = req.monthly_flow_cad if "monthly_flow_cad" in req.provided else known.get("monthly_flow_cad", 0.0)
@@ -702,33 +895,20 @@ def _replay(req: _Req, ctx: _Ctx, cfg: EvolutionConfig, marker: str) -> dict[str
     else:
         start = month_end(known["origin"]) if known else end - pd.offsets.MonthEnd(DEFAULT_REPLAY_MONTHS)
     _check_window(pit, start, end)
-    new_params = _params(_ym(start), value, flow, overlays)
-    if params is not None and not _same_params(params, new_params):
-        raise _trajectory_exists(params, new_params)
-
-    res, _ = replay(profile, cid, req.persona_label, start, end, value, pit=pit, cfg=cfg, monthly_flow=flow,
-                    overlays=overlays, history=None, run_id=run_id)
-    k = min(len(stored), len(res.versions))
-    if _digest(stored[:k]) != _digest(res.versions[:k]):
-        raise _drift(_digest(stored[:k]), _digest(res.versions[:k]))
-    appended = res.versions[len(stored):]
-    if appended and params is None:              # avant le premier ajout (params absents ⇒ historique vide)
-        _ensure_params(ctx, cid, new_params, run_id)
-    for v in appended:
-        _append(hist, v)
-    rkey = replay_result_key(cid, run_id)
-    ctx.store.put_json(rkey, res.model_dump(mode="json"))
-    body = _replay_body(res, rkey, n_history=len(stored) + len(appended), appended=len(appended))
-    _write_marker(ctx, marker, {"status": "ok", "error": None, **body})
-    return body
+    return _ReplayPlan(start, end, value, flow, overlays)
 
 
 def _replay_body(res: ReplayResult, result_key: str, *, n_history: int, appended: int) -> dict[str, Any]:
     return {
-        "run_id": res.run_id, "client_id": res.client_id, "digest": res.digest, "n_versions": len(res.versions),
-        "n_events_by_action": dict(sorted(res.n_events_by_action.items())), "result_key": result_key,
+        "run_id": res.run_id,
+        "client_id": res.client_id,
+        "digest": res.digest,
+        "n_versions": len(res.versions),
+        "n_events_by_action": dict(sorted(res.n_events_by_action.items())),
+        "result_key": result_key,
         "window": [_ym(res.window[0]), _ym(res.window[1])],
-        "history": {"n_versions": n_history, "appended": appended}, "already_done": False,
+        "history": {"n_versions": n_history, "appended": appended},
+        "already_done": False,
     }
 
 
@@ -746,19 +926,37 @@ def handle_replay_summary(payload: dict, *, store: Store | None = None) -> dict:
         chain_ok, bad = hist.verify()
         last = idx[-1] if idx else {}
         return {
-            "client_id": req.client_id, "run_id": req.run_id, "n_versions": len(idx),
-            "first_as_of": idx[0]["as_of"] if idx else None, "last_as_of": last.get("as_of"),
-            "last_version_id": last.get("version_id"), "last_action": last.get("action"),
-            "last_value_cad": last.get("value_cad"), "last_level": last.get("level"),
+            "client_id": req.client_id,
+            "run_id": req.run_id,
+            "n_versions": len(idx),
+            "first_as_of": idx[0]["as_of"] if idx else None,
+            "last_as_of": last.get("as_of"),
+            "last_version_id": last.get("version_id"),
+            "last_action": last.get("action"),
+            "last_value_cad": last.get("value_cad"),
+            "last_level": last.get("level"),
             "n_events_by_action": dict(sorted(Counter(e["action"] for e in idx).items())),
-            "chain_ok": chain_ok, "first_bad_version": bad, "history_prefix": history_prefix(req.client_id),
+            "chain_ok": chain_ok,
+            "first_bad_version": bad,
+            "history_prefix": history_prefix(req.client_id),
         }
 
     return _run(ctx, None, {}, go)
 
 
 __all__ = [
-    "ACTION_REPLAY", "ACTION_REPLAY_SUMMARY", "ACTION_TICK", "DEFAULT_REPLAY_MONTHS", "handle_replay",
-    "handle_replay_summary", "handle_tick", "load_pit", "params_key", "replay_marker_key", "replay_result_key",
-    "tick_marker_key", "tick_result_key", "version_key",
+    "ACTION_REPLAY",
+    "ACTION_REPLAY_SUMMARY",
+    "ACTION_TICK",
+    "DEFAULT_REPLAY_MONTHS",
+    "handle_replay",
+    "handle_replay_summary",
+    "handle_tick",
+    "load_pit",
+    "params_key",
+    "replay_marker_key",
+    "replay_result_key",
+    "tick_marker_key",
+    "tick_result_key",
+    "version_key",
 ]

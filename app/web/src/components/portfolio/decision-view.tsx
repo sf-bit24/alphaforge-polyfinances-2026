@@ -4,6 +4,7 @@ import { EXPLANATION_SECTIONS, type Decision, type ExplanationSection, type Port
 import { curly, formatDateTime, formatDate } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
 import { protectionCause, requestFacts } from "@/lib/portfolio/decision";
+import { groundingLine } from "@/lib/portfolio/grounding";
 import d from "@/components/details/details.module.css";
 import { cn } from "@/components/ui/cn";
 import { Positions, StylePanel } from "./allocation-panels";
@@ -147,15 +148,12 @@ function ExplanationQuestion({ section, statements }: { section: ExplanationSect
 
 /** The outcome of the Bedrock Guardrails contextual grounding check, when a guardrail ran. */
 function GroundingNote({ grounding }: { grounding: PortfolioBuildResponse["grounding"] }) {
-  const { t } = useI18n();
-  const v = t.portfolioView.grounding;
-  const action = grounding?.action;
-  if (!action) return null;
-  const named = (Object.hasOwn(v.actions, action) ? v.actions[action] : undefined) ?? action;
-  // The raw action stays in the tooltip, for the audit.
+  const { t, locale } = useI18n();
+  const line = grounding ? groundingLine(grounding, t.portfolioView.grounding, locale) : null;
+  if (!line) return null;
   return (
-    <p className={cn(d.cap, p.block)} title={action}>
-      {v.title} · {v.action(named)}
+    <p className={cn(d.cap, p.block)}>
+      {t.portfolioView.grounding.title} · {line}
     </p>
   );
 }

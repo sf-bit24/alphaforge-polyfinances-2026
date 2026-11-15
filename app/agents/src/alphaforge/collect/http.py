@@ -41,6 +41,7 @@ ALLOWED_HOSTS = frozenset(
     }
 )
 USER_AGENT = "AlphaForgeResearchBot/0.1 (+https://github.com/sf-bit24/alphaforge-polyfinances-2026)"
+SEC_USER_AGENT_NAME = "AlphaForge AI Research"
 FALLBACK_USER_AGENTS = {"fred.stlouisfed.org": "curl/8.0"}
 # La SEC exige un courriel de contact dans le User-Agent (« fair access ») : sans ALPHAFORGE_CONTACT_EMAIL,
 # ses hôtes répondent 403 et la source est déclarée bloquée. Aucun courriel n'est inventé.
@@ -171,10 +172,13 @@ def _gunzip(body: bytes, max_bytes: int, url: str) -> bytes:
 
 
 def user_agent_for(host: str) -> str:
-    """User-Agent déclaré; la SEC reçoit en plus le courriel de contact s'il est configuré."""
+    """User-Agent déclaré; la SEC reçoit son format documenté, « nom courriel », s'il est configuré.
+
+    La SEC refuse (403) le User-Agent habituel même suivi du courriel : la version et l'adresse entre parenthèses
+    le font rejeter (test du 2026-11-15). Elle accepte « AlphaForge AI Research <courriel> »."""
     contact = (os.environ.get("ALPHAFORGE_CONTACT_EMAIL") or "").strip()
     if host in SEC_HOSTS and contact:
-        return f"{USER_AGENT} {contact}"
+        return f"{SEC_USER_AGENT_NAME} {contact}"
     return USER_AGENT
 
 

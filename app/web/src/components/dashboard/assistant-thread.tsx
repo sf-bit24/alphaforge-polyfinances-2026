@@ -170,7 +170,7 @@ export function ThreadEntries({ view, questions, form, onPlayDemo }: { view: Thr
 export function PendingReply({ replying, streamText }: { replying: boolean; streamText: string }) {
   const { t } = useI18n();
   return (
-    <AgentMessage>
+    <AgentMessage mood={replying && streamText ? undefined : "think"}>
       {replying && streamText ? (
         <Markdown>{streamText}</Markdown>
       ) : (

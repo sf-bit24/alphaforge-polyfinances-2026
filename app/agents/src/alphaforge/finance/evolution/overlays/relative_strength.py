@@ -1,4 +1,5 @@
 """Force relative entre FNB du cœur : déplacement de ``tilt`` du poids des moins bons vers les meilleurs."""
+
 from __future__ import annotations
 
 import math
@@ -24,16 +25,32 @@ class RelativeStrength:
             return OverlaySignal(self.name, None, {}, "moins de deux FNB du cœur avec historique suffisant")
         ranked = sorted(mom, key=lambda a: (-mom[a], a))
         half = len(ranked) // 2
-        best, worst = ranked[:half], ranked[len(ranked) - half:]
+        best, worst = ranked[:half], ranked[len(ranked) - half :]
         moved = {a: tilt * ctx.target[a] for a in worst}
         tot = math.fsum(moved.values())
         tb = math.fsum(ctx.target[a] for a in best)
         delta = {a: -v for a, v in moved.items()}
         for a in best:
             delta[a] = delta.get(a, 0.0) + tot * ctx.target[a] / tb
-        facts = [fact(ctx, self.name, f"mom_{a}", f"Rendement {lb}-{skip} de {a}", mom[a], "ratio",
-                      params=("lookback", "skip")) for a in ranked]
-        facts.append(fact(ctx, self.name, "moved", "Poids déplacé vers les mieux classés", tot, "ratio",
-                          params=("tilt",)))
-        return OverlaySignal(self.name, float(half), clean(delta),
-                             f"{', '.join(best)} en tête ; {tot:.1%} pris à {', '.join(worst)}", facts)
+        facts = [
+            fact(
+                ctx,
+                self.name,
+                f"mom_{a}",
+                f"Rendement {lb}-{skip} de {a}",
+                mom[a],
+                "ratio",
+                params=("lookback", "skip"),
+            )
+            for a in ranked
+        ]
+        facts.append(
+            fact(ctx, self.name, "moved", "Poids déplacé vers les mieux classés", tot, "ratio", params=("tilt",))
+        )
+        return OverlaySignal(
+            self.name,
+            float(half),
+            clean(delta),
+            f"{', '.join(best)} en tête ; {tot:.1%} pris à {', '.join(worst)}",
+            facts,
+        )

@@ -41,6 +41,14 @@ portfolio_enabled = true
 # l'horaire de demo (1 execution = 1 mois simule) reste desactive.
 evolution_enabled = true
 
+# Interface deployee (web.tf) : ECS Fargate derriere un ALB et CloudFront, image
+# ECR poussee par le job build_web (role de infrastructure/bootstrap/github.tf).
+# VPC par defaut ; trois sous-reseaux publics par defaut de zone (us-east-1a, b,
+# c), hors us-east-1e (use1-az3), ou Fargate n'est pas propose.
+web_enabled    = true
+web_vpc_id     = "vpc-069adf85dbd931d7f"
+web_subnet_ids = ["subnet-0281babfcae54063f", "subnet-0315eb8575f90e70d", "subnet-05548ee397dc9ba6b"]
+
 additional_tags = {
   Owner = "larpathon"
   Event = "datathon-polyfinances-2026"

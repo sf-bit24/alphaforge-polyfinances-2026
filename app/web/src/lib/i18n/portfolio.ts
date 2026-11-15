@@ -245,13 +245,19 @@ export const portfolioFr = {
   grounding: {
     title: "Ancrage vérifié par Bedrock Guardrails",
     action: ((action: string) => `Résultat : ${action}`) as Fn<[string]>,
-    /** `ApplyGuardrail` actions of Bedrock; an action not listed is shown as is. */
-    actions: { NONE: "aucune intervention", GUARDRAIL_INTERVENED: "le garde-fou est intervenu" } as Record<string, string>,
+    passed: ((checked: number, min: string, threshold: string) =>
+      `${checked} énoncé${checked > 1 ? "s" : ""} ancré${checked > 1 ? "s" : ""} dans les faits cités, la décision et les fiches de méthode (score minimal ${min}, seuil ${threshold})`) as Fn<
+      [number, string, string]
+    >,
+    below: ((below: number, checked: number, threshold: string) =>
+      `${below} énoncé${below > 1 ? "s" : ""} sur ${checked} sous le seuil d’ancrage (${threshold}) : voir le rapport de vérification`) as Fn<[number, number, string]>,
+    errors: ((errors: number) => `${errors} vérification${errors > 1 ? "s" : ""} impossible${errors > 1 ? "s" : ""}`) as Fn<[number]>,
+    failed: "Vérification impossible : le service n’a pas répondu.",
   },
   report: "Reformulation par le modèle",
 };
 
-type PortfolioStrings = typeof portfolioFr;
+export type PortfolioStrings = typeof portfolioFr;
 
 export const portfolioEn: PortfolioStrings = {
   title: "Simulated portfolio",
@@ -473,7 +479,14 @@ export const portfolioEn: PortfolioStrings = {
   grounding: {
     title: "Grounding checked by Bedrock Guardrails",
     action: ((action: string) => `Outcome: ${action}`) as Fn<[string]>,
-    actions: { NONE: "no intervention", GUARDRAIL_INTERVENED: "the guardrail intervened" },
+    passed: ((checked: number, min: string, threshold: string) =>
+      `${checked} statement${checked > 1 ? "s" : ""} grounded in the cited facts, the decision and the methodology sheets (lowest score ${min}, threshold ${threshold})`) as Fn<
+      [number, string, string]
+    >,
+    below: ((below: number, checked: number, threshold: string) =>
+      `${below} of ${checked} statement${checked > 1 ? "s" : ""} below the grounding threshold (${threshold}): see the verification report`) as Fn<[number, number, string]>,
+    errors: ((errors: number) => `${errors} check${errors > 1 ? "s" : ""} could not run`) as Fn<[number]>,
+    failed: "Check not possible: the service did not answer.",
   },
   report: "Rephrasing by the model",
 };

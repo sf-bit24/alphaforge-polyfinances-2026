@@ -619,9 +619,15 @@ requête, archive, localisateurs, licence, attribution, robots, `as_of`, `adjust
 - `metric` : minuscules, chiffres et `_` (40 au plus). Pour `sector_activity`, c'est une catégorie d'exclusion du
   questionnaire : `tobacco`, `weapons`, `fossil_fuels`, `gambling`, `alcohol` (`okf.ESG_ACTIVITIES`).
 - `period` : `AAAA`, `AAAA-MM` ou `AAAA-MM-JJ` ; par défaut, la date d'observation.
-- Seuls les hôtes du paquet `funds-sustainability` peuvent en produire. Le document reste rangé sous
-  `general/faits/<source>/` (section 5), avec le tag `esg`. Comme tout document de la recherche, son `data` porte
-  `tickers`.
+- Côté recherche, seuls les hôtes du paquet `funds-sustainability` peuvent en produire. Le document reste rangé
+  sous `general/faits/<source>/` (section 5), avec le tag `esg`. Comme tout document de la recherche, son `data`
+  porte `tickers`.
+- Côté collecte, sans modèle : A5 lit le code SIC de chaque émetteur dans EDGAR (`submissions`) et le joint à
+  l'élément `fundamentals` (`data.sic`). Si le code figure dans la table fixe `collect.edgar.SIC_ACTIVITY` (pétrole,
+  gaz, charbon, pipelines, raffinage, tabac, alcool, armement), A6 écrit un fait `sector_activity` sous
+  `general/faits/data-sec-gov/<AAAA-MM-JJ>-<empreinte>.md`, relu par `okf_facts.parse_esg`. L'empreinte vient du titre
+  et du code SIC : le fait n'est pas réécrit tant que le code ne change pas. `published_at` est l'heure de
+  récupération (`published_at_basis = "retrieved_at_upper_bound"`).
 - Le runtime `portfolio` les lit (`OkfMarketStore`, sujet `esg`) : faits publiés au plus tard à `as_of`, statut
   FAIT, identifiants `okf.esg.<TICKER>.<n>`, et leurs (clé, ETag) entrent dans la version des données. Avant
   l'étape 0, un titre qu'un fait `sector_activity` relie à une catégorie exclue par l'investisseur est exclu, avec

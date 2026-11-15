@@ -10,6 +10,7 @@ import { ErrorEnvelope } from "@/lib/contract/schemas";
 import { portfolioEn, portfolioFr } from "@/lib/i18n/portfolio";
 import { PORTFOLIO_FIXTURES } from "@/lib/mock/decisions";
 import { indexFacts, rankingRows, requestFacts, rowFacts, styleBand } from "@/lib/portfolio/decision";
+import { groundingLine } from "@/lib/portfolio/grounding";
 import { formatCad, formatEngineValue, formatFact, formatLimit, formatWeight, normalizeNumber, pythonFixed } from "@/lib/portfolio/format";
 import { portfolioSessionId } from "@/lib/server/aws";
 import { handlePortfolio, validatePortfolioRequest } from "@/lib/server/gateway";
@@ -287,5 +288,45 @@ describe("portfolio strings", () => {
     ]);
     expect(portfolioFr.banner).toBe("Simulation éducative — aucun conseil, aucune transaction");
     expect(portfolioFr.style.badge(portfolioFr.style.styles.offensive)).toBe("Style offensif");
+  });
+});
+
+describe("grounding line (Bedrock Guardrails, per statement)", () => {
+  const perStatement = {
+    action: "NONE",
+    method: "per_statement",
+    checked: 19,
+    below: 0,
+    errors: 0,
+    retries: 0,
+    min_score: 0.79,
+    threshold: 0.75,
+    sources: ["general/methodologie/scoring-par-style.md"],
+    statements: [{ section: "why", index: 0, action: "NONE", score: 0.79, threshold: 0.75, relevance: 0.97, scope: "section", retries: 0 }],
+  };
+
+  it("parses the engine's per-statement result and the older single-call shape", () => {
+    expect(PortfolioBuildResponse.shape.grounding.parse(perStatement)?.statements?.[0]?.scope).toBe("section");
+    expect(PortfolioBuildResponse.shape.grounding.parse({ action: "GUARDRAIL_INTERVENED", assessments: [] })?.method).toBeUndefined();
+  });
+
+  it("says how many statements are grounded, with the engine's own scores", () => {
+    expect(groundingLine(perStatement, portfolioFr.grounding, "fr")).toBe(
+      "19 énoncés ancrés dans les faits cités, la décision et les fiches de méthode (score minimal 0,79, seuil 0,75)",
+    );
+    expect(groundingLine(perStatement, portfolioEn.grounding, "en")).toContain("lowest score 0.79, threshold 0.75");
+  });
+
+  it("names statements below the threshold and checks that could not run", () => {
+    const below = { ...perStatement, action: "GUARDRAIL_INTERVENED", below: 2, errors: 1 };
+    expect(groundingLine(below, portfolioFr.grounding, "fr")).toBe(
+      "2 énoncés sur 19 sous le seuil d’ancrage (0,75) : voir le rapport de vérification · 1 vérification impossible",
+    );
+    expect(groundingLine({ ...perStatement, action: "ERROR", checked: 0 }, portfolioFr.grounding, "fr")).toBe(portfolioFr.grounding.failed);
+  });
+
+  it("keeps the raw outcome for an older response, and nothing without a check", () => {
+    expect(groundingLine({ action: "GUARDRAIL_INTERVENED" }, portfolioFr.grounding, "fr")).toBe("Résultat : GUARDRAIL_INTERVENED");
+    expect(groundingLine({ action: null }, portfolioFr.grounding, "fr")).toBeNull();
   });
 });

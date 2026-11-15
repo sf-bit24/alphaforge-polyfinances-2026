@@ -713,7 +713,18 @@ SUBJECTS: dict[str, Subject] = {
                 "packs": ["funds-sustainability"],
             },
             {
-                "objective": "Reported emissions and pipeline incidents for energy issuers of the universe",
+                "objective": "Reported facility GHG emissions (GHGRP) of the universe's energy issuers: one fact per "
+                "issuer and year, esg_kind emissions, esg_metric ghg_tonnes_co2e",
+                "packs": ["funds-sustainability"],
+            },
+            {
+                "objective": "CER pipeline incidents since 2023 of the universe's pipeline operators: one count per "
+                "issuer and year, esg_kind incident, esg_metric pipeline_incidents",
+                "packs": ["funds-sustainability"],
+            },
+            {
+                "objective": "Fossil fuel activity of universe issuers from official industry classifications (NAICS, "
+                "NPRI): esg_kind sector_activity, esg_metric fossil_fuels",
                 "packs": ["funds-sustainability"],
             },
         ),

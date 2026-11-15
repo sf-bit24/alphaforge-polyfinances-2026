@@ -14,6 +14,7 @@ casse ``verify()``. Supports : mémoire, répertoire local (``LocalStore``) ou t
 Point de coordination : « Portfolio Version » n'est pas (encore) dans ``okf.DOC_TYPES`` ; le résumé ``.md``
 est rendu avec ``okf.render`` (qui ne valide pas) et passera ``okf.validate`` dès que le type sera déclaré.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -66,8 +67,15 @@ class MemoryStore(Store):
             return None
         return StoredObject(key=key, body=body, etag=self._etag(body), last_modified="")
 
-    def put(self, key: str, body: bytes, *, content_type: str = "text/markdown; charset=utf-8",
-            if_match: str | None = None, if_none_match: bool = False) -> str:
+    def put(
+        self,
+        key: str,
+        body: bytes,
+        *,
+        content_type: str = "text/markdown; charset=utf-8",
+        if_match: str | None = None,
+        if_none_match: bool = False,
+    ) -> str:
         with self._lock:
             cur = self._objects.get(key)
             if if_none_match and cur is not None:
@@ -81,8 +89,10 @@ class MemoryStore(Store):
         validate_prefix(prefix)
         with self._lock:
             keys = sorted(k for k in self._objects if k.startswith(prefix))[:limit]
-            return [ObjectInfo(key=k, etag=self._etag(self._objects[k]), last_modified="",
-                               size=len(self._objects[k])) for k in keys]
+            return [
+                ObjectInfo(key=k, etag=self._etag(self._objects[k]), last_modified="", size=len(self._objects[k]))
+                for k in keys
+            ]
 
 
 class HistoryError(ValueError):
@@ -150,9 +160,15 @@ class HistoryStore:
         prev_hash = last["record_hash"] if last else GENESIS
         v_hash = canonical_hash(payload)
         entry = {
-            "version_id": version.version_id, "seq": version.seq, "as_of": version.as_of.isoformat(),
-            "action": version.event.action, "level": version.level, "value_cad": version.value_cad,
-            "drift": version.event.drift, "version_hash": v_hash, "prev_hash": prev_hash,
+            "version_id": version.version_id,
+            "seq": version.seq,
+            "as_of": version.as_of.isoformat(),
+            "action": version.event.action,
+            "level": version.level,
+            "value_cad": version.value_cad,
+            "drift": version.event.drift,
+            "version_hash": v_hash,
+            "prev_hash": prev_hash,
             "record_hash": canonical_hash({"prev": prev_hash, "version": v_hash}),
         }
         self.store.put_json(f"{stem}.json", payload, if_none_match=True)
@@ -193,10 +209,15 @@ class HistoryStore:
             if raw is None:
                 return False, vid
             v_hash = canonical_hash(raw)
-            if (e.get("seq") != i or e.get("prev_hash") != prev or v_hash != e.get("version_hash")
-                    or canonical_hash({"prev": prev, "version": v_hash}) != e.get("record_hash")
-                    or raw.get("seq") != i or raw.get("version_id") != vid
-                    or raw.get("parent_version_id") != prev_id):
+            if (
+                e.get("seq") != i
+                or e.get("prev_hash") != prev
+                or v_hash != e.get("version_hash")
+                or canonical_hash({"prev": prev, "version": v_hash}) != e.get("record_hash")
+                or raw.get("seq") != i
+                or raw.get("version_id") != vid
+                or raw.get("parent_version_id") != prev_id
+            ):
                 return False, vid
             prev, prev_id = e["record_hash"], vid
         return True, None
@@ -206,29 +227,48 @@ def render_summary(v: PortfolioVersion) -> str:
     """Résumé Markdown d'une version (frontmatter OKF « Portfolio Version » + tableau des mouvements)."""
     ev = v.event
     now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-    doc = okf.OkfDoc(frontmatter={
-        "type": DOC_TYPE,
-        "title": f"Version de portefeuille {v.version_id}",
-        "description": f"Portefeuille simulé au {v.as_of.isoformat()} ({ev.action}) ; {EVENT_LABEL}.",
-        "tags": ["portefeuille", "evolution", "simulation"],
-        "status": "draft",
-        "owners": ["alphaforge-a3"],
-        "sensitivity": "client",
-        "generated": {"by": "agent:A3", "at": now},
-        "sources": [{"id": "version-json", "title": "PortfolioVersion complète",
-                     "resource": f"{history_prefix(v.client_id)}{v.seq:04d}-{v.as_of:%Y%m}.json"}],
-        "data": {"version_id": v.version_id, "seq": v.seq, "as_of": v.as_of.isoformat(), "action": ev.action,
-                 "level": v.level, "value_cad": round(v.value_cad, 2), "simulation_only": True,
-                 "status": v.status},
-    })
-    lines = [f"**{EVENT_LABEL.capitalize()}** — simulation seulement, aucun ordre ni conseil.", "",
-             f"- Action : {ev.action} ; niveau : {v.level} ; valeur simulée : {v.value_cad:,.2f} CAD",
-             f"- Dérive avant opération : {ev.drift:.4f} ; rotation (aller simple) : {ev.turnover_oneway:.4f}", ""]
+    doc = okf.OkfDoc(
+        frontmatter={
+            "type": DOC_TYPE,
+            "title": f"Version de portefeuille {v.version_id}",
+            "description": f"Portefeuille simulé au {v.as_of.isoformat()} ({ev.action}) ; {EVENT_LABEL}.",
+            "tags": ["portefeuille", "evolution", "simulation"],
+            "status": "draft",
+            "owners": ["alphaforge-a3"],
+            "sensitivity": "client",
+            "generated": {"by": "agent:A3", "at": now},
+            "sources": [
+                {
+                    "id": "version-json",
+                    "title": "PortfolioVersion complète",
+                    "resource": f"{history_prefix(v.client_id)}{v.seq:04d}-{v.as_of:%Y%m}.json",
+                }
+            ],
+            "data": {
+                "version_id": v.version_id,
+                "seq": v.seq,
+                "as_of": v.as_of.isoformat(),
+                "action": ev.action,
+                "level": v.level,
+                "value_cad": round(v.value_cad, 2),
+                "simulation_only": True,
+                "status": v.status,
+            },
+        }
+    )
+    lines = [
+        f"**{EVENT_LABEL.capitalize()}** — simulation seulement, aucun ordre ni conseil.",
+        "",
+        f"- Action : {ev.action} ; niveau : {v.level} ; valeur simulée : {v.value_cad:,.2f} CAD",
+        f"- Dérive avant opération : {ev.drift:.4f} ; rotation (aller simple) : {ev.turnover_oneway:.4f}",
+        "",
+    ]
     if ev.trades:
-        lines += ["| Actif | Poids avant | Poids après | Δ | Montant (CAD) | Motif |",
-                  "|---|---:|---:|---:|---:|---|"]
-        lines += [f"| {t.asset_id} | {t.w_from:.4f} | {t.w_to:.4f} | {t.dw:+.4f} | {t.amount_cad:,.2f} | {t.reason} |"
-                  for t in ev.trades]
+        lines += ["| Actif | Poids avant | Poids après | Δ | Montant (CAD) | Motif |", "|---|---:|---:|---:|---:|---|"]
+        lines += [
+            f"| {t.asset_id} | {t.w_from:.4f} | {t.w_to:.4f} | {t.dw:+.4f} | {t.amount_cad:,.2f} | {t.reason} |"
+            for t in ev.trades
+        ]
     else:
         lines.append("Aucun mouvement ce mois-ci.")
     doc.body = "\n".join(lines) + "\n"

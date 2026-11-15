@@ -30,6 +30,8 @@ Le tableau de bord, la page Détails et l'assistant ne sont pas branchés sur le
 
 La marche, la volée d'oiseaux et l'entrée des graphiques font partie de la maquette : elles jouent même si le système demande de réduire les animations (Windows avec les effets d'animation désactivés le signale). « Passer la marche » saute la marche en cours.
 
+Yan, l'assistant, est le petit robot rouge en pixels de la vidéo de démonstration (`src/components/yan/`) et suit la même règle. Sur l'accueil, il naît du carré rouge de la marque : ses pixels traversent la page et se rassemblent à droite du titre. Il vole ensuite vers l'avatar de chaque carte du parcours, puis vers l'en-tête de l'assistant du tableau de bord. À chaque arrivée, il se pose en s'écrasant. Il flotte au-dessus de son ombre et cligne des yeux. Il plisse les yeux de joie (« ^ ^ ») à l'accueil et quand le profil est prêt, et regarde autour de lui pendant qu'A1 prépare sa réponse.
+
 ### Tailles d'écran
 
 Vérifiées à 1920 × 1080, 1440 × 900, 1280 × 720, 1024 × 768 et 390 × 844 :

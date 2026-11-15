@@ -265,8 +265,40 @@ export const DebateRoundSummary = z.object({
 });
 export type DebateRoundSummary = z.infer<typeof DebateRoundSummary>;
 
-/** Bedrock Guardrails contextual grounding (`grounding_check`), only when a guardrail is configured. */
-export const Grounding = z.object({ action: z.string().nullish(), assessments: z.unknown().optional() });
+/** One statement checked by `grounding_check`: the guardrail's own action and scores (its threshold rules). */
+export const GroundingStatement = z.object({
+  section: z.string(),
+  index: z.number().int().nonnegative(),
+  action: z.string(),
+  score: z.number().nullish(),
+  threshold: z.number().nullish(),
+  relevance: z.number().nullish(),
+  /** `section`: the whole section was grounded in one call; `statement`: checked on its own. */
+  scope: z.string().nullish(),
+  error: z.string().nullish(),
+  retries: z.number().int().nullish(),
+});
+export type GroundingStatement = z.infer<typeof GroundingStatement>;
+
+/**
+ * Bedrock Guardrails contextual grounding (`grounding_check`), only when a guardrail is configured.
+ * `method = per_statement`: every statement is checked against its cited facts, the decision record and the
+ * methodology sheets; `action` is `NONE`, `GUARDRAIL_INTERVENED` (a statement below the threshold) or `ERROR`.
+ * Older responses only carry `action` and `assessments`.
+ */
+export const Grounding = z.object({
+  action: z.string().nullish(),
+  assessments: z.unknown().optional(),
+  method: z.string().nullish(),
+  checked: z.number().int().nonnegative().nullish(),
+  below: z.number().int().nonnegative().nullish(),
+  errors: z.number().int().nonnegative().nullish(),
+  retries: z.number().int().nonnegative().nullish(),
+  min_score: z.number().nullish(),
+  threshold: z.number().nullish(),
+  sources: z.array(z.string()).optional(),
+  statements: z.array(GroundingStatement).optional(),
+});
 export type Grounding = z.infer<typeof Grounding>;
 
 /* ------------------------------------------------------------------ */

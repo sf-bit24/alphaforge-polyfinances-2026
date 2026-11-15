@@ -240,7 +240,7 @@ function Thinking({ first }: { first: boolean }) {
   return (
     <>
       <DoneBadge index={0} total={0} />
-      <AssistantLine>{first ? t.journey.end.thinking : t.journey.end.thinkingNext}</AssistantLine>
+      <AssistantLine mood="think">{first ? t.journey.end.thinking : t.journey.end.thinkingNext}</AssistantLine>
       {failed ? (
         <ReplyError />
       ) : (
@@ -283,7 +283,7 @@ function ProfileReady({ onRestart }: { onRestart: () => void }) {
   return (
     <>
       <div className={styles.ready}>
-        <YanFigure height={112} />
+        <YanFigure height={112} arrive="last" cheer />
         <div>
           <p className={styles.kicker}>
             <CircleCheck aria-hidden />

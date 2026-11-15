@@ -10,6 +10,7 @@ le nécessaire (moins de rotation, moins de coûts). La cible w* est déjà admi
 décision) ; les modes ci-dessous restent dans l'enveloppe convexe {w dérivé, w*} (half, full) ou ne
 déplacent que les lignes en dépassement (edge). Le Judge revérifie les contraintes après l'opération.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -56,12 +57,18 @@ def _edge(wd: dict[str, float], tg: dict[str, float], bands, br: list[str]) -> d
         new[a] = tg[a] + b if wd[a] > tg[a] else max(0.0, tg[a] - b)
     # excédent à redistribuer : > 0 si les lignes en dépassement ont été réduites (on doit acheter ailleurs)
     excess = sum(wd[a] - new[a] for a in br)
-    if abs(excess) <= _EPS:
-        return new
     others = [a for a in wd if a not in br]
-    if not others:
+    if abs(excess) <= _EPS or not others:
         return new
-    # 1) au prorata de l'écart à la cible dans le sens utile (acheter les sous-pondérées / vendre les sur-)
+    rest = _absorb_toward_target(new, tg, others, excess)
+    if rest > _EPS:
+        _absorb_pro_rata(new, others, rest, buying=excess > 0)
+    return new
+
+
+def _absorb_toward_target(new: dict[str, float], tg: dict[str, float], others: list[str], excess: float) -> float:
+    """1) Absorbe ``excess`` sur ``others`` (modifie ``new``) au prorata de l'écart à la cible dans le sens utile
+    (acheter les sous-pondérées / vendre les sur-pondérées). Renvoie le reliquat non absorbé."""
     if excess > 0:
         room = {a: max(0.0, tg[a] - new[a]) for a in others}
     else:
@@ -71,24 +78,26 @@ def _edge(wd: dict[str, float], tg: dict[str, float], bands, br: list[str]) -> d
     if total_room > _EPS:
         for a in others:
             new[a] += (1 if excess > 0 else -1) * take * room[a] / total_room
-    rest = abs(excess) - take
-    # 2) reliquat au prorata des poids (achat) ou des poids restants (vente), jamais en dessous de 0
-    if rest > _EPS:
-        base = {a: new[a] for a in others}
-        tot = sum(base.values())
-        if tot <= _EPS:
-            base, tot = {a: 1.0 for a in others}, float(len(others))
-        if excess > 0:
-            for a in others:
-                new[a] += rest * base[a] / tot
+    return abs(excess) - take
+
+
+def _absorb_pro_rata(new: dict[str, float], others: list[str], rest: float, *, buying: bool) -> None:
+    """2) Reliquat ``rest`` au prorata des poids (achat) ou des poids restants (vente), jamais en dessous de 0
+    (modifie ``new``)."""
+    base = {a: new[a] for a in others}
+    tot = sum(base.values())
+    if tot <= _EPS:
+        base, tot = dict.fromkeys(others, 1.0), float(len(others))
+    for a in others:
+        if buying:
+            new[a] += rest * base[a] / tot
         else:
-            for a in others:
-                new[a] -= min(new[a], rest * base[a] / tot)
-    return new
+            new[a] -= min(new[a], rest * base[a] / tot)
 
 
-def rebalance_to_bands(w_drift: Mapping[str, float], target: Mapping[str, float], bands,
-                       mode: TradeMode | None = None) -> dict[str, float]:
+def rebalance_to_bands(
+    w_drift: Mapping[str, float], target: Mapping[str, float], bands, mode: TradeMode | None = None
+) -> dict[str, float]:
     """Poids après retour dans les bandes, en partant des poids dérivés ``w_drift``.
 
     - aucun dépassement : ``w_drift`` inchangé (mêmes valeurs, clés = union avec la cible) ;

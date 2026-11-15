@@ -4,12 +4,15 @@
 #
 #   agents_test    app/agents : ruff + pytest (Python 3.13, uv)
 #   web_test       app/web    : lint, typecheck, tests, build (Node 24)
+#   build_web      image de l'interface (app/web/Dockerfile), construite sur
+#                  chaque run ; poussee dans ECR seulement quand build=true
 #   package_agents zip des runtimes AgentCore (linux/arm64) + base generale
 #                  de depart -> artefact agents-package (infra/build/)
 #   release_tfvars release_id (SHA court du commit) -> artefact release-tfvars
 #
-# Pas d'image de conteneur : AgentCore deploie le zip directement depuis S3,
-# et l'interface tourne en local. Les deux artefacts sont le seul lien vers
+# AgentCore deploie le zip directement depuis S3 : seule l'interface a une
+# image, que web.tf (ECS Fargate) tire d'ECR avec le tag image_tag (le meme
+# SHA que release_id). Les deux artefacts et ce tag sont le seul lien vers
 # infra.yml (pas de manifest.yaml, rien n'est commit).
 #
 # Pas de logique shell inline : un step installe ses outils et appelle un
@@ -22,7 +25,9 @@
 #   build          "true" sur un push qui deploie
 #   deploy         "true" -> construire le zip et publier release-tfvars
 #   image_tag      SHA court du commit (immuable), devient release_id
-#   registry_image prefixe GHCR, inutilise (aucune image)
+#   registry_image depot de l'image de l'interface (ECR du bootstrap)
+#   aws_push_role_arn, aws_region : role OIDC du push ECR
+#                  (infrastructure/bootstrap/github.tf)
 # =============================================================================
 
 name: app
@@ -40,6 +45,12 @@ on:
         type: string
         required: true
       registry_image:
+        type: string
+        required: true
+      aws_push_role_arn:
+        type: string
+        required: true
+      aws_region:
         type: string
         required: true
 
@@ -81,6 +92,36 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  # Image de l'interface. Une PR valide le Dockerfile sans rien pousser ; seul
+  # un run qui deploie (build=true, branche par defaut) assume le role ECR par
+  # OIDC et pousse <registry_image>:<image_tag>, que web.tf deploie.
+  build_web:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - if: inputs.build == 'true'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ inputs.aws_push_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+      - if: inputs.build == 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: app/web
+          platforms: linux/amd64
+          push: ${{ inputs.build == 'true' }}
+          tags: ${{ inputs.registry_image }}:${{ inputs.image_tag }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          # Une seule image par tag : pas d'index d'attestation dans ECR.
+          provenance: false
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
   # Construit sur chaque run qui deploie ou planifie (push de la branche par
   # defaut, PR qui touche infrastructure/**) : le plan lit le zip. Aucun acces
   # AWS ici ; seul HCP Terraform, par OIDC, televerse le zip dans S3.
@@ -103,9 +144,9 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  # Un test ou un paquet en echec bloque ce job, donc le deploiement.
+  # Un test, un paquet ou une image en echec bloque ce job, donc le deploiement.
   release_tfvars:
-    needs: [package_agents, web_test]
+    needs: [package_agents, web_test, build_web]
     if: ${{ !cancelled() && !failure() && inputs.deploy == 'true' }}
     runs-on: ubuntu-latest
     env:

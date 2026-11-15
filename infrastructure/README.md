@@ -14,6 +14,7 @@ Compte AWS Workshop Studio du Datathon, `us-east-1`, environnement `sandbox`, pr
 | Step Functions | `infra/stepfunctions.tf` | Collecte : A4 et A5 en parallèle, A6, puis ingestion de la Knowledge Base. |
 | EventBridge Scheduler | `infra/scheduler.tf` | Veille : lance la collecte toutes les 6 heures. |
 | SageMaker Processing + Step Functions | `infra/scenarios.tf` | Scénarios probabilistes (facultatif, `scenarios_enabled`) : un job sur l'image scikit-learn d'AWS calcule la table des scénarios hors du poste, de façon reproductible (image et code figés, entrées et sorties dans S3). Step Functions le lance (`.sync`), écrit `_done.json` puis `scenarios/latest.json`. |
+| ECS Fargate + ALB + CloudFront | `infra/web.tf` | Interface Next.js (`app/web/Dockerfile`), `AGENT_MODE=aws`, image ECR `alphaforge-web:<release_id>`. CloudFront donne le HTTPS sur `*.cloudfront.net` (output `web_url`) ; l'ALB direct (`web_alb_url`, HTTP) garde la connexion 900 s pour un build du portefeuille de plus de 60 s, limite de CloudFront. Tâche en sous-réseau public avec IP publique (pas de NAT), joignable seulement depuis l'ALB. Facultatif (`web_enabled`). |
 | Glue + Athena | `infra/scenarios.tf` | Table `scenarios` (parquet, projection de partition sur `run_id`) interrogeable en SQL pour la validation et la démo, sans base à gérer; résultats chiffrés par la clé du bucket. |
 
 ```mermaid
@@ -59,18 +60,19 @@ flowchart LR
 
 | Événement | Jobs app | Jobs infra |
 | --- | --- | --- |
-| Push sur `master` | tests, zip, release | validate, upload, plan, apply |
-| PR qui touche `infrastructure/**` | tests, zip, release | validate, upload, plan (pas d'apply) |
-| Autre PR, autre push, `workflow_dispatch` | tests | aucun |
+| Push sur `master` | tests, zip, image poussée dans ECR, release | validate, upload, plan, apply |
+| PR qui touche `infrastructure/**` | tests, zip, image construite sans push, release | validate, upload, plan (pas d'apply) |
+| Autre PR, autre push, `workflow_dispatch` | tests, image construite sans push | aucun |
 | Variable de repo `DESTROY_ENV=true` | tests | aucun |
 
-GitHub Actions n'a aucun accès AWS : seul HCP Terraform assume le rôle `alphaforge-tfc-run` par OIDC, et c'est lui qui téléverse le zip dans S3. Le zip porte le SHA du commit (`runtime/agents-<sha>.zip`), donc chaque commit déploie un objet immuable et met les quatre runtimes à jour.
+GitHub Actions n'a aucune clé AWS. HCP Terraform assume le rôle `alphaforge-tfc-run` par OIDC, et c'est lui qui téléverse le zip dans S3. Seul le job `build_web`, sur un push de `master`, assume aussi par OIDC le rôle `alphaforge-github-ecr-push`, qui ne peut que pousser dans le dépôt ECR `alphaforge-web`. Le zip porte le SHA du commit (`runtime/agents-<sha>.zip`), donc chaque commit déploie un objet immuable et met les quatre runtimes à jour.
 
 ## Layout
 
 ```text
 infrastructure/
-  bootstrap/          OIDC HCP Terraform -> AWS et rôle des runs (une fois, état local)
+  bootstrap/          OIDC HCP Terraform -> AWS et rôle des runs (main.tf) ; OIDC GitHub,
+                      dépôt ECR et rôle de push de l'image (github.tf) ; une fois, état local
   infra/              module racine Terraform (le bundle téléversé garde ce dossier)
     build/            artefact du run : agents.zip, knowledge/ (jamais commité)
   deploy/
@@ -88,7 +90,7 @@ infrastructure/
    terraform -chdir=infrastructure/bootstrap apply
    ```
 
-   Il crée le fournisseur OIDC `app.terraform.io` et le rôle `alphaforge-tfc-run`, assumable seulement par les runs du workspace `larpathon` de l'organisation `larpathon_2026`. Son ARN est déjà dans `deploy/envs/sandbox.tfvars`.
+   Il crée le fournisseur OIDC `app.terraform.io` et le rôle `alphaforge-tfc-run`, assumable seulement par les runs du workspace `larpathon` de l'organisation `larpathon_2026`. Son ARN est déjà dans `deploy/envs/sandbox.tfvars`. `github.tf` (appliqué le 2026-11-15, même état) ajoute le fournisseur OIDC de GitHub Actions, le dépôt ECR `alphaforge-web`, le rôle `alphaforge-github-ecr-push` (branche `master` seulement) et les rôles liés aux services ECS et ELB ; leurs valeurs sont dans l'env du job `context` de `pipeline.yml`.
 2. **Workspace HCP Terraform** `larpathon` : sans VCS, répertoire de travail `infra`, auto-apply, Terraform 1.17.2, variables d'environnement `TFC_AWS_PROVIDER_AUTH=true` et `TFC_AWS_RUN_ROLE_ARN`.
 3. **GitHub** : secret `TF_API_TOKEN`, variables `EPHEMERAL_ENVS_ENABLED=false` et `TFC_PROJECT_ID`.
 
@@ -110,7 +112,7 @@ GITHUB_EVENT_NAME=push GITHUB_REF_NAME=master DEFAULT_BRANCH=master sh scripts/c
 - **Workspace VCS** : HCP Terraform refuse le téléversement de configuration sur un workspace relié à un VCS; `larpathon` n'en a pas.
 - **Runtime `portfolio` : `portfolio_enabled = false`** par défaut (ni runtime, ni rôle, ni zip, ni droit de traçabilité), **activé dans `envs/sandbox.tfvars`**. Activé, le runtime prend `runtime/agents-portfolio-<release>.zip`, que `package.sh` construit par défaut (`ALPHAFORGE_PACKAGE_PORTFOLIO=0` pour s'en passer). Les données longues du moteur (parquets non versionnés) sont lues au premier `build` sous `runtime/data/long/` (déposées par `app/agents/scripts/finance/upload_long_data.py`, sha256 vérifiés via `manifest.json`). Sans ce zip, il prend le zip commun : un bloc `check` avertit au plan, `health` répond et `build` renvoie une erreur qui le dit. Son rôle est dans `finance_trace_runtimes` (journal des décisions, rejeu LLM, `/alphaforge-sandbox/finance`). Le zip vise `aarch64-manylinux_2_28` (cvxpy n'a pas de roue `manylinux2014` pour linux/arm64) : vérifier `health` puis un `build` en mode `rules` au premier déploiement.
 - **Scénarios : bundle du job** : `package.sh` construit `infra/build/scenarios/` (`run.sh`, `scenarios.zip`) quand `deploy/envs/<DEPLOY_ENV>.tfvars` (`sandbox` par défaut, le fichier que `upload-config.sh` envoie) pose `scenarios_enabled = true` : le tfvars est la seule source de vérité, et `app.yml` n'a pas à changer (le jeton de l'équipe n'a pas le droit `workflow`). `ALPHAFORGE_PACKAGE_SCENARIOS=0|1`, posée et non vide, l'emporte; une autre valeur, ou une ligne `scenarios_enabled` illisible ou en double, fait échouer le script. Construit, il échoue au moindre manque : `scenarios/job.py`, le constructeur `alphaforge/finance/backtest/build_data.py`, `requirements-job.txt` figé par `==` (roues x86_64-manylinux_2_28, Python 3.12, celui de l'image), taille (200 Mo au plus). Un échec fait échouer `package_agents`, donc tout le déploiement de master (pas seulement les scénarios) : pour s'en passer d'urgence, remettre `scenarios_enabled = false`. Le bundle ne contient jamais de parquet ni `data/long/raw/`, ni les suites de tests de numpy, pandas, scipy et pyarrow ni les en-têtes C++ de pyarrow (132 Mo le 2026-11-15, contre 143 Mo avant ce tri). Si `scenarios_enabled = true` vient d'ailleurs que du tfvars (variable du workspace HCP Terraform), le bundle manque : un bloc `check` de `scenarios.tf` avertit au plan et une exécution échoue au démarrage du job.
-- **Runtime `portfolio` : droits X-Ray, à vérifier au premier déploiement** : avec `ALPHAFORGE_OTLP_XRAY=1`, le volet finance envoie ses spans en OTLP à `https://xray.<région>.amazonaws.com/v1/traces` (`finance/observability/telemetry.py`). Le rôle des runtimes n'a que `xray:PutTraceSegments`, `xray:PutTelemetryRecords` et les règles d'échantillonnage; ce point de terminaison demande peut-être `xray:PutSpans` (et `xray:PutSpansForIndexing`). Si les traces n'arrivent pas, ajouter ces actions au rôle `portfolio`.
+- **Observabilité d'AgentCore (tous les runtimes)** : `AGENT_OBSERVABILITY_ENABLED = "true"` (`agentcore_common_env`) fait lancer à `main.py` l'instrumentation d'ADOT (`aws-opentelemetry-distro`, `app/agents/src/alphaforge/otel.py`). Les spans partent en OTLP à `https://xray.<région>.amazonaws.com/v1/traces` (droits `Tracing`, dont `xray:PutSpans` et `xray:PutSpansForIndexing`), les journaux OTLP dans le groupe du runtime (`RuntimeLogStreams`), les métriques en EMF (`Metrics`, espace `bedrock-agentcore`). Transaction Search est réglée par `traceability.tf`. Le volet finance (`ALPHAFORGE_OTLP_XRAY=1`) réutilise alors le provider d'ADOT au lieu d'exporter une seconde fois. ADOT ajoute environ 10 Mo à chaque zip (`agents.zip` 41,7 Mo, `agents-portfolio.zip` 176,1 Mo, mesurés le 2026-11-15). Au premier déploiement, vérifier `otel=on` dans le journal du runtime, puis les sessions du tableau de bord Observability (quelques minutes de délai).
 - **Scénarios : `scenarios_enabled = false`** (défaut de la variable; le sandbox pose `true`) : aucune ressource, aucun droit des rôles `profile` et `portfolio` sous `scenarios/`, aucun bundle construit par `package.sh`, aucune règle de cycle de vie Athena; le plan est identique à celui sans scénarios.
 - **Scénarios : taille de la configuration HCP Terraform** : le bundle part dans `config.tar.gz` avec `agents.zip` (31,8 Mo) et `agents-portfolio.zip` (167,2 Mo, `portfolio_enabled = true` en sandbox) : `scenarios.zip` 132,0 Mo, soit 331 Mo de zips et un `config.tar.gz` de 327 Mo (mesuré le 2026-11-15, contre 32 Mo avant les deux runtimes facultatifs). HCP Terraform ne publie ni limite de taille pour une version de configuration, ni les ressources de ses machines de run (documentation lue le 2026-11-15); `aws_s3_object` envoie chaque fichier en un seul `PutObject` (5 Go au plus). À surveiller au premier plan : la durée de `upload_configuration` et une éventuelle erreur 413 ou de disque. Repli sans le droit `workflow` (la CI ne peut pas poser `ALPHAFORGE_PACKAGE_SCENARIOS=0`) : remettre `scenarios_enabled = false` dans `sandbox.tfvars`.
 - **Scénarios : image AWS figée** : `scenarios_image_uri` refuse les étiquettes mobiles (`1.4-2-py312`); changer d'image demande de vérifier la version de Python et de reconstruire le bundle.

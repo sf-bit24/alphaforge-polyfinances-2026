@@ -1,6 +1,6 @@
 /**
- * Issue #78, after the end-to-end check in LLM mode: the outcome of Bedrock Guardrails is named in both
- * languages, a lens's evidence missing from the decision stays an audit detail, and counters agree in number
+ * Issue #78, after the end-to-end check in LLM mode: the outcome of Bedrock Guardrails is readable in both
+ * languages (line of #94), a lens's evidence missing from the decision stays an audit detail, and counters agree in number
  * (French: 0 and 1 take the singular; English: only 1 does).
  */
 import { createElement, type ReactElement } from "react";
@@ -28,18 +28,12 @@ function render(locale: Locale, response: PortfolioBuildResponse, view: (respons
 const decisionView = (response: PortfolioBuildResponse) => createElement(DecisionView, { response, fixture: true });
 
 describe("Bedrock Guardrails outcome", () => {
-  it("names the action in French and in English, the raw action in the tooltip", () => {
-    const response = { ...robert(), grounding: { action: "GUARDRAIL_INTERVENED" } };
-    const fr = render("fr", response, decisionView);
-    expect(fr).toContain("Ancrage vérifié par Bedrock Guardrails · Résultat : le garde-fou est intervenu");
-    expect(fr).toContain('title="GUARDRAIL_INTERVENED"');
-    expect(fr).not.toContain("Résultat : GUARDRAIL_INTERVENED");
-    expect(render("en", response, decisionView)).toContain("Grounding checked by Bedrock Guardrails · Outcome: the guardrail intervened");
-    expect(render("fr", { ...robert(), grounding: { action: "NONE" } }, decisionView)).toContain("Résultat : aucune intervention");
-  });
-
-  it("shows an action it does not know as is", () => {
-    expect(render("fr", { ...robert(), grounding: { action: "NEW_ACTION" } }, decisionView)).toContain("Résultat : NEW_ACTION");
+  it("shows the readable line of the per-statement check (#94), in French and in English", () => {
+    const grounding = { action: "GUARDRAIL_INTERVENED", method: "per_statement", checked: 19, below: 2, errors: 0, threshold: 0.75, min_score: 0.6 };
+    const response = { ...robert(), grounding } as PortfolioBuildResponse;
+    expect(render("fr", response, decisionView)).toContain("Ancrage vérifié par Bedrock Guardrails · 2 énoncés sur 19 sous le seuil d’ancrage");
+    expect(render("en", response, decisionView)).toContain("Grounding checked by Bedrock Guardrails · 2 of 19 statements below the grounding threshold");
+    expect(render("fr", response, decisionView)).not.toContain("GUARDRAIL_INTERVENED");
   });
 });
 

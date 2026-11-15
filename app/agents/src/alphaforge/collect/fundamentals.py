@@ -3,6 +3,10 @@
 Le bloc ``data`` est exactement celui que ``collect.edgar`` a construit; A6 le relit avec le lecteur du volet
 finance (``okf_facts.parse_company_fundamentals``) avant d'écrire, n'écrit que si ``data`` change, et n'écrase
 jamais un document qu'il n'a pas écrit lui-même (les seeds ATD et CSU, relevés à la main et poussés par Terraform).
+
+Si l'élément porte un code SIC de ``edgar.SIC_ACTIVITY``, A6 écrit aussi un fait ESG ``sector_activity``
+(``general/faits/data-sec-gov/<AAAA-MM-JJ>-<empreinte>.md``), relu par ``okf_facts.parse_esg``. L'empreinte vient
+du titre et du code : tant que le code ne change pas, le fait existant reste et n'est pas réécrit.
 """
 
 from __future__ import annotations
@@ -13,9 +17,17 @@ from typing import Any, Protocol
 
 from .. import clock, okf
 from ..store import Store
-from . import edgar, general
+from . import edgar, general, staging
 
 FUNDAMENTALS_STALE_DAYS = 120  # un trimestre de plus que le dernier dépôt
+SECTOR_STALE_DAYS = 365
+SECTOR_PREFIX = "general/faits/data-sec-gov/"
+ACTIVITY_FR = {
+    "fossil_fuels": "combustibles fossiles",
+    "tobacco": "tabac",
+    "alcohol": "alcool",
+    "weapons": "armement",
+}
 A6_AUTHOR = "agent:A6"
 UNCHANGED = "inchangé"
 
@@ -125,6 +137,107 @@ def write_fundamentals(store: Store, candidate: _Candidate, now: str) -> str | N
     return None
 
 
+def sector_activity_doc(item: dict[str, Any], now: str) -> tuple[str, okf.OkfDoc] | None:
+    """Fait ESG ``sector_activity`` tiré du code SIC de l'émetteur, ou ``None`` si le code n'est pas dans la table."""
+    data = item.get("data") or {}
+    sic = data.get("sic") or {}
+    block = data.get("fundamentals") or {}
+    activity = edgar.SIC_ACTIVITY.get(sic.get("code")) if isinstance(sic.get("code"), int) else None
+    ticker = str(block.get("ticker") or "")
+    if activity is None or not ticker:
+        return None
+    retrieved = str(item.get("retrieved_at") or now)
+    day = retrieved[:10]
+    digest = staging.short_hash(f"sic|{ticker}|{sic['code']}", 8)
+    key = f"{SECTOR_PREFIX}{day}-{digest}.md"
+    issuer = block.get("issuer") or ticker
+    title = f"{issuer} ({ticker}) — activité : {ACTIVITY_FR[activity]} (code SIC {sic['code']})"
+    licence = "Données publiques de la SEC (accès équitable : 10 requêtes par seconde, User-Agent déclaré)"
+    doc = okf.new_doc(
+        type="Fact",
+        title=title,
+        description=(
+            f"Fact : la SEC classe {issuer} sous le code SIC {sic['code']} ({sic.get('description')}), une activité "
+            f"de la catégorie « {ACTIVITY_FR[activity]} » du questionnaire."
+        ),
+        tags=["faits", "esg", activity, edgar.doc_slug(ticker)],
+        owners=["alphaforge-a6"],
+        sensitivity="public",
+        generated_by=A6_AUTHOR,
+        at=now,
+        status="stable",
+        stale_after=clock.iso((clock.parse_datetime(retrieved) or clock.utcnow()) + timedelta(days=SECTOR_STALE_DAYS)),
+        sources=[
+            {
+                "id": f"sec-submissions-{edgar.doc_slug(ticker)}",
+                "title": f"SEC EDGAR, submissions de {issuer} (code SIC)",
+                "resource": sic.get("url"),
+                "retrieved_at": retrieved,
+                "licence": licence,
+                "attribution": "Source : U.S. Securities and Exchange Commission, EDGAR",
+            }
+        ],
+        data={
+            "kind": "fact",
+            "esg": {"kind": "sector_activity", "metric": activity, "period": day},
+            "value": str(sic["code"]),
+            "unit": "code SIC",
+            "label": f"Code SIC {sic['code']} : {sic.get('description')}",
+            "tickers": [ticker],
+            "url": sic.get("url"),
+            "published_at": retrieved,
+            "published_at_basis": "retrieved_at_upper_bound",
+            "observed_at": day,
+            "retrieved_at": retrieved,
+            "provenance": {
+                "host": "data.sec.gov",
+                "licence": licence,
+                "attribution_text": "Source : U.S. Securities and Exchange Commission, EDGAR",
+                "basis": "code SIC de submissions, table fixe edgar.SIC_ACTIVITY (sans modèle)",
+            },
+            "collected_by": "A5",
+            "run_id": data.get("run_id"),
+        },
+        body="\n".join(
+            [
+                f"# {title}",
+                "",
+                f"- Source : SEC EDGAR — <{sic.get('url')}>",
+                "- Source : U.S. Securities and Exchange Commission, EDGAR",
+                f"- Code SIC : {sic['code']} ({sic.get('description')})",
+                f"- Catégorie d'exclusion du questionnaire : {ACTIVITY_FR[activity]} (`{activity}`)",
+                f"- Relevé le : {retrieved}",
+                "",
+                "## Limites",
+                "",
+                "- Le code SIC classe l'activité principale déclarée à la SEC, pas la part de revenus par activité.",
+                "- La correspondance code → catégorie est une table fixe du code (`collect/edgar.py`), sans modèle.",
+                "",
+            ]
+        ),
+    )
+    return key, doc
+
+
+def write_sector_activity(store: Store, item: dict[str, Any], now: str) -> tuple[str | None, str | None]:
+    """Écrit le fait ``sector_activity`` s'il y a lieu; renvoie (clé écrite, raison du refus ou ``UNCHANGED``)."""
+    from ..finance.strategy.okf_facts import OkfFactsError, parse_esg
+
+    built = sector_activity_doc(item, now)
+    if built is None:
+        return None, None
+    key, doc = built
+    suffix = key.rsplit("-", 1)[-1]
+    if any(i.key.endswith(f"-{suffix}") for i in store.list(SECTOR_PREFIX, limit=2000)):
+        return None, UNCHANGED
+    try:
+        parse_esg(okf.render(doc), key, "a6")
+    except OkfFactsError as exc:
+        return None, f"fait d'activité sectorielle refusé par le lecteur du volet finance : {exc}"
+    general.write_document(store, key, doc)
+    return key, None
+
+
 def write_all(  # noqa: PLR0913 - les deux listes du marqueur sont complétées en place
     store: Store,
     candidates: list[_Candidate],
@@ -147,4 +260,9 @@ def write_all(  # noqa: PLR0913 - les deux listes du marqueur sont complétées 
             unchanged.append(candidate.target)
         else:
             rejected.append({"key": candidate.key, "reason": reason})
+        sector_key, sector_reason = write_sector_activity(store, candidate.item, now)
+        if sector_key is not None:
+            written.append(sector_key)
+        elif sector_reason not in (None, UNCHANGED):
+            rejected.append({"key": candidate.key, "reason": sector_reason})
     return unchanged

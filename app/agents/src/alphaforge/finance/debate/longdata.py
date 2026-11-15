@@ -36,14 +36,32 @@ def ensure_long_data(store: Store, prefix: str = KEY_PREFIX, target: Path = TARG
     """Rend les données longues disponibles ; renvoie le répertoire utilisé. Idempotent."""
     if long_data_available():
         return Path(os.environ.get("ALPHAFORGE_BT_DATA") or DEFAULT_DATA_DIR)
+    manifest = _read_manifest(store, prefix)
+    target.mkdir(parents=True, exist_ok=True)
+    _copy_metadata(target)
+    _download_long(store, prefix, target, manifest)
+    _download_daily(store, prefix, target, manifest)
+    os.environ["ALPHAFORGE_BT_DATA"] = str(target)
+    logger.info("long data ready in %s (data_sha256=%s)", target, manifest.get("data_sha256"))
+    return target
+
+
+def _read_manifest(store: Store, prefix: str) -> dict:
     manifest_obj = store.get(prefix + MANIFEST)
     if manifest_obj is None:
         raise LongDataError(f"données longues absentes : {prefix}{MANIFEST} introuvable dans le magasin")
-    manifest = json.loads(manifest_obj.text)
-    target.mkdir(parents=True, exist_ok=True)
-    for meta in DEFAULT_DATA_DIR.iterdir():  # métadonnées versionnées dans le paquet (assets.csv, data_version.json…)
+    return json.loads(manifest_obj.text)
+
+
+def _copy_metadata(target: Path) -> None:
+    """Métadonnées versionnées dans le paquet (assets.csv, data_version.json…)."""
+    for meta in DEFAULT_DATA_DIR.iterdir():
         if meta.is_file() and meta.suffix in (".csv", ".json", ".md"):
             shutil.copy2(meta, target / meta.name)
+
+
+def _download_long(store: Store, prefix: str, target: Path, manifest: dict) -> None:
+    """Parquets du moteur, obligatoires : chacun est vérifié (sha256 du manifeste) avant d'être écrit."""
     for name in LONG_PARQUETS:
         expected = (manifest.get("files") or {}).get(name)
         obj = store.get(prefix + name)
@@ -53,19 +71,25 @@ def ensure_long_data(store: Store, prefix: str = KEY_PREFIX, target: Path = TARG
         if digest != expected:
             raise LongDataError(f"sha256 inattendu pour {name} : {digest[:12]} au lieu de {expected[:12]}")
         (target / name).write_bytes(obj.body)
-    # Données quotidiennes (alphaforge.market) : facultatives, prises seulement si le manifeste les déclare toutes.
-    if all((manifest.get("files") or {}).get(n) for n in DAILY_PARQUETS):
-        for name in DAILY_PARQUETS:
-            obj = store.get(prefix + name)
-            digest = hashlib.sha256(obj.body).hexdigest() if obj is not None else None
-            if digest != manifest["files"][name]:
-                raise LongDataError(f"données quotidiennes absentes ou altérées : {prefix}{name}")
-            (target / name).write_bytes(obj.body)
-        if manifest.get("daily"):
-            version_path = target / "data_version.json"
-            version = json.loads(version_path.read_text()) if version_path.is_file() else {}
-            version["daily"] = manifest["daily"]
-            version_path.write_text(json.dumps(version, indent=2, default=str))
-    os.environ["ALPHAFORGE_BT_DATA"] = str(target)
-    logger.info("long data ready in %s (data_sha256=%s)", target, manifest.get("data_sha256"))
-    return target
+
+
+def _download_daily(store: Store, prefix: str, target: Path, manifest: dict) -> None:
+    """Données quotidiennes (alphaforge.market) : facultatives, prises seulement si le manifeste les déclare toutes."""
+    if not all((manifest.get("files") or {}).get(n) for n in DAILY_PARQUETS):
+        return
+    for name in DAILY_PARQUETS:
+        obj = store.get(prefix + name)
+        digest = hashlib.sha256(obj.body).hexdigest() if obj is not None else None
+        if digest != manifest["files"][name]:
+            raise LongDataError(f"données quotidiennes absentes ou altérées : {prefix}{name}")
+        (target / name).write_bytes(obj.body)
+    if manifest.get("daily"):
+        _record_daily_version(target, manifest["daily"])
+
+
+def _record_daily_version(target: Path, daily) -> None:
+    """Ajoute la version des données quotidiennes à data_version.json (copié du paquet, ou créé)."""
+    version_path = target / "data_version.json"
+    version = json.loads(version_path.read_text()) if version_path.is_file() else {}
+    version["daily"] = daily
+    version_path.write_text(json.dumps(version, indent=2, default=str))

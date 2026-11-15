@@ -70,6 +70,7 @@ def profile_view(
     facts = [
         {"field": field_id, "value": fact.get("value"), "provenance": fact.get("provenance"), "at": fact.get("at")}
         for field_id, fact in sorted(session.facts.items(), key=lambda item: (item[1].get("at") or "", item[0]))
+        if fact.get("confirmed") is not False  # une valeur à confirmer n'est pas encore un fait du profil
     ]
     return {
         "knowledge_level": rules.knowledge_level(q, values),

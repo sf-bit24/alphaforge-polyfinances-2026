@@ -128,7 +128,16 @@ class ClientSession:
         return int(self.data.get("turn") or 0)
 
     def values(self) -> dict[str, Any]:
-        return {field_id: fact.get("value") for field_id, fact in self.facts.items()}
+        """Valeurs confirmées. Un fait tiré d'un texte libre (``confirmed: false``) n'y entre qu'après la
+        confirmation de l'investisseur : complétude, scores, conditions ``when``, arrêt et ``ProfileView`` ne le
+        voient pas. Un fait sans la clé ``confirmed`` est confirmé."""
+        return {
+            field_id: fact.get("value") for field_id, fact in self.facts.items() if fact.get("confirmed") is not False
+        }
+
+    def unconfirmed(self) -> dict[str, dict[str, Any]]:
+        """Faits tirés d'un texte libre qui attendent la confirmation de l'investisseur."""
+        return {field_id: fact for field_id, fact in self.facts.items() if fact.get("confirmed") is False}
 
     def next_turn(self) -> int:
         self.data["turn"] = self.turn + 1
@@ -174,10 +183,11 @@ class ClientSession:
         question_id: str | None = None,
         at: str | None = None,
         option: str | None = None,
+        confirmed: bool = True,
     ) -> Any:
         """Écrit un fait validé et l'inscrit au journal (``kind: answer``, ``field``, ``value``, ``question_id``?,
         ``option``?, ``previous``?). ``option`` est l'identifiant de la tranche choisie quand un clic écrit un
-        nombre."""
+        nombre. ``confirmed=False`` marque une valeur tirée d'un texte libre, à faire confirmer."""
         if not PROVENANCE.match(provenance):
             raise ValueError(f"invalid provenance {provenance!r}")
         at = at or clock.iso()
@@ -186,6 +196,8 @@ class ClientSession:
             self.facts.pop(field_id, None)
         else:
             self.facts[field_id] = {"value": value, "provenance": provenance, "at": at}
+            if not confirmed:
+                self.facts[field_id]["confirmed"] = False
         entry: dict[str, Any] = {
             "at": at,
             "kind": "answer",
@@ -201,6 +213,23 @@ class ClientSession:
             entry["previous"] = previous
         self.new_journal.append(entry)
         return previous
+
+    def confirm_fact(self, field_id: str, provenance: str, *, question_id: str) -> None:
+        """L'investisseur confirme une valeur tirée d'un texte libre : ``kind: answer`` avec ``question_id``."""
+        if not PROVENANCE.match(provenance):
+            raise ValueError(f"invalid provenance {provenance!r}")
+        fact = self.facts[field_id]
+        fact.pop("confirmed", None)
+        self.new_journal.append(
+            {
+                "at": clock.iso(),
+                "kind": "answer",
+                "provenance": provenance,
+                "field": field_id,
+                "value": fact.get("value"),
+                "question_id": question_id,
+            }
+        )
 
     def record_answer(self, question_id: str, value: Any) -> None:
         self.answers[question_id] = {"value": value, "at": clock.iso()}
@@ -252,13 +281,16 @@ class ClientSession:
         turn: int,
         *,
         choices: dict[str, dict[str, Any]] | None = None,
+        confirmations: dict[str, str] | None = None,
     ) -> None:
         """Questions envoyées à l'investisseur. Les tables des tranches (identifiant → nombre) restent hors des
-        questions, dans ``pending_choices``. ``followup_counts`` compte les questions générées par A1 et les
+        questions, dans ``pending_choices``, et le champ visé par une question de confirmation ``cf_`` dans
+        ``pending_confirmations``. ``followup_counts`` compte les questions générées par A1 et les
         questions ouvertes envoyées dans la session (``asked`` est tronqué et contient aussi le secours)."""
         self.data["pending_questions"] = questions
         ids = {question["id"] for question in questions}
         self.data["pending_choices"] = {qid: table for qid, table in (choices or {}).items() if qid in ids}
+        self.data["pending_confirmations"] = {qid: f for qid, f in (confirmations or {}).items() if qid in ids}
         counts = dict(self.data.get("followup_counts") or {})
         counts["generated"] = int(counts.get("generated") or 0) + sum(q.get("source") == "a1" for q in questions)
         counts["open"] = int(counts.get("open") or 0) + sum(q.get("kind") == "text" for q in questions)
@@ -281,6 +313,7 @@ class ClientSession:
     def clear_pending(self) -> None:
         self.data["pending_questions"] = []
         self.data["pending_choices"] = {}
+        self.data["pending_confirmations"] = {}
 
     def mark_answered(self, question_id: str, value: Any) -> None:
         for item in self.data.get("asked") or []:
@@ -487,10 +520,10 @@ def render_profile_body(
         fact = session.facts.get(spec.id)
         if not fact:
             continue
-        row = (
-            f"| {spec.label_text(locale)} | {format_field_value(spec, fact['value'], locale).replace('|', '/')} "
-            f"| {fact.get('provenance', '')} | {fact.get('at', '')} |"
-        )
+        shown = format_field_value(spec, fact["value"], locale).replace("|", "/")
+        if fact.get("confirmed") is False:
+            shown += " (to be confirmed)" if en else " (à confirmer)"
+        row = f"| {spec.label_text(locale)} | {shown} | {fact.get('provenance', '')} | {fact.get('at', '')} |"
         by_dimension.setdefault(spec.dimension, []).append(row)
     for dimension, rows in by_dimension.items():
         lines += [

@@ -75,25 +75,36 @@ def test_a1_first_turn_records_facts_and_asks_questions(settings, store):
                 )
             ],
             [("tool", "check_completeness", {})],
+            # Trois questions refusées : la confirmation de goal_detail occupe une des trois places du tour.
+            [finish("Trois questions.", [HORIZON_QUESTION, LOSS_QUESTION, APPROACH_QUESTION])],
             [
                 finish(
                     "Merci. Quelques précisions sur votre horizon et votre capacité.",
-                    [HORIZON_QUESTION, LOSS_QUESTION, APPROACH_QUESTION],
+                    [HORIZON_QUESTION, LOSS_QUESTION],
                 )
             ],
         ]
     )
     service = make_service(settings, store, factory)
     client_id = started(service)
+    before = service.handle({"action": "session.resume", "client_id": client_id})["completeness"]["score"]
     response = service.handle(
         {"action": "followup.reply", "client_id": client_id, "message": "Je veux une mise de fonds dans 12 ans."}
     )
     assert response["ok"], response
     assert response["stage"] == "followups"
     assert response["message"].startswith("Merci.")
-    assert [q["id"] for q in response["questions"]] == ["a1_1_1", "a1_1_2", "a1_1_3"]
-    assert all(q["source"] == "a1" for q in response["questions"])
-    horizon, loss = response["questions"][0], response["questions"][1]
+    assert [q["id"] for q in response["questions"]] == ["cf_1_1", "a1_1_1", "a1_1_2"]
+    confirm = response["questions"][0]
+    assert confirm["source"] == "deterministic" and confirm["kind"] == "boolean" and confirm["field"] is None
+    assert confirm["prompt"] == (
+        "J'ai compris : Précision de l'objectif = Une mise de fonds dans 12 ans. C'est bien ça ?"
+    )
+    assert confirm["dimension"] == "objective"
+    assert all(q["source"] == "a1" for q in response["questions"][1:])
+    tool_results = [s["outputs"]["result"] for s in response["trace"] if s["kind"] == "tool"]
+    assert "at most 2 questions this turn" in tool_results[2]["reason"]
+    horizon, loss = response["questions"][1], response["questions"][2]
     assert horizon["kind"] == loss["kind"] == "single_choice"
     assert [o["value"] for o in horizon["options"]] == ["10to15", "15to20", "20to30", "30plus"]
     assert loss["options"][1] == {"value": "2_5to5pct", "label": "De 250 $ à moins de 500 $ (2,5 à 5 %)"}
@@ -102,9 +113,23 @@ def test_a1_first_turn_records_facts_and_asks_questions(settings, store):
     stored = okf.parse(store.get(profile_key(client_id)).text).data
     assert stored["pending_choices"]["a1_1_2"]["2_5to5pct"] == 250
     assert all(set(o) == {"value", "label"} for q in stored["pending_questions"] for o in q["options"])
-    fact = next(f for f in response["profile"]["facts"] if f["field"] == "objective.goal_detail")
-    assert fact["provenance"] == "a1:1"
+    assert stored["pending_confirmations"] == {"cf_1_1": "objective.goal_detail"}
+    # La valeur tirée du message attend sa confirmation : hors de ProfileView et de la complétude.
+    assert stored["facts"]["objective.goal_detail"] == {
+        "value": "Une mise de fonds dans 12 ans",
+        "provenance": "a1:1",
+        "at": stored["facts"]["objective.goal_detail"]["at"],
+        "confirmed": False,
+    }
+    assert not any(f["field"] == "objective.goal_detail" for f in response["profile"]["facts"])
+    assert response["completeness"]["score"] == before
+    assert {"dimension": "objective", "field": "goal_detail", "label": "Précision de l'objectif"} in response[
+        "completeness"
+    ]["missing"]
     assert not any(f["field"] == "horizon.horizon_years" for f in response["profile"]["facts"])
+    rejected = tool_results[0]["results"]
+    assert rejected[0]["status"] == "ok" and rejected[0]["to_confirm"] is True
+    assert [r["status"] for r in rejected[1:]] == ["error", "error"]
     assert factory.requests == [{"effort": "low", "guardrail": False, "max_tokens": 8000}]
     model = factory.models[0]
     assert model.calls[0]["tools"] == [
@@ -114,7 +139,7 @@ def test_a1_first_turn_records_facts_and_asks_questions(settings, store):
         "finish_turn",
     ]
     assert "<investor_message>" in model.calls[0]["messages"][0]["content"][0]["text"]
-    assert len(model.calls) == 3  # l'outil finish_turn arrête la boucle sans nouvel appel du modèle
+    assert len(model.calls) == 4  # l'outil finish_turn accepté arrête la boucle sans nouvel appel du modèle
     kinds = [s["kind"] for s in response["trace"]]
     assert "model" in kinds and "tool" in kinds and "agent" in kinds
     entries = okf.parse(store.get(journal_key(client_id)).text).data["entries"]
@@ -130,15 +155,16 @@ def test_a1_first_turn_records_facts_and_asks_questions(settings, store):
     ]
 
     # Réponses aux questions d'A1 : validées par le code et écrites avec la provenance du tour qui les a posées.
+    # « Oui » confirme la valeur tirée du message.
     factory.scripts.append([[finish("Le profil est complet.", complete=True)]])
     answered = service.handle(
         {
             "action": "followup.reply",
             "client_id": client_id,
             "answers": [
+                {"question_id": "cf_1_1", "value": True},
                 {"question_id": "a1_1_1", "value": "10to15"},
                 {"question_id": "a1_1_2", "value": "10to20pct"},
-                {"question_id": "a1_1_3", "value": "passive_funds"},
             ],
         }
     )
@@ -146,12 +172,17 @@ def test_a1_first_turn_records_facts_and_asks_questions(settings, store):
     assert answered["stage"] == "complete" and answered["questions"] == []
     assert answered["completeness"]["ready"] is True
     provenances = {f["field"]: f["provenance"] for f in answered["profile"]["facts"]}
-    assert provenances["horizon.horizon_years"] == "a1:1" and provenances["preferences.approach"] == "a1:1"
+    assert provenances["horizon.horizon_years"] == "a1:1" and provenances["objective.goal_detail"] == "a1:1"
     values = {f["field"]: f["value"] for f in answered["profile"]["facts"]}
     assert values["horizon.horizon_years"] == 10 and values["risk_capacity.max_loss_cad"] == 1000
     entries = okf.parse(store.get(journal_key(client_id)).text).data["entries"]
     loss_entry = next(e for e in entries if e.get("question_id") == "a1_1_2")
     assert loss_entry["value"] == 1000 and loss_entry["option"] == "10to20pct"
+    confirmed = next(e for e in entries if e.get("question_id") == "cf_1_1")
+    assert confirmed["field"] == "objective.goal_detail" and confirmed["value"] == "Une mise de fonds dans 12 ans"
+    stored = okf.parse(store.get(profile_key(client_id)).text).data
+    assert "confirmed" not in stored["facts"]["objective.goal_detail"]
+    assert stored["pending_confirmations"] == {}
     assert okf.parse(store.get(profile_key(client_id)).text).data["pending_choices"] == {}
     context = factory.models[1].calls[0]["messages"][0]["content"][0]["text"]
     assert '"new_answers_this_turn"' in context and "a1_1_2" in context
@@ -194,6 +225,57 @@ def test_a1_invalid_questions_are_sent_back_to_the_model(settings, store):
     assert refused["status"] == "error" and [e["question"] for e in refused["errors"]] == [1, 2]
     assert "kind number is not allowed" in refused["errors"][0]["reason"]
     assert "'lt7k' is not a tranche" in refused["errors"][1]["reason"]
+
+
+def update(field, value, evidence):
+    return ("tool", "update_profile", {"updates": [{"field": field, "value": value, "evidence": evidence}]})
+
+
+MONTHLY = "constraints.monthly_contribution_cad"
+
+
+def test_free_text_value_is_kept_only_after_yes(settings, store):
+    factory = ScriptedFactory(
+        [[update(MONTHLY, 3000, "3 000 $ par mois")], [finish("Merci.", [APPROACH_QUESTION])]],
+        [[update(MONTHLY, 500, "500 $")], [finish("Noté.", [LOSS_QUESTION])]],
+        [[finish("Merci.", [HORIZON_QUESTION])]],
+    )
+    service = make_service(settings, store, factory)
+    client_id = started(service)
+    first = service.handle(
+        {"action": "followup.reply", "client_id": client_id, "message": "Je compte ajouter 3 000 $ par mois."}
+    )
+    assert [q["id"] for q in first["questions"]] == ["cf_1_1", "a1_1_1"]
+    assert first["questions"][0]["prompt"] == "J'ai compris : Ajout mensuel prévu = 3\u202f000 $. C'est bien ça ?"
+    assert MONTHLY not in first["profile"]["dimensions"]["constraints"]["fields"]
+
+    # « Non » : la valeur est retirée, le champ redevient manquant et le journal garde la valeur précédente.
+    second = service.handle(
+        {
+            "action": "followup.reply",
+            "client_id": client_id,
+            "message": "Plutôt 500 $.",
+            "answers": [{"question_id": "cf_1_1", "value": False}],
+        }
+    )
+    assert second["ok"], second
+    entries = okf.parse(store.get(journal_key(client_id)).text).data["entries"]
+    removed = next(e for e in entries if e.get("question_id") == "cf_1_1")
+    assert removed == {**removed, "field": MONTHLY, "value": None, "previous": 3000, "provenance": "a1:1"}
+    stored = okf.parse(store.get(profile_key(client_id)).text).data
+    assert stored["facts"][MONTHLY] == {**stored["facts"][MONTHLY], "value": 500, "confirmed": False}
+    assert [q["id"] for q in second["questions"]] == ["cf_2_1", "a1_2_1"]
+    context = factory.models[1].calls[0]["messages"][0]["content"][0]["text"]
+    assert '"kind": "confirmation"' in context
+
+    # « Oui » : la valeur entre dans le profil, sans écrire le booléen dans le champ.
+    third = service.handle(
+        {"action": "followup.reply", "client_id": client_id, "answers": [{"question_id": "cf_2_1", "value": True}]}
+    )
+    facts = {f["field"]: f for f in third["profile"]["facts"]}
+    assert facts[MONTHLY]["value"] == 500 and facts[MONTHLY]["provenance"] == "a1:2"
+    assert third["profile"]["dimensions"]["constraints"]["fields"]["monthly_contribution_cad"] == 500
+    assert [q["id"] for q in third["questions"]] == ["a1_3_1"]
 
 
 def test_third_open_question_of_the_session_is_refused(settings, store):

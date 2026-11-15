@@ -36,7 +36,7 @@ logger = logging.getLogger("alphaforge.profile")
 LOCALES = ("fr", "en")
 STREAMABLE = frozenset({"portfolio.submit", "followup.reply"})
 MAX_MESSAGE = 4000
-QUESTION_TURN = re.compile(r"^(?:a1|fb)_(\d+)_\d+$")
+QUESTION_TURN = re.compile(r"^(?:a1|fb|cf)_(\d+)_\d+$")
 _DONE = object()
 
 
@@ -647,6 +647,7 @@ class ProfileService:
         message = (message or "").strip() or None
         pending = {item["id"]: item for item in session.data.get("pending_questions") or []}
         pending_choices = dict(session.data.get("pending_choices") or {})
+        pending_confirmations = dict(session.data.get("pending_confirmations") or {})
         validated = []
         for item in answers:
             question_id = item.get("question_id") if isinstance(item, dict) else None
@@ -670,6 +671,23 @@ class ProfileService:
         for question, value in validated:
             match = QUESTION_TURN.match(question["id"])
             provenance = f"a1:{match.group(1) if match else session.turn}"
+            if question["id"].startswith("cf_"):
+                # Confirmation d'une valeur tirée d'un texte libre : traitée avant la branche générique, qui
+                # écrirait sinon le booléen dans le champ visé.
+                field_id = pending_confirmations.pop(question["id"], None)
+                self._confirm(session, field_id, value, provenance, question["id"])
+                session.mark_answered(question["id"], value)
+                pending.pop(question["id"], None)
+                new_answers.append(
+                    {
+                        "question_id": question["id"],
+                        "field": field_id,
+                        "kind": "confirmation",
+                        "value": value,
+                        "prompt": question.get("prompt"),
+                    }
+                )
+                continue
             spec = self.q.fields.get(question.get("field") or "")
             table = pending_choices.pop(question["id"], None)
             option = None
@@ -694,6 +712,7 @@ class ProfileService:
             )
         session.data["pending_questions"] = list(pending.values())
         session.data["pending_choices"] = pending_choices
+        session.data["pending_confirmations"] = pending_confirmations
         if validated:
             req.trace.add(
                 "deterministic",
@@ -755,8 +774,22 @@ class ProfileService:
         if message:
             session.journal_message(message, locale, f"a1:{turn}")
         for update in outcome.updates:
-            session.set_fact(update["field"], update["value"], f"a1:{turn}")
-        session.remember_questions(outcome.questions, turn, choices=outcome.choices)
+            # Valeur tirée d'un texte libre : écrite non confirmée, puis confirmée par un clic.
+            session.set_fact(update["field"], update["value"], f"a1:{turn}", confirmed=False)
+        confirmations, targets = a1_agent.confirmation_questions(self.q, session, turn=turn, locale=locale)
+        questions = confirmations + outcome.questions
+        if confirmations:
+            req.trace.add(
+                "deterministic",
+                "questionnaire",
+                req.trace.t("Confirmations demandées par le code", "Confirmations asked by code"),
+                req.trace.t(
+                    "Valeurs tirées d'un texte libre, retenues après un clic de l'investisseur.",
+                    "Values taken from free text, kept once the investor confirms them.",
+                ),
+                outputs={"questions": [{"id": qid, "field": field} for qid, field in targets.items()]},
+            )
+        session.remember_questions(questions, turn, choices=outcome.choices, confirmations=targets)
         if outcome.complete:
             session.data["completion"] = {**(session.data.get("completion") or {}), "a1_complete": True}
             session.set_stage("complete", f"a1:{turn}", req.trace, reason="A1 juge le profil complet")
@@ -764,6 +797,19 @@ class ProfileService:
         self._completeness_step(req, session)
         self._commit(req, session)
         return self._state(req, session, locale, message=outcome.message, portfolio=portfolio_view)
+
+    def _confirm(
+        self, session: ClientSession, field_id: str | None, value: Any, provenance: str, question_id: str
+    ) -> None:
+        """« Oui » retire ``confirmed: false`` du fait; « Non » retire la valeur (le journal garde ``previous``)."""
+        fact = session.facts.get(field_id) if field_id else None
+        if fact is None or fact.get("confirmed") is not False:
+            # La valeur a changé depuis (clic sur le même champ) : la réponse est seulement inscrite au journal.
+            session.journal_answer(question_id, value, provenance)
+        elif value is True:
+            session.confirm_fact(field_id, provenance, question_id=question_id)
+        else:
+            session.set_fact(field_id, None, provenance, question_id=question_id)
 
     def kb_list(self, req: Request) -> dict[str, Any]:
         prefix = kb.check_prefix(req.payload.get("prefix"), req.locale_hint)

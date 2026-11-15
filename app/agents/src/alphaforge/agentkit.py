@@ -88,6 +88,22 @@ def guarded(text: str) -> dict[str, Any]:
     return {"guardContent": {"text": {"text": text}}}
 
 
+def unguarded(prompt: Any) -> Any:
+    """Le prompt sans blocs ``guardContent``, remplacés par du texte simple.
+
+    Bedrock refuse un bloc ``guardContent`` sans ``guardrailConfig`` (ValidationException). Sans garde-fou
+    configuré (``ALPHAFORGE_GUARDRAIL_ID`` absent, en local par exemple), le texte de l'investisseur part donc
+    dans un bloc texte ordinaire."""
+    if not isinstance(prompt, list):
+        return prompt
+    return [
+        {"text": block["guardContent"]["text"]["text"]}
+        if isinstance(block, dict) and "guardContent" in block
+        else block
+        for block in prompt
+    ]
+
+
 class TraceHooks(HookProvider):
     """Ajoute à la trace une étape par appel du modèle et par appel d'outil (actions observables seulement)."""
 
@@ -214,6 +230,8 @@ def run_agent(
     trace: Trace,
 ) -> AgentRun:
     extra = {"guard_tagged": True} if spec.guard_tagged else {}
+    if not spec.guardrail:
+        prompt = unguarded(prompt)
     model = model_factory(effort=spec.effort, guardrail=spec.guardrail, max_tokens=spec.max_tokens, **extra)
     hooks = TraceHooks(trace, spec, model_id)
     agent = Agent(

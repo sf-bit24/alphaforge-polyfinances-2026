@@ -22,6 +22,7 @@ DOC_TYPES = (
     "Financial Concept",
     "Company Fundamentals",
     "Index",
+    "Profile Note",  # note de la base d'un client, écrite par A1 avec son skill (profile/skills/)
     # Recherche par experts (A0, E1 à E7, CONTRACTS.md section 11).
     "Fact",
     "Market Signal",

@@ -389,7 +389,13 @@ class ClientSession:
         if self.new_journal:
             self._append_journal(store, trace)
         if self.index_dirty:
-            write_client_index(store, self.client_id, self.locale, has_portfolio=self.has_portfolio_doc(store))
+            write_client_index(
+                store,
+                self.client_id,
+                self.locale,
+                has_portfolio=self.has_portfolio_doc(store),
+                notes=(self.data.get("brain") or {}).get("documents"),
+            )
             self.index_dirty = False
         self.created = False
 
@@ -462,7 +468,14 @@ def new_journal_doc(locale: str) -> okf.OkfDoc:
     )
 
 
-def write_client_index(store: Store, client_id: str, locale: str, *, has_portfolio: bool) -> None:
+def write_client_index(
+    store: Store,
+    client_id: str,
+    locale: str,
+    *,
+    has_portfolio: bool,
+    notes: list[dict[str, Any]] | None = None,
+) -> None:
     now = clock.iso()
     en = locale == "en"
     lines = [
@@ -480,6 +493,9 @@ def write_client_index(store: Store, client_id: str, locale: str, *, has_portfol
     if has_portfolio:
         lines.append("- [" + ("Existing portfolio" if en else "Portefeuille existant") + "](portefeuille-existant.md)")
     lines.append("- " + ("Execution traces: `traces/`" if en else "Traces d'exécution : `traces/`"))
+    if notes:
+        lines += ["", "## " + ("Notes written by A1" if en else "Notes écrites par A1"), ""]
+        lines += [f"- [{note.get('title') or note['path']}]({note['path']})" for note in notes]
     doc = okf.new_doc(
         type="Index",
         title="Base du client" if not en else "Client knowledge base",

@@ -109,7 +109,7 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
 }
 ```
 
-- `questions` : les questions à afficher maintenant. En `base_questions`, exactement une. En `followups`, de zéro à trois, posées par A1. Vide en `existing_portfolio`, `portfolio_review` et `complete`.
+- `questions` : les questions à afficher maintenant. En `base_questions`, exactement une. En `followups`, de zéro à trois, posées par A1 ou par le code (secours `fb_`, confirmations `cf_`). Vide en `existing_portfolio`, `portfolio_review` et `complete`.
 - `message` : texte Markdown de l'agent (A1 ou A2) dans la langue de `locale`, adapté au niveau de connaissances. Il vaut `null` après une transition déterministe.
 - `portfolio` : `PortfolioView` dès que A2 a proposé des positions, sinon `null`.
 - `trace` : les étapes de cette requête seulement. L'historique complet est dans la base du client.
@@ -137,7 +137,7 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
 
 - `source` : `deterministic` ou `a1`.
 - `field` : champ du profil que la réponse renseigne, sous la même forme que `facts[].field` (`<dimension>.<nom>`), ou `null` (facultatif).
-- `id` : `q_<nom>` pour une question de base (`questionnaire.yaml`), `a1_<tour>_<n>` pour une relance d'A1. Si A1 est indisponible, le code pose des questions de repli `fb_<tour>_<n>`, avec `source: deterministic`.
+- `id` : `q_<nom>` pour une question de base (`questionnaire.yaml`), `a1_<tour>_<n>` pour une relance d'A1. Si A1 est indisponible, le code pose des questions de repli `fb_<tour>_<n>`, avec `source: deterministic`. `cf_<tour>_<n>` est une question de confirmation posée par le code quand A1 a tiré une valeur d'un texte libre (`source: deterministic`, `kind: boolean`, `field: null`) : « oui » garde la valeur, « non » la retire. Au plus deux par tour, comptées dans les trois questions du tour.
 - `dimension` : `knowledge`, `objective`, `horizon`, `risk_tolerance`, `risk_capacity`, `constraints`, `preferences`, `context`.
 - `kind` et type de `value` attendu : `single_choice` (chaîne parmi `options[].value`), `multi_choice` (liste de chaînes), `boolean` (booléen), `number` (nombre, borné par `min` et `max`), `money` (nombre, `unit` = devise, `CAD` par défaut), `percent` (nombre de 0 à 100), `scale` (entier de `min` à `max`), `text` (chaîne de 1 à 2 000 caractères).
 - Les textes (`prompt`, `help`, `label`) sont déjà dans la langue de `locale`; l'interface n'en traduit aucun.
@@ -287,8 +287,10 @@ sources:
 data: {}                          # données structurées lues par le code (profil, positions, série…)
 ```
 
+- Dans `profil.md`, un fait tiré d'un texte libre porte `confirmed: false` (`data.facts.<champ>`) jusqu'à la réponse à sa question `cf_`. Il n'entre ni dans `ProfileView`, ni dans la complétude, ni dans les scores. S'il remplace une valeur confirmée, il la garde dans `replaces` (`value`, `provenance`, `at`, facultatif) : elle reste en vigueur jusqu'à la réponse, et « non » la rétablit. Un fait sans la clé `confirmed` est confirmé.
 - `journal.md` porte ses entrées dans `data.entries[]`, en ajout seulement, une entrée par événement : `{at, kind, provenance, ...}`.
-  - `kind` vaut `answer` (`field`, `value`, `question_id`?, `previous`?), `message` ou `stage` (`value`, `previous`, `note`).
+  - `kind` vaut `answer` (`field`, `value`, `question_id`?, `option`?, `previous`?), `message` ou `stage` (`value`, `previous`, `note`).
+  - `option` (facultatif) : identifiant de la tranche choisie quand une question à choix renseigne un champ numérique (`number`, `money`, `percent`). `value` est alors le nombre que le code a écrit dans le champ, tiré de `questionnaire.yaml` (option `number`) ou calculé par le code pour une relance.
   - Une entrée `message` garde le texte libre de l'investisseur (`followup.reply.message`) avec sa provenance `a1:<tour>`, `text` et `locale`. Elle n'est écrite qu'après un tour d'A1 réussi, donc jamais quand le garde-fou bloque.
   - Une requête écrit le journal au plus une fois.
 - La base générale ne contient rien d'un client; une base de client ne recopie pas la base générale.

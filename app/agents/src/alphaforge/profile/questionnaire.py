@@ -6,6 +6,10 @@ ce module ne fait que l'appliquer, toujours de la même façon pour les mêmes r
 Types de champ et genre de question correspondant (CONTRACTS.md 3.3) :
 ``enum`` ↔ ``single_choice``, ``multi_enum`` ↔ ``multi_choice``, ``boolean``, ``number``, ``money``,
 ``percent``, ``scale`` et ``text`` portent le même nom des deux côtés.
+
+Exception : un champ ``number``, ``money`` ou ``percent`` peut être demandé par une question ``single_choice``
+à tranches. Chaque option porte un identifiant de tranche (``value``, une chaîne) et la valeur numérique écrite
+dans le champ (``number``); le code convertit l'une en l'autre avant d'écrire le fait (``numeric_choices``).
 """
 
 from __future__ import annotations
@@ -42,6 +46,8 @@ TYPE_TO_KIND = {
 }
 CHOICE_KINDS = ("single_choice", "multi_choice")
 NUMERIC_KINDS = ("number", "money", "percent", "scale")
+# Types de champ numériques demandés par des tranches (single_choice) plutôt qu'en saisie libre.
+CHOICE_NUMBER_TYPES = ("number", "money", "percent")
 DEFAULT_TEXT_MAX = 2000
 OPTION_VALUE = re.compile(r"^[a-z0-9_]{1,40}$")
 
@@ -104,6 +110,7 @@ class FieldSpec:
     computed: bool = False
     summary: bool = False
     fallback: dict[str, Any] | None = None
+    choices: dict[str, Any] | None = None
 
     @property
     def dimension(self) -> str:
@@ -130,6 +137,12 @@ class FieldSpec:
     def label_text(self, locale: str) -> str:
         return localized(self.label, locale) or self.id
 
+    @property
+    def bounds(self) -> tuple[float | None, float | None]:
+        lo = self.min if self.min is not None else default_min(self.kind)
+        hi = self.max if self.max is not None else default_max(self.kind)
+        return lo, hi
+
 
 @dataclass(frozen=True)
 class QuestionSpec:
@@ -146,6 +159,17 @@ class QuestionSpec:
     def option_ids(self) -> tuple[str, ...]:
         return tuple(item["value"] for item in self.options)
 
+    @property
+    def numeric_choice(self) -> bool:
+        """Question à tranches sur un champ numérique : la réponse est un identifiant, le fait un nombre."""
+        return self.kind == "single_choice" and self.field.type in CHOICE_NUMBER_TYPES
+
+    def option_number(self, option: str) -> float | int:
+        for item in self.options:
+            if item["value"] == option:
+                return item["number"]
+        raise KeyError(option)
+
 
 @dataclass
 class Questionnaire:
@@ -155,7 +179,20 @@ class Questionnaire:
     fields: dict[str, FieldSpec]
     questions: list[QuestionSpec]
     rules: dict[str, Any]
+    followups: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
+
+    @property
+    def max_generated(self) -> int:
+        return int(self.followups.get("max_generated", 8))
+
+    @property
+    def max_open_questions(self) -> int:
+        return int(self.followups.get("max_open_questions", 2))
+
+    @property
+    def open_fields(self) -> tuple[str, ...]:
+        return tuple(self.followups.get("open_fields") or ())
 
     # ------------------------------------------------------------------ chargement
     @classmethod
@@ -178,6 +215,7 @@ class Questionnaire:
                 computed=bool(item.get("computed", False)),
                 summary=bool(item.get("summary", False)),
                 fallback=item.get("fallback"),
+                choices=item.get("choices"),
             )
             if spec.dimension not in DIMENSIONS:
                 raise ValueError(f"field {spec.id}: unknown dimension")
@@ -185,16 +223,20 @@ class Questionnaire:
                 raise ValueError(f"field {spec.id}: unknown type {spec.type}")
             if spec.id in fields:
                 raise ValueError(f"duplicate field {spec.id}")
+            if spec.choices is not None:
+                _check_field_choices(spec)
             fields[spec.id] = spec
         questions: list[QuestionSpec] = []
         seen: set[str] = set()
         for item in raw["questions"]:
             spec_field = fields[item["field"]]
             kind = item["kind"]
-            if kind != spec_field.kind:
-                raise ValueError(f"question {item['id']}: kind {kind} does not match field type {spec_field.type}")
             options = tuple(item.get("options") or spec_field.values)
-            if kind in CHOICE_KINDS:
+            if kind == "single_choice" and spec_field.type in CHOICE_NUMBER_TYPES:
+                _check_number_options(item["id"], spec_field, options)
+            elif kind != spec_field.kind:
+                raise ValueError(f"question {item['id']}: kind {kind} does not match field type {spec_field.type}")
+            elif kind in CHOICE_KINDS:
                 if {o["value"] for o in options} != set(spec_field.value_ids):
                     raise ValueError(f"question {item['id']}: options must match the field values")
             if item["id"] in seen:
@@ -213,6 +255,10 @@ class Questionnaire:
                 )
             )
         completeness = raw.get("completeness") or {}
+        followups = raw.get("followups") or {}
+        for field_id in followups.get("open_fields") or ():
+            if field_id not in fields or fields[field_id].type != "text":
+                raise ValueError(f"followups.open_fields: {field_id} is not a text field")
         return cls(
             version=str(raw["version"]),
             threshold=float(completeness.get("threshold", 0.7)),
@@ -220,6 +266,7 @@ class Questionnaire:
             fields=fields,
             questions=questions,
             rules=raw.get("rules") or {},
+            followups=followups,
             raw=raw,
         )
 
@@ -302,6 +349,172 @@ class Questionnaire:
     def format_value(self, field_id: str, value: Any, locale: str) -> str:
         spec = self.fields[field_id]
         return format_field_value(spec, value, locale)
+
+
+# ---------------------------------------------------------------------- tranches des champs numériques
+def _is_number(value: Any) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _within(spec: FieldSpec, number: float) -> bool:
+    lo, hi = spec.bounds
+    return (lo is None or number >= lo) and (hi is None or number <= hi)
+
+
+def _check_options_ids(where: str, options: tuple[dict[str, Any], ...] | list[dict[str, Any]]) -> None:
+    seen: set[str] = set()
+    for option in options:
+        value = option.get("value")
+        if not isinstance(value, str) or not OPTION_VALUE.match(value) or value in seen:
+            raise ValueError(f"{where}: option values must be unique identifiers matching {OPTION_VALUE.pattern}")
+        seen.add(value)
+
+
+def _check_number_options(question_id: str, spec: FieldSpec, options: tuple[dict[str, Any], ...]) -> None:
+    """Question à tranches sur un champ numérique : chaque option porte ``number``, dans les bornes du champ."""
+    where = f"question {question_id}"
+    if len(options) < 2:
+        raise ValueError(f"{where}: a choice question on {spec.id} needs at least two options")
+    _check_options_ids(where, options)
+    for option in options:
+        number = option.get("number")
+        if not _is_number(number):
+            raise ValueError(f"{where}: option {option['value']} needs a numeric number for field {spec.id}")
+        if not _within(spec, number):
+            raise ValueError(f"{where}: option {option['value']} number {number} is outside the bounds of {spec.id}")
+
+
+def _check_field_choices(spec: FieldSpec) -> None:
+    config = spec.choices or {}
+    where = f"field {spec.id} choices"
+    if spec.type not in CHOICE_NUMBER_TYPES:
+        raise ValueError(f"{where}: only number, money and percent fields take computed choices")
+    tranches = config.get("tranches") or []
+    _check_options_ids(where, tranches)
+    for item in tranches:
+        lo, hi = item.get("min"), item.get("max")
+        if not _is_number(lo) or not _within(spec, lo) or (hi is not None and (not _is_number(hi) or hi < lo)):
+            raise ValueError(f"{where}: tranche {item['value']} needs min <= max within the field bounds")
+    if config.get("relative_to"):
+        shares = config.get("shares") or []
+        if not shares or any(not _is_number(s) or s <= 0 for s in shares) or sorted(shares) != list(shares):
+            raise ValueError(f"{where}: shares must be increasing positive numbers")
+
+
+def _tranche(spec: FieldSpec, item: dict[str, Any], locale: str) -> dict[str, Any]:
+    number = item.get("number", item.get("min"))
+    return {
+        "value": item["value"],
+        "label": localized(item["label"], locale) or item["value"],
+        "number": _plain_number(number),
+        "min": _plain_number(item.get("min")),
+        "max": _plain_number(item.get("max")),
+    }
+
+
+def _share_text(share: float, locale: str) -> str:
+    text = f"{round(share * 100, 4):g}"
+    return text if locale == "en" else text.replace(".", ",")
+
+
+def _share_id(share: float) -> str:
+    return f"{round(share * 100, 4):g}".replace(".", "_")
+
+
+def _relative_tranches(
+    spec: FieldSpec, config: dict[str, Any], values: dict[str, Any], locale: str
+) -> list[dict[str, Any]] | None:
+    """Tranches en dollars, parts du montant de référence; ``None`` si ce montant est inconnu ou trop petit."""
+    base = values.get(config["relative_to"])
+    if not _is_number(base) or base <= 0:
+        return None
+    shares = [float(s) for s in config["shares"]]
+    cuts = [int(round(s * base)) for s in shares]
+    if cuts[0] <= 0 or any(b <= a for a, b in zip(cuts, cuts[1:], strict=False)):
+        return None
+    if not _within(spec, cuts[-1]):
+        return None
+    en = locale == "en"
+    of_amount = " of the amount" if en else " du montant"
+    pct = "%" if en else " %"
+    out = [
+        {
+            "value": f"lt{_share_id(shares[0])}pct",
+            "label": (
+                f"Less than {format_money(cuts[0], locale)} ({_share_text(shares[0], locale)}{pct}{of_amount})"
+                if en
+                else f"Moins de {format_money(cuts[0], locale)} ({_share_text(shares[0], locale)}{pct}{of_amount})"
+            ),
+            "number": 0,
+            "min": 0,
+            "max": cuts[0],
+        }
+    ]
+    for (s_lo, s_hi), (lo, hi) in zip(
+        zip(shares, shares[1:], strict=False), zip(cuts, cuts[1:], strict=False), strict=False
+    ):
+        a, b = _share_text(s_lo, locale), _share_text(s_hi, locale)
+        out.append(
+            {
+                "value": f"{_share_id(s_lo)}to{_share_id(s_hi)}pct",
+                "label": (
+                    f"{format_money(lo, locale)} to less than {format_money(hi, locale)} ({a} to {b}{pct})"
+                    if en
+                    else f"De {format_money(lo, locale)} à moins de {format_money(hi, locale)} ({a} à {b}{pct})"
+                ),
+                "number": lo,
+                "min": lo,
+                "max": hi,
+            }
+        )
+    last = _share_text(shares[-1], locale)
+    out.append(
+        {
+            "value": f"{_share_id(shares[-1])}pct_plus",
+            "label": (
+                f"{format_money(cuts[-1], locale)} or more ({last}{pct} or more)"
+                if en
+                else f"{format_money(cuts[-1], locale)} ou plus ({last}{pct} ou plus)"
+            ),
+            "number": cuts[-1],
+            "min": cuts[-1],
+            "max": None,
+        }
+    )
+    return out
+
+
+def numeric_choices(q: Questionnaire, field_id: str, values: dict[str, Any], locale: str) -> list[dict[str, Any]]:
+    """Tranches d'un champ ``number``, ``money`` ou ``percent`` : ``value`` (identifiant), ``label``, ``number``
+    (la valeur écrite dans le champ, la plus prudente de la tranche), ``min`` et ``max`` (bornes, ``max`` nul
+    sans borne haute). Fonction pure : mêmes tranches pour les mêmes valeurs confirmées.
+
+    Sources, dans l'ordre : ``choices`` du champ dans le YAML (parts d'un montant de référence, sinon tranches
+    absolues, filtrées par la bande ``within`` déjà connue), puis les options de la question de base du champ.
+    Liste vide pour un champ qui n'est pas numérique ou qui n'a aucune tranche.
+    """
+    spec = q.fields.get(field_id)
+    if spec is None or spec.type not in CHOICE_NUMBER_TYPES:
+        return []
+    config = spec.choices
+    if config:
+        tranches = _relative_tranches(spec, config, values, locale) if config.get("relative_to") else None
+        if tranches is None:
+            tranches = [_tranche(spec, item, locale) for item in config.get("tranches") or []]
+        within = config.get("within")
+        if within:
+            band = values.get(within["field"])
+            limits = (within.get("ranges") or {}).get(band) if band is not None else None
+            if limits:
+                lo, hi = limits
+                tranches = [
+                    t for t in tranches if t["min"] >= lo and (hi is None or (t["max"] is not None and t["max"] <= hi))
+                ]
+        return tranches
+    question = q.question_for_field(field_id)
+    if question is not None and question.numeric_choice:
+        return [_tranche(spec, item, locale) for item in question.options]
+    return []
 
 
 # ---------------------------------------------------------------------- fonctions partagées

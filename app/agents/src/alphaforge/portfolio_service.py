@@ -317,6 +317,8 @@ class PortfolioService:
                 profile = client_store.load_profile(args["client_id"])
             except KeyError as exc:
                 raise AppError("not_found", pick(locale, "Profil introuvable.", "Profile not found.")) from exc
+            # Portefeuille existant lu avec le profil : sa clé et son ETag entrent dans la version des données.
+            market_store.note_client_inputs(client_store.inputs)
             # Étape 0 : variables de style du profil court, lues comme dans finance/debate/app.py.
             style_inputs = None
             if args["strategy"]:

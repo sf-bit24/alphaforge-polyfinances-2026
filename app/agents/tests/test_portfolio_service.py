@@ -100,6 +100,7 @@ class FakeEngine:
     calls: list = field(default_factory=list)
     saved: list = field(default_factory=list)
     views: list = field(default_factory=list)
+    client_inputs: list = field(default_factory=list)
     flushed: int = 0
 
     def load(self):
@@ -142,6 +143,7 @@ class FakeEngine:
         class ClientStore:
             def __init__(self, store, questionnaire=None, locale="fr"):
                 self.locale = locale
+                self.inputs = {}
 
             def load_profile(self, client_id):
                 if client_id not in engine.profiles:
@@ -162,6 +164,9 @@ class FakeEngine:
 
             def evidence(self, ticker, topic, as_of):
                 return []
+
+            def note_client_inputs(self, inputs):
+                engine.client_inputs.append(dict(inputs))
 
         def flush():
             engine.flushed += 1
@@ -212,6 +217,8 @@ def test_build_runs_the_engine_and_returns_the_decision(portfolio_settings, stor
     # Étape 0 active par défaut : variables de style lues dans la vue du profil, comme finance/debate/app.py.
     assert call["strategy"] is True and call["style_preference"] is None
     assert call["style_inputs"] == ("style-inputs", "growth") and engine.views == [CLIENT_ID]
+    # Documents du client lus avec le profil (portefeuille existant) : passés à la version des données.
+    assert engine.client_inputs == [{}]
     assert engine.saved == [("dec-1", "pol-1")] and engine.flushed == 1
 
 

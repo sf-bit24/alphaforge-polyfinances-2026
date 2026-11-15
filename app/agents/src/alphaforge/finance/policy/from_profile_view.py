@@ -15,7 +15,19 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from alphaforge.finance.contracts.profile import Debt, Goal, Income, InvestorProfile, Preferences, Score, ValueFilter
+from alphaforge.finance.contracts.profile import (
+    AccountType,
+    Claim,
+    ClaimKind,
+    Debt,
+    Goal,
+    Holding,
+    Income,
+    InvestorProfile,
+    Preferences,
+    Score,
+    ValueFilter,
+)
 
 # Milieu des tranches de R du risk_levels.yaml v0.2 (coupures 15/30/45/60/75) : la catégorie de
 # l'app tombe dans le niveau correspondant, jamais au-dessus.
@@ -33,6 +45,15 @@ GOAL_PRIORITY = {"retirement": "besoin", "project": "besoin", "income": "besoin"
 # Exclusions de l'app → tickers de l'univers (secteur Energy du jeu de départ ; aucune autre
 # exclusion n'a de titre dans l'univers actuel, la règle est conservée pour la trace).
 EXCLUSION_TICKERS = {"fossil_fuels": ["XOM", "CNQ.TO", "ENB.TO"]}
+# Comptes du portefeuille existant (profile/portfolio.py, ACCOUNT_TYPES) → comptes du contrat finance.
+A2_ACCOUNTS = {
+    "tfsa": AccountType.CELI,
+    "rrsp": AccountType.REER,
+    "resp": AccountType.REEE,
+    "rrif": AccountType.FERR,
+    "non_registered": AccountType.NON_ENREGISTRE,
+    "unknown": AccountType.AUTRE,
+}
 INTERESTS = {"technology": "IA", "crypto": "crypto"}
 
 
@@ -46,6 +67,48 @@ def _facts(view: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def holdings_from_existing_portfolio(data: dict[str, Any] | None) -> tuple[list[Holding], list[Claim]]:
+    """Positions du portefeuille existant (``data`` de ``clients/<id>/portefeuille-existant.md``, écrit par A2).
+
+    Seule une vue confirmée par l'investisseur compte. Une position entre dans ``holdings`` si le code l'a évaluée
+    (``resolved`` et ``value_cad``) : valeur en CAD, jamais recalculée ici. L'encaisse n'est pas une position. Une
+    position non évaluée, ou une vue non confirmée, est signalée par une ``Claim`` « déclaré non vérifié », sans
+    effet sur le mandat (ni ``missing_info``, qui rendrait le profil incomplet, ni ``consistency_flags``, qui
+    pénalisent le niveau de risque).
+    """
+    view = (data or {}).get("view") or {}
+    positions = view.get("positions") or []
+    if not positions:
+        return [], []
+    if view.get("status") != "confirmed":
+        note = "Portefeuille existant non confirmé par l'investisseur : non pris en compte."
+        return [], [Claim(text=note, classification=ClaimKind.DECLARE_NON_VERIFIE)]
+    holdings: list[Holding] = []
+    claims: list[Claim] = []
+    for p in positions:
+        if p.get("asset_class") == "cash":
+            continue
+        value, ticker = p.get("value_cad"), p.get("ticker")
+        if p.get("resolved") and isinstance(value, int | float) and value >= 0 and ticker:
+            holdings.append(
+                Holding(
+                    ticker=str(ticker),
+                    market_value=float(value),
+                    currency="CAD",
+                    account=A2_ACCOUNTS.get(p.get("account_type") or "unknown", AccountType.AUTRE),
+                )
+            )
+        else:
+            raw = str(p.get("raw") or p.get("name") or p.get("id") or "?")[:120]
+            claims.append(
+                Claim(
+                    text=f"Position existante non évaluée, ignorée : {raw}",
+                    classification=ClaimKind.DECLARE_NON_VERIFIE,
+                )
+            )
+    return holdings, claims
+
+
 def investor_profile_from_view(
     view: dict[str, Any],
     client_id: str,
@@ -53,7 +116,9 @@ def investor_profile_from_view(
     version: int = 1,
     created_utc: datetime | None = None,
     completeness: dict[str, Any] | None = None,
+    existing_portfolio: dict[str, Any] | None = None,
 ) -> InvestorProfile:
+    """``existing_portfolio`` : ``data`` de ``portefeuille-existant.md`` (``holdings_from_existing_portfolio``)."""
     f = _facts(view)
     g = lambda key: f.get(key)  # noqa: E731
     missing: list[str] = []
@@ -120,6 +185,7 @@ def investor_profile_from_view(
     status = "COMPLETE" if not missing else "INCOMPLETE"
 
     income_stab = g("risk_capacity.income_stability")
+    holdings, claims = holdings_from_existing_portfolio(existing_portfolio)
     return InvestorProfile(
         profile_id=client_id,
         version=version,
@@ -141,7 +207,9 @@ def investor_profile_from_view(
         else None,
         income=Income(variability=INCOME.get(income_stab)) if income_stab else None,
         debts=debts,
+        holdings=holdings,
         preferences=Preferences(tilts=tilts, value_filters=filters, esg_required=esg, reference_currency="CAD"),
+        claims=claims,
         missing_info=missing,
         consistency_flags=[],
     )

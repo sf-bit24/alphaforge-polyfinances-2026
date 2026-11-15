@@ -3,7 +3,8 @@
 Chaque décision est sérialisée canoniquement ; ``record_hash = sha256(prev_hash + decision_hash)``.
 Modifier une décision passée casse la chaîne de son profil (``verify_chain``).
 Supports : JSONL local (toujours) ; S3 ``decisions/`` (Object Lock du bucket) et DynamoDB
-``alphaforge-decisions`` (écriture conditionnelle) si ``outputs.json`` est fourni.
+(écriture conditionnelle) si ``aws`` est fourni. Noms : ``aws["decisions_table"]``, sinon
+``ALPHAFORGE_DECISIONS_TABLE`` (output Terraform ``decisions_table``), sinon ``alphaforge-decisions``.
 """
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from ..contracts import Decision
 from .telemetry import canonical_hash, current_ids, log_event, span
 
 GENESIS = "0" * 64
-TABLE = "alphaforge-decisions"
+TABLE = os.environ.get("ALPHAFORGE_DECISIONS_TABLE", "alphaforge-decisions")
 
 
 def _local_path(root: str, profile_id: str) -> str:
@@ -45,8 +46,8 @@ def _profile_lock(root: str, profile_id: str):
             fcntl.flock(fh, fcntl.LOCK_UN)
 
 
-def _aws_head(ddb, profile_id: str) -> tuple[str, int]:
-    item = ddb.get_item(TableName=TABLE, Key={"pk": {"S": f"head#{profile_id}"}}, ConsistentRead=True).get("Item")
+def _aws_head(ddb, profile_id: str, table: str = TABLE) -> tuple[str, int]:
+    item = ddb.get_item(TableName=table, Key={"pk": {"S": f"head#{profile_id}"}}, ConsistentRead=True).get("Item")
     if not item:
         return GENESIS, -1
     return item["record_hash"]["S"], int(item["seq"]["N"])
@@ -65,13 +66,14 @@ def record_decision(decision: Decision, root: str, aws: dict | None = None, max_
     tid, sid = current_ids()
     with span("audit.record_decision", decision_id=decision.decision_id), _profile_lock(root, decision.profile_id):
         ddb = s3 = None
+        table = (aws or {}).get("decisions_table", TABLE)
         if aws:
             import boto3
             ddb = boto3.client("dynamodb", region_name=aws["region"])
             s3 = boto3.client("s3", region_name=aws["region"])
         for attempt in range(max_retries):
             if ddb is not None:
-                prev_hash, prev_seq = _aws_head(ddb, decision.profile_id)
+                prev_hash, prev_seq = _aws_head(ddb, decision.profile_id, table)
             else:
                 prev = _last(root, decision.profile_id)
                 prev_hash, prev_seq = (prev["record_hash"], prev["seq"]) if prev else (GENESIS, -1)
@@ -88,13 +90,13 @@ def record_decision(decision: Decision, root: str, aws: dict | None = None, max_
             head_vals = {} if prev_seq < 0 else {":prev": {"S": prev_hash}}
             try:
                 ddb.transact_write_items(TransactItems=[
-                    {"Put": {"TableName": TABLE, "ConditionExpression": "attribute_not_exists(pk)", "Item": {
+                    {"Put": {"TableName": table, "ConditionExpression": "attribute_not_exists(pk)", "Item": {
                         "pk": {"S": decision.decision_id}, "profile_id": {"S": decision.profile_id},
                         "seq": {"N": str(entry["seq"])}, "record_hash": {"S": entry["record_hash"]},
                         "prev_hash": {"S": prev_hash}, "s3_key": {"S": key},
                         "s3_version": {"S": put.get("VersionId", "null")},
                         "recorded_utc": {"S": entry["recorded_utc"]}, "kind": {"S": decision.kind}}}},
-                    {"Put": {"TableName": TABLE, "ConditionExpression": head_cond,
+                    {"Put": {"TableName": table, "ConditionExpression": head_cond,
                              **({"ExpressionAttributeValues": head_vals} if head_vals else {}),
                              "Item": {"pk": {"S": f"head#{decision.profile_id}"},
                                       "record_hash": {"S": entry["record_hash"]}, "seq": {"N": str(entry["seq"])},

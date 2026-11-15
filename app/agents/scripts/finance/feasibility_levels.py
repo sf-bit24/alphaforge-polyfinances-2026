@@ -1,7 +1,8 @@
 """Faisabilité de la table de risque (F1) par niveau : optimiseur F2 puis contrôle du Judge F4.
 
 Usage :
-    PYTHONPATH=.:research/finance python -I research/finance/feasibility_levels.py <risk_levels.yaml> <expand.py> [as_of]
+    cd app/agents
+    uv run --group finance python -I scripts/finance/feasibility_levels.py <risk_levels.yaml> <expand.py> [as_of]
 
 Les limites viennent de la fonction ``emit`` du script d'expansion de F1 (non recopiée ici).
 La limite conditionnelle ``risk.cdar_m`` (biais d'aversion aux pertes) est testée à part.
@@ -14,7 +15,7 @@ import io
 import os
 import runpy
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import yaml
 
@@ -51,7 +52,7 @@ def build_policy(level: str, limits, Y: dict, universe: list[str]) -> PolicySpec
     lb = {a: delta for a in Y.get("no_proxy") or [] if a in universe}
     d = Y.get("policy_defaults") or {}
     return PolicySpec(policy_id=f"feasibility-{level}", profile_id="table", profile_version=1,
-                      created_utc=datetime.now(timezone.utc), universe=universe, limits=limits,
+                      created_utc=datetime.now(UTC), universe=universe, limits=limits,
                       exposure_overrides=ov, history_proxies=hp, loss_bounds=lb,
                       loss_bounds_source="risk_levels.yaml satellites.crypto.delta" if lb else None,
                       lookback_months=d.get("lookback_months", 120), cvar_beta=d.get("cvar_beta", 0.95),
@@ -65,7 +66,7 @@ def run(yaml_path: str, expand_path: str, as_of: str, repo_root: str) -> list[di
     rows = []
     for level in LEVELS:
         for variant, drop in (("base", {"risk.cdar_m"}), ("avec_cdar", set())):
-            lims = [l for l in emit(level) if l.rule_id not in drop]
+            lims = [lim for lim in emit(level) if lim.rule_id not in drop]
             p = build_policy(level, lims, Y, uni)
             res = optimize(p, as_of)
             row = {"level": level, "variant": variant, "status": res.status, "window": res.window,

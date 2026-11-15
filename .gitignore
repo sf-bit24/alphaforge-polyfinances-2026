@@ -13,5 +13,7 @@ __pycache__/
 .venv/
 
 # Traçabilité locale (peut contenir des prompts) et sorties d'infra (identifiant du compte)
+app/agents/.traces/
+# anciens emplacements (copies locales encore présentes sur certains postes)
 research/finance/traces/
 research/finance/infra/outputs.json

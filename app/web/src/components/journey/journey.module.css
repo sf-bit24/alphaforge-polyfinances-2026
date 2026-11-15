@@ -75,6 +75,12 @@
   border-color: var(--navy);
   color: var(--ink);
 }
+.topLink:disabled {
+  cursor: default;
+  opacity: 0.6;
+  border-color: var(--line);
+  color: var(--ink-2);
+}
 .topLink svg {
   width: 14px;
   height: 14px;
@@ -149,6 +155,50 @@
   gap: 18px;
   align-items: center;
 }
+/* The landing text stands on the city: a soft white veil behind it keeps every line readable. */
+.landing::before {
+  content: "";
+  position: absolute;
+  inset: -16px -24px -12px -24px;
+  z-index: -1;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 0 28px 18px rgba(255, 255, 255, 0.72);
+  pointer-events: none;
+}
+/* Secondary actions of the landing (start over, skip the questions): white pills, never bare text on the scene. */
+.landingAlt {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--ink-2);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.landingAlt:hover {
+  border-color: var(--navy);
+  color: var(--ink);
+}
+.landingAlt:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.landingAlt svg {
+  width: 14px;
+  height: 14px;
+}
+.landing .landingSkip {
+  margin-top: 14px;
+}
 
 .cta {
   display: inline-flex;
@@ -203,6 +253,11 @@
   cursor: default;
   opacity: 0.6;
 }
+.skipCount {
+  font-size: 13px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
 
 /* ---------- question card ---------- */
 .card {
@@ -220,17 +275,11 @@
   gap: 12px;
   align-items: flex-start;
 }
+/* Yan's head (components/yan): it stands on its own, without a disc. */
 .avatar {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--navy);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-top: -3px;
 }
 .say p {
   font-size: 15px;
@@ -388,8 +437,7 @@
   align-items: center;
 }
 /* In a card that scrolls (short screens), its main button stays in reach at the bottom. */
-.card .actions,
-.card .next {
+.card .actions {
   position: sticky;
   bottom: -22px;
   z-index: 1;
@@ -577,59 +625,125 @@
   margin-bottom: 16px;
 }
 
-/* ---------- summary at the house ---------- */
-.card dl {
-  margin-top: 16px;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0 18px;
-  font-size: 14px;
-}
-.card dt,
-.card dd {
-  padding: 9px 0;
-  border-top: 1px solid var(--line);
-}
-.card dt {
-  color: var(--ink-3);
-}
-.card dd {
-  color: var(--ink);
-  font-weight: 550;
-}
-.meter {
-  margin-top: 16px;
-  font-size: 13px;
+/* ---------- at the house: Yan's follow-ups, in the question cards ---------- */
+/* Yan's own message (A1's markdown) in its line. */
+.sayRich {
+  min-width: 0;
+  padding-top: 4px;
+  font-size: 15px;
+  line-height: 1.5;
   color: var(--ink-2);
 }
-.meterTrack {
-  position: relative;
-  margin-top: 8px;
-  height: 8px;
-  border-radius: 4px;
-  background: var(--soft);
+.sayRich p + p {
+  margin-top: 6px;
 }
-.meterTrack > i {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  border-radius: 4px;
-  background: var(--red);
+.more {
+  margin-top: 6px;
+  font-size: 14px;
 }
-.meterTrack > b {
-  position: absolute;
-  top: -4px;
-  bottom: -4px;
-  width: 2px;
-  border-radius: 1px;
-  background: var(--navy);
+.more summary {
+  cursor: pointer;
+  color: var(--ink-3);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
-.next {
-  margin-top: -4px;
+.more[open] summary {
+  margin-bottom: 6px;
+}
+/* The questionnaire is over: a small badge above Yan's line, with where its questions stand. */
+.kicker {
+  margin-bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ok);
+  background: var(--ok-soft);
+  border: 1px solid #bfe0cc;
+  border-radius: 999px;
+  padding: 3px 11px 3px 8px;
+  white-space: nowrap;
+}
+.kicker svg {
+  width: 15px;
+  height: 15px;
+}
+.kickerPct {
+  margin-left: 4px;
+  padding-left: 9px;
+  border-left: 1px solid #bfe0cc;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/* Below the sticky « Continuer » area, which overlaps what follows by its padding. */
+.followupActions {
+  margin-top: 24px;
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 8px 20px;
+}
+.typing {
+  display: inline-flex;
+  gap: 5px;
+  margin: 14px 0 4px 46px;
+}
+.typing i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line-2);
+  animation: typing 1s infinite ease-in-out;
+}
+.typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes typing {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (max-width: 760px) {
+  .kicker {
+    gap: 4px;
+    font-size: 11px;
+    padding: 3px 9px 3px 6px;
+  }
+  .kickerPct {
+    margin-left: 2px;
+    padding-left: 6px;
+  }
+}
+/* The profile is ready: Yan in full beside the title. */
+.ready {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+}
+.ready .kicker {
+  margin-bottom: 0;
+}
+.card .ready h2 {
+  margin-top: 10px;
+}
+.lead {
+  margin-top: 14px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.next {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
   align-items: center;
 }
 
@@ -779,8 +893,7 @@
   .card {
     padding: 18px 18px 16px;
   }
-  .card .actions,
-  .card .next {
+  .card .actions {
     bottom: -16px;
     margin-bottom: -16px;
     padding-bottom: 16px;
@@ -798,10 +911,5 @@
   }
   .answer {
     padding: 10px 12px;
-  }
-  .card dl {
-    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
-    gap: 0 12px;
-    font-size: 13px;
   }
 }

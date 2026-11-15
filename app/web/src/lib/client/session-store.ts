@@ -226,6 +226,27 @@ export class SessionStore {
     );
   };
 
+  /**
+   * « Passer les questions » (tests, demos): answers every pending base question with
+   * `answerFor`, one `base.answer` each as if clicked, and skips the existing portfolio if
+   * the runtime asks for it. Stops at the first failure, whose error stays on the session.
+   */
+  answerAllBase = async (answerFor: (question: Question) => AnswerValue, onAnswered?: (count: number) => void): Promise<boolean> => {
+    let count = 0;
+    // Bounded: the questionnaire has about 30 questions, branches included.
+    for (let guard = 0; guard < 80; guard += 1) {
+      const state = this.snapshot.state;
+      if (!state) return false;
+      if (state.stage === "existing_portfolio") return this.skipPortfolio();
+      const question = state.stage === "base_questions" ? state.questions[0] : undefined;
+      if (!question) return true;
+      if (!(await this.answerBase(question.id, answerFor(question)))) return false;
+      count += 1;
+      onAnswered?.(count);
+    }
+    return false;
+  };
+
   submitPortfolio = (input: { text?: string; files?: UploadFile[] }): Promise<boolean> => {
     const clientId = this.requireClient();
     return this.execute(

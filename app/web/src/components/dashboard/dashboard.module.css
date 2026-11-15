@@ -344,17 +344,11 @@
   gap: 12px;
   align-items: flex-start;
 }
+/* Yan's head (components/yan): it stands on its own, without a disc. */
 .avatar {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--navy);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-top: -3px;
 }
 .body {
   min-width: 0;

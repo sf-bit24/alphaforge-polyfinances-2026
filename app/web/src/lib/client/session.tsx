@@ -12,6 +12,7 @@ type SessionActions = Pick<
   | "restart"
   | "forget"
   | "answerBase"
+  | "answerAllBase"
   | "submitPortfolio"
   | "confirmPortfolio"
   | "skipPortfolio"
@@ -49,6 +50,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       restart: store.restart,
       forget: store.forget,
       answerBase: store.answerBase,
+      answerAllBase: store.answerAllBase,
       submitPortfolio: store.submitPortfolio,
       confirmPortfolio: store.confirmPortfolio,
       skipPortfolio: store.skipPortfolio,

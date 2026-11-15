@@ -105,12 +105,25 @@ export function useFollowupForm(asked: Question[]) {
 
 export type FollowupForm = ReturnType<typeof useFollowupForm>;
 
+interface ThreadScroll {
+  entryCount: number;
+  replying: boolean;
+  demoTyping: boolean;
+  streamText: string;
+  /** Yan's last message, with open questions, ends the thread: it is read from its start. */
+  readFromStart: boolean;
+}
+
 /** Keeps the end of the thread in view when an entry, a reply being written or the demo's typing shows up. */
-export function useThreadScroll({ entryCount, replying, demoTyping, streamText }: { entryCount: number; replying: boolean; demoTyping: boolean; streamText: string }) {
+export function useThreadScroll({ entryCount, replying, demoTyping, streamText, readFromStart }: ThreadScroll) {
   const threadRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const thread = threadRef.current;
-    if (thread) thread.scrollTo({ top: thread.scrollHeight, behavior: "smooth" });
-  }, [entryCount, replying, demoTyping, streamText]);
+    if (!thread) return;
+    const asking = readFromStart ? thread.querySelector<HTMLElement>("[data-asks]") : null;
+    thread.scrollTo({ top: asking ? asking.offsetTop - 12 : thread.scrollHeight, behavior: "smooth" });
+  }, [entryCount, replying, demoTyping, streamText, readFromStart]);
   return threadRef;
 }
+
+

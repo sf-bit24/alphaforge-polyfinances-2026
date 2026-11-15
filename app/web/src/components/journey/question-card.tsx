@@ -324,7 +324,8 @@ function AnswerBody(props: BodyProps) {
 
 interface QuestionCardProps {
   question: Question;
-  say: string;
+  /** Yan's line above the question: a short text, or its own message (follow-ups). */
+  say: ReactNode;
   busy: boolean;
   autoFocus: boolean;
   onAnswer: (value: AnswerValue) => void;

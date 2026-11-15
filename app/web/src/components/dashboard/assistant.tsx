@@ -112,8 +112,8 @@ function Composer({
 }
 
 /**
- * The assistant of the dashboard draft. Its conversation is A1's (`followup.reply`): it
- * asks the follow-ups that complete the profile, and answers within the profile's scope.
+ * Yan, the assistant of the dashboard draft. Its conversation is A1's (`followup.reply`):
+ * it asks the follow-ups that complete the profile, and answers within the profile's scope.
  * In `mock` mode, the draft's portfolio questions also get their example answers.
  */
 export function Assistant({ state, sample }: { state: ClientState; sample: boolean }) {
@@ -123,7 +123,8 @@ export function Assistant({ state, sample }: { state: ClientState; sample: boole
   const { demoEntries, demoTyping, playedDemos, playDemo } = useDemoScript();
   const view = threadView(state, session, demoEntries);
   const form = useFollowupForm(view.askQuestions ? state.questions : []);
-  const threadRef = useThreadScroll({ entryCount: view.entries.length, replying: view.replying, demoTyping, streamText: session.streamText });
+  const readFromStart = view.askQuestions && !demoTyping && view.entries.at(-1) === view.lastAgent;
+  const threadRef = useThreadScroll({ entryCount: view.entries.length, replying: view.replying, demoTyping, streamText: session.streamText, readFromStart });
 
   const act = (chip: string, text: string) => {
     if (chip === "followups") void session.reply({});

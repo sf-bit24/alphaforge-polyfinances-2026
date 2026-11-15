@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Dictionary } from "@/lib/i18n/dictionary";
 import { cn } from "@/components/ui/cn";
+import { YanMark } from "@/components/yan/yan";
 import styles from "./dashboard.module.css";
 
 export interface HowStep {
@@ -55,12 +56,11 @@ export function Sources({ items, tag }: { items: string[]; tag?: string }) {
   );
 }
 
-export function AgentMessage({ children }: { children: ReactNode }) {
+/** A message from Yan; `asks` marks the one whose questions are open, read from its start. */
+export function AgentMessage({ children, asks = false }: { children: ReactNode; asks?: boolean }) {
   return (
-    <div className={styles.msg}>
-      <span className={styles.avatar} aria-hidden>
-        A
-      </span>
+    <div className={styles.msg} data-asks={asks || undefined}>
+      <YanMark className={styles.avatar} />
       <div className={styles.body}>{children}</div>
     </div>
   );

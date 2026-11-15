@@ -128,10 +128,10 @@ function AskedQuestions({ questions }: { questions: Question[] }) {
 }
 
 /** A message of A1; `children` shows its questions. */
-function AgentTurn({ entry, run, children }: { entry: AgentEntry; run: TraceRun | undefined; children: ReactNode }) {
+function AgentTurn({ entry, run, asks, children }: { entry: AgentEntry; run: TraceRun | undefined; asks: boolean; children: ReactNode }) {
   const { t, locale } = useI18n();
   return (
-    <AgentMessage>
+    <AgentMessage asks={asks}>
       {entry.message ? <Markdown>{entry.message}</Markdown> : null}
       {children}
       <Sources items={sourcesOfRun(run)} />
@@ -157,10 +157,10 @@ export function ThreadEntries({ view, questions, form, onPlayDemo }: { view: Thr
     if (entry.role === "user") return <UserTurn key={entry.id} entry={entry} />;
     if (!entry.message && entry.questions.length === 0) return null;
     const run = entry.runId ? session.runs.find((candidate) => candidate.id === entry.runId) : undefined;
-    const isLast = entry === view.lastAgent;
+    const asks = entry === view.lastAgent && view.askQuestions;
     return (
-      <AgentTurn key={entry.id} entry={entry} run={run}>
-        {isLast && view.askQuestions ? <FollowupQuestions questions={questions} form={form} replying={view.replying} /> : <AskedQuestions questions={entry.questions} />}
+      <AgentTurn key={entry.id} entry={entry} run={run} asks={asks}>
+        {asks ? <FollowupQuestions questions={questions} form={form} replying={view.replying} /> : <AskedQuestions questions={entry.questions} />}
       </AgentTurn>
     );
   });

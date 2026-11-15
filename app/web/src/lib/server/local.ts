@@ -1,12 +1,30 @@
 import "server-only";
+import type { PortfolioBuildRequest } from "@/lib/contract/portfolio";
 import type { AgentRequest } from "@/lib/contract/requests";
 import { GatewayError } from "./errors";
 import type { Upstream } from "./upstream";
 
 const TIMEOUT_MS = 180_000;
 
+/** How to start each local runtime, for the error message when it does not answer. */
+const START = {
+  profile: "cd app/agents && AGENT_ROLE=profile ALPHAFORGE_STORE=local uv run python main.py",
+  portfolio: "cd app/agents && AGENT_ROLE=portfolio PORT=8081 ALPHAFORGE_STORE=local uv run --group finance python main.py",
+} as const;
+
+interface LocalOptions {
+  role?: keyof typeof START;
+  timeoutMs?: number;
+}
+
 /** `local` mode: POST the request to the Python runtime started on this machine. */
-export async function invokeLocal(url: string, request: AgentRequest, stream: boolean, signal: AbortSignal): Promise<Upstream> {
+export async function invokeLocal(
+  url: string,
+  request: AgentRequest | PortfolioBuildRequest,
+  stream: boolean,
+  signal: AbortSignal,
+  { role = "profile", timeoutMs = TIMEOUT_MS }: LocalOptions = {},
+): Promise<Upstream> {
   let response: Response;
   try {
     response = await fetch(url, {
@@ -17,7 +35,7 @@ export async function invokeLocal(url: string, request: AgentRequest, stream: bo
       },
       body: JSON.stringify(request),
       cache: "no-store",
-      signal: AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
     });
   } catch (error) {
     if (signal.aborted) throw error;
@@ -25,11 +43,11 @@ export async function invokeLocal(url: string, request: AgentRequest, stream: bo
     throw new GatewayError(
       "internal",
       {
-        fr: `Runtime local injoignable à ${url} (${reason}). Lancez-le : cd app/agents && AGENT_ROLE=profile ALPHAFORGE_STORE=local uv run python main.py. Il n'écoute que sur 127.0.0.1 : évitez localhost dans LOCAL_AGENT_URL.`,
-        en: `Local runtime unreachable at ${url} (${reason}). Start it: cd app/agents && AGENT_ROLE=profile ALPHAFORGE_STORE=local uv run python main.py. It listens on 127.0.0.1 only: avoid localhost in LOCAL_AGENT_URL.`,
+        fr: `Runtime local injoignable à ${url} (${reason}). Lancez-le : ${START[role]}. Il n'écoute que sur 127.0.0.1 : évitez localhost dans ${role === "profile" ? "LOCAL_AGENT_URL" : "LOCAL_PORTFOLIO_URL"}.`,
+        en: `Local runtime unreachable at ${url} (${reason}). Start it: ${START[role]}. It listens on 127.0.0.1 only: avoid localhost in ${role === "profile" ? "LOCAL_AGENT_URL" : "LOCAL_PORTFOLIO_URL"}.`,
       },
       502,
-      { mode: "local", url },
+      { mode: "local", url, role },
     );
   }
 

@@ -4,21 +4,11 @@
  * converts USD with the starter's USD/CAD rate. Exposures are computed by code.
  */
 import type { PositionInput } from "@/lib/contract/requests";
-import type { AccountType, Exposures, FxRate, Locale, Position, Source, UnresolvedItem } from "@/lib/contract/schemas";
-import { findAssetByTicker, findAssetInText, PRICE_DATE, STARTER_SOURCES, USDCAD, type StarterAsset } from "./starter";
+import type { Exposures, FxRate, Locale, Position, Source, UnresolvedItem } from "@/lib/contract/schemas";
+import { CASH_NAME, readInput, round, type ExtractionInput, type FileReport, type Holding } from "./portfolio-lines";
+import { findAssetByTicker, PRICE_DATE, STARTER_SOURCES, USDCAD, type StarterAsset } from "./starter";
 
-export interface ExtractionInput {
-  text?: string;
-  files?: Array<{ name: string; media_type: string; data_base64: string }>;
-}
-
-export interface FileReport {
-  name: string;
-  media_type: string;
-  bytes: number;
-  readable: boolean;
-  lines: number;
-}
+export type { ExtractionInput, FileReport } from "./portfolio-lines";
 
 export interface Extraction {
   positions: Position[];
@@ -27,45 +17,7 @@ export interface Extraction {
   lines: number;
 }
 
-const ACCOUNT_PATTERNS: Array<[RegExp, AccountType]> = [
-  [/\b(celi|tfsa)\b/i, "tfsa"],
-  [/\b(reer|rrsp)\b/i, "rrsp"],
-  [/\b(reee|resp)\b/i, "resp"],
-  [/\b(ferr|rrif)\b/i, "rrif"],
-  [/(non[ -]?enregistr|non[ -]?registered|\bmarge\b|\bmargin\b|\bcash account\b)/i, "non_registered"],
-];
-
 const MAX_RAW_CHARS = 200;
-
-const HEADER_WORDS = /\b(ticker|symbole|symbol|titre|security|quantit[ée]|quantity|qty|compte|account|valeur|value|devise|currency)\b/i;
-
-function isTextLike(mediaType: string, name: string): boolean {
-  return (
-    mediaType.startsWith("text/") ||
-    /json|csv|xml|yaml|markdown/.test(mediaType) ||
-    /\.(csv|tsv|txt|md|json|ya?ml)$/i.test(name)
-  );
-}
-
-function decodeText(base64: string): string | null {
-  const bytes = Buffer.from(base64, "base64");
-  const text = bytes.toString("utf8");
-  // Binary content (PDF, image, spreadsheet) is not readable without a model.
-  if (text.includes("\u0000") || /�/.test(text.slice(0, 2000))) return null;
-  return text;
-}
-
-function parseNumber(token: string): number | null {
-  const cleaned = token.replace(/[\s  $€£]/g, "").replace(/(\d),(\d{3})(?!\d)/g, "$1$2").replace(",", ".");
-  if (!/^\d+(\.\d+)?$/.test(cleaned)) return null;
-  const value = Number(cleaned);
-  return Number.isFinite(value) ? value : null;
-}
-
-function round(value: number, digits = 2): number {
-  const factor = 10 ** digits;
-  return Math.round(value * factor) / factor;
-}
 
 /** Value in the listing currency: quantity times price when both are known, else the declared market value. */
 function nativeValue(
@@ -104,7 +56,13 @@ const NOTES = {
     fr: "Titre absent du jeu de départ : valeur déclarée utilisée, sans cours.",
     en: "Security not in the starter universe: declared value used, no price.",
   },
+  cash_missing: {
+    fr: "Montant de l'encaisse absent : ajoutez-le.",
+    en: "No cash amount: add it.",
+  },
 } as const;
+
+const CASH_LABEL = { fr: "Encaisse", en: "Cash" } as const;
 
 const UNRESOLVED_REASONS = {
   unread_file: {
@@ -117,13 +75,6 @@ const UNRESOLVED_REASONS = {
   },
 } as const;
 
-/** What a line says about a holding, before any price. */
-interface Holding {
-  quantity: number | null;
-  marketValue: number | null;
-  account: AccountType | null;
-}
-
 /** A row of the portfolio as read from a line, or as sent back by the investor. */
 interface PositionRow extends Holding {
   id: string;
@@ -132,7 +83,11 @@ interface PositionRow extends Holding {
 
 function positionFromAsset(row: PositionRow, asset: StarterAsset, locale: Locale): Position {
   const { quantity, marketValue } = row;
-  const value = valueInCad(quantity, asset.close, quantity === null ? marketValue : null, asset.currency);
+  // Without a quantity, the declared value is in the currency the line gives, else in the listing currency.
+  const value =
+    quantity === null
+      ? valueInCad(null, null, marketValue, row.currency ?? asset.currency)
+      : valueInCad(quantity, asset.close, null, asset.currency);
   let notes: string | null = null;
   if (quantity === null && marketValue !== null) notes = NOTES.value_declared[locale];
   if (quantity === null && marketValue === null) notes = NOTES.quantity_missing[locale];
@@ -157,119 +112,77 @@ function positionFromAsset(row: PositionRow, asset: StarterAsset, locale: Locale
   };
 }
 
-function unresolvedPosition(row: PositionRow, reason: string): Position {
+/** A line A2 did not identify; an explicit symbol absent from the universe keeps its ticker. */
+function unresolvedPosition(row: PositionRow, security: { ticker: string | null; name: string | null }, reason: string): Position {
   const { marketValue } = row;
+  const currency = row.currency ?? (marketValue !== null ? "CAD" : null);
   return {
     id: row.id,
     raw: row.raw,
-    ticker: null,
-    name: null,
+    ticker: security.ticker,
+    name: security.name,
     asset_class: null,
     sector: null,
     market: null,
-    currency: marketValue !== null ? "CAD" : null,
+    currency,
     quantity: row.quantity,
     market_value: marketValue,
     account_type: row.account,
     price: null,
     price_date: null,
     price_source: null,
-    value_cad: marketValue !== null ? valueInCad(null, null, marketValue, "CAD") : null,
+    value_cad: valueInCad(null, null, marketValue, currency),
     resolved: false,
     notes: reason,
   };
 }
 
-/** On a line that is not comma-delimited, "0,05" is a decimal and "1,234" a thousands group. */
-function normalizeCommas(line: string): string {
-  if ((line.match(/,/g) ?? []).length > 1) return line;
-  return line.replace(/(\d),(\d{3})(?!\d)/g, "$1$2").replace(/(\d),(\d+)/g, "$1.$2");
-}
-
-function parseLine(rawLine: string): Holding & { asset: StarterAsset | null } {
-  const line = normalizeCommas(rawLine);
-  const tokens = line.split(/[\s,;\t|]+/).filter(Boolean);
-  let asset: StarterAsset | null = null;
-  let tickerToken = -1;
-  tokens.forEach((token, index) => {
-    if (asset) return;
-    const candidate = findAssetByTicker(token.replace(/^["'(]|["')]$/g, ""));
-    if (candidate && /[A-Za-z]/.test(token)) {
-      asset = candidate;
-      tickerToken = index;
-    }
-  });
-  asset ??= findAssetInText(line);
-
-  let quantity: number | null = null;
-  let marketValue: number | null = null;
-  const money = /(\$\s?[\d\s.,]+|[\d\s.,]+\s?\$)/.exec(line);
-  if (money) marketValue = parseNumber(money[0]);
-  tokens.forEach((token, index) => {
-    if (index === tickerToken || quantity !== null) return;
-    if (money && money[0].includes(token)) return;
-    const number = parseNumber(token);
-    if (number !== null) quantity = number;
-  });
-  let account: AccountType | null = null;
-  for (const [pattern, type] of ACCOUNT_PATTERNS) {
-    if (pattern.test(line)) {
-      account = type;
-      break;
-    }
-  }
-  return { asset, quantity, marketValue, account };
-}
-
-interface InputLines {
-  lines: string[];
-  files: FileReport[];
-  unread: UnresolvedItem[];
-}
-
-/** The lines of the pasted text and of the text-like files; a file without readable text is reported, not parsed. */
-function readInput(input: ExtractionInput, locale: Locale): InputLines {
-  const lines: string[] = input.text ? input.text.split(/\r?\n/) : [];
-  const files: FileReport[] = [];
-  const unread: UnresolvedItem[] = [];
-  for (const file of input.files ?? []) {
-    const bytes = Buffer.byteLength(file.data_base64, "base64");
-    const text = isTextLike(file.media_type, file.name) ? decodeText(file.data_base64) : null;
-    const fileLines = text ? text.split(/\r?\n/) : [];
-    files.push({ name: file.name, media_type: file.media_type, bytes, readable: text !== null, lines: fileLines.length });
-    lines.push(...fileLines);
-    // Not a row: like the runtime's unparsed items, it has no `position_id`.
-    if (!text) unread.push({ raw: file.name, reason: UNRESOLVED_REASONS.unread_file[locale] });
-  }
-  return { lines, files, unread };
-}
-
-/** A line that names no security and is only a header row, or has no letter at all. */
-function isNoise(line: string): boolean {
-  return (HEADER_WORDS.test(line) && !/\d/.test(line)) || !/[A-Za-zÀ-ÿ]/.test(line);
+/** Cash (CASH, Encaisse): valued at its amount, like `_resolve_cash` of the Python runtime. */
+function cashPosition(row: PositionRow, name: string | null, locale: Locale): Position {
+  const amount = row.marketValue ?? row.quantity;
+  const currency = row.currency ?? "CAD";
+  return {
+    id: row.id,
+    raw: row.raw,
+    ticker: null,
+    name: name ?? CASH_LABEL[locale],
+    asset_class: "cash",
+    sector: "Cash",
+    market: "Cash",
+    currency,
+    quantity: null,
+    market_value: amount,
+    account_type: row.account ?? "unknown",
+    price: null,
+    price_date: null,
+    price_source: null,
+    value_cad: valueInCad(null, null, amount, currency),
+    resolved: true,
+    notes: amount === null ? NOTES.cash_missing[locale] : null,
+  };
 }
 
 /** Extract positions from pasted text and text-like files. */
 export function extractPositions(input: ExtractionInput, locale: Locale): Extraction {
-  const { lines, files, unread } = readInput(input, locale);
+  const { holdings, files, lines } = readInput(input);
+  // Not a row: like the runtime's unparsed items, an unreadable file has no `position_id`.
+  const unresolved: UnresolvedItem[] = files
+    .filter((file) => !file.readable)
+    .map((file) => ({ raw: file.name, reason: UNRESOLVED_REASONS.unread_file[locale] }));
   // Like the runtime, every line becomes a row; an unidentified one stays `resolved: false` and is listed in `unresolved`.
   const positions: Position[] = [];
-  const unresolved: UnresolvedItem[] = [...unread];
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (line === "" || line.startsWith("#")) continue;
-    const { asset, ...holding } = parseLine(line);
-    if (!asset && isNoise(line)) continue;
-    const row: PositionRow = { id: `p${positions.length + 1}`, raw: line.slice(0, MAX_RAW_CHARS), ...holding };
-    if (asset) {
-      positions.push(positionFromAsset(row, asset, locale));
-      continue;
+  for (const { line, asset, symbol, cash, name, ...holding } of holdings) {
+    const raw = line.slice(0, MAX_RAW_CHARS);
+    const row: PositionRow = { id: `p${positions.length + 1}`, raw, ...holding };
+    if (asset) positions.push(positionFromAsset(row, asset, locale));
+    else if (cash) positions.push(cashPosition(row, name, locale));
+    else {
+      const reason = UNRESOLVED_REASONS.not_in_universe[locale];
+      positions.push(unresolvedPosition(row, { ticker: symbol, name }, reason));
+      unresolved.push({ raw, reason, position_id: row.id });
     }
-    const reason = UNRESOLVED_REASONS.not_in_universe[locale];
-    positions.push(unresolvedPosition(row, reason));
-    unresolved.push({ raw: line.slice(0, MAX_RAW_CHARS), reason, position_id: row.id });
   }
-  return { positions, unresolved, files, lines: lines.length };
+  return { positions, unresolved, files, lines };
 }
 
 function rowOf(input: PositionInput): PositionRow {
@@ -279,6 +192,7 @@ function rowOf(input: PositionInput): PositionRow {
     quantity: input.quantity ?? null,
     marketValue: input.market_value ?? null,
     account: input.account_type ?? null,
+    currency: input.currency ?? null,
   };
 }
 
@@ -310,7 +224,9 @@ function unlistedPosition(input: PositionInput, row: PositionRow, locale: Locale
 export function normalizeConfirmed(input: PositionInput, locale: Locale): Position {
   const row = rowOf(input);
   const asset = findAssetByTicker(input.ticker ?? null);
-  return asset ? positionFromAsset(row, asset, locale) : unlistedPosition(input, row, locale);
+  if (asset) return positionFromAsset(row, asset, locale);
+  const isCash = input.asset_class === "cash" || CASH_NAME.test(input.ticker || input.name || "");
+  return isCash ? cashPosition(row, input.name ?? null, locale) : unlistedPosition(input, row, locale);
 }
 
 const SHARE_DIGITS = 4;

@@ -1,7 +1,8 @@
 /**
  * Strings of the « Portefeuille simulé » view (`/portfolio`). Merged into the dictionary as
  * `portfolioView`; the English half is typed by the French one. The Decision's own texts
- * (statements, labels of facts, constraint descriptions) come from the engine in French.
+ * (statements, labels of facts, constraint descriptions) come from the engine in French: in
+ * another language the view says so (`engineLanguage`).
  */
 import type { DecisionKind, FactLabel, LensVerdict, Style } from "@/lib/contract/portfolio";
 
@@ -42,6 +43,10 @@ export const portfolioFr = {
     auditFailed: "audit non enregistré",
   },
   modes: { rules: "règles", llm: "LLM" },
+  /** Shown when the interface language is not the engine's (French). */
+  engineLanguage: "Les textes du moteur (faits, explication, contrôles du Judge, contrefactuels, trace) sont en français seulement pour l’instant.",
+  /** Between a label and its value. */
+  colon: " : ",
   kinds: {
     proposition: "Proposition",
     refus_encadre: "Refus encadré",
@@ -161,11 +166,34 @@ export const portfolioFr = {
     showLess: "Ne montrer que les contrôles saturés ou violés",
     requestCheck: "Contrôle de la demande telle quelle",
     none: "Aucun contrôle dans cette décision.",
+    /**
+     * Names of the parts of a check's provenance (`derived_from`, split on « ; »): the identifiers of
+     * risk_levels.yaml#limits_template, of the compiler and of the Judge. A part not listed (a sentence the
+     * engine wrote, « étape 0 : … ») is shown as is; the raw value stays under the name, for the audit.
+     */
+    derivedFrom: {
+      level: "niveau de risque",
+      "profile->R->level": "score de risque R du profil, puis niveau",
+      "dollar_rule.e_cap": "règle des dollars (part actions maximale)",
+      "dollar_rule.l_star": "règle des dollars (perte admissible)",
+      "profile.knowledge": "connaissances de l’investisseur",
+      "profile.preferences.crypto": "préférence pour les cryptoactifs",
+      "profile.biases[familiarite]": "biais de familiarité",
+      "profile.biases[aversion_perte]": "aversion aux pertes",
+      "profile.biases[FOMO]": "biais FOMO (peur de manquer une occasion)",
+      "profile.composure<40": "sang-froid sous 40",
+      "profile.requests": "demandes précises de l’investisseur",
+      "profile.employer_equity": "titres de l’employeur détenus",
+      "policy.universe/excluded": "univers investissable et exclusions",
+      "définition d'un portefeuille": "définition d’un portefeuille",
+      "simulation long-only": "simulation sans vente à découvert",
+      "demande précise de l'investisseur": "demande précise de l’investisseur",
+    } as Record<string, string>,
   },
   debate: {
     title: "Débat des lentilles",
     lead: "Verdicts du second tour, tranchés par le code; un amendement ne peut que resserrer le mandat.",
-    lenses: { timeline: "Horizon", risk: "Risque", diversity: "Diversification", constraints: "Contraintes" } as Record<string, string>,
+    lenses: { timeline: "Horizon", risk: "Risque", diversity: "Diversité et préférences", constraints: "Contraintes" } as Record<string, string>,
     verdicts: { soutien: "soutien", objection_maintenue: "objection maintenue", objection_satisfaite: "objection satisfaite" } satisfies Record<LensVerdict, string>,
     applied: "appliqué",
     rejected: "rejeté",
@@ -174,7 +202,7 @@ export const portfolioFr = {
   },
   trace: {
     title: "Trace d’exécution",
-    count: ((count: number) => `${count} étapes`) as Fn<[number]>,
+    count: ((count: number) => `${count} étape${count > 1 ? "s" : ""}`) as Fn<[number]>,
     facts: ((count: number) => `${count} fait${count > 1 ? "s" : ""}`) as Fn<[number]>,
     status: { ok: "ok", erreur: "erreur", refus: "refus" } as Record<string, string>,
   },
@@ -246,6 +274,8 @@ export const portfolioEn: PortfolioStrings = {
     auditFailed: "audit not recorded",
   },
   modes: { rules: "rules", llm: "LLM" },
+  engineLanguage: "Engine texts (facts, explanation, Judge checks, counterfactuals, trace) are in French only for now.",
+  colon: ": ",
   kinds: {
     proposition: "Proposal",
     refus_encadre: "Framed refusal",
@@ -365,11 +395,29 @@ export const portfolioEn: PortfolioStrings = {
     showLess: "Only show binding or violated checks",
     requestCheck: "Check of the request as asked",
     none: "No check in this decision.",
+    derivedFrom: {
+      level: "risk level",
+      "profile->R->level": "profile risk score R, then level",
+      "dollar_rule.e_cap": "dollar rule (maximum equity share)",
+      "dollar_rule.l_star": "dollar rule (acceptable loss)",
+      "profile.knowledge": "investor knowledge",
+      "profile.preferences.crypto": "preference for crypto-assets",
+      "profile.biases[familiarite]": "familiarity bias",
+      "profile.biases[aversion_perte]": "loss aversion",
+      "profile.biases[FOMO]": "FOMO bias (fear of missing out)",
+      "profile.composure<40": "composure below 40",
+      "profile.requests": "investor’s precise requests",
+      "profile.employer_equity": "employer shares held",
+      "policy.universe/excluded": "investable universe and exclusions",
+      "définition d'un portefeuille": "definition of a portfolio",
+      "simulation long-only": "long-only simulation",
+      "demande précise de l'investisseur": "investor’s precise request",
+    },
   },
   debate: {
     title: "Debate of the lenses",
     lead: "Second-round verdicts, settled by code; an amendment can only tighten the mandate.",
-    lenses: { timeline: "Horizon", risk: "Risk", diversity: "Diversification", constraints: "Constraints" },
+    lenses: { timeline: "Horizon", risk: "Risk", diversity: "Diversity and preferences", constraints: "Constraints" },
     verdicts: { soutien: "support", objection_maintenue: "objection maintained", objection_satisfaite: "objection satisfied" },
     applied: "applied",
     rejected: "rejected",
@@ -378,7 +426,7 @@ export const portfolioEn: PortfolioStrings = {
   },
   trace: {
     title: "Execution trace",
-    count: ((count: number) => `${count} steps`) as Fn<[number]>,
+    count: ((count: number) => `${count} step${count === 1 ? "" : "s"}`) as Fn<[number]>,
     facts: ((count: number) => `${count} fact${count > 1 ? "s" : ""}`) as Fn<[number]>,
     status: { ok: "ok", erreur: "error", refus: "refusal" },
   },

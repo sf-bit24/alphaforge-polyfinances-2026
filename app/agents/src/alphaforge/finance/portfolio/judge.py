@@ -36,6 +36,17 @@ from .market import ReturnWindow, returns_window
 from .scenario_risk import evaluate_prob_loss
 
 TOL = 1e-4
+# Verdict tel qu'on le lit (trace, interface) ; ``JudgeReport.verdict`` garde le code approuve | refuse.
+VERDICT_FR = {"approuve": "approuvée", "refuse": "refusée"}
+
+
+def verdict_summary(verdict: str, n_blocking: int) -> str:
+    """« refusée ; 4 violations bloquantes », « approuvée ; aucune violation bloquante »."""
+    if n_blocking == 0:
+        count = "aucune violation bloquante"
+    else:
+        count = f"{n_blocking} violation{'s' if n_blocking > 1 else ''} bloquante{'s' if n_blocking > 1 else ''}"
+    return f"{VERDICT_FR.get(verdict, verdict)} ; {count}"
 
 
 @dataclass(frozen=True)
@@ -141,7 +152,7 @@ class _Ledger:
                 "as_of": str(self.window.as_of.date()),
                 "weights": {asset: round(x, 6) for asset, x in weights.items() if abs(x) > MIN_HELD_WEIGHT},
             },
-            output_summary=f"{verdict} ; {len(self.blocking)} violation(s) bloquante(s)",
+            output_summary=verdict_summary(verdict, len(self.blocking)),
             fact_ids=[fact.fact_id for fact in self.facts if fact.trace_id == self.trace_id],
             started_utc=started,
             ended_utc=datetime.now(UTC),
@@ -202,10 +213,12 @@ def _check_linear_limits(
     ledger: _Ledger, rows: list[LinearRow], weights: np.ndarray, superseded: dict[str, str]
 ) -> None:
     """Limites linéaires (poids par titre, groupes, look-through)."""
+    labels = {row.limit.rule_id: row.limit.description_fr or row.limit.rule_id for row in rows}
     for row in rows:
         share = float(row.vector @ weights)
         limit = row.limit
-        note = f" (remplacée par {superseded[limit.rule_id]}, plus stricte)" if limit.rule_id in superseded else ""
+        stricter = superseded.get(limit.rule_id)
+        note = f" (remplacée par « {labels.get(stricter, stricter)} », plus stricte)" if stricter else ""
         processing = f"{limit.kind} = vecteur·poids" + (" (look-through)" if limit.kind == "exposure" else "")
         for side, bound in (("max", row.hi), ("min", row.lo)):
             if bound is None:

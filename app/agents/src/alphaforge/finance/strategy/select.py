@@ -22,6 +22,7 @@ from alphaforge.finance.portfolio.judge import check
 from alphaforge.finance.portfolio.optimizer import optimize
 
 from .config import StrategyConfig, load_strategy
+from .labels import evidence_text, flag_fr, interest_fr, sector_fr, style_fr
 from .rules import (
     Candidate,
     Plan,
@@ -184,27 +185,28 @@ def apply_strategy(
             "rule",
             "strat.style",
             "style de composition retenu (étape 0)",
-            d.style,
+            style_fr(d.style),
             "texte",
             path="level_to_style",
-            processing=f"niveau {comp.level} → {d.from_level}, décalage {d.shift:+d}",
+            processing=f"niveau {comp.level} → {d.from_level}, décalage {d.shift:+d} → {d.style}",
         )
         add(
             "rule",
             "strat.style_from_level",
             "style tiré du niveau (convention d'équipe)",
-            d.from_level,
+            style_fr(d.from_level),
             "texte",
             path="level_to_style",
+            processing=f"niveau {comp.level} → {d.from_level}",
         )
         add(
             "rule",
             "strat.preference",
             "préférence de style",
-            d.preference or "aucune",
+            style_fr(d.preference) if d.preference else "aucune",
             "texte",
             path="preference",
-            processing=d.preference_source,
+            processing=f"{d.preference_source} → {d.preference}" if d.preference else d.preference_source,
         )
         for i, r in enumerate(d.refused):
             add(
@@ -228,10 +230,11 @@ def apply_strategy(
             add(
                 "rule",
                 f"strat.flag.{f}",
-                f"signal de comportement : {f} (garde-fou, jamais une allocation)",
-                " ; ".join(d.flags.evidence.get(f, [])),
+                f"signal de comportement : {flag_fr(f)} (garde-fou, jamais une allocation)",
+                evidence_text(d.flags.evidence.get(f, [])),
                 "texte",
                 path="profile_codes",
+                processing=f"{f} : " + " ; ".join(d.flags.evidence.get(f, [])),
             )
         g_lim = limit(comp, "alloc.growth")
         add(
@@ -314,7 +317,7 @@ def apply_strategy(
             add(
                 "ranking",
                 f"strat.score.{r.ticker}",
-                f"score du style {d.style} ({r.ticker})",
+                f"score du style {style_fr(d.style)} ({r.ticker})",
                 round(r.score, 6),
                 "ratio",
                 path=f"weights.{d.style}",
@@ -365,11 +368,13 @@ def apply_strategy(
     with book.step("s0b.feasibility", tool="optimize+check", inputs={"n_limits": len(plan.floors) + len(caps)}):
         feas = _Feasibility(base, as_of)
         fallback: list[str] = []
+        steps: list[tuple[str, str | None]] = []  # (palier lisible, limites en cause) : un Fact par palier
         policy = apply_to_policy(base, plan, cfg)
         ok, res, new_viol = feas(policy)
         if not ok:
             for label, p2 in degrade_steps(plan, float(g_lim.min or 0.0) if g_lim else 0.0, cfg.band.rounding):
                 fallback.append(f"{label} (violations : {sorted(new_viol) or 'optimiseur'})")
+                steps.append((label, f"violations : {', '.join(sorted(new_viol)) or 'optimiseur'}"))
                 if inputs.amount_cad:  # le repli ne crée jamais de ligne sous le minimum en dollars
                     lmin = cfg.eligibility.min_line_cad
                     p2 = replace(p2, floors={t: f for t, f in p2.floors.items() if f * inputs.amount_cad >= lmin})
@@ -381,14 +386,16 @@ def apply_strategy(
         if not ok:
             policy, plan = base, Plan(None, {}, {}, {})
             fallback.append("mandat de base conservé")
+            steps.append(("mandat de base conservé", None))
         b_res = feas.base_result
         rc = (
             (res.risk_value - b_res.risk_value)
             if (applied and res is not None and res.risk_value is not None and b_res.risk_value is not None)
             else None
         )
-        for i, f in enumerate(fallback):
-            add("result", f"strat.fallback.{i}", "palier de repli de l'étape 0", f, "texte", path="floors")
+        for i, (label, why) in enumerate(steps):
+            add("result", f"strat.fallback.{i}", "palier de repli de l'étape 0", label, "texte", path="floors",
+                processing=why)
         if plan.growth_floor is not None:
             add(
                 "result",
@@ -404,7 +411,7 @@ def apply_strategy(
             add(
                 "result",
                 f"strat.floor.{t}",
-                f"plancher de {t} (intérêt {interest})" if interest else f"plancher du satellite {t}",
+                f"plancher de {t} (intérêt {interest_fr(interest)})" if interest else f"plancher du satellite {t}",
                 f,
                 "%",
                 path="bonus.interest_assets" if interest else "floors",
@@ -428,7 +435,7 @@ def apply_strategy(
             add(
                 "result",
                 f"strat.sector_cap.{tag}",
-                f"plafond d'exposition {tag} (look-through)",
+                f"plafond d'exposition au {sector_fr(tag)} (look-through)",
                 cap,
                 "%",
                 path="sectors",

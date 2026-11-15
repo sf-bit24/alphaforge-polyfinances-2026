@@ -17,8 +17,9 @@ from alphaforge.finance.contracts.profile import InvestorProfile
 from alphaforge.finance.portfolio import analysis
 from alphaforge.finance.portfolio.judge import check
 from alphaforge.finance.portfolio.market import returns_window
+from alphaforge.finance.strategy.labels import sector_fr
 
-from .facts import FactBook
+from .facts import FactBook, fmt
 
 ENGINE = "alphaforge.finance.backtest (rendements mensuels, data/long)"
 
@@ -65,11 +66,12 @@ def timeline_evidence(c: LensContext) -> list[str]:
     h = shortest_horizon(c.profile)
     ids = [b.add(f"{p}.horizon", "Horizon le plus court des objectifs", h, "années", dataset="profile")]
     hr = analysis.horizon_report(w, max(h, 1.0), c.as_of)
+    years = f"{max(h, 1.0):.0f}"
     if hr.worst is not None:
         ids += [
             b.add(
                 f"{p}.horizon_worst",
-                f"Pire rendement composé sur {max(h, 1.0):.0f} an(s), historique",
+                f"Pire rendement composé sur {years} an{'s' if int(years) > 1 else ''}, historique",
                 hr.worst,
                 "%",
                 dataset=ENGINE,
@@ -152,7 +154,7 @@ def risk_evidence(c: LensContext) -> list[str]:
                         max(-s.period_return, 0.0) * W,
                         "CAD",
                         dataset=ENGINE,
-                        processing=f"perte × patrimoine investissable déclaré ({W:,.0f} $)",
+                        processing=f"perte × patrimoine investissable déclaré ({fmt(W, 'CAD')})",
                     )
                 )
     if c.profile.max_acceptable_loss_cad is not None:
@@ -192,7 +194,7 @@ def diversity_evidence(c: LensContext, tags=("tech", "energy", "financials")) ->
         ids.append(
             b.add(
                 f"{p}.lt.{t}",
-                f"Exposition consolidée « {t} » (look-through)",
+                f"Exposition consolidée au {sector_fr(t)} (look-through)",
                 v,
                 "%",
                 dataset=ENGINE,
@@ -290,7 +292,7 @@ def strands_tools(lens: str, c: LensContext) -> list:
             return [
                 c.book.add(
                     f"{c.label}.lt.{tag}",
-                    f"Exposition consolidée « {tag} »",
+                    f"Exposition consolidée au {sector_fr(tag)}",
                     lt.exposures.get(tag),
                     "%",
                     dataset=ENGINE,

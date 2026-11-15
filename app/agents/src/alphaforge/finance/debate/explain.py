@@ -13,8 +13,10 @@ import json
 import re
 
 from alphaforge.finance.contracts.decision import Explanation, Statement
+from alphaforge.finance.strategy.labels import STYLE_FR, flag_fr, sector_fr
 
 from .facts import FactBook, fmt
+from .schemas import LENS_FR
 
 _NUM = re.compile(
     r"(?<![A-Za-z_.])-?\d[\d\s]*(?:[.,]\d+)?(?![A-Za-z_])"
@@ -100,7 +102,8 @@ def skeleton(
         if a.status == "applique" and a.amendment.kind != "flag_only":
             why.append(
                 Statement(
-                    text_fr=f"La lentille « {a.lens} » a resserré le mandat : {a.amendment.reason_fr}.",
+                    text_fr=f"La lentille « {LENS_FR.get(a.lens, a.lens)} » a resserré le mandat : "
+                    f"{a.amendment.reason_fr}.",
                     fact_ids=[i for i in a.amendment.evidence_fact_ids if i in f],
                 )
             )
@@ -128,9 +131,6 @@ def skeleton(
         why += extra["why"]
         limits += extra["limits"]
     return Explanation(data_used=data_used, why=why, limits=limits, what_would_change=counterfactual_stmts)
-
-
-STYLE_FR = {"defensive": "défensif", "dynamique": "dynamique", "offensive": "offensif"}  # accordé à « style »
 
 
 def strategy_statements(book: FactBook, final: dict | None = None) -> dict[str, list[Statement]]:
@@ -205,7 +205,9 @@ def strategy_statements(book: FactBook, final: dict | None = None) -> dict[str, 
         tag = fid[len("strat.sector_cap.") :]
         out["why"].append(
             Statement(
-                text_fr=f"Plafond d'exposition {tag} (look-through) : {v(fid)}.", fact_ids=[fid], label="HYPOTHESE"
+                text_fr=f"Plafond d'exposition au {sector_fr(tag)} (look-through) : {v(fid)}.",
+                fact_ids=[fid],
+                label="HYPOTHESE",
             )
         )
     for fid in [k for k in f if k.startswith("strat.preference_refused.")]:
@@ -225,8 +227,8 @@ def strategy_statements(book: FactBook, final: dict | None = None) -> dict[str, 
     for fid in [k for k in f if k.startswith("strat.flag.")]:
         out["limits"].append(
             Statement(
-                text_fr=f"Signal de comportement « {fid[len('strat.flag.') :]} » : il règle des garde-fous, jamais "
-                "l'allocation.",
+                text_fr=f"Signal de comportement « {flag_fr(fid[len('strat.flag.') :])} » : il règle des garde-fous, "
+                "jamais l'allocation.",
                 fact_ids=[fid],
                 label="HYPOTHESE",
             )

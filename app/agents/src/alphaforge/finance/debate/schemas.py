@@ -13,6 +13,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 Lens = Literal["timeline", "risk", "diversity", "constraints"]
 LENSES: tuple[Lens, ...] = ("timeline", "risk", "diversity", "constraints")
+# Noms des lentilles dans les textes montrés (roles.LENS_PROMPTS) : l'identifiant reste dans la trace et les fact_id.
+LENS_FR: dict[Lens, str] = {
+    "timeline": "horizon",
+    "risk": "risque",
+    "diversity": "diversité et préférences",
+    "constraints": "contraintes",
+}
 
 # Ordre de priorité quand deux amendements se contredisent (le plus prioritaire gagne).
 PRIORITY: dict[Lens, int] = {"constraints": 0, "risk": 1, "timeline": 2, "diversity": 3}

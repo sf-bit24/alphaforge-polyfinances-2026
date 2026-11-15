@@ -26,6 +26,11 @@ def fmt(value: Any, unit: str) -> str:
         return "n.d."
     if isinstance(value, str):
         return value
+    return _fmt_number(value, unit)
+
+
+def _fmt_number(value: Any, unit: str) -> str:
+    """Nombre à la française selon son unité : virgule décimale, espace entre les milliers."""
     if unit == "%":
         return f"{value * 100:.1f}".replace(".", ",") + " %"
     if unit == "CAD":
@@ -85,7 +90,7 @@ class FactBook:
         return self._stack[-1]
 
     # --------------------------------------------------------------------- facts
-    def add(
+    def add(  # noqa: PLR0913 - un Fact et sa source : les champs facultatifs sont passés par mot-clé
         self,
         key: str,
         label_fr: str,

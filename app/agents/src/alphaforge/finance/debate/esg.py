@@ -23,12 +23,13 @@ def esg_preference(profile: InvestorProfile) -> bool:
     return bool(profile.preferences.value_filters) or profile.preferences.esg_required
 
 
-def esg_exclusions(
+def esg_exclusions(  # noqa: PLR0913 - les entrées de l'étape S0c ; protect, facultatif, est passé par mot-clé
     profile: InvestorProfile,
     policy: PolicySpec,
     market,
     as_of: date,
     book: FactBook,
+    *,
     protect: tuple[str, ...] | list[str] = (),
 ) -> PolicySpec:
     """Mandat où les titres liés par un fait ``sector_activity`` à une catégorie exclue sont exclus, preuve citée.

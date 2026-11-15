@@ -130,7 +130,7 @@ def test_a1_first_turn_records_facts_and_asks_questions(settings, store):
     rejected = tool_results[0]["results"]
     assert rejected[0]["status"] == "ok" and rejected[0]["to_confirm"] is True
     assert [r["status"] for r in rejected[1:]] == ["error", "error"]
-    assert factory.requests == [{"effort": "low", "guardrail": False, "max_tokens": 8000}]
+    assert factory.requests == [{"effort": "low", "guardrail": False, "max_tokens": 8000, "guard_tagged": True}]
     model = factory.models[0]
     assert model.calls[0]["tools"] == [
         "update_profile",
@@ -138,7 +138,14 @@ def test_a1_first_turn_records_facts_and_asks_questions(settings, store):
         "search_general_knowledge",
         "finish_turn",
     ]
-    assert "<investor_message>" in model.calls[0]["messages"][0]["content"][0]["text"]
+    # Seul le message de l'investisseur passe par le garde-fou (bloc guardContent); le contexte du code, non.
+    blocks = model.calls[0]["messages"][0]["content"]
+    assert '"missing_fields"' in blocks[0]["text"] and "mise de fonds" not in blocks[0]["text"]
+    assert blocks[1] == {
+        "guardContent": {
+            "text": {"text": "<investor_message>\nJe veux une mise de fonds dans 12 ans.\n</investor_message>"}
+        }
+    }
     assert len(model.calls) == 4  # l'outil finish_turn accepté arrête la boucle sans nouvel appel du modèle
     kinds = [s["kind"] for s in response["trace"]]
     assert "model" in kinds and "tool" in kinds and "agent" in kinds

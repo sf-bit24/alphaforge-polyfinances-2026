@@ -8,6 +8,7 @@ provenance ``base:<question>``, ``a1:<tour>``, ``a2:<tour>`` ou ``settings``).
 
 from __future__ import annotations
 
+import contextlib
 import re
 from datetime import timedelta
 from typing import Any
@@ -16,7 +17,7 @@ from .. import clock, okf
 from ..store import ConflictError, Store
 from ..trace import Trace
 from . import rules
-from .questionnaire import Questionnaire, fact_band, format_fact, labeled
+from .questionnaire import Questionnaire, default_questionnaire, fact_band, format_fact, labeled
 
 UUID4 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 STAGES = ("base_questions", "existing_portfolio", "portfolio_review", "followups", "complete")
@@ -98,7 +99,11 @@ class ClientSession:
         doc = okf.new_doc(
             type="Investor Profile",
             title="Profil investisseur" if locale != "en" else "Investor profile",
-            description="Profil en cinq dimensions, niveau de connaissances et complétude.",
+            description=(
+                "Your profile in five dimensions, your knowledge level and how complete it is."
+                if locale == "en"
+                else "Votre profil en cinq dimensions, votre niveau de connaissances et sa complétude."
+            ),
             tags=["profil-investisseur"],
             owners=["alphaforge-a1"],
             sensitivity="client",
@@ -191,7 +196,7 @@ class ClientSession:
                 "deterministic",
                 "questionnaire",
                 trace.t("Changement d'étape", "Stage change"),
-                f"{previous} → {stage}",
+                f"{stage_label(previous, trace.locale)} → {stage_label(stage, trace.locale)}",
                 inputs={"from": previous},
                 outputs={"stage": stage, "reason": reason},
             )
@@ -406,14 +411,17 @@ class ClientSession:
             "completeness": {k: score[k] for k in ("score", "displayed", "ready")},
         }
         self.doc.frontmatter["status"] = "stable" if self.stage == "complete" else "draft"
-        self.doc.frontmatter["sources"] = self._sources()
+        self.doc.frontmatter["sources"] = self._sources(questionnaire)
         self.doc.body = render_profile_body(questionnaire, self, values, risk, score)
 
     def _write_profile(self, store: Store, trace: Trace) -> None:
         """Écrit ``profil.md`` avec la précondition sur l'ETag lu (création seulement s'il n'y en a pas)."""
         text = okf.render(self.doc)
         with trace.step(
-            "storage", "store", trace.t("Écriture du profil", "Profile written"), profile_key(self.client_id)
+            "storage",
+            "store",
+            trace.t("Profil enregistré", "Profile saved"),
+            inputs={"key": profile_key(self.client_id)},
         ) as info:
             if self.etag is None:
                 self.etag = store.put_text(profile_key(self.client_id), text, if_none_match=True)
@@ -442,14 +450,14 @@ class ClientSession:
             portfolio_key(self.client_id)
         )
 
-    def _sources(self) -> list[dict[str, Any]]:
+    def _sources(self, questionnaire: Questionnaire) -> list[dict[str, Any]]:
         sources = []
         for field_id, fact in sorted(self.facts.items()):
             provenance = fact.get("provenance", "")
             sources.append(
                 {
                     "id": f"{provenance.replace(':', '-')}-{field_id}",
-                    "title": f"{field_id} ({provenance})",
+                    "title": fact_source_title(field_id, provenance, self.locale, questionnaire),
                     "resource": provenance,
                     "retrieved_at": fact.get("at"),
                 }
@@ -476,7 +484,9 @@ class ClientSession:
 
     def _append_journal(self, store: Store, trace: Trace) -> None:
         key = journal_key(self.client_id)
-        with trace.step("storage", "store", trace.t("Ajout au journal", "Journal appended"), key) as info:
+        with trace.step(
+            "storage", "store", trace.t("Journal du profil mis à jour", "Profile journal updated"), inputs={"key": key}
+        ) as info:
             if not any(self._try_append_journal(store, key) for _ in range(JOURNAL_WRITE_ATTEMPTS)):
                 raise ConflictError(key)
             info["outputs"] = {"key": key, "entries_added": len(self.new_journal)}
@@ -496,7 +506,11 @@ def new_journal_doc(locale: str) -> okf.OkfDoc:
     return okf.new_doc(
         type="Profile Journal",
         title="Journal du profil" if locale != "en" else "Profile journal",
-        description="Chaque réponse et chaque mise à jour du profil, avec sa provenance et sa date.",
+        description=(
+            "Each answer and each update of your profile, with where it came from and its date."
+            if locale == "en"
+            else "Chaque réponse et chaque mise à jour de votre profil, avec son origine et sa date."
+        ),
         tags=["profil-investisseur", "journal"],
         owners=["alphaforge-a1"],
         sensitivity="client",
@@ -511,7 +525,7 @@ def new_journal_doc(locale: str) -> okf.OkfDoc:
 def _render_index_body(locale: str, *, has_portfolio: bool, notes: list[dict[str, Any]] | None) -> str:
     is_english = locale == "en"
     lines = [
-        "# " + ("Client knowledge base" if is_english else "Base du client"),
+        "# " + ("Your personal documents" if is_english else "Vos documents personnels"),
         "",
         (
             "Fictitious profile built with AlphaForge AI (simulation only, no personalised advice)."
@@ -526,9 +540,8 @@ def _render_index_body(locale: str, *, has_portfolio: bool, notes: list[dict[str
         lines.append(
             "- [" + ("Existing portfolio" if is_english else "Portefeuille existant") + "](portefeuille-existant.md)"
         )
-    lines.append("- " + ("Execution traces: `traces/`" if is_english else "Traces d'exécution : `traces/`"))
     if notes:
-        lines += ["", "## " + ("Notes written by A1" if is_english else "Notes écrites par A1"), ""]
+        lines += ["", "## " + ("Yan's notes" if is_english else "Notes de Yan"), ""]
         lines += [f"- [{note.get('title') or note['path']}]({note['path']})" for note in notes]
     return "\n".join(lines) + "\n"
 
@@ -544,8 +557,12 @@ def write_client_index(
     now = clock.iso()
     doc = okf.new_doc(
         type="Index",
-        title="Base du client" if locale != "en" else "Client knowledge base",
-        description="Documents OKF d'un investisseur : profil, journal, portefeuille existant et traces.",
+        title="Vos documents personnels" if locale != "en" else "Your personal documents",
+        description=(
+            "Your profile, its journal, your existing portfolio and Yan's notes."
+            if locale == "en"
+            else "Votre profil, son journal, votre portefeuille existant et les notes de Yan."
+        ),
         tags=["profil-investisseur", "index"],
         owners=["alphaforge-a1"],
         sensitivity="client",
@@ -559,31 +576,116 @@ def write_client_index(
     store.put_text(index_key(client_id), okf.render(doc))
 
 
-def _journal_row(entry: dict[str, Any]) -> str:
-    value = entry.get("text") if entry.get("kind") == "message" else entry.get("value")
-    text = value if isinstance(value, str) else ("" if value is None else str(value))
-    text = text.replace("|", "\\|").replace("\n", " ")
+# Ce que l'investisseur lit de l'étape, de l'origine d'un fait et du genre d'une entrée du journal (français, anglais).
+STAGE_LABELS = {
+    "base_questions": ("Questions de base", "Basic questions"),
+    "existing_portfolio": ("Portefeuille existant", "Existing portfolio"),
+    "portfolio_review": ("Vérification du portefeuille", "Portfolio review"),
+    "followups": ("Questions de Yan", "Yan's questions"),
+    "complete": ("Profil complet", "Profile complete"),
+}
+ORIGIN_LABELS = {
+    "base": ("questionnaire", "questionnaire"),
+    "a1": ("échange avec Yan", "conversation with Yan"),
+    "a2": ("portefeuille existant", "existing portfolio"),
+    "settings": ("réglages", "settings"),
+}
+ENTRY_LABELS = {"stage": ("Étape", "Step"), "answer": ("Réponse", "Answer"), "message": ("Message", "Message")}
+DIMENSION_LABELS = {
+    "knowledge": ("Connaissances", "Knowledge"),
+    "objective": ("Objectif", "Objective"),
+    "horizon": ("Horizon", "Horizon"),
+    "risk_tolerance": ("Tolérance au risque", "Risk tolerance"),
+    "risk_capacity": ("Capacité à prendre des risques", "Risk capacity"),
+    "constraints": ("Contraintes", "Constraints"),
+    "preferences": ("Préférences", "Preferences"),
+    "behavior": ("Comportement", "Behaviour"),
+    "context": ("Contexte", "Context"),
+}
+
+
+def _shown(labels: dict[str, tuple[str, str]], key: str | None, locale: str) -> str:
+    pair = labels.get(key or "")
+    if pair is None:
+        return key or "—"
+    return pair[1] if locale == "en" else pair[0]
+
+
+def stage_label(stage: str | None, locale: str) -> str:
+    """Nom de l'étape tel que l'investisseur le lit (« Questions de base »), jamais son code."""
+    return _shown(STAGE_LABELS, stage, locale) if stage else "—"
+
+
+def origin_label(provenance: str | None, locale: str) -> str:
+    """Origine d'un fait en mots simples (« questionnaire », « échange avec Yan »), jamais sa provenance brute."""
+    return _shown(ORIGIN_LABELS, (provenance or "").split(":", 1)[0], locale)
+
+
+def fact_source_title(
+    field_id: str, provenance: str | None, locale: str, questionnaire: Questionnaire | None = None
+) -> str:
+    """Titre de la source d'un fait : le nom du champ et son origine (« Horizon de placement (questionnaire) »)."""
+    spec = (questionnaire or default_questionnaire()).fields.get(field_id)
+    label = spec.label_text(locale) if spec else field_id
+    return f"{label} ({origin_label(provenance, locale)})"
+
+
+def _journal_value(entry: dict[str, Any], questionnaire: Questionnaire, locale: str) -> str:
+    """Valeur d'une entrée du journal en clair : le texte, le nom de l'étape ou la valeur telle que le profil la
+    montre; une valeur que le questionnaire ne sait pas montrer est écrite telle quelle."""
+    kind, value = entry.get("kind"), entry.get("value")
+    if kind == "message":
+        value = entry.get("text")
+    elif kind == "stage":
+        value = stage_label(value if isinstance(value, str) else None, locale)
+    elif entry.get("field") in questionnaire.fields and value is not None:
+        with contextlib.suppress(TypeError, ValueError, KeyError):
+            value = questionnaire.format_value(entry["field"], value, locale)
+    return value if isinstance(value, str) else ("" if value is None else str(value))
+
+
+def _journal_target(entry: dict[str, Any], questionnaire: Questionnaire, locale: str) -> str:
+    """Ce que vise l'entrée : le nom du champ; une question sans champ est une question de Yan."""
+    spec = questionnaire.fields.get(entry.get("field") or "")
+    if spec is not None:
+        return spec.label_text(locale)
+    if entry.get("question_id"):
+        return "Yan's question" if locale == "en" else "Question de Yan"
+    return ""
+
+
+def _journal_row(entry: dict[str, Any], questionnaire: Questionnaire, locale: str) -> str:
+    text = _journal_value(entry, questionnaire, locale).replace("|", "\\|").replace("\n", " ")
     if len(text) > JOURNAL_CELL_MAX:
         text = text[: JOURNAL_CELL_MAX - 1] + "…"
-    target = entry.get("field") or entry.get("question_id") or ""
-    return f"| {entry.get('at', '')} | {entry.get('kind', '')} | {target} | {text} | {entry.get('provenance', '')} |"
+    target = _journal_target(entry, questionnaire, locale).replace("|", "/")
+    kind = _shown(ENTRY_LABELS, entry.get("kind"), locale)
+    origin = origin_label(entry.get("provenance"), locale)
+    return f"| {str(entry.get('at', ''))[:10]} | {kind} | {target} | {text} | {origin} |"
 
 
 def render_journal_body(entries: list[dict[str, Any]], locale: str) -> str:
     is_english = locale == "en"
+    questionnaire = default_questionnaire()
     lines = [
         "# " + ("Profile journal" if is_english else "Journal du profil"),
         "",
         "| "
         + (
             " | ".join(
-                ["Date", "Type", "Field" if is_english else "Champ", "Value" if is_english else "Valeur", "Provenance"]
+                [
+                    "Date",
+                    "Event" if is_english else "Événement",
+                    "Item" if is_english else "Élément",
+                    "Value" if is_english else "Valeur",
+                    "Origin" if is_english else "Origine",
+                ]
             )
         )
         + " |",
         "| --- | --- | --- | --- | --- |",
     ]
-    lines += [_journal_row(entry) for entry in entries[-JOURNAL_BODY_ENTRIES:]]
+    lines += [_journal_row(entry, questionnaire, locale) for entry in entries[-JOURNAL_BODY_ENTRIES:]]
     return "\n".join(lines) + "\n"
 
 
@@ -599,10 +701,10 @@ def _risk_line(questionnaire: Questionnaire, risk: dict[str, Any], locale: str) 
 
 
 def _completeness_line(questionnaire: Questionnaire, score: float, locale: str) -> str:
-    reached, threshold, cap = round(score * 100), round(questionnaire.threshold * 100), round(questionnaire.cap * 100)
+    reached, threshold = round(score * 100), round(questionnaire.threshold * 100)
     if locale == "en":
-        return f"- Completeness: {reached}% (threshold {threshold}%, displayed cap {cap}%)"
-    return f"- {labeled('Complétude', f'{reached} % (seuil {threshold} %, plafond affiché {cap} %)', locale)}"
+        return f"- Completeness: {reached}% ({threshold}% is enough to move on)"
+    return f"- {labeled('Complétude', f'{reached} % ({threshold} % suffit pour passer à la suite)', locale)}"
 
 
 def _fact_rows_by_dimension(questionnaire: Questionnaire, session: ClientSession, locale: str) -> dict[str, list[str]]:
@@ -616,26 +718,26 @@ def _fact_rows_by_dimension(questionnaire: Questionnaire, session: ClientSession
         shown = format_fact(spec, fact, locale).replace("|", "/")
         if fact.get("confirmed") is False:
             shown += unconfirmed_mark
-        row = f"| {spec.label_text(locale)} | {shown} | {fact.get('provenance', '')} | {fact.get('at', '')} |"
+        origin = origin_label(fact.get("provenance"), locale)
+        row = f"| {spec.label_text(locale)} | {shown} | {origin} | {str(fact.get('at', ''))[:10]} |"
         rows.setdefault(spec.dimension, []).append(row)
     return rows
 
 
 def _fact_table_lines(questionnaire: Questionnaire, session: ClientSession, locale: str) -> list[str]:
-    header = (
-        "| " + ("Field | Value | Provenance | Date" if locale == "en" else "Champ | Valeur | Provenance | Date") + " |"
-    )
+    header = "| " + ("Item | Value | Origin | Date" if locale == "en" else "Élément | Valeur | Origine | Date") + " |"
     lines: list[str] = []
     for dimension, rows in _fact_rows_by_dimension(questionnaire, session, locale).items():
-        lines += [f"## {dimension}", "", header, "| --- | --- | --- | --- |", *rows, ""]
+        title = _shown(DIMENSION_LABELS, dimension, locale)
+        lines += [f"## {title}", "", header, "| --- | --- | --- | --- |", *rows, ""]
     return lines
 
 
 def _missing_field_lines(missing: list[dict[str, Any]], locale: str) -> list[str]:
     if not missing:
         return []
-    title = "## " + ("Missing fields" if locale == "en" else "Champs manquants")
-    return [title, "", *(f"- {item['label']} (`{item['dimension']}.{item['field']}`)" for item in missing), ""]
+    title = "## " + ("Still to answer" if locale == "en" else "Reste à préciser")
+    return [title, "", *(f"- {item['label']}" for item in missing), ""]
 
 
 def render_profile_body(
@@ -659,7 +761,7 @@ def render_profile_body(
             else "Profil fictif, simulation seulement : aucune transaction réelle ni conseil financier personnalisé."
         ),
         "",
-        f"- {labeled('Stage' if is_english else 'Étape', f'`{session.stage}`', locale)}",
+        f"- {labeled('Step' if is_english else 'Étape', stage_label(session.stage, locale), locale)}",
         f"- {labeled('Knowledge level' if is_english else 'Niveau de connaissances', level_text, locale)}",
         _risk_line(questionnaire, risk, locale),
         _completeness_line(questionnaire, score["score"], locale),

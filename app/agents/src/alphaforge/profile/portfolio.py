@@ -234,10 +234,12 @@ def _listing_candidates(symbol: str | None, hint: str | None, currency: str | No
     return [symbol]
 
 
-def _yahoo_chart_source(quote: Quote) -> dict[str, Any]:
+def _yahoo_chart_source(quote: Quote, locale: str) -> dict[str, Any]:
     return {
         "id": f"yahoo-chart-{quote.symbol.lower()}",
-        "title": f"Yahoo Finance, graphique quotidien de {quote.symbol}",
+        "title": pick(
+            locale, f"Yahoo Finance, cours quotidiens de {quote.symbol}", f"Yahoo Finance, {quote.symbol} daily prices"
+        ),
         "resource": quote.url,
         "observed_at": quote.last_date,
         "retrieved_at": clock.iso(),
@@ -288,7 +290,11 @@ class Resolver:
             self._source(
                 market.source_entry(
                     "fx_usdcad_daily.csv",
-                    "Jeu de départ, fx_usdcad_daily.csv (Banque du Canada, série FXUSDCAD)",
+                    pick(
+                        self.locale,
+                        "Taux de change USD/CAD (Banque du Canada)",
+                        "USD/CAD exchange rate (Bank of Canada)",
+                    ),
                     observed_at=self.fx_rate.date,
                 )
             )
@@ -340,13 +346,24 @@ class Resolver:
             market=asset.market,
             currency=asset.currency,
         )
-        self._source(market.source_entry("assets_universe.csv", "Jeu de départ, assets_universe.csv"))
+        self._source(
+            market.source_entry(
+                "assets_universe.csv",
+                pick(self.locale, "Liste des titres connus du simulateur", "List of securities known to the simulator"),
+            )
+        )
         last_price = market.last_prices().get(asset.ticker)
         if last_price is not None:
             position.update(price=round(last_price.close, 4), price_date=last_price.date)
             position["price_source"] = self._source(
                 market.source_entry(
-                    "prices_daily.csv", "Jeu de départ, prices_daily.csv (Yahoo Finance)", observed_at=last_price.date
+                    "prices_daily.csv",
+                    pick(
+                        self.locale,
+                        "Cours de clôture quotidiens (Yahoo Finance)",
+                        "Daily closing prices (Yahoo Finance)",
+                    ),
+                    observed_at=last_price.date,
                 )
             )
 
@@ -368,7 +385,7 @@ class Resolver:
             price=round(float(quote.last_close), 4),
             price_date=quote.last_date,
         )
-        position["price_source"] = self._source(_yahoo_chart_source(quote))
+        position["price_source"] = self._source(_yahoo_chart_source(quote, self.locale))
 
     def _identify_security(self, position: dict[str, Any], raw: RawPosition) -> bool:
         """Complète la position d'après l'univers du jeu de départ, sinon d'après une cotation Yahoo Finance.

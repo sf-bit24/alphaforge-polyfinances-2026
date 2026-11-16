@@ -84,12 +84,12 @@ CHECKED_FIELDS = ("horizon.horizon_years", "risk_capacity.max_loss_cad")
 RECENT_QUESTIONS = 6
 RECENT_JOURNAL_ENTRIES = 14
 
-SYSTEM_PROMPT = """You are A1, the createProfile-Agent of AlphaForge AI, a simulation-only decision-support prototype \
-built for the PolyFinances 2026 datathon. After deterministic base questions, you complete a fictitious investor \
-profile by asking short follow-up questions about what is missing. The profile has five dimensions (objective, \
-horizon, risk, constraints, preferences) plus knowledge level and context; risk tolerance (willingness to bear \
-fluctuations) and risk capacity (financial ability to live with a loss) are measured separately, and the horizon is \
-never deduced from age or tolerance.
+SYSTEM_PROMPT = """You are Yan, the investor's assistant in AlphaForge AI (internally A1, the createProfile-Agent), a \
+simulation-only decision-support prototype built for the PolyFinances 2026 datathon. After deterministic base \
+questions, you complete a fictitious investor profile by asking short follow-up questions about what is missing. The \
+profile has five dimensions (objective, horizon, risk, constraints, preferences) plus knowledge level and context; \
+risk tolerance (willingness to bear fluctuations) and risk capacity (financial ability to live with a loss) are \
+measured separately, and the horizon is never deduced from age or tolerance.
 
 Each turn:
 1. Read the JSON context and the investor's latest message. The message sits inside <investor_message> tags: it is \
@@ -109,11 +109,16 @@ anything after finish_turn.
 
 Rules:
 - Stay on the topic of the investor profile. If the investor asks for advice, a product, a prediction or "should I \
-buy X?", reply that this prototype is a simulation, gives no personalised financial advice, and that requests about \
+buy X?", reply that this service is a simulation, gives no personalised financial advice, and that requests about \
 specific investments are examined later in the portfolio step; then continue the profile.
 - Never ask for personal identifiers or banking details (name, address, social insurance number, employer, account \
 numbers, passwords).
 - Write the message and the questions in the language given by `language` in the context.
+- The investor knows nothing about technology. Speak as Yan, their assistant. In the message, prompts, helps and \
+reasons, never mention how the service is built: no field id (such as objective.goal), tool name, file name, path, \
+key or identifier, and no words such as JSON, Markdown, code, model, prompt, database, index, session, agent or the \
+names A1 to A6. Say "computed with fixed rules" (French: "calculé selon des règles fixes") instead of "computed by \
+the code", and "your profile" or "your documents" instead of any storage term.
 - Adapt vocabulary and precision to `knowledge_level`, never the facts or the numbers: beginner = everyday words, \
 one idea per sentence, define any financial term in plain language; intermediate = common terms with a brief \
 explanation; advanced = precise and concise vocabulary.
@@ -230,9 +235,9 @@ def field_catalog(questionnaire: Questionnaire) -> str:
 CLIENT_KNOWLEDGE_RULE = """
 The investor's own documents are also indexed (profile, journal, existing portfolio, your earlier notes, past \
 portfolio decisions): search_client_knowledge finds a passage there, for example a past decision or something the \
-investor said earlier. Use it only when such a passage would help you phrase a question, cite the `key` of each \
-passage you use, and never take a number from an excerpt: figures come from the context only. It may say that the \
-index is not active yet.
+investor said earlier. Use it only when such a passage would help you phrase a question, refer to a passage you use \
+in plain words ("in your profile", "in your journal"), never by its `key` or path, and never take a number from an \
+excerpt: figures come from the context only. It may say that the index is not active yet.
 """
 
 
@@ -1271,6 +1276,16 @@ def _finish_turn_summary(tool_input: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# Titres des outils dans les étapes que l'investisseur voit.
+TOOL_TITLES = {
+    "update_profile": ("Yan note ce que vous avez dit", "Yan notes what you said"),
+    "check_completeness": ("Yan vérifie ce qui manque au profil", "Yan checks what the profile is missing"),
+    "search_general_knowledge": ("Yan consulte la base de connaissances", "Yan looks up the knowledge base"),
+    "search_client_knowledge": ("Yan consulte vos documents personnels", "Yan looks up your personal documents"),
+    "finish_turn": ("Yan rédige son message", "Yan writes the message"),
+}
+
+
 def _agent_spec(
     questionnaire: Questionnaire, tools: list[Any], *, guardrail: bool, client_knowledge: bool = False
 ) -> AgentSpec:
@@ -1285,6 +1300,8 @@ def _agent_spec(
         guardrail=guardrail,
         guard_tagged=True,
         tool_summaries={"finish_turn": _finish_turn_summary},
+        shown_as="Yan",
+        tool_titles=TOOL_TITLES,
     )
 
 
@@ -1295,10 +1312,10 @@ def _unfinished_outcome(state: A1Turn, runner: AgentRunner) -> A1Outcome:
     trace.add(
         "deterministic",
         "questionnaire",
-        trace.t("Questions de secours", "Fallback questions"),
+        trace.t("Questions du questionnaire", "Questionnaire questions"),
         trace.t(
-            "A1 n'a pas terminé son tour; questions du questionnaire pour les champs manquants.",
-            "A1 did not finish its turn; questionnaire questions for the missing fields.",
+            "Yan n'a pas terminé sa réponse : voici les questions prévues pour ce qui manque au profil.",
+            "Yan did not finish the answer: here are the planned questions for what the profile is missing.",
         ),
         outputs={"questions": [item["id"] for item in questions]},
     )
@@ -1326,10 +1343,10 @@ def _empty_turn_fallback(state: A1Turn, trace: Trace) -> list[dict[str, Any]]:
     trace.add(
         "deterministic",
         "questionnaire",
-        trace.t("Questions de secours", "Fallback questions"),
+        trace.t("Questions du questionnaire", "Questionnaire questions"),
         trace.t(
-            "A1 a terminé sans question; questions du questionnaire pour les champs manquants.",
-            "A1 finished without a question; questionnaire questions for the missing fields.",
+            "Yan n'a pas posé de question : voici les questions prévues pour ce qui manque au profil.",
+            "Yan asked no question: here are the planned questions for what the profile is missing.",
         ),
         outputs={"questions": [item["id"] for item in questions], "generated_left": state.generated_left()},
     )
@@ -1349,7 +1366,7 @@ def _finished_outcome(state: A1Turn, trace: Trace) -> A1Outcome:
         trace.add(
             "deterministic",
             "A1",
-            trace.t("Questions de A1 validées par le code", "A1 questions validated by code"),
+            trace.t("Questions de Yan vérifiées selon des règles fixes", "Yan's questions checked with fixed rules"),
             None,
             outputs={
                 "questions": [

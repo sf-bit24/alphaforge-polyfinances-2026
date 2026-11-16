@@ -33,8 +33,8 @@ N'écris une note de dimension que si au moins un de ses champs est connu. `synt
 - `cites` : les identifiants des champs (`horizon.horizon_band`…) sur lesquels la note s'appuie. Le code en tire les sources de la note.
 - `body` : du Markdown, avec ces sections :
   1. `# <titre>` ;
-  2. `## Ce que l'investisseur a dit` : les valeurs connues, en langage clair, chacune suivie de sa provenance entre parenthèses (`base:q_horizon`, `a1:2`…) ;
-  3. `## Ce que le code en tire` : seulement les niveaux et scores donnés dans `derived` (tolérance, capacité, risque effectif, niveau de connaissances, complétude) ;
+  2. `## Ce que vous avez dit` : les valeurs connues, en langage clair, chacune suivie de son origine en mots simples entre parenthèses, d'après sa provenance : `base:…` = « questionnaire », `a1:…` = « échange avec Yan », `a2:…` = « portefeuille existant », `settings` = « réglages ». Jamais la provenance brute (`base:q_horizon`, `a1:2`) ;
+  3. `## Ce qui en est calculé` : seulement les niveaux et scores donnés dans `derived` (tolérance, capacité, risque effectif, niveau de connaissances, complétude), calculés selon des règles fixes ;
   4. `## À préciser` : les champs manquants de la dimension et les contradictions, s'il y en a. Sinon, omettre la section.
 
 ## Règles
@@ -42,7 +42,8 @@ N'écris une note de dimension que si au moins un de ses champs est connu. `synt
 - Écris dans la langue donnée par `locale` (fr : français du Canada, en : anglais), au niveau `knowledge_level` : débutant = mots courants et termes définis; avancé = vocabulaire précis.
 - N'utilise que les faits du contexte. N'invente, n'estime et ne calcule aucun nombre : chaque nombre écrit vient d'un fait ou de `derived`.
 - Un fait répondu par une tranche porte `band` (`option`, `label`, `min`, `max`) : sa `value` n'est que le chiffre que le code retient pour ses calculs, pas la réponse de l'investisseur. C'est le plus souvent une borne prudente de la tranche, parfois son milieu (« Moins de 10 000 $ » compte pour 5 000 $) ou une valeur par défaut sans bornes (« Je ne sais pas » compte pour 10 000 $). Écris la tranche telle que `shown_as` la donne (« moins de 1 mois », « de 10 000 $ à moins de 50 000 $ (10 000 $ retenus par prudence) »), jamais `value` seule comme un montant exact; n'écris « au moins X » que si X est `band.min`. « Moins de 1 mois » de fonds d'urgence n'est pas « aucun fonds d'urgence ».
-- Distingue ce que l'investisseur a dit (faits) de ce que le code en déduit (`derived`). Ne tranche aucune contradiction : signale-la.
+- Distingue ce que l'investisseur a dit (faits) de ce qui en est calculé (`derived`). Ne tranche aucune contradiction : signale-la.
+- L'investisseur lit ces notes et ne connaît rien à la technologie : parle-lui avec « vous ». N'écris aucun identifiant de champ (`horizon.horizon_band`), aucun chemin ni nom de fichier, aucun nom d'outil ni d'agent (A1 à A6), ni les mots JSON, Markdown, OKF, code, modèle ou base de données. Écris « calculé selon des règles fixes » plutôt que « calculé par le code ».
 - Aucun conseil, aucune recommandation de produit ni de titre : le profil est fictif et sert une simulation.
 - Aucun renseignement personnel : n'écris ni nom, ni adresse, ni employeur, ni numéro, même si l'investisseur en a donné.
 - Termine par `finish` avec un résumé d'une phrase de ce que tu as écrit.

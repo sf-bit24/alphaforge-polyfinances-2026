@@ -387,7 +387,7 @@ def test_ninth_generated_question_is_refused_then_fallback_takes_over(settings, 
     assert '"generated": 0' in context
     assert [q["id"] for q in fourth["questions"]] == ["fb_4_1", "fb_4_2", "fb_4_3"]
     assert all(q["source"] == "deterministic" for q in fourth["questions"])
-    assert any(s["title"] == "Questions de secours" for s in fourth["trace"])
+    assert any(s["title"] == "Questions du questionnaire" for s in fourth["trace"])
     stored = okf.parse(store.get(profile_key(client_id)).text).data
     assert stored["followup_counts"]["generated"] == 8  # le secours ne compte pas dans le budget
 
@@ -399,7 +399,7 @@ def test_reason_is_kept_in_the_trace_not_in_the_question(settings, store):
     client_id = started(service)
     response = service.handle({"action": "followup.reply", "client_id": client_id})
     assert "reason" not in response["questions"][0]
-    step = next(s for s in response["trace"] if s["title"] == "Questions de A1 validées par le code")
+    step = next(s for s in response["trace"] if s["title"] == "Questions de Yan vérifiées selon des règles fixes")
     assert step["actor"] == "A1"
     assert step["outputs"]["questions"] == [
         {"id": "a1_1_1", "field": "risk_capacity.max_loss_cad", "reason": "La perte admissible manque et pèse lourd."}
@@ -499,7 +499,7 @@ def test_a1_fallback_when_finish_turn_is_never_called(settings, store):
     assert response["ok"]
     assert [q["source"] for q in response["questions"]] == ["deterministic"] * 3
     assert response["questions"][0]["id"].startswith("fb_1_")
-    assert any(s["title"] == "Questions de secours" for s in response["trace"])
+    assert any(s["title"] == "Questions du questionnaire" for s in response["trace"])
     # Les champs numériques du secours se demandent par tranches, comme les relances d'A1.
     by_field = {q["field"]: q for q in response["questions"]}
     assert by_field["horizon.horizon_years"]["kind"] == "single_choice"

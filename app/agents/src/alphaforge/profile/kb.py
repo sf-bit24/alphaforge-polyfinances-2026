@@ -40,13 +40,20 @@ _COMPARISONS = {
 TRACE_JSON = re.compile(r"^clients/[0-9a-f-]{36}/traces/[A-Za-z0-9._-]+\.json$")
 
 
+# Une demande de documents mal formée ne vient pas de l'investisseur : le message ne cite ni clé ni chemin.
+LIST_UNAVAILABLE_FR = "Ces documents ne peuvent pas être affichés. Rechargez la page, puis réessayez."
+LIST_UNAVAILABLE_EN = "These documents cannot be shown. Reload the page, then try again."
+DOCUMENT_UNAVAILABLE_FR = "Ce document ne peut pas être affiché. Rechargez la page, puis réessayez."
+DOCUMENT_UNAVAILABLE_EN = "This document cannot be shown. Reload the page, then try again."
+
+
 def check_prefix(prefix: Any, locale: str) -> str:
     if not isinstance(prefix, str):
-        raise AppError("bad_request", pick(locale, "prefix est requis.", "prefix is required."))
+        raise AppError("bad_request", pick(locale, LIST_UNAVAILABLE_FR, LIST_UNAVAILABLE_EN))
     try:
         validate_prefix(prefix)
     except StoreError as exc:
-        raise AppError("bad_request", pick(locale, "prefix invalide.", "Invalid prefix.")) from exc
+        raise AppError("bad_request", pick(locale, LIST_UNAVAILABLE_FR, LIST_UNAVAILABLE_EN)) from exc
     if prefix.startswith("general/"):
         return prefix
     parts = prefix.split("/")
@@ -54,11 +61,7 @@ def check_prefix(prefix: Any, locale: str) -> str:
         return prefix
     raise AppError(
         "bad_request",
-        pick(
-            locale,
-            "prefix doit commencer par general/ ou clients/<client_id>/.",
-            "prefix must start with general/ or clients/<client_id>/.",
-        ),
+        pick(locale, LIST_UNAVAILABLE_FR, LIST_UNAVAILABLE_EN),
     )
 
 
@@ -95,32 +98,28 @@ def list_documents(store: Store, prefix: str) -> list[dict[str, Any]]:
 
 def check_key(key: Any, client_id: Any, locale: str) -> str:
     if not isinstance(key, str):
-        raise AppError("bad_request", pick(locale, "key est requis.", "key is required."))
+        raise AppError("bad_request", pick(locale, DOCUMENT_UNAVAILABLE_FR, DOCUMENT_UNAVAILABLE_EN))
     try:
         validate_key(key)
     except StoreError as exc:
-        raise AppError("bad_request", pick(locale, "key invalide.", "Invalid key.")) from exc
+        raise AppError("bad_request", pick(locale, DOCUMENT_UNAVAILABLE_FR, DOCUMENT_UNAVAILABLE_EN)) from exc
     if key.startswith("general/") and key.endswith(".md"):
         return key
     if key.startswith("clients/"):
         owner = key.split("/")[1] if key.count("/") >= 2 else ""
         if not (key.endswith(".md") or TRACE_JSON.match(key)):
-            raise AppError("bad_request", pick(locale, "Type de document non servi.", "Document type not served."))
+            raise AppError("bad_request", pick(locale, DOCUMENT_UNAVAILABLE_FR, DOCUMENT_UNAVAILABLE_EN))
         if not client_id:
             raise AppError(
                 "bad_request",
-                pick(
-                    locale, "client_id est requis pour une clé clients/.", "client_id is required for a clients/ key."
-                ),
+                pick(locale, DOCUMENT_UNAVAILABLE_FR, DOCUMENT_UNAVAILABLE_EN),
             )
         if client_id != owner:
             raise AppError("not_found", pick(locale, "Document introuvable.", "Document not found."))
         return key
     raise AppError(
         "bad_request",
-        pick(
-            locale, "Seules les clés general/ et clients/ sont servies.", "Only general/ and clients/ keys are served."
-        ),
+        pick(locale, DOCUMENT_UNAVAILABLE_FR, DOCUMENT_UNAVAILABLE_EN),
     )
 
 

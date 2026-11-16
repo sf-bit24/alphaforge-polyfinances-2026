@@ -314,9 +314,8 @@ def test_existing_portfolio_summary_follows_the_language():
         "unresolved": [{"raw": "XYZ fund", "reason": "not found"}],
     }
     english = render_portfolio_body(view, "en")
-    assert (
-        "- Status: `draft`" in english and "- Total value: 1342.0 CAD" in english and "- XYZ fund: not found" in english
-    )
+    assert "- Status: To be confirmed" in english and "- Total value: 1342.0 CAD" in english
+    assert "- XYZ fund: not found" in english
     assert " :" not in english
     french = render_portfolio_body(view, "fr")
-    assert f"- Statut{NBSP}: `draft`" in french and f"- XYZ fund{NBSP}: not found" in french
+    assert f"- Statut{NBSP}: À confirmer" in french and f"- XYZ fund{NBSP}: not found" in french

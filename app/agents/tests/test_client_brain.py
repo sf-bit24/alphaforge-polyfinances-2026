@@ -103,7 +103,7 @@ def test_end_of_questionnaire_invokes_a1_with_the_init_skill(settings, store):
     listed = service.handle({"action": "kb.list", "prefix": f"clients/{client_id}/"})["items"]
     assert {i["key"].split(f"{client_id}/")[1] for i in listed} >= {"synthese.md", "dimensions/horizon.md"}
     titles = [s["title"] for s in response["trace"]]
-    assert "Base du client écrite par A1" in titles
+    assert "Notes de Yan ajoutées à vos documents personnels" in titles
 
 
 def test_a1_completion_also_invokes_the_skill(settings, store):
@@ -220,7 +220,7 @@ def test_no_change_means_no_model_call(settings, store):
     store.put_text(profile_key(client_id), okf.render(profile))
     again = stop(service, client_id)
     assert len(factory.models) == 1
-    assert "Base du client déjà à jour" in [s["title"] for s in again["trace"]]
+    assert "Notes de Yan déjà à jour" in [s["title"] for s in again["trace"]]
 
 
 def test_changing_a_skill_triggers_the_update(tmp_path):
@@ -263,6 +263,6 @@ def test_a_failed_skill_never_blocks_completion(settings, store, script):
     client_id = ready_client(service, store)
     response = stop(service, client_id)
     assert response["stage"] == "complete"
-    assert "Base du client non écrite" in [s["title"] for s in response["trace"]]
+    assert "Notes de Yan non écrites" in [s["title"] for s in response["trace"]]
     assert store.get(f"clients/{client_id}/synthese.md") is None
     assert "brain" not in okf.parse(store.get(profile_key(client_id)).text).data

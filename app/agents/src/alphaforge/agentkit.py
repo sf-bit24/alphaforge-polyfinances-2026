@@ -117,6 +117,10 @@ class AgentSpec:
     # Vrai quand le prompt marque lui-même le texte de l'investisseur (blocs guardContent, voir guarded()).
     guard_tagged: bool = False
     tool_summaries: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = field(default_factory=dict)
+    # Nom de l'agent à l'écran (« Yan » pour A1 et A2); sans lui, les titres de la trace ne nomment personne.
+    shown_as: str | None = None
+    # Titre à l'écran (français, anglais) de chaque outil; un outil sans titre reçoit un titre général.
+    tool_titles: dict[str, tuple[str, str]] = field(default_factory=dict)
 
 
 def guarded(text: str) -> dict[str, Any]:
@@ -186,10 +190,10 @@ def personal_data_error(entity: str, trace: Trace, spec: AgentSpec, *, source: s
     trace.add(
         "guardrail",
         "guardrail",
-        trace.t("Garde-fou : renseignement personnel", "Guardrail: personal information"),
+        trace.t("Protection de vos renseignements personnels", "Protection of your personal information"),
         trace.t(
-            "Le texte de l'investisseur contient un renseignement personnel : l'échange est refusé.",
-            "The investor's text contains personal information: the exchange is refused.",
+            "Votre message contient un renseignement personnel : il n'a pas été traité.",
+            "Your message contains personal information: it was not processed.",
         ),
         outputs={"agent": spec.actor, "reason": "personal_data", "entity": entity, "source": source},
     )
@@ -245,12 +249,15 @@ class TraceHooks(HookProvider):
                 outputs["tools_requested"] = requested
         if event.exception is not None:
             outputs["error"] = type(event.exception).__name__
+        who = self.spec.shown_as
         self.trace.add(
             "model",
             self.spec.actor,
-            self.trace.t("Appel du modèle", "Model call"),
-            f"{self.model_id} · effort {self.spec.effort}",
-            inputs={"call": self.model_calls},
+            self.trace.t(f"{who} prépare sa réponse", f"{who} prepares the answer")
+            if who
+            else self.trace.t("Préparation de la réponse", "Preparing the answer"),
+            None,
+            inputs={"call": self.model_calls, "model": self.model_id, "effort": self.spec.effort},
             outputs=outputs,
             duration_ms=duration,
         )
@@ -271,13 +278,14 @@ class TraceHooks(HookProvider):
                 except (TypeError, ValueError):
                     payload = block["text"]
                 break
+        title = self.spec.tool_titles.get(name) or ("Étape de travail", "Work step")
         self.trace.add(
             "tool",
             self.spec.actor,
-            self.trace.t(f"Outil {name}", f"Tool {name}"),
+            self.trace.t(*title),
             None,
             inputs=compact_value(inputs if isinstance(inputs, dict) else {"input": inputs}),
-            outputs={"status": status, "result": compact_value(payload)},
+            outputs={"tool": name, "status": status, "result": compact_value(payload)},
             duration_ms=int((event.duration or 0) * 1000),
         )
 
@@ -312,8 +320,8 @@ def model_error(exc: Exception, locale: str) -> AppError:
         "model_error",
         pick(
             locale,
-            "Le modèle n'a pas pu répondre. Réessayez dans un instant.",
-            "The model could not answer. Please try again in a moment.",
+            "Le service ne répond pas pour l'instant : réessayez dans un instant.",
+            "The service is not answering right now: try again in a moment.",
         ),
         {"type": type(exc).__name__, **({"code": code} if code else {})},
     )
@@ -358,9 +366,11 @@ def run_agent(
     trace.add(
         "agent",
         spec.actor,
-        trace.t(f"{spec.actor} : tour terminé", f"{spec.actor}: turn finished"),
-        spec.name,
-        inputs={"effort": spec.effort, "max_turns": spec.max_turns},
+        trace.t(f"{spec.shown_as} a terminé", f"{spec.shown_as} finished")
+        if spec.shown_as
+        else trace.t("Réponse terminée", "Answer finished"),
+        None,
+        inputs={"agent": spec.name, "effort": spec.effort, "max_turns": spec.max_turns},
         outputs={
             "stop_reason": run.stop_reason,
             "model_calls": hooks.model_calls,
@@ -381,26 +391,29 @@ def check_stop_reason(run: AgentRun, trace: Trace, spec: AgentSpec) -> None:
         trace.add(
             "guardrail",
             "guardrail",
-            trace.t("Garde-fou déclenché", "Guardrail triggered"),
+            trace.t("Vérification du cadre du service", "Service scope check"),
             trace.t(
-                "Le garde-fou du cadre responsable a bloqué l'échange.",
-                "The responsible-use guardrail blocked the exchange.",
+                "Cette demande sort du cadre du service : elle n'a pas été traitée.",
+                "This request is outside the service's scope: it was not processed.",
             ),
             outputs={"agent": spec.actor},
         )
         raise AppError(
             "guardrail_blocked",
             trace.t(
-                "Cette demande sort du cadre du prototype (simulation seulement, aucun conseil personnalisé). "
+                "Cette demande sort du cadre du service (simulation seulement, aucun conseil personnalisé). "
                 "Reformulez votre message sur votre profil d'investisseur.",
-                "This request is outside the prototype's scope (simulation only, no personalised advice). "
+                "This request is outside the service's scope (simulation only, no personalised advice). "
                 "Please rephrase your message about your investor profile.",
             ),
         )
     if run.stop_reason == "content_filtered":
         raise AppError(
             "model_error",
-            trace.t("Le modèle a refusé de répondre à cette demande.", "The model declined to answer this request."),
+            trace.t(
+                "Nous ne pouvons pas répondre à cette demande. Reformulez votre message.",
+                "We cannot answer this request. Please rephrase your message.",
+            ),
             {"stop_reason": run.stop_reason},
         )
 

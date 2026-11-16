@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { AccountProvider } from "@/lib/client/account";
 import { SessionProvider } from "@/lib/client/session";
 import { I18nProvider } from "@/lib/i18n/provider";
 import { serverDictionary } from "@/lib/i18n/server";
@@ -28,7 +29,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang={locale}>
       <body className="font-sans antialiased">
         <I18nProvider initialLocale={locale}>
-          <SessionProvider>{children}</SessionProvider>
+          <AccountProvider>
+            <SessionProvider>{children}</SessionProvider>
+          </AccountProvider>
         </I18nProvider>
       </body>
     </html>

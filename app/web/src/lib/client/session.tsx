@@ -2,8 +2,9 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useI18n } from "@/lib/i18n/provider";
+import { useAccount, type AccountState } from "./account";
 import { callMessages } from "./api";
-import { SessionStore, type SessionSnapshot } from "./session-store";
+import { SessionStore, type ClientBinding, type SessionSnapshot } from "./session-store";
 
 type SessionActions = Pick<
   SessionStore,
@@ -29,6 +30,11 @@ export type SessionValue = SessionSnapshot & SessionActions;
 
 const SessionContext = createContext<SessionValue | null>(null);
 
+function bindingOf(account: Exclude<AccountState, { status: "loading" }>): ClientBinding {
+  if (account.status === "signed_in") return { source: "account", clientId: account.user.client_id };
+  return account.status === "signed_out" ? { source: "none" } : { source: "browser" };
+}
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const { locale, t } = useI18n();
   const [store] = useState(() => new SessionStore());
@@ -38,9 +44,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     store.configure(locale, callMessages(t));
   }, [store, locale, t]);
 
+  const account = useAccount();
   useEffect(() => {
-    void store.init();
-  }, [store]);
+    // The client_id waits for /api/auth/me: with sign-in on, only the account's is accepted.
+    if (account.status !== "loading") void store.init(bindingOf(account));
+  }, [store, account]);
 
   const value = useMemo<SessionValue>(
     () => ({

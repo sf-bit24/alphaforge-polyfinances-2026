@@ -57,7 +57,7 @@ Toute requête est un objet JSON avec `action` (chaîne). Toute réponse non str
 { "ok": false, "release": "1a2b3c4d", "error": { "code": "invalid_answer", "message": "texte lisible", "details": {} } }
 ```
 
-Codes d'erreur : `bad_request`, `unknown_action`, `not_found`, `invalid_answer`, `conflict`, `model_error`, `guardrail_blocked`, `internal`.
+Codes d'erreur : `bad_request`, `unknown_action`, `not_found`, `invalid_answer`, `conflict`, `model_error`, `guardrail_blocked`, `internal`. Le serveur Next.js ajoute `unauthorized` et `forbidden` quand la connexion est active (section 7.1).
 
 Toutes les actions de tous les rôles acceptent `{"action": "health"}` et répondent `{"ok": true, "role": "profile", "release": "…", "env": "sandbox"}`.
 
@@ -421,6 +421,43 @@ Le serveur Next.js appelle AWS avec les identifiants AWS du poste (chaîne par d
 | `AWS_REGION` | `us-east-1` | Région. |
 | `ALPHAFORGE_PREFIX` | `alphaforge_sandbox` | Préfixe des runtimes; l'ARN de `<préfixe>_profile` est trouvé par son nom (`ListAgentRuntimes`). |
 | `ALPHAFORGE_STATE_MACHINE` | `alphaforge-sandbox-collecte` | Machine de collecte, trouvée par son nom (`ListStateMachines`). |
+| `AUTH_MODE` | `off`, `cognito` | Connexion des investisseurs (section 7.1); `off` par défaut. |
+
+### 7.1 Identité et connexion
+
+Avec `AUTH_MODE=off` (par défaut), rien ne change : le serveur Next.js nomme un nouveau client au premier `session.start` et le navigateur garde son `client_id` dans le `localStorage`.
+
+Avec `AUTH_MODE=cognito` (`infrastructure/infra/auth.tf`, `auth_enabled = true`), l'identité vient d'un compte Amazon Cognito. Un compte = un `client_id` = une base `clients/<client_id>/`; la base générale `general/` reste commune.
+
+- Inscription libre sur la connexion gérée de Cognito : le courriel est l'identifiant, vérifié par un code. Terraform ne crée aucun utilisateur.
+- `client_id` du compte : le `sub` Cognito s'il est un UUID v4 (le cas des comptes du User Pool), sinon un UUID dérivé de SHA-256(`alphaforge:` + `sub`), aux bits de version 4 et de variante RFC 4122 (`app/web/src/lib/server/auth/client-id.ts`). Le même compte retrouve donc sa base sur n'importe quel appareil.
+- Le serveur tire le `client_id` de la session, jamais du corps de la requête. Dans `POST /api/agent` : un `client_id` différent de celui du compte donne 403 (`forbidden`); `session.start` sans `client_id` ouvre la base du compte, créée au premier usage; `kb.list` sur `clients/<autre>/` et `kb.get` d'une clé `clients/<autre>/...` donnent 403. Dans `POST /api/portfolio`, même règle; un profil de démonstration FICTION (`persona` sans `client_id`) reste permis à tout compte connecté.
+- `POST /api/collect` (lancer une collecte) exige le groupe Cognito `admin` (revendication `cognito:groups`), sinon 403; `GET /api/collect` reste permis à tout compte connecté.
+- Toute page et toute route `/api/*` exigent une session, sauf `/api/auth/*`, `/api/health` et `/api/ping`. Sans session, une page redirige vers `/login` et une route répond 401 (`unauthorized`) avec l'enveloppe de la section 2. Ces deux codes, `unauthorized` (401) et `forbidden` (403), ne viennent que du serveur Next.js (`details.source = "gateway"`), jamais d'un runtime.
+
+Flux (client d'application public, sans secret) :
+
+| Route | Rôle |
+| --- | --- |
+| `GET /api/auth/login?next=/chemin` | Crée `state`, `nonce` et le vérificateur PKCE (S256), les garde 10 min dans un cookie chiffré propre à cette connexion, `af_login_<16 premiers caractères du state>` (chemin `/api/auth` ; deux onglets ne s'écrasent pas), puis redirige vers `/oauth2/authorize` de la connexion gérée, avec `lang` (`fr`, `en`) selon la langue de l'interface. |
+| `GET /api/auth/callback?code&state` | Vérifie `state`, échange le code (`/oauth2/token`), vérifie l'ID token (signature par le JWKS du User Pool, RS256, `iss`, `aud`, `exp`, `token_use = id`, `nonce`), puis pose la session et revient à `next` (un chemin de l'interface seulement : tout chemin qui, normalisé, commence par `//`, contient un antislash, ou vise `/login` ou `/api/` devient `/`). Un échec renvoie à `/login?error=denied\|state\|token`. |
+| `POST /api/auth/logout` | Efface la session, puis `/logout` de Cognito (`logout_uri` = l'interface). Un en-tête `Origin` présent et différent de `APP_URL` donne 403 (`forbidden`). |
+| `GET /api/auth/me` | `{ "ok": true, "mode": "off", "user": null }`, ou `{ "ok": true, "mode": "cognito", "user": { "email", "client_id", "groups", "admin", "expires_at" } }`; 401 en `cognito` sans session. |
+
+Session : cookie `af_session`, `httpOnly`, `SameSite=Lax`, `Secure` sauf sur `http://localhost`, chiffré et authentifié (AES-256-GCM, clé dérivée de `AUTH_SESSION_SECRET` par HKDF). Il ne contient que `sub`, `email`, `groups`, `client_id` et `exp`, jamais un jeton Cognito. Il expire avec l'ID token (`auth_session_hours`, 8 h par défaut); l'investisseur se reconnecte alors. Un changement de groupe vaut à la connexion suivante.
+
+Variables posées par Terraform sur la tâche ECS de l'interface (`web.tf`) :
+
+| Variable | Exemple | Rôle |
+| --- | --- | --- |
+| `AUTH_MODE` | `cognito` | `off` si `auth_enabled = false`. |
+| `COGNITO_ISSUER` | `https://cognito-idp.us-east-1.amazonaws.com/us-east-1_AbCdEfGhI` | Émetteur des ID tokens. |
+| `COGNITO_CLIENT_ID` | `1a2b3c4d5e6f7g8h9i0j1k2l3m` | Client d'application public. |
+| `COGNITO_DOMAIN` | `https://alphaforge-sandbox-024848478575.auth.us-east-1.amazoncognito.com` | Domaine de la connexion gérée. |
+| `APP_URL` | `https://d2gsaqmfxygugx.cloudfront.net` | Origine publique : URL de retour et de déconnexion. |
+| `AUTH_SESSION_SECRET` | (64 caractères, `random_password`) | Clé du cookie de session. |
+
+Limite : l'ALB n'écoute qu'en HTTP (pas de certificat sans nom de domaine), d'où la connexion dans Next.js plutôt que l'action `authenticate-cognito` de l'ALB. Le lien direct de l'ALB (`web_alb_url`) ne garde pas de session : le cookie est `Secure` et Cognito n'accepte un retour en HTTP que sur `localhost`.
 
 ## 9. Volet finance (proposition, hors version 1)
 

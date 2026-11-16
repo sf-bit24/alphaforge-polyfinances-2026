@@ -335,4 +335,26 @@ describe("SessionStore", () => {
       ]
     `);
   });
+
+  it("with sign-in on, resumes the account's client_id, not the browser's, and opens a new account quietly", async () => {
+    const account = "33333333-3333-4333-8333-333333333333";
+    stored.set("alphaforge.client_id", CLIENT);
+    const store = newStore();
+    script({ error: new ApiError("not_found", "Unknown client") });
+    await store.init({ source: "account", clientId: account });
+    const calls = gateway.log.filter((line) => line.startsWith("callAgent"));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain(`"action":"session.resume","client_id":"${account}"`);
+    expect(gateway.log).toContain(`storage.set alphaforge.client_id ${account}`);
+    // A new account has no base yet: no « profile not found » notice, session.start creates it.
+    expect(store.getSnapshot()).toMatchObject({ hydrated: true, clientId: null, notice: null, error: null });
+  });
+
+  it("with sign-in on and no session, resumes nothing", async () => {
+    stored.set("alphaforge.client_id", CLIENT);
+    const store = newStore();
+    await store.init({ source: "none" });
+    expect(gateway.log.some((line) => line.startsWith("callAgent"))).toBe(false);
+    expect(store.getSnapshot()).toMatchObject({ hydrated: true, clientId: null });
+  });
 });

@@ -4,6 +4,7 @@ import { Ban, CircleAlert, CircleCheck, Hourglass, LoaderCircle, Play, RefreshCw
 import { useEffect, useEffectEvent, useId, useRef, useState, type ReactNode } from "react";
 import type { CollectRequest } from "@/lib/contract/requests";
 import type { ExecutionStatus, ExecutionSummary } from "@/lib/contract/schemas";
+import { useAccount } from "@/lib/client/account";
 import { ApiError, callMessages, listExecutions, startCollection, type CallOptions } from "@/lib/client/api";
 import { useHealth } from "@/lib/client/health";
 import { useAsync } from "@/lib/client/use-async";
@@ -158,20 +159,23 @@ interface CollectFormProps {
   tickers: string;
   tickersInvalid: boolean;
   starting: boolean;
+  /** Sign-in on and the account is not in the `admin` group: the run cannot be started. */
+  locked: boolean;
   onSinceChange: (value: string) => void;
   onTickersChange: (value: string) => void;
   onStart: () => void;
 }
 
-function CollectForm({ ids, since, tickers, tickersInvalid, starting, onSinceChange, onTickersChange, onStart }: CollectFormProps) {
+function CollectForm({ ids, since, tickers, tickersInvalid, starting, locked, onSinceChange, onTickersChange, onStart }: CollectFormProps) {
   const { t } = useI18n();
   return (
     <div className="grid gap-4 border-b border-ink-150 px-5 py-4 md:grid-cols-[12rem_minmax(0,1fr)_auto] md:items-end">
       <SinceField id={ids.since} value={since} onChange={onSinceChange} />
       <TickersField id={ids.tickers} value={tickers} invalid={tickersInvalid} onChange={onTickersChange} />
-      <Button onClick={onStart} loading={starting} disabled={tickersInvalid} icon={<Play aria-hidden className="size-4" />} className="md:mb-5">
+      <Button onClick={onStart} loading={starting} disabled={tickersInvalid || locked} icon={<Play aria-hidden className="size-4" />} className="md:mb-5">
         {starting ? t.collect.starting : t.collect.start}
       </Button>
+      {locked ? <p className="text-xs text-ink-500 md:col-span-3">{t.auth.adminOnly}</p> : null}
     </div>
   );
 }
@@ -291,6 +295,8 @@ export function CollectPanel({ onWritten, onOpenDoc }: { onWritten: () => void; 
   const [tickers, setTickers] = useState("");
   const starter = useCollectionStart();
   const local = health?.mode === "local";
+  const account = useAccount();
+  const locked = account.status === "signed_in" && !account.user.admin;
   const options = (signal?: AbortSignal) => ({ locale, signal, messages: callMessages(t) });
   const executions = useRecentExecutions(local, onWritten, options);
   const tickerList = parseTickers(tickers);
@@ -317,6 +323,7 @@ export function CollectPanel({ onWritten, onOpenDoc }: { onWritten: () => void; 
             tickers={tickers}
             tickersInvalid={tickersInvalid}
             starting={starter.starting}
+            locked={locked}
             onSinceChange={setSince}
             onTickersChange={setTickers}
             onStart={start}

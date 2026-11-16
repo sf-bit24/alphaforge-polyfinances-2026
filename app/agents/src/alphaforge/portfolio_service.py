@@ -22,12 +22,13 @@ sont ingérés si la base du client est active, sinon gardés en attente. Ce run
 from __future__ import annotations
 
 import contextlib
+import importlib
 import logging
 import os
 import re
 import tempfile
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import date
 from typing import Any
 
@@ -51,6 +52,8 @@ UNAVAILABLE_FR = "Le service ne répond pas pour l'instant : réessayez dans un 
 UNAVAILABLE_EN = "The service is not answering right now: try again in a moment."
 ENGINE_DOWN_FR = "Le simulateur ne répond pas pour l'instant : réessayez dans un instant."
 ENGINE_DOWN_EN = "The simulator is not answering right now: try again in a moment."
+FINANCE_DEPENDENCIES = ("cvxpy", "numpy", "pandas")  # groupe « finance » : absent du zip commun des runtimes
+MODEL_ERROR_MODULES = ("botocore", "boto3", "strands")  # une erreur de ces paquets vient du modèle (Bedrock)
 
 
 class FinanceEngine:
@@ -64,48 +67,49 @@ class FinanceEngine:
     def load(self) -> dict[str, Any]:
         with self._lock:
             if self._loaded is None:
-                try:
-                    # Dépendances du groupe finance d'abord : sans elles (zip commun), l'erreur doit le dire, même si
-                    # les données longues manquent aussi. Ces imports ne lisent pas encore ALPHAFORGE_BT_DATA.
-                    import cvxpy  # noqa: F401
-                    import numpy  # noqa: F401
-                    import pandas  # noqa: F401
-                except ImportError as exc:
-                    raise self._missing_engine(exc) from exc
-                if self._store is not None:
-                    # Données longues (parquets non versionnés, absents du zip) : déposées sous runtime/data/long/
-                    # par scripts/finance/upload_long_data.py. ALPHAFORGE_BT_DATA doit être posé AVANT le premier
-                    # import du moteur (backtest.data lit ce chemin une seule fois).
-                    from .finance.debate.longdata import LongDataError, ensure_long_data
-
-                    try:
-                        ensure_long_data(self._store)
-                    except LongDataError as exc:
-                        logger.error("long data unavailable: %s", exc)
-                        raise AppError(
-                            "internal", ENGINE_DOWN_FR, {"detail": str(exc), "path": "runtime/data/long/"}
-                        ) from exc
-                try:
-                    from .finance.debate import okf_bridge, pipeline
-                    from .finance.observability import telemetry
-                    from .finance.policy.from_profile_view import style_inputs_from_view
-                    from .finance.strategy import STYLES
-                except ImportError as exc:
-                    raise self._missing_engine(exc) from exc
-
-                try:
-                    # Traces OpenTelemetry : X-Ray si ALPHAFORGE_OTLP_XRAY=1 (posée par Terraform). Idempotent.
-                    telemetry.setup()
-                except Exception:  # la télémétrie ne doit jamais empêcher une simulation
-                    logger.exception("telemetry setup failed")
-                self._loaded = {
-                    "pipeline": pipeline,
-                    "okf_bridge": okf_bridge,
-                    "telemetry": telemetry,
-                    "style_inputs_from_view": style_inputs_from_view,
-                    "styles": tuple(STYLES),
-                }
+                self._loaded = self._import_engine()
             return self._loaded
+
+    def _import_engine(self) -> dict[str, Any]:
+        """Ordre fixe : dépendances du groupe finance, puis données longues, puis seulement le moteur."""
+        try:
+            # Dépendances du groupe finance d'abord : sans elles (zip commun), l'erreur doit le dire, même si
+            # les données longues manquent aussi. Ces imports ne lisent pas encore ALPHAFORGE_BT_DATA.
+            for module in FINANCE_DEPENDENCIES:
+                importlib.import_module(module)
+        except ImportError as exc:
+            raise self._missing_engine(exc) from exc
+        if self._store is not None:
+            # Données longues (parquets non versionnés, absents du zip) : déposées sous runtime/data/long/
+            # par scripts/finance/upload_long_data.py. ALPHAFORGE_BT_DATA doit être posé AVANT le premier
+            # import du moteur (backtest.data lit ce chemin une seule fois).
+            from .finance.debate.longdata import LongDataError, ensure_long_data
+
+            try:
+                ensure_long_data(self._store)
+            except LongDataError as exc:
+                logger.error("long data unavailable: %s", exc)
+                raise AppError("internal", ENGINE_DOWN_FR, {"detail": str(exc), "path": "runtime/data/long/"}) from exc
+        try:
+            from .finance.debate import okf_bridge, pipeline
+            from .finance.observability import telemetry
+            from .finance.policy.from_profile_view import style_inputs_from_view
+            from .finance.strategy import STYLES
+        except ImportError as exc:
+            raise self._missing_engine(exc) from exc
+
+        try:
+            # Traces OpenTelemetry : X-Ray si ALPHAFORGE_OTLP_XRAY=1 (posée par Terraform). Idempotent.
+            telemetry.setup()
+        except Exception:  # la télémétrie ne doit jamais empêcher une simulation
+            logger.exception("telemetry setup failed")
+        return {
+            "pipeline": pipeline,
+            "okf_bridge": okf_bridge,
+            "telemetry": telemetry,
+            "style_inputs_from_view": style_inputs_from_view,
+            "styles": tuple(STYLES),
+        }
 
     @staticmethod
     def _missing_engine(exc: ImportError) -> AppError:
@@ -139,22 +143,7 @@ class PortfolioService:
         release = self.settings.release
         locale = payload.get("locale") if isinstance(payload, dict) and payload.get("locale") in LOCALES else "fr"
         try:
-            if not isinstance(payload, dict):
-                raise AppError("bad_request", BAD_REQUEST_FR)
-            action = payload.get("action")
-            if not isinstance(action, str) or not action:
-                raise AppError("bad_request", pick(locale, BAD_REQUEST_FR, BAD_REQUEST_EN))
-            if action == "health":
-                return ok_response(release, role=self.settings.role, env=self.settings.env)
-            if action in EVOLUTION_ACTIONS:
-                return self._evolution(action, payload, release)
-            if action != "build":
-                raise AppError(
-                    "unknown_action",
-                    pick(locale, BAD_REQUEST_FR, BAD_REQUEST_EN),
-                    {"action": action, "expected": ["build", "health", *EVOLUTION_ACTIONS]},
-                )
-            return ok_response(release, **self.build(payload, locale))
+            return self._dispatch(payload, release, locale)
         except AppError as exc:
             return error_response(release, exc)
         except ConflictError:
@@ -171,16 +160,25 @@ class PortfolioService:
             )
         except Exception as exc:
             logger.exception("portfolio build failed")
-            if type(exc).__module__.split(".")[0] in ("botocore", "boto3", "strands"):
-                return error_response(
-                    release,
-                    AppError(
-                        "model_error",
-                        pick(locale, UNAVAILABLE_FR, UNAVAILABLE_EN),
-                        {"type": type(exc).__name__},
-                    ),
-                )
-            return error_response(release, AppError("internal", pick(locale, UNAVAILABLE_FR, UNAVAILABLE_EN)))
+            return error_response(release, _unexpected_error(exc, locale))
+
+    def _dispatch(self, payload: Any, release: str, locale: str) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            raise AppError("bad_request", BAD_REQUEST_FR)
+        action = payload.get("action")
+        if not isinstance(action, str) or not action:
+            raise AppError("bad_request", pick(locale, BAD_REQUEST_FR, BAD_REQUEST_EN))
+        if action == "health":
+            return ok_response(release, role=self.settings.role, env=self.settings.env)
+        if action in EVOLUTION_ACTIONS:
+            return self._evolution(action, payload, release)
+        if action != "build":
+            raise AppError(
+                "unknown_action",
+                pick(locale, BAD_REQUEST_FR, BAD_REQUEST_EN),
+                {"action": action, "expected": ["build", "health", *EVOLUTION_ACTIONS]},
+            )
+        return ok_response(release, **self.build(payload, locale))
 
     # ------------------------------------------------------------------ évolution dans le temps
     def _evolution(self, action: str, payload: dict[str, Any], release: str) -> dict[str, Any]:
@@ -199,15 +197,16 @@ class PortfolioService:
         if not isinstance(run_id, str) or not run_id:
             raise AppError("bad_request", "run_id est requis.", {"field": "run_id"})
         task_id = self.app.add_async_task(f"portfolio:{action}:{run_id}", {"run_id": run_id}) if self.app else None
-        thread = threading.Thread(target=self._evolution_job, args=(action, dict(payload), task_id),
-                                  name=f"evolution-{run_id}", daemon=True)
+        thread = threading.Thread(
+            target=self._evolution_job, args=(action, dict(payload), task_id), name=f"evolution-{run_id}", daemon=True
+        )
         thread.start()
         self._evolution_threads[run_id] = thread
         return ok_response(release, accepted=True, action=action, run_id=run_id, simulation_only=True)
 
     def _evolution_job(self, action: str, payload: dict[str, Any], task_id: int | None) -> None:
         try:
-            self._engine()      # dépendances finance et données longues (ALPHAFORGE_BT_DATA) avant le moteur
+            self._engine()  # dépendances finance et données longues (ALPHAFORGE_BT_DATA) avant le moteur
             from .finance.evolution import actions
 
             handler = actions.handle_tick if action == "evolution.tick" else actions.handle_replay
@@ -215,13 +214,13 @@ class PortfolioService:
             if not out.get("ok"):
                 logger.warning("evolution %s %s : %s", action, payload.get("run_id"), out.get("error"))
             self.client_kb.sync_noted()  # portefeuilles/*.md écrits par la tâche : ingérés si la base est active
-        except Exception:  # noqa: BLE001 - la tâche de fond ne doit jamais tuer le runtime ; le marqueur dit l'échec
+        except Exception:  # la tâche de fond ne doit jamais tuer le runtime ; le marqueur dit l'échec
             logger.exception("evolution %s failed", action)
             try:
                 from .finance.evolution import actions
 
                 actions.write_error_marker(payload, self.store, "internal", "échec de la tâche d'évolution")
-            except Exception:  # noqa: BLE001
+            except Exception:  # journalisé seulement : la tâche de fond ne lève jamais
                 logger.exception("evolution error marker failed")
         finally:
             if task_id is not None and self.app is not None:
@@ -234,59 +233,30 @@ class PortfolioService:
             thread.join(timeout)
 
     # ------------------------------------------------------------------ build
-    def _parse(self, payload: dict[str, Any], locale: str) -> dict[str, Any]:
-        from .profile.state import is_client_id
-
-        def bad(fr: str, en: str, **details: Any) -> AppError:
-            # Demande mal formée par l'interface, jamais par l'investisseur : le motif reste dans ``details``.
-            return AppError("bad_request", pick(locale, BAD_REQUEST_FR, BAD_REQUEST_EN), {"reason": en, **details})
-
+    @staticmethod
+    def _parse(payload: dict[str, Any], locale: str) -> dict[str, Any]:
+        """Champs de ``build``, validés dans un ordre fixe : la première erreur est celle rendue."""
         client_id = payload.get("client_id")
         persona = payload.get("persona")
-        if persona is not None:
-            from .finance.personas import ids as persona_ids
-
-            if client_id is not None:
-                raise bad("client_id ou persona, pas les deux.", "client_id or persona, not both.")
-            if persona not in persona_ids():
-                raise bad("persona inconnu.", "Unknown persona.", allowed=persona_ids())
-        elif not is_client_id(client_id):
-            raise bad("client_id doit être un UUID v4.", "client_id must be a UUID v4.")
-        as_of = payload.get("as_of")
-        if as_of is not None:
-            try:
-                if not isinstance(as_of, str) or not DATE.match(as_of):
-                    raise ValueError(as_of)
-                as_of = date.fromisoformat(as_of)
-            except ValueError as exc:
-                raise bad("as_of doit être une date AAAA-MM-JJ.", "as_of must be a YYYY-MM-DD date.") from exc
+        _check_identity(client_id, persona, locale)
+        as_of = _parse_as_of(payload.get("as_of"), locale)
         mode = payload.get("mode", "llm")
         if mode not in MODES:
-            raise bad("mode vaut llm ou rules.", "mode must be llm or rules.", allowed=list(MODES))
+            raise _bad_request(locale, "mode vaut llm ou rules.", "mode must be llm or rules.", allowed=list(MODES))
         strategy = payload.get("strategy", True)
         if not isinstance(strategy, bool):
-            raise bad("strategy est un booléen.", "strategy must be a boolean.")
+            raise _bad_request(locale, "strategy est un booléen.", "strategy must be a boolean.")
         style = payload.get("style_preference")
         if style is not None and not isinstance(style, str):
-            raise bad("style_preference est une chaîne.", "style_preference must be a string.")
+            raise _bad_request(locale, "style_preference est une chaîne.", "style_preference must be a string.")
         request = payload.get("request")
-        if request is not None:
-            if (
-                not isinstance(request, dict)
-                or set(request) - REQUEST_KEYS
-                or not isinstance(request.get("ticker"), str)
-                or not request["ticker"].strip()
-                or any(
-                    request.get(k) is not None
-                    and (isinstance(request[k], bool) or not isinstance(request[k], int | float))
-                    for k in ("amount_cad", "weight")
-                )
-            ):
-                raise bad(
-                    "request vaut {ticker, amount_cad?, weight?}.",
-                    "request must be {ticker, amount_cad?, weight?}.",
-                    allowed=sorted(REQUEST_KEYS),
-                )
+        if request is not None and not _is_valid_request(request):
+            raise _bad_request(
+                locale,
+                "request vaut {ticker, amount_cad?, weight?}.",
+                "request must be {ticker, amount_cad?, weight?}.",
+                allowed=sorted(REQUEST_KEYS),
+            )
         return {
             "client_id": client_id,
             "persona": persona,
@@ -299,60 +269,26 @@ class PortfolioService:
 
     def build(self, payload: dict[str, Any], locale: str) -> dict[str, Any]:
         args = self._parse(payload, locale)
-        try:
-            engine = self._engine()
-        except AppError as exc:
-            # Le moteur écrit son message en français : il suit ici la langue de la demande.
-            raise AppError(exc.code, pick(locale, ENGINE_DOWN_FR, ENGINE_DOWN_EN), exc.details) from exc
+        engine = self._load_engine(locale)
         pipeline, bridge = engine["pipeline"], engine["okf_bridge"]
         styles = engine["styles"]
         if args["style"] is not None and args["style"] not in styles:
-            raise AppError(
-                "bad_request",
-                pick(locale, BAD_REQUEST_FR, BAD_REQUEST_EN),
-                {"reason": "Unknown style_preference.", "allowed": list(styles)},
-            )
-        if self._questionnaire is None:
-            from .profile.questionnaire import Questionnaire
-
-            self._questionnaire = Questionnaire.load()
-        client_store = bridge.OkfClientStore(self.store, self._questionnaire, locale=locale)
+            raise _bad_request(locale, "style_preference inconnu.", "Unknown style_preference.", allowed=list(styles))
+        client_store = bridge.OkfClientStore(self.store, self._loaded_questionnaire(), locale=locale)
         market_store = bridge.OkfMarketStore(self.store)
         persona_label = None
         if args["persona"]:
-            # Persona FICTION de démonstration : profil de test du moteur, variables de style de demo.yaml.
-            from .finance.personas import load as load_persona
-
-            profile, style_inputs, demo_request, persona_label = load_persona(args["persona"])
-            if args["request"] is None and demo_request:
-                args["request"] = demo_request
-            if not args["strategy"]:
-                style_inputs = None
-            args["client_id"] = profile.profile_id
+            profile, style_inputs, persona_label = _persona_profile(args)
         else:
-            try:
-                profile = client_store.load_profile(args["client_id"])
-            except KeyError as exc:
-                raise AppError(
-                    "not_found",
-                    pick(
-                        locale,
-                        "Nous ne trouvons pas votre profil. Rechargez la page, puis réessayez.",
-                        "We cannot find your profile. Reload the page, then try again.",
-                    ),
-                ) from exc
-            # Portefeuille existant lu avec le profil : sa clé et son ETag entrent dans la version des données.
-            market_store.note_client_inputs(client_store.inputs)
-            # Étape 0 : variables de style du profil court, lues comme dans finance/debate/app.py.
-            style_inputs = None
-            if args["strategy"]:
-                style_inputs = engine["style_inputs_from_view"](client_store.view(args["client_id"])[0])
+            profile, style_inputs = _client_profile(args, client_store, market_store, engine, locale)
         as_of = args["as_of"] or pipeline.DEFAULT_AS_OF
         telemetry = engine.get("telemetry")
-        try:
-            # Span racine : les outils du moteur (optimize, judge.check, strategy.select…) et l'audit
-            # partagent une seule trace X-Ray, que la décision enregistrée cite (audit.otel_trace_id).
-            with self._root_span(telemetry, profile_id=args["client_id"], persona=args["persona"], mode=args["mode"]):
+        # Span racine : les outils du moteur (optimize, judge.check, strategy.select…) et l'audit partagent une
+        # seule trace X-Ray, que la décision enregistrée cite (audit.otel_trace_id). Le flush vient après la
+        # fermeture du span, pour qu'il soit exporté.
+        span_attrs = {"profile_id": args["client_id"], "persona": args["persona"], "mode": args["mode"]}
+        with _flushed(telemetry):
+            with self._root_span(telemetry, **span_attrs):
                 trace_id = self._trace_id(telemetry)
                 result = pipeline.build_portfolio(
                     profile,
@@ -372,12 +308,6 @@ class PortfolioService:
                 audit = self._audit(result.decision)
             # decisions/<id>.md dans la Knowledge Base du client : jamais une erreur pour l'investisseur.
             client_kb = None if args["persona"] else self.client_kb.sync(args["client_id"], None)
-        finally:
-            if telemetry is not None:
-                try:
-                    telemetry.flush()  # après la fermeture du span racine, pour qu'il soit exporté
-                except Exception:
-                    logger.exception("telemetry flush failed")
         return {
             "client_id": args["client_id"],
             "persona": args["persona"],
@@ -390,20 +320,27 @@ class PortfolioService:
             "simulation_only": True,
             "decision_key": decision_key,
             "decision": result.decision.model_dump(mode="json"),
-            "rounds": [
-                {
-                    "round": r.round,
-                    "verdicts": r.verdicts,
-                    "amendments": [a.model_dump(mode="json") for a in r.decisions],
-                }
-                for r in result.rounds
-            ],
+            "rounds": _rounds(result),
             "explanation_report": result.explanation_report,
             "grounding": result.grounding,
             "client_kb": client_kb,
             "strategy": result.strategy.summary() if result.strategy is not None else None,
             "allocation": result.allocation,
         }
+
+    def _load_engine(self, locale: str) -> dict[str, Any]:
+        try:
+            return self._engine()
+        except AppError as exc:
+            # Le moteur écrit son message en français : il suit ici la langue de la demande.
+            raise AppError(exc.code, pick(locale, ENGINE_DOWN_FR, ENGINE_DOWN_EN), exc.details) from exc
+
+    def _loaded_questionnaire(self) -> Any:
+        if self._questionnaire is None:
+            from .profile.questionnaire import Questionnaire
+
+            self._questionnaire = Questionnaire.load()
+        return self._questionnaire
 
     @staticmethod
     def _root_span(telemetry: Any, **attrs: Any) -> contextlib.AbstractContextManager[Any]:
@@ -442,6 +379,127 @@ class PortfolioService:
         except Exception as exc:
             logger.exception("audit record failed")
             return {"error": type(exc).__name__}
+
+
+def _bad_request(locale: str, fr: str, en: str, **details: Any) -> AppError:
+    """Demande mal formée par l'interface, jamais par l'investisseur : il lit un message général, le motif (``en``)
+    reste dans ``details``. Le motif en français (``fr``) reste au point d'appel, pour la lecture du code."""
+    return AppError("bad_request", pick(locale, BAD_REQUEST_FR, BAD_REQUEST_EN), {"reason": en, **details})
+
+
+def _check_identity(client_id: Any, persona: Any, locale: str) -> None:
+    """Un persona de démonstration connu, ou un ``client_id`` UUID v4 ; pas les deux."""
+    from .profile.state import is_client_id
+
+    if persona is not None:
+        from .finance.personas import ids as persona_ids
+
+        if client_id is not None:
+            raise _bad_request(locale, "client_id ou persona, pas les deux.", "client_id or persona, not both.")
+        if persona not in persona_ids():
+            raise _bad_request(locale, "persona inconnu.", "Unknown persona.", allowed=persona_ids())
+    elif not is_client_id(client_id):
+        raise _bad_request(locale, "client_id doit être un UUID v4.", "client_id must be a UUID v4.")
+
+
+def _parse_as_of(as_of: Any, locale: str) -> date | None:
+    if as_of is None:
+        return None
+    try:
+        if not isinstance(as_of, str) or not DATE.match(as_of):
+            raise ValueError(as_of)
+        return date.fromisoformat(as_of)
+    except ValueError as exc:
+        raise _bad_request(locale, "as_of doit être une date AAAA-MM-JJ.", "as_of must be a YYYY-MM-DD date.") from exc
+
+
+def _is_valid_request(request: Any) -> bool:
+    """``{ticker, amount_cad?, weight?}`` : ticker non vide ; montant et poids numériques (jamais booléens) ou nuls."""
+    return (
+        isinstance(request, dict)
+        and not set(request) - REQUEST_KEYS
+        and isinstance(request.get("ticker"), str)
+        and bool(request["ticker"].strip())
+        and not any(
+            request.get(k) is not None and (isinstance(request[k], bool) or not isinstance(request[k], int | float))
+            for k in ("amount_cad", "weight")
+        )
+    )
+
+
+def _persona_profile(args: dict[str, Any]) -> tuple[Any, Any, str]:
+    """Persona FICTION de démonstration : profil de test du moteur, variables de style de demo.yaml.
+
+    Complète ``args`` : la demande de démonstration remplace une demande absente, et ``client_id`` devient
+    l'identifiant du profil."""
+    from .finance.personas import load as load_persona
+
+    profile, style_inputs, demo_request, persona_label = load_persona(args["persona"])
+    if args["request"] is None and demo_request:
+        args["request"] = demo_request
+    if not args["strategy"]:
+        style_inputs = None
+    args["client_id"] = profile.profile_id
+    return profile, style_inputs, persona_label
+
+
+def _client_profile(
+    args: dict[str, Any], client_store: Any, market_store: Any, engine: dict[str, Any], locale: str
+) -> tuple[Any, Any]:
+    """Profil enregistré du client, et variables de style de l'étape 0 lues dans son profil court."""
+    try:
+        profile = client_store.load_profile(args["client_id"])
+    except KeyError as exc:
+        raise AppError(
+            "not_found",
+            pick(
+                locale,
+                "Nous ne trouvons pas votre profil. Rechargez la page, puis réessayez.",
+                "We cannot find your profile. Reload the page, then try again.",
+            ),
+        ) from exc
+    # Portefeuille existant lu avec le profil : sa clé et son ETag entrent dans la version des données.
+    market_store.note_client_inputs(client_store.inputs)
+    # Étape 0 : variables de style du profil court, lues comme dans finance/debate/app.py.
+    style_inputs = None
+    if args["strategy"]:
+        style_inputs = engine["style_inputs_from_view"](client_store.view(args["client_id"])[0])
+    return profile, style_inputs
+
+
+@contextlib.contextmanager
+def _flushed(telemetry: Any) -> Iterator[None]:
+    """Exporte les traces en sortie, même après une erreur ; un échec du flush est journalisé, jamais relevé."""
+    try:
+        yield
+    finally:
+        if telemetry is not None:
+            try:
+                telemetry.flush()
+            except Exception:
+                logger.exception("telemetry flush failed")
+
+
+def _rounds(result: Any) -> list[dict[str, Any]]:
+    return [
+        {
+            "round": r.round,
+            "verdicts": r.verdicts,
+            "amendments": [a.model_dump(mode="json") for a in r.decisions],
+        }
+        for r in result.rounds
+    ]
+
+
+def _unexpected_error(exc: Exception, locale: str) -> AppError:
+    """Erreur inattendue : celle du modèle (botocore, boto3, strands) est dite comme telle, le reste est interne."""
+    if type(exc).__module__.split(".")[0] in MODEL_ERROR_MODULES:
+        return AppError(
+            "model_error",
+            pick(locale, UNAVAILABLE_FR, UNAVAILABLE_EN),
+            {"type": type(exc).__name__},
+        )
+    return AppError("internal", pick(locale, UNAVAILABLE_FR, UNAVAILABLE_EN))
 
 
 def xray_trace_id(otel_trace_id: str | None) -> str | None:

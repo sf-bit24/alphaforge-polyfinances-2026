@@ -399,7 +399,7 @@ export const portfolioEn: PortfolioStrings = {
       corr_core: "Corr. to core",
       mdd_long: "Long max drawdown",
       dividend_yield: "Dividend",
-      liquidity_cad: "Liquidity / session",
+      liquidity_cad: "Liquidity / trading day",
       momentum: "12-1 momentum",
     },
     showAll: ((count: number) => `Show the ${count} stocks`) as Fn<[number]>,

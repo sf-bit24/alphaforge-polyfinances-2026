@@ -4,7 +4,7 @@ L'architecture d'AlphaForge AI sur AWS (sandbox us-east-1), établie d'après le
 
 | Document | Contenu |
 | --- | --- |
-| [Document d'architecture AWS (PDF)](../../remise/alphaforge-architecture-aws.pdf) | Le document remis au jury : les agents et leurs runtimes, la structure OKF des bases, le débat et le Judge, la plateforme, le rôle et la justification de chaque service, les trois cas d'utilisation étape par étape, les agents et le stockage, la sécurité, la traçabilité et le déploiement. |
+| [Document d'architecture AWS (PDF)](../remise/alphaforge-architecture-aws.pdf) | Le document remis au jury : les agents et leurs runtimes, la structure OKF des bases, le débat et le Judge, la plateforme, le rôle et la justification de chaque service, les trois cas d'utilisation étape par étape, les agents et le stockage, la sécurité, la traçabilité et le déploiement. |
 | [`diagrams/`](diagrams/README.md) | Les quatre diagrammes, avec leur source draw.io : la plateforme, puis un diagramme par cas d'utilisation. |
 | [Agents déployés et stockage](agents-et-stockage.md) | Les 8 runtimes AgentCore, les buckets S3 et S3 Vectors, DynamoDB et ECR. |
 | [Le débat, le Judge et la traçabilité](debat-et-judge.md) | Comment les quatre lentilles et le Judge construisent et contrôlent un portefeuille, comment chaque chiffre se trace, et ce qui est lu dans les bases OKF. |

@@ -28,7 +28,6 @@ Points communs :
 | --- | --- | --- |
 | `alphaforge-sandbox-kb-024848478575` | Les bases OKF. `general/` : la base générale, seule source de la Knowledge Base générale. `clients/` : une base par investisseur, avec ses décisions. `staging/` : collecte brute, effacée après 14 jours. `runtime/` : le zip du code des runtimes, un par commit. `scenarios/` : entrées et sorties du job des scénarios. | Versionné, chiffré par la clé KMS du projet. |
 | `alphaforge-sandbox-traces-024848478575` | Le journal complet des appels Bedrock (`bedrock-invocations/`) et une copie de chaque maillon de la chaîne d'audit (`decisions/<profil>/`). | Versionné, Object Lock (mode GOVERNANCE, 3 jours) : une preuve ne se réécrit pas. |
-| `alphaforge-trace-024848478575` | Ancien bucket de traces, créé par un script boto3 avant le passage à Terraform. Il a reçu le journal Bedrock au début du 15 novembre ; le journal va maintenant dans le bucket `traces` ci-dessus. Hors Terraform, il disparaîtra avec le compte. | Versionné, Object Lock (GOVERNANCE, 3 jours). |
 
 ## Buckets S3 Vectors (index des Knowledge Bases)
 
@@ -43,7 +42,7 @@ Points communs :
 | --- | --- |
 | DynamoDB `alphaforge-sandbox-decisions` | La chaîne d'audit : chaque décision est liée à la précédente par un hachage (58 éléments au relevé). |
 | DynamoDB `alphaforge-sandbox-llm-replay` | L'index du rejeu des appels LLM (clé sha256), vide : les runtimes déployés gardent leurs enregistrements dans leur session. |
-| DynamoDB `alphaforge-decisions`, `alphaforge-llm-replay` | Anciennes tables du même script boto3, hors Terraform, plus utilisées (4 éléments et 0). |
+| DynamoDB `alphaforge-decisions`, `alphaforge-llm-replay` | Anciennes tables créées par un script boto3 avant Terraform, plus utilisées (4 éléments et 0). |
 | ECR `alphaforge-web` | L'image de l'interface Next.js, déployée sur ECS Fargate. |
 
 Voir aussi : le [diagramme de la plateforme](assets/alphaforge-plateforme-aws.png), [`app/agents/README.md`](../../app/agents/README.md) et [`infrastructure/README.md`](../../infrastructure/README.md).

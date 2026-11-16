@@ -16,6 +16,7 @@ import threading
 import time
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import Any
 
 from alphaforge.finance.contracts.decision import Explanation, Statement
@@ -103,7 +104,12 @@ def _s(book: FactBook, text: str, ids: list[str], label="FAIT") -> Statement:
     )
 
 
-def skeleton(
+def _shown(facts: dict[str, Any], fid: str) -> str:
+    """Valeur affichée d'un Fact (celle que ``verify`` admet), ou « n.d. » s'il manque."""
+    return fmt(facts[fid].value, facts[fid].unit) if fid in facts else "n.d."
+
+
+def skeleton(  # noqa: PLR0913 - signature gardée : pipeline.py passe ces entrées de l'enregistrement par mot-clé
     book: FactBook,
     *,
     kind: str,
@@ -116,49 +122,8 @@ def skeleton(
     limits_extra: list[str] | None = None,
     strategy: dict | None = None,
 ) -> Explanation:
-    f = book.facts
-
-    def v(fid):
-        return fmt(f[fid].value, f[fid].unit) if fid in f else "n.d."
-
-    data_used = [
-        Statement(
-            text_fr=f"Profil de risque effectif : niveau {v(level_fid)}, dérivé de la tolérance et "
-            f"de la capacité (la plus prudente l'emporte).",
-            fact_ids=[level_fid],
-        )
-    ]
-    risk_ids = [i for i in (f"{cand}.cvar_m", f"{cand}.mdd", f"{cand}.vol") if i in f]
-    if risk_ids:
-        data_used.append(
-            Statement(
-                text_fr="Mesures historiques du portefeuille proposé : CVaR mensuelle "
-                f"{v(risk_ids[0])}"
-                + (f", baisse maximale {v(risk_ids[1])}" if len(risk_ids) > 1 else "")
-                + " (rendements mensuels en CAD, prix ajustés).",
-                fact_ids=risk_ids,
-            )
-        )
-    why = []
-    for fid in active_fids[:3]:
-        why.append(Statement(text_fr=f"Contrainte déterminante. {f[fid].label_fr} ({v(fid)}).", fact_ids=[fid]))
-    for a in applied:
-        if a.status == "applique" and a.amendment.kind != "flag_only":
-            why.append(
-                Statement(
-                    text_fr=f"La lentille « {LENS_FR.get(a.lens, a.lens)} » a resserré le mandat : "
-                    f"{a.amendment.reason_fr}.",
-                    fact_ids=[i for i in a.amendment.evidence_fact_ids if i in f],
-                )
-            )
-    if kind == "refus_encadre" and request_fids:
-        why.append(
-            Statement(
-                text_fr="La demande telle quelle dépasse les limites du profil ; une version encadrée "
-                "est proposée à la place.",
-                fact_ids=[i for i in request_fids if i in f],
-            )
-        )
+    data_used = _data_used_statements(book.facts, level_fid, cand)
+    why = _why_statements(book.facts, active_fids, applied, kind, request_fids)
     limits = [
         Statement(
             text_fr="Les chiffres décrivent le passé (2018-2026 pour les titres réels, proxys longs "
@@ -167,8 +132,7 @@ def skeleton(
             label="HYPOTHESE",
         )
     ]
-    for t in limits_extra or []:
-        limits.append(Statement(text_fr=t, fact_ids=[], label="HYPOTHESE"))
+    limits += [Statement(text_fr=t, fact_ids=[], label="HYPOTHESE") for t in limits_extra or []]
     if strategy is not None:
         extra = strategy_statements(book, strategy)
         data_used += extra["data_used"]
@@ -177,119 +141,208 @@ def skeleton(
     return Explanation(data_used=data_used, why=why, limits=limits, what_would_change=counterfactual_stmts)
 
 
+def _data_used_statements(facts: dict[str, Any], level_fid: str, cand: str) -> list[Statement]:
+    """Niveau de risque effectif, puis les mesures historiques du portefeuille candidat ``cand`` qui existent."""
+    out = [
+        Statement(
+            text_fr=f"Profil de risque effectif : niveau {_shown(facts, level_fid)}, dérivé de la tolérance et "
+            f"de la capacité (la plus prudente l'emporte).",
+            fact_ids=[level_fid],
+        )
+    ]
+    risk_ids = [i for i in (f"{cand}.cvar_m", f"{cand}.mdd", f"{cand}.vol") if i in facts]
+    if risk_ids:
+        out.append(
+            Statement(
+                text_fr="Mesures historiques du portefeuille proposé : CVaR mensuelle "
+                f"{_shown(facts, risk_ids[0])}"
+                + (f", baisse maximale {_shown(facts, risk_ids[1])}" if len(risk_ids) > 1 else "")
+                + " (rendements mensuels en CAD, prix ajustés).",
+                fact_ids=risk_ids,
+            )
+        )
+    return out
+
+
+def _why_statements(
+    facts: dict[str, Any], active_fids: list[str], applied: list, kind: str, request_fids: list[str] | None
+) -> list[Statement]:
+    """Les trois premières contraintes déterminantes, les resserrements appliqués par les lentilles, puis le refus
+    encadré d'une demande hors profil."""
+    out = [
+        Statement(text_fr=f"Contrainte déterminante. {facts[fid].label_fr} ({_shown(facts, fid)}).", fact_ids=[fid])
+        for fid in active_fids[:3]
+    ]
+    out += [
+        Statement(
+            text_fr=f"La lentille « {LENS_FR.get(a.lens, a.lens)} » a resserré le mandat : {a.amendment.reason_fr}.",
+            fact_ids=[i for i in a.amendment.evidence_fact_ids if i in facts],
+        )
+        for a in applied
+        if a.status == "applique" and a.amendment.kind != "flag_only"
+    ]
+    if kind == "refus_encadre" and request_fids:
+        out.append(
+            Statement(
+                text_fr="La demande telle quelle dépasse les limites du profil ; une version encadrée "
+                "est proposée à la place.",
+                fact_ids=[i for i in request_fids if i in facts],
+            )
+        )
+    return out
+
+
 def strategy_statements(book: FactBook, final: dict | None = None) -> dict[str, list[Statement]]:
     """Gabarits de l'étape 0 (style et sélection). Tout nombre écrit est la valeur formatée d'un Fact cité ;
     les règles citées (ACVM, FTSE…) restent dans les Facts, pas dans le texte, pour le vérificateur."""
-    f = book.facts
-    out: dict[str, list[Statement]] = {"data_used": [], "why": [], "limits": []}
-    if "strat.style" not in f:
-        return out
+    facts = book.facts
+    if "strat.style" not in facts:
+        return {"data_used": [], "why": [], "limits": []}
+    final = final or {}
+    return {
+        "data_used": _style_data_used(facts),
+        "why": _style_why(facts, final),
+        "limits": _style_limits(facts, final),
+    }
 
-    def v(fid):
-        return fmt(f[fid].value, f[fid].unit) if fid in f else "n.d."
 
-    out["data_used"].append(
+def _with_prefix(facts: dict[str, Any], prefix: str) -> list[str]:
+    return [k for k in facts if k.startswith(prefix)]
+
+
+def _style_data_used(facts: dict[str, Any]) -> list[Statement]:
+    """Style retenu (ce qu'il règle et ce qu'il ne règle pas), puis le classement des titres individuels."""
+    out = [
         Statement(
-            text_fr=f"Style de composition retenu : {STYLE_FR.get(f['strat.style'].value, v('strat.style'))}. "
+            text_fr="Style de composition retenu : "
+            f"{STYLE_FR.get(facts['strat.style'].value, _shown(facts, 'strat.style'))}. "
             "Il ne relève ni le niveau de risque, ni la "
             "part d'actions visée, ni les budgets de perte : il règle la composition (titres retenus, planchers "
             "des satellites, plafonds sectoriels). Il peut donc ajouter du risque, toujours sous ces budgets.",
             fact_ids=["strat.style"],
             label="HYPOTHESE",
         )
-    )
-    if "strat.n_candidates" in f:
-        out["data_used"].append(
+    ]
+    if "strat.n_candidates" in facts:
+        out.append(
             Statement(
-                text_fr=f"Classement des {v('strat.n_candidates')} titres individuels par rangs (volatilité, bêta, "
-                "baisse maximale longue, dividende, corrélation au cœur), sur le jeu de départ et l'historique long.",
+                text_fr=f"Classement des {_shown(facts, 'strat.n_candidates')} titres individuels par rangs "
+                "(volatilité, bêta, baisse maximale longue, dividende, corrélation au cœur), sur le jeu de départ "
+                "et l'historique long.",
                 fact_ids=["strat.n_candidates"],
                 label="HYPOTHESE",
             )
         )
-    final = final or {}
-    band = final.get("band_target", "strat.band_target" if "strat.band_target" in f else None)
-    if band and band in f:
-        out["why"].append(
+    return out
+
+
+def _style_why(facts: dict[str, Any], final: dict) -> list[Statement]:
+    """Part actions visée, effet du style sur le risque minimisé, planchers des titres retenus, plafonds sectoriels
+    et préférences refusées."""
+    out = []
+    band = final.get("band_target", "strat.band_target" if "strat.band_target" in facts else None)
+    if band and band in facts:
+        out.append(
             Statement(
-                text_fr=f"Part actions visée : {v(band)}, entre {v('strat.e_min')} et "
-                f"{v('strat.e_cap')}. La tolérance place le portefeuille dans sa bande, la capacité la plafonne.",
+                text_fr=f"Part actions visée : {_shown(facts, band)}, entre {_shown(facts, 'strat.e_min')} et "
+                f"{_shown(facts, 'strat.e_cap')}. La tolérance place le portefeuille dans sa bande, la capacité la "
+                "plafonne.",
                 fact_ids=[band, "strat.e_min", "strat.e_cap"],
                 label="HYPOTHESE",
             )
         )
-    if "strat.risk_cost" in f and "strat.base_risk" in f:
-        rc = f["strat.risk_cost"].value
-        out["why"].append(
-            Statement(
-                text_fr="Effet du style et de la sélection sur le risque minimisé (CVaR mensuelle) : "
-                f"{'hausse' if rc >= 0 else 'baisse'} de {fmt(abs(rc), '%')} par rapport au mandat de base "
-                f"({v('strat.base_risk')}), dans les budgets du niveau.",
-                fact_ids=["strat.risk_cost", "strat.base_risk"],
-                label="HYPOTHESE",
-            )
+    if "strat.risk_cost" in facts and "strat.base_risk" in facts:
+        out.append(_risk_cost_statement(facts))
+    out += _floor_statements(facts, final.get("floors"))
+    out += [
+        Statement(
+            text_fr=f"Plafond d'exposition au {sector_fr(fid[len('strat.sector_cap.') :])} (look-through) : "
+            f"{_shown(facts, fid)}.",
+            fact_ids=[fid],
+            label="HYPOTHESE",
         )
-    floors = final.get("floors") if final else None
+        for fid in _with_prefix(facts, "strat.sector_cap.")
+    ]
+    out += [
+        Statement(
+            text_fr=f"Pourquoi votre profil dit autrement : {facts[fid].value}.", fact_ids=[fid], label="HYPOTHESE"
+        )
+        for fid in _with_prefix(facts, "strat.preference_refused.")
+    ]
+    return out
+
+
+def _risk_cost_statement(facts: dict[str, Any]) -> Statement:
+    cost = facts["strat.risk_cost"].value
+    return Statement(
+        text_fr="Effet du style et de la sélection sur le risque minimisé (CVaR mensuelle) : "
+        f"{'hausse' if cost >= 0 else 'baisse'} de {fmt(abs(cost), '%')} par rapport au mandat de base "
+        f"({_shown(facts, 'strat.base_risk')}), dans les budgets du niveau.",
+        fact_ids=["strat.risk_cost", "strat.base_risk"],
+        label="HYPOTHESE",
+    )
+
+
+def _floor_statements(facts: dict[str, Any], floors: dict[str, str] | None) -> list[Statement]:
+    """Un énoncé par plancher de satellite : ceux du débat (``floors``), sinon tous ceux de l'étape 0."""
     if floors is None:
-        floors = {k[len("strat.floor.") :]: k for k in f if k.startswith("strat.floor.")}
-    for t, fid in floors.items():
-        rank = f"strat.rank.{t}"
+        floors = {k[len("strat.floor.") :]: k for k in _with_prefix(facts, "strat.floor.")}
+    return [_floor_statement(facts, ticker, fid) for ticker, fid in floors.items()]
+
+
+def _floor_statement(facts: dict[str, Any], ticker: str, fid: str) -> Statement:
+    rank, cad = f"strat.rank.{ticker}", f"strat.floor_cad.{ticker}"
+    if rank in facts:
         ids = [fid, rank, "strat.n_candidates"]
-        cad = f"strat.floor_cad.{t}"
-        if rank in f:
-            text = f"Titre retenu {t} : rang {v(rank)} sur {v('strat.n_candidates')}, plancher de satellite {v(fid)}"
-        else:  # FNB d'un intérêt de l'investisseur (or → GLD) : pas de classement
-            ids = [fid]
-            text = f"{t}, demandé par un intérêt de l'investisseur : plancher de {v(fid)}, dans le plafond du niveau"
-        if cad in f:
-            text += f", soit {v(cad)}"
-            ids.append(cad)
-        out["why"].append(Statement(text_fr=text + ".", fact_ids=[i for i in ids if i in f], label="HYPOTHESE"))
-    for fid in [k for k in f if k.startswith("strat.sector_cap.")]:
-        tag = fid[len("strat.sector_cap.") :]
-        out["why"].append(
-            Statement(
-                text_fr=f"Plafond d'exposition au {sector_fr(tag)} (look-through) : {v(fid)}.",
-                fact_ids=[fid],
-                label="HYPOTHESE",
-            )
+        text = (
+            f"Titre retenu {ticker} : rang {_shown(facts, rank)} sur {_shown(facts, 'strat.n_candidates')}, "
+            f"plancher de satellite {_shown(facts, fid)}"
         )
-    for fid in [k for k in f if k.startswith("strat.preference_refused.")]:
-        out["why"].append(
-            Statement(
-                text_fr=f"Pourquoi votre profil dit autrement : {f[fid].value}.", fact_ids=[fid], label="HYPOTHESE"
-            )
+    else:  # FNB d'un intérêt de l'investisseur (or → GLD) : pas de classement
+        ids = [fid]
+        text = (
+            f"{ticker}, demandé par un intérêt de l'investisseur : plancher de {_shown(facts, fid)}, "
+            "dans le plafond du niveau"
         )
-    for fid in [k for k in f if k.startswith("strat.contradiction.")]:
-        out["limits"].append(
-            Statement(
-                text_fr=f"Réponses contradictoires, la plus prudente l'emporte : {f[fid].value}.",
-                fact_ids=[fid],
-                label="HYPOTHESE",
-            )
+    if cad in facts:
+        text += f", soit {_shown(facts, cad)}"
+        ids.append(cad)
+    return Statement(text_fr=text + ".", fact_ids=[i for i in ids if i in facts], label="HYPOTHESE")
+
+
+def _style_limits(facts: dict[str, Any], final: dict) -> list[Statement]:
+    """Réponses contradictoires, signaux de comportement, choix abaissés par le débat, style allégé, puis les
+    hypothèses de conception du style et de la sélection."""
+    out = [
+        Statement(
+            text_fr=f"Réponses contradictoires, la plus prudente l'emporte : {facts[fid].value}.",
+            fact_ids=[fid],
+            label="HYPOTHESE",
         )
-    for fid in [k for k in f if k.startswith("strat.flag.")]:
-        out["limits"].append(
-            Statement(
-                text_fr=f"Signal de comportement « {flag_fr(fid[len('strat.flag.') :])} » : il règle des garde-fous, "
-                "jamais l'allocation.",
-                fact_ids=[fid],
-                label="HYPOTHESE",
-            )
+        for fid in _with_prefix(facts, "strat.contradiction.")
+    ]
+    out += [
+        Statement(
+            text_fr=f"Signal de comportement « {flag_fr(fid[len('strat.flag.') :])} » : il règle des garde-fous, "
+            "jamais l'allocation.",
+            fact_ids=[fid],
+            label="HYPOTHESE",
         )
-    for fid in final.get("clamped", []) if final else []:
-        out["limits"].append(
-            Statement(
-                text_fr="Le débat a abaissé ou retiré un choix du style : la prudence l'emporte.",
-                fact_ids=[fid],
-                label="HYPOTHESE",
-            )
+        for fid in _with_prefix(facts, "strat.flag.")
+    ]
+    out += [
+        Statement(
+            text_fr="Le débat a abaissé ou retiré un choix du style : la prudence l'emporte.",
+            fact_ids=[fid],
+            label="HYPOTHESE",
         )
-    for fid in [k for k in f if k.startswith("strat.fallback.")]:
-        out["limits"].append(
-            Statement(text_fr="Le style a été allégé pour rester faisable.", fact_ids=[fid], label="HYPOTHESE")
-        )
-    out["limits"].append(
+        for fid in final.get("clamped", [])
+    ]
+    out += [
+        Statement(text_fr="Le style a été allégé pour rester faisable.", fact_ids=[fid], label="HYPOTHESE")
+        for fid in _with_prefix(facts, "strat.fallback.")
+    ]
+    out.append(
         Statement(
             text_fr="Les règles du style et de la sélection sont des hypothèses de conception à valider par "
             "l'équipe. L'univers a "
@@ -398,7 +451,7 @@ def grounding_source(
     return "\n\n".join(x for x in parts if x)[:GROUNDING_SOURCE_MAX] or "(aucune source)"
 
 
-def grounding_check(
+def grounding_check(  # noqa: PLR0913 - signature gardée : pipeline.py et les tests passent ces réglages par mot-clé
     book: FactBook,
     expl: Explanation,
     guardrail_id: str | None,
@@ -424,24 +477,57 @@ def grounding_check(
         return None
     if not guardrail_version or str(guardrail_version).upper() == "DRAFT":
         raise ValueError("guardrail : version numérotée requise (jamais DRAFT)")
-    if client is None:
-        import boto3
-        from botocore.config import Config
+    call = _GuardrailCall(
+        client=client if client is not None else _bedrock_runtime(region),
+        guardrail_id=guardrail_id,
+        guardrail_version=guardrail_version,
+        book=book,
+        context=context,
+        docs=docs,
+        pacer=_TextUnitPacer(units_per_second) if units_per_second else None,
+    )
+    sections = _statements_to_check(expl, only)
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        if only is None:
+            rows, redo = _check_sections(pool, call, sections)
+        else:
+            rows, redo = {}, [(sec, i, st) for sec, items in sections.items() for i, st in items]
+        for (sec, i, _), res in zip(redo, pool.map(lambda item: call([item[2]]), redo), strict=True):
+            rows[(sec, i)] = _row(sec, i, res, "statement")
+    ordered = [rows[(sec, i)] for sec in SECTIONS for i, _ in sections.get(sec, []) if (sec, i) in rows]
+    return summarize_grounding(ordered, [key for key, _ in docs])
 
-        client = boto3.client(
-            "bedrock-runtime", region_name=region, config=Config(retries={"mode": "standard", "max_attempts": 6})
-        )
-    pacer = _TextUnitPacer(units_per_second) if units_per_second else None
 
-    def call(statements: list[Statement]) -> dict[str, Any]:
-        src = grounding_source(book, statements, context, docs)
+def _bedrock_runtime(region: str) -> Any:
+    import boto3
+    from botocore.config import Config
+
+    return boto3.client(
+        "bedrock-runtime", region_name=region, config=Config(retries={"mode": "standard", "max_attempts": 6})
+    )
+
+
+@dataclass(frozen=True)
+class _GuardrailCall:
+    """Un appel ApplyGuardrail sur des énoncés : leur source d'ancrage, la question, puis leur texte (un par ligne)."""
+
+    client: Any
+    guardrail_id: str
+    guardrail_version: str
+    book: FactBook
+    context: str
+    docs: Sequence[tuple[str, str]]
+    pacer: _TextUnitPacer | None
+
+    def __call__(self, statements: list[Statement]) -> dict[str, Any]:
+        src = grounding_source(self.book, statements, self.context, self.docs)
         text = "\n".join(x.text_fr for x in statements)[:GROUNDING_CONTENT_MAX]
-        if pacer is not None:
-            pacer.wait(len(src) + len(GROUNDING_QUERY) + len(text))
+        if self.pacer is not None:
+            self.pacer.wait(len(src) + len(GROUNDING_QUERY) + len(text))
         try:
-            r = client.apply_guardrail(
-                guardrailIdentifier=guardrail_id,
-                guardrailVersion=guardrail_version,
+            response = self.client.apply_guardrail(
+                guardrailIdentifier=self.guardrail_id,
+                guardrailVersion=self.guardrail_version,
                 source="OUTPUT",
                 content=[
                     {"text": {"text": src, "qualifiers": ["grounding_source"]}},
@@ -451,43 +537,57 @@ def grounding_check(
             )
         except Exception as exc:  # réseau, droits, quota : rapporté, la décision continue
             return {"action": "ERROR", "error": type(exc).__name__}
-        filters = {
-            x.get("type"): x
-            for a in r.get("assessments") or []
-            for x in (a.get("contextualGroundingPolicy") or {}).get("filters", [])
-        }
-        g, rel = filters.get("GROUNDING", {}), filters.get("RELEVANCE", {})
-        return {
-            "action": r.get("action"),
-            "score": g.get("score"),
-            "threshold": g.get("threshold"),
-            "relevance": rel.get("score"),
-            "retries": (r.get("ResponseMetadata") or {}).get("RetryAttempts", 0),
-        }
+        return _grounding_result(response)
 
+
+def _grounding_result(response: dict[str, Any]) -> dict[str, Any]:
+    """Action rendue par le guardrail, score et seuil du filtre d'ancrage, score de pertinence et reprises."""
+    filters = {
+        x.get("type"): x
+        for a in response.get("assessments") or []
+        for x in (a.get("contextualGroundingPolicy") or {}).get("filters", [])
+    }
+    grounding, relevance = filters.get("GROUNDING", {}), filters.get("RELEVANCE", {})
+    return {
+        "action": response.get("action"),
+        "score": grounding.get("score"),
+        "threshold": grounding.get("threshold"),
+        "relevance": relevance.get("score"),
+        "retries": (response.get("ResponseMetadata") or {}).get("RetryAttempts", 0),
+    }
+
+
+def _statements_to_check(
+    expl: Explanation, only: set[tuple[str, int]] | None
+) -> dict[str, list[tuple[int, Statement]]]:
+    """Énoncés à vérifier (tous, ou ceux de ``only``) par section, sans les sections vides, dans l'ordre de SECTIONS."""
     sections = {
         sec: [(i, st) for i, st in enumerate(getattr(expl, sec)) if only is None or (sec, i) in only]
         for sec in SECTIONS
     }
-    sections = {sec: items for sec, items in sections.items() if items}
+    return {sec: items for sec, items in sections.items() if items}
+
+
+def _check_sections(
+    pool: ThreadPoolExecutor, call: _GuardrailCall, sections: dict[str, list[tuple[int, Statement]]]
+) -> tuple[dict[tuple[str, int], dict[str, Any]], list[tuple[str, int, Statement]]]:
+    """Un appel par section. Une section ancrée (ou d'un seul énoncé) donne son résultat à chacun de ses énoncés ;
+    les énoncés des autres sont rendus à part, pour être revérifiés un par un."""
     rows: dict[tuple[str, int], dict[str, Any]] = {}
     redo: list[tuple[str, int, Statement]] = []
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        if only is None:
-            names = list(sections)
-            for sec, res in zip(names, pool.map(lambda sec: call([st for _, st in sections[sec]]), names), strict=True):
-                items = sections[sec]
-                if res["action"] == "NONE" or len(items) == 1:
-                    scope = "section" if len(items) > 1 else "statement"
-                    rows.update({(sec, i): {"section": sec, "index": i, **res, "scope": scope} for i, _ in items})
-                else:
-                    redo += [(sec, i, st) for i, st in items]
+    names = list(sections)
+    for sec, res in zip(names, pool.map(lambda sec: call([st for _, st in sections[sec]]), names), strict=True):
+        items = sections[sec]
+        if res["action"] == "NONE" or len(items) == 1:
+            scope = "section" if len(items) > 1 else "statement"
+            rows.update({(sec, i): _row(sec, i, res, scope) for i, _ in items})
         else:
-            redo = [(sec, i, st) for sec, items in sections.items() for i, st in items]
-        for (sec, i, _), res in zip(redo, pool.map(lambda item: call([item[2]]), redo), strict=True):
-            rows[(sec, i)] = {"section": sec, "index": i, **res, "scope": "statement"}
-    ordered = [rows[(sec, i)] for sec in SECTIONS for i, _ in sections.get(sec, []) if (sec, i) in rows]
-    return summarize_grounding(ordered, [key for key, _ in docs])
+            redo += [(sec, i, st) for i, st in items]
+    return rows, redo
+
+
+def _row(sec: str, index: int, res: dict[str, Any], scope: str) -> dict[str, Any]:
+    return {"section": sec, "index": index, **res, "scope": scope}
 
 
 def summarize_grounding(rows: list[dict[str, Any]], sources: list[str]) -> dict[str, Any]:

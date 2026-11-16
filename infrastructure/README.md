@@ -126,7 +126,7 @@ Chacun supprime aussi son compte lui-même : menu du compte, « Supprimer mon co
 | `s3vectors:DeleteIndex` | index `client-*` du bucket `<préfixe>-client-vectors` | |
 | `s3:ListBucketVersions` | bucket des bases OKF | `s3:prefix` = `clients/*` seulement. |
 | `s3:DeleteObject`, `s3:DeleteObjectVersion` | `clients/*` | Refus explicite sur `clients/demo-*`. Ni `s3:GetObject` ni KMS : rien n'est lu ni déchiffré. |
-| `cognito-idp:AdminDeleteUser` | le User Pool des investisseurs | |
+| `cognito-idp:AdminDeleteUser`, `cognito-idp:AdminGetUser` | le User Pool des investisseurs | `AdminGetUser` : les routes vérifient que le compte d'une session existe encore (réponse gardée 5 min par compte), pour qu'un cookie gardé après une suppression ne rouvre pas la base. |
 
 Le code vérifie en plus que chaque clé supprimée commence par `clients/<client_id>/` (le `client_id` de la session) et que la Knowledge Base porte l'étiquette `alphaforge:client_id` du compte. Restent après la suppression : la chaîne d'audit des décisions simulées (table `<préfixe>-decisions` et `decisions/<client_id>/` du bucket de traces, en Object Lock), faite pour ne jamais se réécrire, et les journaux qui ne sont pas rangés par client.
 

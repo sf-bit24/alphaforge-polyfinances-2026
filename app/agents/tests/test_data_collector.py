@@ -187,16 +187,16 @@ def test_stage_data_writes_series_and_quotes_and_refuses_the_rest(run, store, mo
         "kind": "series",
         "title": "Série STATIC_TOTALCPICHANGE : 3 % au 2026-10-01",
         "url": "https://example.org/STATIC_TOTALCPICHANGE",
-        "source": "Banque du Canada (API Valet)",
+        "source": "Banque du Canada",
         "published_at": "2026-11-14T12:00:00+00:00",
         "observed_at": "2026-10-01",
         "retrieved_at": "2026-11-14T12:00:00+00:00",
         "language": "fr",
         "tickers": [],
         "summary": (
-            "Dernière valeur : 3 % (mois de référence 2026-10-01), source Banque du Canada (API Valet). "
+            "Dernière valeur : 3 % (mois de référence 2026-10-01), source Banque du Canada. "
             "10 observations retenues. Date de publication exacte non fournie par la source : "
-            "la date de récupération en est la borne supérieure. Pertinence (A5) : Inflation annuelle."
+            "la date de récupération en est la borne supérieure. Pertinence : Inflation annuelle."
         ),
         "data": {
             "series_id": "STATIC_TOTALCPICHANGE",
@@ -223,4 +223,4 @@ def test_stage_data_writes_series_and_quotes_and_refuses_the_rest(run, store, mo
     shopify = store.get_json("staging/exec-9/data/quote-shop-to-2026-11-13.json")
     assert shopify["published_at"] == shopify["retrieved_at"] == "2026-11-14T12:00:00+00:00"
     assert shopify["data"]["published_at_basis"] == "retrieved_at_upper_bound"
-    assert shopify["summary"].endswith("22 clôtures quotidiennes. Pertinence (A5) : Commerce en ligne.")
+    assert shopify["summary"].endswith("22 clôtures quotidiennes. Pertinence : Commerce en ligne.")

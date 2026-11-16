@@ -137,9 +137,12 @@ resource "aws_cognito_user_pool_client" "web" {
   prevent_user_existence_errors = "ENABLED"
   enable_token_revocation       = true
 
+  # Cognito exige un refresh token plus long que l'ID token et l'access token :
+  # 2 jours couvrent tout auth_session_hours (24 h au plus). L'interface ne
+  # garde pas le refresh token (la session expire avec l'ID token).
   id_token_validity      = var.auth_session_hours
   access_token_validity  = var.auth_session_hours
-  refresh_token_validity = 1
+  refresh_token_validity = 2
 
   token_validity_units {
     id_token      = "hours"

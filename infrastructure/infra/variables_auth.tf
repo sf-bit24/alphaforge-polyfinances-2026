@@ -19,7 +19,7 @@ variable "auth_local_urls" {
 }
 
 variable "auth_session_hours" {
-  description = "Duree de l'ID token et de la session de l'interface (heures, 1 a 24). A l'expiration, l'investisseur se reconnecte."
+  description = "Duree de l'ID token et de la session de l'interface (heures, 1 a 24). A l'expiration, l'investisseur se reconnecte. Le refresh token (2 jours, auth.tf) reste plus long, comme Cognito l'exige."
   type        = number
   default     = 8
 

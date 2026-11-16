@@ -57,9 +57,6 @@ export function SampleBento() {
         <span className={styles.num}>{formatPercent(protective, locale)}</span>
         <p className={styles.lbl}>{t.dash.sample.alloc}</p>
         <AllocationRows rows={rows} label={allocLabel} />
-        <Link className={styles.more} href="/details#positions">
-          {t.dash.sample.allocMore}
-        </Link>
       </div>
       <div className={cn(styles.tile, styles.tGold)}>
         <TrendingDown {...ICON} />
@@ -101,9 +98,6 @@ function PortfolioTile({ portfolio }: { portfolio: ClientState["portfolio"] }) {
           <span className={styles.num}>{formatMoney(confirmed.exposures.total_value_cad, locale)}</span>
           <p className={styles.lbl}>{t.dash.real.portfolio}</p>
           <AllocationRows rows={classes} label={t.dash.real.portfolioAria} />
-          <Link className={styles.more} href="/details">
-            {t.dash.real.portfolioMore}
-          </Link>
         </>
       ) : (
         <>

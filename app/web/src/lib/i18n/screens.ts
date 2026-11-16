@@ -1,6 +1,6 @@
 /**
  * Strings of the screens built from the approved drafts: navigation, profile journey,
- * dashboard and assistant, portfolio details. Merged into the dictionary (dictionary.ts);
+ * dashboard and assistant. Merged into the dictionary (dictionary.ts);
  * the English half is typed by the French one, so a missing key fails the build.
  */
 import type { Dimension } from "@/lib/contract/schemas";
@@ -8,7 +8,6 @@ import type { Dimension } from "@/lib/contract/schemas";
 export const screensFr = {
   appNav: {
     dashboard: "Tableau de bord",
-    details: "Détails",
     portfolio: "Portefeuille simulé",
     profile: "Mon profil",
     knowledge: "Base de connaissances",
@@ -89,7 +88,6 @@ export const screensFr = {
     hello: "Bonjour",
     leadSample: "Un exemple de portefeuille simulé, en un coup d'œil. Retraite prévue en 2030.",
     leadReal: "Votre profil en un coup d'œil, la base de votre portefeuille simulé.",
-    allDetails: "Voir tous les détails",
     exampleChip: "Valeurs d’exemple",
     sample: {
       value: "Valeur simulée du portefeuille",
@@ -98,7 +96,6 @@ export const screensFr = {
       volSub: (cap: string) => `Sous votre plafond de ${cap}`,
       alloc: "En obligations et en or pour protéger votre capital",
       allocAria: (list: string) => `Répartition : ${list}`,
-      allocMore: "Voir chaque position",
       drop: "Pire baisse en 2022",
       dropSub: (money: string) => `Soit ${money} sur ce capital`,
       limits: "Limites de votre profil respectées",
@@ -112,7 +109,6 @@ export const screensFr = {
       riskSub: (tolerance: string, capacity: string) => `Le plus prudent de votre tolérance (${tolerance}) et de votre capacité (${capacity})`,
       portfolio: "Votre portefeuille existant, lu par A2 et valorisé par le code",
       portfolioAria: "Répartition de votre portefeuille existant par classe d’actifs",
-      portfolioMore: "Voir les expositions",
       simulated: {
         title: "Portefeuille simulé",
         lead: "Construit à partir de votre profil",
@@ -160,113 +156,6 @@ export const screensFr = {
     sampleTag: "Exemple simulé",
     exampleOnly: "Exemple : cette action n’est pas encore branchée",
   },
-  details: {
-    title: "Détails du portefeuille",
-    lead: "Tout ce qui soutient le portefeuille simulé, du rendement quotidien aux décisions des agents.",
-    realLead: "Où construire votre portefeuille simulé, et votre portefeuille existant tel que le code l’a valorisé.",
-    back: "Retour au tableau de bord",
-    today: "Aujourd’hui",
-    date: "Date",
-    periodLabel: "Période",
-    periods: { "1m": "1 mois", "1y": "1 an", "3y": "3 ans", "5y": "5 ans" },
-    pageNote: "Prototype du Datathon PolyFinances 2026 · ne constitue pas un conseil financier · toutes les valeurs de cette page sont synthétiques.",
-    hero: {
-      aria: "Valeur et rendements du dernier mois",
-      lead: "Le dernier mois en un coup d'œil.",
-      worth: "Valeur simulée",
-      daily: "Rendement quotidien",
-    },
-    retirement: {
-      title: "Retraite",
-      countdown: (years: number, months: number) => `${years} an${years > 1 ? "s" : ""} et ${months} mois`,
-      before: "avant le départ prévu",
-      today: "Actions aujourd’hui",
-      target: (year: number) => `Visé en ${year}`,
-      note: "Le risque baisse graduellement d’ici la retraite.",
-      pathAria: (pct: string) => `Trajectoire vers la retraite : ${pct} du chemin parcouru`,
-    },
-    vol: {
-      title: "Volatilité",
-      annualized: "annualisée",
-      cap: (pct: string) => `Plafond du profil : ${pct}`,
-    },
-    chart: {
-      title: "Portefeuille comparé à un placement 100 % XIU.TO",
-      periodLabel: "Période du graphique",
-      portfolio: "Le portefeuille",
-      benchmark: "Seulement XIU.TO",
-      lead: (pct: string) => `${pct} vs XIU.TO`,
-      keyboard: "Flèches gauche et droite : parcourir les dates. Échap : revenir à aujourd’hui.",
-      tableCaption: (period: string) => `Valeur du portefeuille et de XIU.TO seul, sur ${period}`,
-    },
-    alloc: {
-      title: "Répartition",
-    },
-    gov: {
-      title: "Gouvernance",
-      compliant: "Conforme",
-      sub: "limites du profil respectées",
-      lastCheck: "Dernier contrôle :",
-      lastCheckText: "aujourd’hui, par le Judge, après le calcul des pondérations.",
-      limit: (text: string) => `limite ${text}`,
-      journal: "Voir le journal des décisions",
-      note: "Plafonds dérivés du profil · valeurs d’exemple",
-    },
-    stress: {
-      title: "Stress test 2022",
-      within: "Dans la limite",
-      dollars: (money: string) => `soit ${money} au pire moment`,
-      note: "Actions et obligations ont baissé ensemble en 2022 : l’or et l’encaisse ont amorti le choc.",
-      aria: (drop: string, limit: string) => `Baisse de ${drop}, limite tolérable de ${limit}`,
-      limitLabel: (pct: string) => `${pct} limite`,
-    },
-    months: {
-      title: "Rendements mensuels",
-      span: (from: string, to: string) => `${from} à ${to}`,
-      lastMonth: (date: string) => `Dernier mois · ${date}`,
-      hint: (count: number) => `${count} mois · survolez une barre`,
-      keyboard: "Flèches gauche et droite : parcourir les mois.",
-      positive: "Mois positifs",
-      positiveValue: (count: number, total: number) => `${count} sur ${total}`,
-      best: "Meilleur mois",
-      worst: "Pire mois",
-      return: "Rendement",
-    },
-    log: {
-      title: "Journal des décisions",
-      who: "agents et vous",
-    },
-    why: {
-      title: "Pourquoi cette répartition ?",
-    },
-    positions: {
-      title: "Positions",
-      count: (count: number) => `${count} lignes`,
-      security: "Titre",
-      pocket: "Poche",
-      weight: "Poids",
-      value: "Valeur",
-      vol: "Volatilité 1 an",
-    },
-    simulated: {
-      title: "Votre portefeuille simulé",
-      text: (tab: string, persona: string) =>
-        `Il se construit dans l’onglet « ${tab} », en choisissant « ${persona} ». Le moteur du volet finance part de votre profil et, s’il y a lieu, de votre portefeuille existant :`,
-      items: [
-        "une proposition de portefeuille optimisée sous les limites de votre profil;",
-        "un débat entre l’agent du portefeuille et quatre lentilles (horizon, risque, diversité et préférences, contraintes);",
-        "le contrôle du Judge, par le code, sans dérogation possible;",
-        "une explication dont chaque chiffre renvoie au fait qui le source, et la trace de la construction.",
-      ],
-      honest: "Cette page ne montre aucun chiffre inventé : seulement ce que le code a calculé pour votre profil.",
-      cta: "Ouvrir le portefeuille simulé",
-    },
-    existing: {
-      title: "Votre portefeuille existant",
-      none: "Aucun portefeuille existant n’a été analysé pour ce profil.",
-      cta: "Revenir à mon profil",
-    },
-  },
 };
 
 export type Screens = typeof screensFr;
@@ -274,7 +163,6 @@ export type Screens = typeof screensFr;
 export const screensEn: Screens = {
   appNav: {
     dashboard: "Dashboard",
-    details: "Details",
     portfolio: "Simulated portfolio",
     profile: "My profile",
     knowledge: "Knowledge base",
@@ -354,7 +242,6 @@ export const screensEn: Screens = {
     hello: "Hello",
     leadSample: "An example simulated portfolio, at a glance. Retirement planned in 2030.",
     leadReal: "Your profile at a glance, the basis of your simulated portfolio.",
-    allDetails: "See all details",
     exampleChip: "Example values",
     sample: {
       value: "Simulated portfolio value",
@@ -363,7 +250,6 @@ export const screensEn: Screens = {
       volSub: (cap: string) => `Under your ${cap} cap`,
       alloc: "In bonds and gold to protect your capital",
       allocAria: (list: string) => `Allocation: ${list}`,
-      allocMore: "See each position",
       drop: "Worst fall in 2022",
       dropSub: (money: string) => `That is ${money} on this capital`,
       limits: "Profile limits respected",
@@ -377,7 +263,6 @@ export const screensEn: Screens = {
       riskSub: (tolerance: string, capacity: string) => `The more cautious of your tolerance (${tolerance}) and your capacity (${capacity})`,
       portfolio: "Your existing portfolio, read by A2 and valued by code",
       portfolioAria: "Allocation of your existing portfolio by asset class",
-      portfolioMore: "See the exposures",
       simulated: {
         title: "Simulated portfolio",
         lead: "Built from your profile",
@@ -423,112 +308,5 @@ export const screensEn: Screens = {
     how: (count: number) => `How I answered (${count} step${count > 1 ? "s" : ""})`,
     sampleTag: "Simulated example",
     exampleOnly: "Example: this action is not wired yet",
-  },
-  details: {
-    title: "Portfolio details",
-    lead: "Everything behind the simulated portfolio, from daily returns to the agents' decisions.",
-    realLead: "Where to build your simulated portfolio, and your existing portfolio as valued by code.",
-    back: "Back to the dashboard",
-    today: "Today",
-    date: "Date",
-    periodLabel: "Period",
-    periods: { "1m": "1 month", "1y": "1 year", "3y": "3 years", "5y": "5 years" },
-    pageNote: "PolyFinances 2026 Datathon prototype · not financial advice · every value on this page is synthetic.",
-    hero: {
-      aria: "Value and returns of the last month",
-      lead: "The last month at a glance.",
-      worth: "Simulated value",
-      daily: "Daily return",
-    },
-    retirement: {
-      title: "Retirement",
-      countdown: (years: number, months: number) => `${years} year${years > 1 ? "s" : ""} and ${months} month${months > 1 ? "s" : ""}`,
-      before: "before the planned retirement",
-      today: "Equities today",
-      target: (year: number) => `Target in ${year}`,
-      note: "Risk decreases gradually until retirement.",
-      pathAria: (pct: string) => `Path to retirement: ${pct} of the way`,
-    },
-    vol: {
-      title: "Volatility",
-      annualized: "annualized",
-      cap: (pct: string) => `Profile cap: ${pct}`,
-    },
-    chart: {
-      title: "Portfolio compared with 100% XIU.TO",
-      periodLabel: "Chart period",
-      portfolio: "The portfolio",
-      benchmark: "XIU.TO only",
-      lead: (pct: string) => `${pct} vs XIU.TO`,
-      keyboard: "Left and right arrows: move through the dates. Escape: back to today.",
-      tableCaption: (period: string) => `Value of the portfolio and of XIU.TO alone, over ${period}`,
-    },
-    alloc: {
-      title: "Allocation",
-    },
-    gov: {
-      title: "Governance",
-      compliant: "Compliant",
-      sub: "profile limits respected",
-      lastCheck: "Last check:",
-      lastCheckText: "today, by the Judge, after the weights were computed.",
-      limit: (text: string) => `limit ${text}`,
-      journal: "See the decision log",
-      note: "Caps derived from the profile · example values",
-    },
-    stress: {
-      title: "2022 stress test",
-      within: "Within the limit",
-      dollars: (money: string) => `that is ${money} at the worst point`,
-      note: "Stocks and bonds fell together in 2022: gold and cash cushioned the shock.",
-      aria: (drop: string, limit: string) => `Fall of ${drop}, tolerable limit of ${limit}`,
-      limitLabel: (pct: string) => `${pct} limit`,
-    },
-    months: {
-      title: "Monthly returns",
-      span: (from: string, to: string) => `${from} to ${to}`,
-      lastMonth: (date: string) => `Last month · ${date}`,
-      hint: (count: number) => `${count} months · hover a bar`,
-      keyboard: "Left and right arrows: move through the months.",
-      positive: "Positive months",
-      positiveValue: (count: number, total: number) => `${count} of ${total}`,
-      best: "Best month",
-      worst: "Worst month",
-      return: "Return",
-    },
-    log: {
-      title: "Decision log",
-      who: "agents and you",
-    },
-    why: {
-      title: "Why this allocation?",
-    },
-    positions: {
-      title: "Positions",
-      count: (count: number) => `${count} lines`,
-      security: "Security",
-      pocket: "Pocket",
-      weight: "Weight",
-      value: "Value",
-      vol: "1-year volatility",
-    },
-    simulated: {
-      title: "Your simulated portfolio",
-      text: (tab: string, persona: string) =>
-        `It is built in the “${tab}” tab, by picking “${persona}”. The finance engine starts from your profile and, if any, your existing portfolio:`,
-      items: [
-        "a portfolio proposal optimized under your profile’s limits;",
-        "a debate between the portfolio agent and four lenses (horizon, risk, diversity and preferences, constraints);",
-        "the Judge’s check, by code, with no possible override;",
-        "an explanation where every number links to the fact that sources it, and the trace of the build.",
-      ],
-      honest: "This page shows no made-up number: only what the code computed for your profile.",
-      cta: "Open the simulated portfolio",
-    },
-    existing: {
-      title: "Your existing portfolio",
-      none: "No existing portfolio was analyzed for this profile.",
-      cta: "Back to my profile",
-    },
   },
 };

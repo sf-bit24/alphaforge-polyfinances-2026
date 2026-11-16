@@ -7,7 +7,7 @@
 import type { L } from "./portfolio";
 
 export type DemoKey = "trap" | "sandbox" | "keep" | "gold" | "nvda";
-export type DemoAction = { key: DemoKey | "dashboardDetails" | "noop"; label: L; primary?: boolean; href?: string };
+export type DemoAction = { key: DemoKey | "simulatedPortfolio" | "noop"; label: L; primary?: boolean; href?: string };
 
 export interface DemoCheck {
   label: L;
@@ -123,7 +123,7 @@ export const DEMO: Record<DemoKey, DemoReply> = {
     },
     sources: [PRICES, { fr: "Corrélations sur 5 ans", en: "5-year correlations" }],
     actions: [
-      { key: "dashboardDetails", label: { fr: "Appliquer à ma simulation", en: "Apply to my simulation" }, primary: true, href: "/details" },
+      { key: "simulatedPortfolio", label: { fr: "Appliquer à ma simulation", en: "Apply to my simulation" }, primary: true, href: "/portfolio" },
       { key: "noop", label: { fr: "Ajuster le montant", en: "Adjust the amount" } },
     ],
     trace: [

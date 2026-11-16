@@ -12,7 +12,6 @@ Le contrat avec les runtimes Python et l'infrastructure est `app/CONTRACTS.md` :
 | --- | --- |
 | `/` | **Parcours du profil** : un personnage marche le long d'un chemin et s'arrête à un panneau par question de base (le runtime choisit la suivante, embranchements compris). Touches 1 à 9 pour répondre, « Pourquoi cette question ? » tiré de `help`. Un panneau à mallette accueille le portefeuille existant (A2 : texte collé ou fichiers, puis vérification des positions). La maison affiche la première version du profil et mène au tableau de bord. Boutons Trace et Profil : la trace complète et le profil détaillé (faits, provenance, documents OKF) s'ouvrent dans un panneau latéral. |
 | `/dashboard` | **Tableau de bord** : tuiles d'indicateurs et assistant. L'assistant s'ouvre sur un paysage (personnage, volée d'oiseaux qui réagit au pointeur et à la saisie), puis devient la conversation avec A1 (`followup.reply`) : relances, questions structurées, arrêt dès 70 %. Chaque réponse porte ses sources et « Comment j'ai répondu », la trace de la requête. |
-| `/details` | **Détails du portefeuille** : valeur, rendements quotidiens, retraite, volatilité, comparaison avec XIU.TO, répartition, gouvernance, stress test 2022, rendements mensuels, journal des décisions, les quatre questions de l'atelier BNCD, positions. |
 | `/portfolio` | **Portefeuille simulé** : la `Decision` du runtime `portfolio` (CONTRACTS.md, section 12), affichée telle quelle pour un profil de démonstration FICTION (Amira, Mateo, Robert) ou, hors mode `mock`, pour son propre profil. Positions cœur et satellite, style et bande de part actions de l'étape 0, classement des titres individuels (momentum en sensibilité seulement), les quatre questions avec l'étiquette FAIT, HYPOTHÈSE ou FICTION de chaque énoncé et ses faits cliquables (valeur, source, étape de trace), contrefactuels, verdicts des lentilles, contrôles du Judge, trace. Bandeau permanent « Simulation éducative — aucun conseil, aucune transaction ». |
 | `/knowledge` | Base de connaissances générale et collecte (A4, A5, A6). |
 | `/settings` | Réglages (langue, niveau de connaissances, session ou compte connecté). |
@@ -22,10 +21,10 @@ Le contrat avec les runtimes Python et l'infrastructure est `app/CONTRACTS.md` :
 
 ### Données d'exemple : mode `mock` seulement
 
-Le tableau de bord, la page Détails et l'assistant ne sont pas branchés sur le moteur de portefeuille (A3, lentilles, Judge) : seule la page `/portfolio` affiche ses décisions. Décision de l'équipe du 2026-11-14 :
+Le tableau de bord et l'assistant ne sont pas branchés sur le moteur de portefeuille (A3, lentilles, Judge) : seule la page `/portfolio` affiche ses décisions. Décision de l'équipe du 2026-11-14 :
 
-- en mode `mock`, les tuiles du tableau de bord, la page Détails et les réponses de l'assistant aux questions suggérées sur le portefeuille (le piège des 50 000 $, l'or, NVDA) reprennent l'exemple des maquettes, marqué « Valeurs d'exemple » et « Exemple simulé » (`src/lib/sample/`, série synthétique calibrée : volatilité 6,1 %, baisse 2022 de −9,8 %, 400 000 $);
-- en modes `local` et `aws`, aucun chiffre inventé : les tuiles montrent ce que le code calcule (complétude, risque retenu, horizon, niveau, portefeuille existant valorisé par A2). La page Détails a deux tuiles : « Votre portefeuille simulé » décrit ce que le moteur construit à partir du profil (proposition sous ses limites, débat avec les quatre lentilles, contrôle du Judge, explication sourcée) et mène à `/portfolio`, profil « Mon profil »; « Votre portefeuille existant » montre les expositions du portefeuille confirmé, valorisé par A2, ou renvoie au profil s'il n'y en a pas.
+- en mode `mock`, les tuiles du tableau de bord et les réponses de l'assistant aux questions suggérées sur le portefeuille (le piège des 50 000 $, l'or, NVDA) reprennent l'exemple des maquettes, marqué « Valeurs d'exemple » et « Exemple simulé » (`src/lib/sample/`, série synthétique calibrée : volatilité 6,1 %, baisse 2022 de −9,8 %, 400 000 $);
+- en modes `local` et `aws`, aucun chiffre inventé : les tuiles montrent ce que le code calcule (complétude, risque retenu, horizon, niveau, portefeuille existant valorisé par A2). La tuile du portefeuille montre le portefeuille existant confirmé (valeur et cinq plus grandes classes d'actifs); sans lui, « Portefeuille simulé » décrit ce que le moteur construit à partir du profil et mène à `/portfolio`, profil « Mon profil ».
 
 ### Animations
 
@@ -185,10 +184,9 @@ Limites appliquées par le serveur : 5 fichiers de 10 Mo au plus par `portfolio.
 
 ```text
 src/
-  app/                  / (parcours), (app)/ : dashboard, details, portfolio, knowledge, settings, sous la navigation; routes /api
+  app/                  / (parcours), (app)/ : dashboard, portfolio, knowledge, settings, sous la navigation; routes /api
   components/journey/   parcours : scène et personnage, cartes de question, portefeuille existant, synthèse
   components/dashboard/ tableau de bord : tuiles, assistant, scène d'accueil et volée d'oiseaux
-  components/details/   détails du portefeuille et graphiques
   components/           aussi : profil (champs de réponse, revue A2, panneau), trace, base de connaissances, réglages, composants communs
   lib/contract/         schémas zod du contrat et des requêtes, lecture des sorties de collecte
   lib/server/           passerelle : configuration, modes local et aws, erreurs, SSE
@@ -206,7 +204,7 @@ src/
 tests/                  tests Vitest (contrat, simulateur, passerelle, SSE, parcours, données d'exemple, portefeuille simulé, textes)
 ```
 
-Les styles des trois écrans des maquettes sont des modules CSS (`*.module.css`) portés des maquettes; le portefeuille simulé reprend ceux de Détails avec les siens, et Yan, le robot de l'assistant, a le sien. Les autres composants utilisent Tailwind avec les jetons de `globals.css`.
+Les styles des écrans des maquettes sont des modules CSS (`*.module.css`) portés des maquettes; le portefeuille simulé garde le cadre, les tuiles et les tableaux de la maquette des détails (`components/portfolio/base.module.css`) avec les siens, et Yan, le robot de l'assistant, a le sien. Les autres composants utilisent Tailwind avec les jetons de `globals.css`.
 
 ## Limites connues
 

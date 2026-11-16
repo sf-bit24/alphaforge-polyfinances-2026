@@ -22,19 +22,6 @@ export function formatSignedPercent(share: number, locale: Locale, digits = 1): 
   return `${share >= 0 ? "+" : "−"}${formatPercent(Math.abs(share), locale, digits)}`;
 }
 
-/** A difference of two returns, in percentage points: "−35,5 pts". */
-export function formatSignedPoints(share: number, locale: Locale, digits = 1): string {
-  return `${share >= 0 ? "+" : "−"}${formatNumber(Math.abs(share) * 100, locale, digits)} pts`;
-}
-
-/** An axis value in thousands or millions of dollars: "450 k$" / "$450k". */
-export function formatCompactMoney(value: number, locale: Locale): string {
-  const millions = Math.abs(value) >= 1_000_000;
-  const amount = formatNumber(value / (millions ? 1_000_000 : 1000), locale, millions ? 1 : 0);
-  const unit = millions ? "M" : "k";
-  return locale === "fr" ? `${amount} ${unit}$` : `$${amount}${unit}`;
-}
-
 /** Money with a U+2212 minus for losses: "−39 200 $". */
 export function formatSignedMoney(value: number, locale: Locale, currency = "CAD", digits = 0): string {
   return `${value < 0 ? "−" : ""}${formatMoney(Math.abs(value), locale, currency, digits)}`;

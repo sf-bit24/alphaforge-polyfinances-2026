@@ -1,7 +1,8 @@
-import type { HTMLAttributes, ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { cn } from "./cn";
 
-export function Card({ className, ...rest }: HTMLAttributes<HTMLElement>) {
+/** A panel; `ref` reaches its section (to scroll it, for instance). */
+export function Card({ className, ...rest }: ComponentProps<"section">) {
   return <section className={cn("rounded-xl bg-surface shadow-card ring-1 ring-ink-200/80", className)} {...rest} />;
 }
 

@@ -442,6 +442,7 @@ const fr = {
     rendered: "Voir le rendu",
     json: "Document JSON",
     invalidFrontmatter: "Frontmatter illisible : le document est affiché tel quel.",
+    sourceCount: ((count: number) => `${count} source${count > 1 ? "s" : ""}`) as Fn<[number]>,
   },
   trace: {
     title: "Trace d’exécution",
@@ -497,6 +498,7 @@ const fr = {
     search: "Filtrer les documents",
     count: ((count: number) => `${count} document${count > 1 ? "s" : ""}`) as Fn<[number]>,
     noMatch: "Aucun document ne correspond au filtre.",
+    matches: ((count: number) => `${count} document${count > 1 ? "s" : ""} trouvé${count > 1 ? "s" : ""}`) as Fn<[number]>,
     select: "Choisissez un document pour le lire.",
     emptyGeneral: "La base générale est encore vide.",
     emptyGeneralHelp:
@@ -520,6 +522,10 @@ const fr = {
     linkMissing: "Ce document n’est pas dans la base générale.",
     graph: {
       title: "Graphe des liens",
+      find: "Trouver dans le graphe",
+      findPlaceholder: "Document ou titre coté",
+      findTable: "Filtrer le tableau",
+      findNone: "Aucun nœud ne correspond.",
       lead: "Les documents de la base générale, les titres qu’ils citent et les liens entre eux.",
       subtitle: ((documents: number, tickers: number, links: number) =>
         `${documents} document${documents > 1 ? "s" : ""}, ${tickers} titre${tickers > 1 ? "s" : ""}, ${links} lien${links > 1 ? "s" : ""}`) as Fn<
@@ -1128,6 +1134,7 @@ const en: Dictionary = {
     rendered: "View rendered",
     json: "JSON document",
     invalidFrontmatter: "Unreadable frontmatter: the document is shown as is.",
+    sourceCount: (count: number) => `${count} source${count > 1 ? "s" : ""}`,
   },
   trace: {
     title: "Execution trace",
@@ -1183,6 +1190,7 @@ const en: Dictionary = {
     search: "Filter documents",
     count: (count: number) => `${count} document${count > 1 ? "s" : ""}`,
     noMatch: "No document matches the filter.",
+    matches: (count: number) => `${count} document${count > 1 ? "s" : ""} found`,
     select: "Pick a document to read it.",
     emptyGeneral: "The general base is still empty.",
     emptyGeneralHelp:
@@ -1206,6 +1214,10 @@ const en: Dictionary = {
     linkMissing: "This document is not in the general base.",
     graph: {
       title: "Link graph",
+      find: "Find in the graph",
+      findPlaceholder: "Document or security",
+      findTable: "Filter the table",
+      findNone: "No node matches.",
       lead: "The documents of the general base, the securities they cite and the links between them.",
       subtitle: (documents: number, tickers: number, links: number) =>
         `${documents} document${documents > 1 ? "s" : ""}, ${tickers} ${tickers > 1 ? "securities" : "security"}, ${links} link${links > 1 ? "s" : ""}`,

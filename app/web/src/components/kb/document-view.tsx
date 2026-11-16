@@ -14,7 +14,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { ErrorNotice } from "@/components/ui/error-notice";
 import { JsonView } from "@/components/ui/json-view";
 import { Markdown, type LinkRenderer } from "@/components/ui/markdown";
-import { Spinner } from "@/components/ui/spinner";
+import { DocumentSkeleton } from "@/components/ui/skeleton";
 
 function asList(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
@@ -229,7 +229,7 @@ export function DocumentLoader({ documentKey, clientId, links }: { documentKey: 
   const { data, error, loading } = useAsync(`${documentKey}|${locale}`, (signal) =>
     getKbDocument(documentKey, clientId, { locale, signal, messages: callMessages(t) }),
   );
-  if (loading) return <Spinner label={t.documentView.loading} />;
+  if (loading) return <DocumentSkeleton label={t.documentView.loading} />;
   if (error) return <ErrorNotice error={error} />;
   if (!data) return null;
   return <DocumentContent content={data.content} documentKey={data.key} links={links} />;

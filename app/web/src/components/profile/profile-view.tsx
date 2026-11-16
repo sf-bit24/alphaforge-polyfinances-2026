@@ -11,7 +11,7 @@ import { itemForStage } from "@/lib/journey/path";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { cn } from "@/components/ui/cn";
-import { Spinner } from "@/components/ui/spinner";
+import { SkeletonCard } from "@/components/ui/skeleton";
 import { ClientDocuments, DimensionList, FactsList, MissingList, ProfileSummary } from "./profile-panel";
 
 const LINK_BUTTON = {
@@ -144,8 +144,15 @@ export function ProfileView() {
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
       <Heading actions={state ? <ProfileActions baseDone={baseDone} /> : undefined} />
       {loading ? (
-        <div className="flex justify-center py-24">
-          <Spinner label={t.session.loading} />
+        <div role="status" aria-label={t.session.loading} className="mt-8 grid items-start gap-6 lg:grid-cols-2">
+          <div className="space-y-6">
+            <SkeletonCard lines={4} />
+            <SkeletonCard lines={6} />
+          </div>
+          <div className="space-y-6">
+            <SkeletonCard lines={5} />
+            <SkeletonCard lines={2} />
+          </div>
         </div>
       ) : null}
       {!loading && !state ? <NoProfile /> : null}

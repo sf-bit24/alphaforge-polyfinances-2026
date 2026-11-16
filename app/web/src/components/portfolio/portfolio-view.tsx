@@ -16,6 +16,7 @@ import { DEMO_PERSONAS, DEMO_SCENARIOS } from "@/lib/portfolio/personas";
 import { cn } from "@/components/ui/cn";
 import { Drawer } from "@/components/ui/drawer";
 import { ErrorNotice } from "@/components/ui/error-notice";
+import { SkeletonCard } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import d from "./base.module.css";
 import { DecisionView } from "./decision-view";
@@ -220,6 +221,20 @@ interface BuildStatusProps {
   engine: BuildMode;
 }
 
+/** The decision's outline while it loads: the summary, the positions, the explanation. */
+function DecisionSkeleton() {
+  return (
+    <div aria-hidden className="mx-auto grid w-full max-w-5xl gap-4 pb-10">
+      <SkeletonCard lines={2} />
+      <div className="grid gap-4 md:grid-cols-2">
+        <SkeletonCard lines={5} />
+        <SkeletonCard lines={5} />
+      </div>
+      <SkeletonCard lines={4} />
+    </div>
+  );
+}
+
 /** The gateway's health first, then the build: not asked yet, under way, failed, or the decision. */
 function BuildStatus({ health, build, mock, engine }: BuildStatusProps) {
   const { t } = useI18n();
@@ -227,9 +242,12 @@ function BuildStatus({ health, build, mock, engine }: BuildStatusProps) {
   const current = build.current;
   if (health === "idle" || health === "loading") {
     return (
-      <div className={p.status}>
-        <Spinner label={t.common.loading} />
-      </div>
+      <>
+        <div className={p.status}>
+          <Spinner label={t.common.loading} />
+        </div>
+        <DecisionSkeleton />
+      </>
     );
   }
   if (current === undefined) {
@@ -241,10 +259,13 @@ function BuildStatus({ health, build, mock, engine }: BuildStatusProps) {
   }
   if (current.status === "loading") {
     return (
-      <div className={p.status} aria-live="polite">
-        <Spinner label={v.building} />
-        {engine === "llm" ? <p className={p.sub}>{v.buildingLlm}</p> : null}
-      </div>
+      <>
+        <div className={p.status} aria-live="polite">
+          <Spinner label={v.building} />
+          {engine === "llm" ? <p className={p.sub}>{v.buildingLlm}</p> : null}
+        </div>
+        <DecisionSkeleton />
+      </>
     );
   }
   if (current.status === "error") return <ErrorNotice error={current.error} onRetry={build.ask} />;

@@ -8,9 +8,9 @@ import { formatPercent } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
 import { itemForStage } from "@/lib/journey/path";
 import { cn } from "@/components/ui/cn";
-import { Spinner } from "@/components/ui/spinner";
 import { Assistant } from "./assistant";
 import { ProfileBento, SampleBento } from "./bento";
+import { BentoSkeleton, DashboardSkeleton } from "./dashboard-skeleton";
 import { YanMark } from "@/components/yan/yan";
 import styles from "./dashboard.module.css";
 
@@ -36,7 +36,8 @@ function Gate({ title, text, cta }: { title: string; text: string; cta: string }
 
 /** The key figures: the example's in `mock` mode, the profile's otherwise, and an empty frame until the mode is known. */
 function KeyFigures({ sample, state }: { sample: boolean | null; state: ClientState }) {
-  if (sample === null) return <div className={styles.bento} aria-busy />;
+  const { t } = useI18n();
+  if (sample === null) return <BentoSkeleton label={t.common.loading} />;
   return sample ? <SampleBento /> : <ProfileBento state={state} />;
 }
 
@@ -46,11 +47,7 @@ export function DashboardView() {
   const sample = useSampleMode();
 
   if (!session.hydrated || (session.resuming && !session.state)) {
-    return (
-      <div className="flex flex-1 items-center justify-center py-24">
-        <Spinner label={t.session.loading} />
-      </div>
-    );
+    return <DashboardSkeleton label={t.session.loading} />;
   }
   const state = session.state;
   if (!state) return <Gate title={t.dash.gate.noneTitle} text={t.dash.gate.noneText} cta={t.dash.gate.noneCta} />;

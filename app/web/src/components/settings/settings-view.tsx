@@ -13,6 +13,7 @@ import { useI18n } from "@/lib/i18n/provider";
 import { SignOutForm } from "@/components/layout/account-menu";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/components/ui/cn";
 import { ErrorNotice } from "@/components/ui/error-notice";
 
@@ -94,8 +95,20 @@ function KnowledgeLevels({ current, busy, onSelect }: { current: KnowledgeLevel 
   );
 }
 
+/** Three grey rows where the levels will be, while the profile loads. */
+function LevelsSkeleton() {
+  const { t } = useI18n();
+  return (
+    <div role="status" aria-label={t.common.loading} className="space-y-2 px-5 py-4">
+      <Skeleton className="h-12 w-full rounded-lg" />
+      <Skeleton className="h-12 w-full rounded-lg" />
+      <Skeleton className="h-12 w-full rounded-lg" />
+    </div>
+  );
+}
+
 /** The level is part of the profile: it needs a session. */
-function KnowledgeCard({ state, saved, busy, onSelect }: { state: ClientState | null; saved: boolean; busy: boolean; onSelect: (level: KnowledgeLevel) => Promise<void> }) {
+function KnowledgeCard({ state, loading, saved, busy, onSelect }: { state: ClientState | null; loading: boolean; saved: boolean; busy: boolean; onSelect: (level: KnowledgeLevel) => Promise<void> }) {
   const { t } = useI18n();
   return (
     <Card>
@@ -105,16 +118,18 @@ function KnowledgeCard({ state, saved, busy, onSelect }: { state: ClientState | 
         icon={<SlidersHorizontal aria-hidden className="size-4" />}
         actions={saved ? <SavedNote /> : null}
       />
-      {state ? (
+      {loading ? <LevelsSkeleton /> : null}
+      {!loading && state ? (
         <KnowledgeLevels current={state.profile.knowledge_level} busy={busy} onSelect={onSelect} />
-      ) : (
+      ) : null}
+      {!loading && !state ? (
         <p className="px-5 py-4 text-sm text-ink-600">
           {t.settings.knowledgeNeedsSession}{" "}
           <Link href="/" className="font-medium text-navy underline underline-offset-2">
             {t.home.start}
           </Link>
         </p>
-      )}
+      ) : null}
     </Card>
   );
 }
@@ -266,7 +281,7 @@ export function SettingsView() {
       ) : null}
 
       <LanguageCard saved={saved === "locale"} busy={busy} onSelect={changeLocale} />
-      <KnowledgeCard state={state} saved={saved === "knowledge"} busy={busy} onSelect={changeLevel} />
+      <KnowledgeCard state={state} loading={!session.hydrated || (session.resuming && !state)} saved={saved === "knowledge"} busy={busy} onSelect={changeLevel} />
       {account.status === "signed_in" ? (
         <AccountCard user={account.user} />
       ) : (

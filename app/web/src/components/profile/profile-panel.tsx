@@ -16,7 +16,7 @@ import { DocumentDialog } from "@/components/kb/document-view";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/components/ui/cn";
 import { ErrorNotice } from "@/components/ui/error-notice";
-import { Spinner } from "@/components/ui/spinner";
+import { SkeletonRows } from "@/components/ui/skeleton";
 import { ClientKbStatusCard } from "./client-kb-status";
 import { CompletenessMeter, KnowledgeMeter, RiskMeter } from "./meters";
 
@@ -191,7 +191,7 @@ function DocumentsSection({ clientId, revision }: { clientId: string; revision: 
   return (
     <>
       {error ? <ErrorNotice error={error} compact /> : null}
-      {loading ? <Spinner label={t.common.loading} /> : null}
+      {loading ? <SkeletonRows label={t.common.loading} count={2} /> : null}
       {empty ? <p className="text-sm text-ink-500">{t.panel.noDocuments}</p> : null}
       <ul className="-mx-2 space-y-0.5">
         {docs.map((item) => (

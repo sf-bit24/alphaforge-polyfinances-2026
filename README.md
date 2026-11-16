@@ -4,7 +4,13 @@ Aide à la décision d'investissement agentique et explicable, construite par l'
 
 > **Simulation seulement** : aucune transaction réelle, aucun conseil financier personnalisé.
 
-[Application déployée](https://d2gsaqmfxygugx.cloudfront.net) (jusqu'au 16 novembre 2026, 13 h 59) · [Démo vidéo](https://github.com/user-attachments/assets/b2629c28-754f-4717-b255-53ac79fe743f) · [Architecture (PDF)](docs/architecture/alphaforge-architecture-aws.pdf) · [One-pager](docs/one-pager/alphaforge-one-pager.pdf) · [Cas d'utilisation](docs/use-cases/README.md)
+[Application déployée](https://d2gsaqmfxygugx.cloudfront.net) (jusqu'au 16 novembre 2026, 13 h 59) · [Architecture (PDF)](docs/architecture/alphaforge-architecture-aws.pdf) · [One-pager](docs/one-pager/alphaforge-one-pager.pdf) · [Cas d'utilisation](docs/use-cases/README.md)
+
+## Démo vidéo
+
+https://github.com/user-attachments/assets/b2629c28-754f-4717-b255-53ac79fe743f
+
+*2 min 19 s, en français, sous-titres incrustés.* Robert, 59 ans (FICTION), demande 50 000 $ dans l'action TSLA : son profil, l'optimisation sous ses limites, quatre lentilles critiques, le Judge, puis le refus encadré et expliqué.
 
 ## Architecture
 

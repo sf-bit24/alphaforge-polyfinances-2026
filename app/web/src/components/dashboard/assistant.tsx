@@ -1,5 +1,6 @@
 "use client";
 
+import { House } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import type { ClientState, Locale } from "@/lib/contract/schemas";
 import { useSession } from "@/lib/client/session";
@@ -15,6 +16,8 @@ import { IntroScene, SuggestionChips, type IntroChip } from "./intro-scene";
 import { isDemoKey, useDemoScript, useFollowupForm, useThreadScroll, type FollowupForm } from "./use-assistant";
 
 interface ChipOffer {
+  /** The landing scene of a returning investor: back to the conversation so far. */
+  resume?: boolean;
   /** « Ask me your follow-up questions » (`offersFollowups`). */
   followups: boolean;
   /** `mock` mode: the draft's demo prompts are offered, except those already played. */
@@ -26,7 +29,9 @@ interface ChipOffer {
 
 function suggestedChips(offer: ChipOffer, t: Dictionary, locale: Locale): IntroChip[] {
   const list: IntroChip[] = [];
-  if (offer.followups) list.push({ key: "followups", label: t.assistant.chipFollowups, tone: "ok" });
+  if (offer.resume) list.push({ key: "resume", label: t.assistant.chipResume, tone: "ok" });
+  // Resuming already reaches the follow-ups in progress: one chip, not two.
+  if (offer.followups && !offer.resume) list.push({ key: "followups", label: t.assistant.chipFollowups, tone: "ok" });
   if (offer.sample)
     for (const chip of DEMO_CHIPS)
       if (!offer.played.includes(chip.key)) list.push({ key: chip.key, label: tr(DEMO[chip.key].user, locale), tone: chip.trap ? "trap" : undefined });
@@ -69,15 +74,26 @@ function MessageForm({ form, replying }: { form: FollowupForm; replying: boolean
 }
 
 /** The input's hint, and during the follow-ups whether they can be stopped yet: one line each. */
-function ComposeHint({ followups, completeness }: { followups: boolean; completeness: ClientState["completeness"] }) {
+/** The lines under the message field, and the way back to Yan's landing scene. */
+function ComposeHint({ followups, completeness, onBack }: { followups: boolean; completeness: ClientState["completeness"]; onBack: () => void }) {
   const { t, locale } = useI18n();
   return (
-    <div className={styles.hints}>
-      {composeHints(t, locale, followups, completeness).map((line) => (
-        <p key={line} className={styles.hint}>
-          {line}
-        </p>
-      ))}
+    <div className="flex items-start justify-between gap-3">
+      <div className={styles.hints}>
+        {composeHints(t, locale, followups, completeness).map((line) => (
+          <p key={line} className={styles.hint}>
+            {line}
+          </p>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={onBack}
+        className="mt-1.5 inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-navy hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-focus"
+      >
+        <House aria-hidden className="size-3.5" />
+        {t.assistant.backToScene}
+      </button>
     </div>
   );
 }
@@ -121,7 +137,7 @@ function AssistantIntro({ view, status, sample, onDone }: { view: ThreadView; st
   return (
     <IntroScene
       {...introTexts(t, view, followups)}
-      chips={suggestedChips({ followups, sample, played: [], stop: false }, t, locale)}
+      chips={suggestedChips({ resume: session.conversation.length > 0, followups, sample, played: [], stop: false }, t, locale)}
       disabled={Boolean(session.pending)}
       onDone={onDone}
     />
@@ -136,7 +152,8 @@ function AssistantIntro({ view, status, sample, onDone }: { view: ThreadView; st
 export function Assistant({ state, sample }: { state: ClientState; sample: boolean }) {
   const { t, locale } = useI18n();
   const session = useSession();
-  const [intro, setIntro] = useState(() => session.conversation.length === 0);
+  // Yan's landing scene opens every visit; a returning investor goes back to the conversation in one click.
+  const [intro, setIntro] = useState(true);
   const { demoEntries, demoTyping, playedDemos, playDemo } = useDemoScript();
   const view = threadView(state, session, demoEntries);
   const form = useFollowupForm(view.askQuestions ? state.questions : []);
@@ -145,6 +162,7 @@ export function Assistant({ state, sample }: { state: ClientState; sample: boole
   const status = followupsStatus(view, session.conversation.length, state.questions.length);
 
   const act = (chip: string, text: string) => {
+    if (chip === "resume") return;
     if (chip === "followups") {
       if (startsFollowups(status)) void session.reply({});
     } else if (chip === "stop") void form.send({ stop: true, text: "" });
@@ -180,7 +198,7 @@ export function Assistant({ state, sample }: { state: ClientState; sample: boole
         onChip={(chip) => act(chip.key, chip.label)}
         form={form}
         replying={view.replying}
-        hint={<ComposeHint followups={view.followups} completeness={state.completeness} />}
+        hint={<ComposeHint followups={view.followups} completeness={state.completeness} onBack={() => setIntro(true)} />}
       />
     </section>
   );

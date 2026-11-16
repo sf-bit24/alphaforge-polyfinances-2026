@@ -2,38 +2,25 @@
 
 Relevé sur le compte AWS du Datathon (us-east-1) le 15 novembre 2026, release `1f026dbf`. Simulation seulement.
 
-## Les agents, en clair
+## Les agents et leurs runtimes AgentCore
 
-« Modèle » veut dire Claude Opus 5.5 sur Bedrock ; « code » veut dire du Python déterministe, sans modèle.
+13 rôles, dont 10 qui appellent le modèle et 3 en code, déployés dans 8 runtimes AgentCore. Un runtime peut porter plusieurs rôles. « Modèle » veut dire Claude Opus 5.5 sur Bedrock ; « code » veut dire du Python déterministe, sans modèle.
 
-| Agent | Ce qu'il fait | Moteur | Runtime |
-| --- | --- | --- | --- |
-| Les questions de base | Pose les questions fixes du profil et valide chaque réponse. | code | `profile` |
-| L'agent du profil | Ne demande que ce qui manque pour compléter le profil, au plus trois questions par tour, puis l'écrit. | modèle | `profile` |
-| L'agent du portefeuille existant | Lit un relevé (PDF, tableur, image, texte) et en extrait les positions ; le code les valorise. | modèle | `profile` |
-| Le calcul du portefeuille (étape 0 et optimiseur) | Traduit le profil en limites, choisit le style et les titres, puis calcule les poids (cvxpy). | code | `portfolio` |
-| L'avocat | Défend le portefeuille construit, puis répond aux critiques au second tour. | modèle | `portfolio` |
-| Les quatre lentilles critiques | Horizon, risque, diversification, contraintes : contestent le portefeuille, et ne peuvent que resserrer une limite. | modèle | `portfolio` |
-| Le Judge | Contrôle chaque limite du profil, sans dérogation ; refuse une demande qui dépasse une limite bloquante et propose une version encadrée. | code | `portfolio` |
-| L'agent de la presse | Collecte les communiqués et les actualités, datés et sourcés. | modèle | `press` |
-| L'agent des données | Collecte les séries économiques et les cours ; les fondamentaux SEC EDGAR viennent du code. | modèle | `data` |
-| Le superviseur | Relit tout ce qui est collecté, rejette ce qui n'a ni source ni date ou fait double emploi, et écrit la base générale. | modèle | `supervisor` |
-| Le routeur | Choisit les sujets d'une question de recherche, puis rédige la synthèse. | modèle | `router` |
-| Les experts de sujet | Un expert par sujet : consulte la base générale et lance ses chercheurs. | modèle | `expert` |
-| Les chercheurs | Une mission chacun : lisent les sites publics de leur liste, en respectant `robots.txt`. | modèle | `researcher` |
-
-## Les 8 runtimes AgentCore
-
-| Runtime | Agents | Ce qu'il fait | Appelé par |
-| --- | --- | --- | --- |
-| `alphaforge_sandbox_profile` | questions de base (code), agent du profil, agent du portefeuille existant | Construit le profil de l'investisseur : questions de base sans modèle, relances de l'agent du profil sur ce qui manque, lecture d'un portefeuille existant. Crée la Knowledge Base du client. | l'interface web (`/api/agent`) |
-| `alphaforge_sandbox_portfolio` | étape 0, optimiseur, avocat, quatre lentilles, Judge | Construit le portefeuille simulé : le code calcule les poids, l'avocat et les lentilles en débattent, le Judge contrôle chaque limite du profil. | l'interface web (`/api/portfolio`), la machine d'évolution |
-| `alphaforge_sandbox_press` | agent de la presse | Collecte les actualités datées (Newswire.ca, PR Newswire, GDELT) dans `staging/`. | la machine de collecte |
-| `alphaforge_sandbox_data` | agent des données | Collecte les séries et les cours datés (Banque du Canada, FRED, Yahoo Finance) dans `staging/`. | la machine de collecte |
-| `alphaforge_sandbox_supervisor` | superviseur | Relit ce qui arrive dans `staging/`, rejette tout document sans source ou sans date, et écrit la base générale (`general/`). | les machines de collecte et de recherche |
-| `alphaforge_sandbox_router` | routeur | Choisit les sujets d'une question de recherche, puis rédige la synthèse finale. | la machine de recherche |
-| `alphaforge_sandbox_expert` | experts de sujet | Expert d'un sujet : lance ses chercheurs et met leurs constats en attente. | la machine de recherche |
-| `alphaforge_sandbox_researcher` | chercheur | Une mission par session : cherche dans les sites de son paquet et consigne ses constats. | le runtime `expert` |
+| Runtime | Agent | Ce qu'il fait | Moteur | Appelé par |
+| --- | --- | --- | --- | --- |
+| `alphaforge_sandbox_profile` | Les questions de base | Pose les questions fixes du profil et valide chaque réponse. | code | l'interface web (`/api/agent`) |
+| | L'agent du profil | Ne demande que ce qui manque pour compléter le profil, au plus trois questions par tour, puis l'écrit. Crée la Knowledge Base du client. | modèle | |
+| | L'agent du portefeuille existant | Lit un relevé (PDF, tableur, image, texte) et en extrait les positions ; le code les valorise. | modèle | |
+| `alphaforge_sandbox_portfolio` | Le calcul du portefeuille (étape 0 et optimiseur) | Traduit le profil en limites, choisit le style et les titres, puis calcule les poids (cvxpy). | code | l'interface web (`/api/portfolio`), la machine d'évolution |
+| | L'avocat | Défend le portefeuille construit, puis répond aux critiques au second tour. | modèle | |
+| | Les quatre lentilles critiques | Horizon, risque, diversification, contraintes : contestent le portefeuille, et ne peuvent que resserrer une limite. | modèle | |
+| | Le Judge | Contrôle chaque limite du profil, sans dérogation ; refuse une demande qui dépasse une limite bloquante et propose une version encadrée. | code | |
+| `alphaforge_sandbox_press` | L'agent de la presse | Collecte les actualités datées (Newswire.ca, PR Newswire, GDELT) dans `staging/`. | modèle | la machine de collecte |
+| `alphaforge_sandbox_data` | L'agent des données | Collecte les séries et les cours datés (Banque du Canada, FRED, Yahoo Finance) dans `staging/` ; les fondamentaux SEC EDGAR viennent du code. | modèle | la machine de collecte |
+| `alphaforge_sandbox_supervisor` | Le superviseur | Relit ce qui arrive dans `staging/`, rejette tout document sans source ou sans date, et écrit la base générale (`general/`). | modèle | les machines de collecte et de recherche |
+| `alphaforge_sandbox_router` | Le routeur | Choisit les sujets d'une question de recherche, puis rédige la synthèse finale. | modèle | la machine de recherche |
+| `alphaforge_sandbox_expert` | Les experts de sujet | Un expert par sujet : consulte la base générale, lance ses chercheurs et met leurs constats en attente. | modèle | la machine de recherche |
+| `alphaforge_sandbox_researcher` | Les chercheurs | Une mission par session : cherchent dans les sites publics de leur liste, en respectant `robots.txt`, et consignent leurs constats. | modèle | le runtime `expert` |
 
 Points communs :
 

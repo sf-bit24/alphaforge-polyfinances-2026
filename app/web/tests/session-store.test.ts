@@ -203,6 +203,7 @@ describe("SessionStore", () => {
         "result true",
         "notify hydrated client=11111111-1111-4111-8111-111111111111 stage=followups resuming=false pending=followup.reply error=- notice=null stream="" live=uuid-7:followup.reply:running:0:null:streamed runs=[uuid-5:followup.reply:ok:0:10:streamed uuid-3:followup.reply:ok:2:10:streamed uuid-1:session.start:ok:0:10] conversation=[uuid-2:user:1:because:false uuid-4:agent:Tell me more:1:followups:uuid-3 uuid-6:user:0:again:false] revision=3",
         "callAgentStream {"action":"followup.reply","client_id":"11111111-1111-4111-8111-111111111111","message":"again"} {"locale":"en","messages":{"network":"Network down","invalidResponse":"Bad answer","noResult":"No result"}}",
+        "callAgent {"action":"session.resume","client_id":"11111111-1111-4111-8111-111111111111","locale":"en"} {"locale":"en","messages":{"network":"Network down","invalidResponse":"Bad answer","noResult":"No result"}}",
         "notify hydrated client=11111111-1111-4111-8111-111111111111 stage=followups resuming=false pending=null error=internal/boom@followup.reply notice=null stream="" live=- runs=[uuid-7:followup.reply:error:0:10:streamed:internal/boom uuid-5:followup.reply:ok:0:10:streamed uuid-3:followup.reply:ok:2:10:streamed uuid-1:session.start:ok:0:10] conversation=[uuid-2:user:1:because:false uuid-4:agent:Tell me more:1:followups:uuid-3] revision=3",
         "storage.set alphaforge.runs.11111111-1111-4111-8111-111111111111 [{"id":"uuid-7","action":"followup.reply","startedAt":"2026-11-15T12:00:00.000Z","durationMs":10,"status":"error","streamed":true,"steps":[],"error":{"code":"internal","message":"boom"}},{"id":"uuid-5","action":"followup.reply","startedAt":"2026-11-15T12:00:00.000Z","durationMs":10,"status":"ok","streamed":true,"steps":[],"error":null},{"id":"uuid-3","action":"followup.reply","startedAt":"2026-11-15T12:00:00.000Z","durationMs":10,"status":"ok","streamed":true,"steps":[{"id":"s1","kind":"agent","title":"step"},{"id":"s1","kind":"agent","title":"step"}],"error":null},{"id":"uuid-1","action":"session.start","startedAt":"2026-11-15T12:00:00.000Z","durationMs":10,"status":"ok","streamed":false,"steps":[],"error":null}]",
         "storage.set alphaforge.conversation.11111111-1111-4111-8111-111111111111 [{"id":"uuid-2","role":"user","at":"2026-11-15T12:00:00.000Z","answers":[{"question_id":"a1_1_1","prompt":"Why?","display":"3 / 5"}],"message":"because","stop":false},{"id":"uuid-4","role":"agent","at":"2026-11-15T12:00:00.000Z","message":"Tell me more","questions":[{"id":"a1_1_1","prompt":"Why?"}],"stage":"followups","runId":"uuid-3"}]",
@@ -228,6 +229,59 @@ describe("SessionStore", () => {
         "result true",
       ]
     `);
+  });
+
+  describe("after a failed follow-up reply, reads the runtime's state back", () => {
+    const SECOND = { id: "a1_1_2", prompt: "How much?" };
+    const NEXT = { id: "a1_2_1", prompt: "Any debt?" };
+    const calls = () => gateway.log.filter((line) => line.startsWith("callAgent")).map((line) => line.slice(0, line.lastIndexOf(" {")));
+
+    async function inFollowups(questions: unknown[]): Promise<SessionStore> {
+      const store = newStore();
+      await store.init();
+      script({ state: state({ stage: "followups", message: "First", questions }) });
+      await store.start();
+      gateway.log.length = 0;
+      return store;
+    }
+
+    it("A1 failed after writing the answers: they leave the screen, and the retry does not send them again", async () => {
+      const store = await inFollowups([QUESTION, SECOND]);
+      const answers = [
+        { question_id: QUESTION.id, value: 3, prompt: QUESTION.prompt, display: "3" },
+        { question_id: SECOND.id, value: "lt100", prompt: SECOND.prompt, display: "< 100" },
+      ];
+      // The runtime keeps the validated answers when A1 fails (#77); the free message is not journaled.
+      script({ error: new ApiError("model_error", "A1 down") }, { state: state({ stage: "followups", message: "First", questions: [] }) });
+      expect(await store.reply({ answers, message: "hi" })).toBe(false);
+      expect(store.getSnapshot()).toMatchObject({ pending: null, errorAction: "followup.reply", error: { code: "model_error" }, revision: 2 });
+      expect(store.getState()?.questions).toEqual([]);
+
+      script({ state: state({ stage: "followups", message: "Next", questions: [NEXT] }) });
+      expect(await store.retry()).toBe(true);
+      expect(calls()).toEqual([
+        `callAgentStream {"action":"followup.reply","client_id":"${CLIENT}","answers":[{"question_id":"a1_1_1","value":3},{"question_id":"a1_1_2","value":"lt100"}],"message":"hi"}`,
+        `callAgent {"action":"session.resume","client_id":"${CLIENT}","locale":"en"}`,
+        `callAgentStream {"action":"followup.reply","client_id":"${CLIENT}","message":"hi"}`,
+      ]);
+      expect(store.getSnapshot()).toMatchObject({ error: null, state: { questions: [NEXT] } });
+    });
+
+    it("the page was behind the runtime (its last result lost): the runtime's state replaces « not pending »", async () => {
+      const store = await inFollowups([QUESTION]);
+      script(
+        { error: new ApiError("invalid_answer", "This question is not pending.", { question_id: QUESTION.id }) },
+        { state: state({ stage: "followups", message: "Thanks, next", questions: [NEXT] }) },
+      );
+      expect(await store.reply({ answers: [{ question_id: QUESTION.id, value: 3, prompt: QUESTION.prompt, display: "3" }] })).toBe(false);
+      const snapshot = store.getSnapshot();
+      expect(snapshot).toMatchObject({ pending: null, error: null, errorAction: null, state: { questions: [NEXT] } });
+      expect(snapshot.conversation.map((entry) => (entry.role === "agent" ? `agent:${entry.message}:${entry.questions.length}` : "user"))).toEqual(["agent:Thanks, next:1"]);
+      expect(snapshot.runs[0]).toMatchObject({ action: "followup.reply", status: "error", error: { code: "invalid_answer" } });
+      // Nothing left to retry: the questions it was about are gone.
+      expect(await store.retry()).toBe(false);
+      expect(calls()).toHaveLength(2);
+    });
   });
 
   it("keeps the runs of a quiet action without trace, and clears runs and errors on demand", async () => {

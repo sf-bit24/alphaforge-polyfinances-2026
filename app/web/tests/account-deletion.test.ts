@@ -280,6 +280,48 @@ describe("deletion steps (fake AWS clients)", () => {
     expect(aws.names().filter((name) => name === "ListObjectVersions")).toHaveLength(3);
   });
 
+  it("lists once more after a third pass that still deleted something, and goes on when the base is empty", async () => {
+    const clientId = randomUUID();
+    let listing = 0;
+    const aws = fakeAws({
+      ...happyHandlers(clientId, 0),
+      ListObjectVersions: () => {
+        listing += 1;
+        return listing <= 3 ? { Versions: [{ Key: `clients/${clientId}/late-${listing}.md`, VersionId: `v${listing}` }] } : {};
+      },
+    });
+    expect((await deleteAccountData(target(clientId), aws.clients)).objects).toBe(3);
+    expect(aws.names().filter((name) => name === "ListObjectVersions")).toHaveLength(4);
+    expect(aws.names().at(-1)).toBe("AdminDeleteUser");
+  });
+
+  it("fails the objects step when versions keep coming after three passes, and keeps the Cognito user", async () => {
+    const clientId = randomUUID();
+    let listing = 0;
+    const aws = fakeAws({
+      ...happyHandlers(clientId, 0),
+      ListObjectVersions: () => {
+        listing += 1;
+        return { Versions: [{ Key: `clients/${clientId}/again-${listing}.md`, VersionId: `v${listing}` }] };
+      },
+    });
+    await expect(deleteAccountData(target(clientId), aws.clients)).rejects.toMatchObject({
+      step: "objects",
+      completed: ["knowledge_base", "vector_index"],
+    });
+    const objectCalls = aws.names().filter((name) => name === "ListObjectVersions" || name === "DeleteObjects");
+    expect(objectCalls).toEqual([
+      "ListObjectVersions",
+      "DeleteObjects",
+      "ListObjectVersions",
+      "DeleteObjects",
+      "ListObjectVersions",
+      "DeleteObjects",
+      "ListObjectVersions",
+    ]);
+    expect(aws.names()).not.toContain("AdminDeleteUser");
+  });
+
   it("never deletes a key outside clients/<client_id>/, and keeps the Cognito user", async () => {
     const clientId = randomUUID();
     const aws = fakeAws({

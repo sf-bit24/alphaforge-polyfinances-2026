@@ -7,7 +7,7 @@ output "web_url" {
 }
 
 output "web_alb_url" {
-  description = "URL HTTP directe de l'ALB : sans la limite de 60 s de CloudFront, pour un build du portefeuille plus long"
+  description = "URL HTTP directe de l'ALB : sans la limite de 60 s de CloudFront, pour un build du portefeuille plus long. Sans session si auth_enabled (cookie Secure, retour Cognito en HTTPS)"
   value       = one([for lb in aws_lb.web : "http://${lb.dns_name}"])
 }
 

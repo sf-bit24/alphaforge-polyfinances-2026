@@ -15,6 +15,11 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.73"
     }
+    # Secret du cookie de session de l'interface (auth.tf).
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.7"
+    }
   }
 
   # Version du workspace HCP Terraform (1.17.2).

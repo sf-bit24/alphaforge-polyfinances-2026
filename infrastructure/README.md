@@ -15,11 +15,13 @@ Compte AWS Workshop Studio du Datathon, `us-east-1`, environnement `sandbox`, pr
 | EventBridge Scheduler | `infra/scheduler.tf` | Veille : lance la collecte toutes les 6 heures. |
 | SageMaker Processing + Step Functions | `infra/scenarios.tf` | Scénarios probabilistes (facultatif, `scenarios_enabled`) : un job sur l'image scikit-learn d'AWS calcule la table des scénarios hors du poste, de façon reproductible (image et code figés, entrées et sorties dans S3). Step Functions le lance (`.sync`), écrit `_done.json` puis `scenarios/latest.json`. |
 | ECS Fargate + ALB + CloudFront | `infra/web.tf` | Interface Next.js (`app/web/Dockerfile`), `AGENT_MODE=aws`, image ECR `alphaforge-web:<release_id>`. CloudFront donne le HTTPS sur `*.cloudfront.net` (output `web_url`) ; l'ALB direct (`web_alb_url`, HTTP) garde la connexion 900 s pour un build du portefeuille de plus de 60 s, limite de CloudFront. Tâche en sous-réseau public avec IP publique (pas de NAT), joignable seulement depuis l'ALB. Facultatif (`web_enabled`). |
+| Cognito | `infra/auth.tf` | Connexion des investisseurs (facultatif, `auth_enabled`, activé en sandbox) : User Pool (courriel comme identifiant, inscription libre, courriel vérifié par Cognito, plan Essentials), domaine de connexion gérée (version 2, output `auth_domain`), client d'application public (code + PKCE, sans secret), groupe `admin`. La tâche ECS passe en `AUTH_MODE=cognito` avec un secret de session `random_password`. Un compte = un `client_id` (`app/CONTRACTS.md`, section 7.1). |
 | Glue + Athena | `infra/scenarios.tf` | Table `scenarios` (parquet, projection de partition sur `run_id`) interrogeable en SQL pour la validation et la démo, sans base à gérer; résultats chiffrés par la clé du bucket. |
 
 ```mermaid
 flowchart LR
     UI["Interface Next.js locale"] -->|"InvokeAgentRuntime (IAM)"| P["Runtime profile : questions, A1, A2"]
+    UI -->|"OIDC code + PKCE"| COG["Cognito : connexion gérée"]
     UI -->|"StartExecution"| SF["Step Functions : collecte"]
     SCH["EventBridge Scheduler"] -->|"toutes les 6 h"| SF
     SF --> A4["Runtime press : A4"]
@@ -94,6 +96,23 @@ infrastructure/
 2. **Workspace HCP Terraform** `larpathon` : sans VCS, répertoire de travail `infra`, auto-apply, Terraform 1.17.2, variables d'environnement `TFC_AWS_PROVIDER_AUTH=true` et `TFC_AWS_RUN_ROLE_ARN`.
 3. **GitHub** : secret `TF_API_TOKEN`, variables `EPHEMERAL_ENVS_ENABLED=false` et `TFC_PROJECT_ID`.
 
+## Comptes des investisseurs (Cognito)
+
+Chacun crée son compte lui-même : ouvrir `web_url`, « Se connecter ou créer un compte », puis « Créer un compte » sur la page de Cognito (courriel et mot de passe de 12 caractères au moins, avec minuscule, majuscule et chiffre). Cognito envoie un code au courriel; une fois le code saisi, l'investisseur arrive sur l'interface avec un profil vide, retrouvé ensuite sur tout appareil. Terraform ne crée aucun utilisateur et aucun mot de passe n'est dans le code.
+
+Ajouter quelqu'un au groupe `admin` (lancer une collecte depuis la page Base de connaissances), avec le rôle du Workshop :
+
+```sh
+POOL=$(aws cognito-idp list-user-pools --max-results 20 --region us-east-1 \
+  --query "UserPools[?Name=='alphaforge-sandbox-investors'].Id" --output text)   # ou l'output auth_user_pool_id
+aws cognito-idp admin-add-user-to-group --region us-east-1 \
+  --user-pool-id "$POOL" --username personne@example.com --group-name admin
+aws cognito-idp admin-list-groups-for-user --region us-east-1 \
+  --user-pool-id "$POOL" --username personne@example.com   # vérifier
+```
+
+Le courriel sert de nom d'utilisateur. Le groupe entre dans l'ID token : la personne se déconnecte puis se reconnecte pour en profiter. `admin-remove-user-from-group` le retire.
+
 ## Vérifier en local
 
 ```sh
@@ -118,4 +137,8 @@ GITHUB_EVENT_NAME=push GITHUB_REF_NAME=master DEFAULT_BRANCH=master sh scripts/c
 - **Scénarios : image AWS figée** : `scenarios_image_uri` refuse les étiquettes mobiles (`1.4-2-py312`); changer d'image demande de vérifier la version de Python et de reconstruire le bundle.
 - **Scénarios : journal SageMaker** : Terraform crée `/aws/sagemaker/ProcessingJobs` (clé des journaux, 14 jours). Si le groupe existe déjà dans le compte (job lancé à la main), l'apply échoue : l'importer ou le supprimer d'abord.
 - **Scénarios : démontage** : le bucket a `force_destroy`, donc les objets écrits par le job et la machine (toutes versions) partent avec lui; le groupe Athena a `force_destroy`; la base et la table Glue sont gérées par Terraform. Restent hors Terraform, sans coût : l'historique des jobs SageMaker (métadonnées) et la règle EventBridge gérée `StepFunctionsGetEventsForSageMakerProcessingJobsRule` créée par Step Functions. `scripts/destroy.sh` refuse `sandbox` : démontage par l'interface HCP Terraform, comme le reste de la pile.
+- **Connexion : lien direct de l'ALB** : avec `auth_enabled = true`, `web_alb_url` (HTTP) n'a plus de session. Le cookie est `Secure` et Cognito n'accepte un retour en HTTP que sur `localhost` : l'ALB n'a pas de certificat sans nom de domaine, d'où la connexion dans Next.js plutôt que l'action `authenticate-cognito` de l'ALB. Un build du portefeuille de plus de 60 s n'a donc plus de voie de secours tant que la connexion est active. Repli : `auth_enabled = false` dans `sandbox.tfvars`, la tâche repasse en `AUTH_MODE=off`.
+- **Connexion : courriel de Cognito** : le courriel par défaut de Cognito (`COGNITO_DEFAULT`) a un petit quota d'envoi quotidien, suffisant pour la démo. Au-delà, passer par SES (`email_configuration`).
+- **Connexion : secret dans la définition de tâche** : `AUTH_SESSION_SECRET` passe comme les autres variables (`environment` de la tâche ECS) : qui lit les définitions de tâche du compte le lit. Il est marqué sensible, donc le plan affiche `container_definitions` en `(sensitive value)`. Il reste stable d'un apply à l'autre (un déploiement ne déconnecte personne).
+- **Connexion : connexion gérée version 2** : elle exige le plan `ESSENTIALS` du User Pool et un style de marque par client d'application (`aws_cognito_managed_login_branding`); sans style, la page de connexion ne s'affiche pas.
 - **Compte supprimé le 2026-11-16** : exporter les bases des clients avant (voir le README racine).

@@ -15,7 +15,9 @@
 #     aux contextes securises : CloudFront donne le HTTPS sans nom de domaine.
 #     CloudFront coupe une reponse muette apres 60 s (maximum sans hausse de
 #     quota) : un build du portefeuille plus long passe par l'URL directe de
-#     l'ALB (output web_alb_url).
+#     l'ALB (output web_alb_url), mais seulement sans connexion
+#     (auth_enabled = false) : en HTTP, le cookie de session Secure ne passe
+#     pas (auth.tf).
 #
 # L'image vient d'ECR (<web_ecr_repository>:<release_id>), poussee par le job
 # build_web de .github/workflows/app.yml avec le role de
@@ -282,13 +284,14 @@ resource "aws_ecs_task_definition" "web" {
       protocol      = "tcp"
     }]
     # app/CONTRACTS.md section 7 : le serveur trouve le runtime et la machine
-    # par leur nom.
-    environment = [
+    # par leur nom. Connexion (section 7.1) : AUTH_MODE et la configuration
+    # Cognito viennent de auth.tf (local.web_auth_environment).
+    environment = concat([
       { name = "AGENT_MODE", value = "aws" },
       { name = "AWS_REGION", value = var.aws_region },
       { name = "ALPHAFORGE_PREFIX", value = local.name_snake },
       { name = "ALPHAFORGE_STATE_MACHINE", value = local.collecte_name },
-    ]
+    ], local.web_auth_environment)
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -338,6 +341,12 @@ resource "aws_ecs_service" "web" {
 # -----------------------------------------------------------------------------
 # CloudFront : HTTPS sur le domaine par defaut, rien en cache sauf les fichiers
 # immuables de Next.js (/_next/static/, noms haches).
+#
+# Connexion (auth.tf) : le comportement par defaut (pages, /api/*, /api/auth/*)
+# ne met rien en cache (Managed-CachingDisabled) et transmet a l'origine tous
+# les cookies, la query string (code et state du retour de Cognito) et les
+# en-tetes, Host compris (Managed-AllViewer). /_next/static/* ne porte aucune
+# donnee personnelle : ni cookie transmis, ni session lue (proxy.ts l'exclut).
 # -----------------------------------------------------------------------------
 data "aws_cloudfront_cache_policy" "disabled" {
   count = local.web_count

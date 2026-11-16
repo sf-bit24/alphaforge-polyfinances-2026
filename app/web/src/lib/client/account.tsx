@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { isOperator, readAccount, type AccountState } from "./account-state";
+import { track } from "./activity";
 
 export { isOperator, type AccountState } from "./account-state";
 
@@ -12,8 +13,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/auth/me", { cache: "no-store", signal: controller.signal })
-      .then(readAccount)
+    track(fetch("/api/auth/me", { cache: "no-store", signal: controller.signal }).then(readAccount))
       .then(setAccount)
       .catch(() => {
         if (!controller.signal.aborted) setAccount({ status: "off" });

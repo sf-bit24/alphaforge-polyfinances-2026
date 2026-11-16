@@ -10,7 +10,7 @@ import { useI18n } from "@/lib/i18n/provider";
 import { Card, CardHeader } from "@/components/ui/card";
 import { cn } from "@/components/ui/cn";
 import { ErrorNotice } from "@/components/ui/error-notice";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { GraphCanvas, type FocusRequest } from "./graph-canvas";
 import { GraphDetails, NodeSwatch, toneOf } from "./graph-details";
 import { GraphTable } from "./graph-table";
@@ -211,7 +211,12 @@ interface KnowledgeGraphPanelProps {
 function PanelStatus({ error, loaded, empty, related }: { error: ApiError | null; loaded: boolean; empty: boolean; related: boolean }) {
   const { t } = useI18n();
   if (error) return <ErrorNotice className="m-5" error={error} />;
-  if (!loaded) return <Spinner className="m-5" label={t.common.loading} />;
+  if (!loaded)
+    return (
+      <div role="status" aria-label={t.common.loading} className="p-5">
+        <Skeleton className="h-[26rem] w-full rounded-xl" />
+      </div>
+    );
   if (empty) return <p className="px-5 py-10 text-center text-sm text-ink-500">{t.kb.emptyGeneral}</p>;
   if (!related) return <p className="px-5 py-10 text-center text-sm text-ink-600">{t.kb.graph.noRelations}</p>;
   return null;

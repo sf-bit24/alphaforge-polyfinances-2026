@@ -5,12 +5,13 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KbItem, Locale } from "@/lib/contract/schemas";
 import type { ApiError } from "@/lib/client/api";
 import { formatDate } from "@/lib/i18n/locale";
+import type { Dictionary } from "@/lib/i18n/dictionary";
 import { useI18n } from "@/lib/i18n/provider";
 import { GENERAL_FOLDERS, generalGroup } from "@/lib/okf";
 import { Card, CardHeader } from "@/components/ui/card";
 import { cn } from "@/components/ui/cn";
 import { ErrorNotice } from "@/components/ui/error-notice";
-import { Spinner } from "@/components/ui/spinner";
+import { SkeletonRows } from "@/components/ui/skeleton";
 import { matchingItems } from "./match";
 
 export const INDEX_KEY = "general/index.md";
@@ -73,7 +74,7 @@ function ListStatus({ error, loaded, itemCount, matchCount }: ListStatusProps) {
   return (
     <>
       {error ? <ErrorNotice className="mx-2" error={error} compact /> : null}
-      {!loaded && !error ? <Spinner className="mx-2" label={t.common.loading} /> : null}
+      {!loaded && !error ? <SkeletonRows className="mx-2" label={t.common.loading} count={6} withLine /> : null}
       {loaded && itemCount === 0 ? <p className="px-2 text-sm text-ink-500">{t.kb.emptyGeneral}</p> : null}
       {itemCount > 0 && matchCount === 0 ? <p className="px-2 text-sm text-ink-500">{t.kb.noMatch}</p> : null}
     </>
@@ -187,6 +188,12 @@ interface DocumentListProps {
   onSelect: (key: string) => void;
 }
 
+/** « 7 documents », « 2 matches », or « Chargement… » while the list is on its way (never « 0 document »). */
+function listSubtitle(t: Dictionary, list: { loaded: boolean; searching: boolean; matches: number; count: number }): string {
+  if (!list.loaded) return t.common.loading;
+  return list.searching ? t.kb.matches(list.matches) : t.kb.count(list.count);
+}
+
 /** The documents of `general/`, by folder, with a filter; on a wide screen, a pane that scrolls on its own. */
 export function DocumentList({ items, error, loaded, current, onSelect }: DocumentListProps) {
   const { t, locale } = useI18n();
@@ -203,7 +210,7 @@ export function DocumentList({ items, error, loaded, current, onSelect }: Docume
   };
   return (
     <Card className="flex flex-col self-start lg:sticky lg:top-[4.5rem] lg:max-h-[calc(100dvh-5.5rem)]">
-      <CardHeader title={t.kb.documents} subtitle={searching ? t.kb.matches(filtered.length) : t.kb.count(items.length)} icon={<BookOpen aria-hidden className="size-4" />} />
+      <CardHeader title={t.kb.documents} subtitle={listSubtitle(t, { loaded, searching, matches: filtered.length, count: items.length })} icon={<BookOpen aria-hidden className="size-4" />} />
       <SearchField id={searchId} query={query} onChange={changeQuery} />
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         <ListStatus error={error} loaded={loaded} itemCount={items.length} matchCount={filtered.length} />

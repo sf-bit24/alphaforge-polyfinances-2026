@@ -12,6 +12,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { TabList, tabPanelProps, type TabItem } from "@/components/ui/tabs";
 import { CollectPanel } from "./collect-panel";
 import { DocumentList, INDEX_KEY } from "./document-list";
+import { DocumentSkeleton } from "@/components/ui/skeleton";
 import { DocumentLoader, type DocumentLinks } from "./document-view";
 import { KnowledgeGraphPanel } from "./knowledge-graph";
 
@@ -50,12 +51,21 @@ interface CurrentDocumentProps {
   item: KbItem | undefined;
   version: number;
   empty: boolean;
+  /** The list is still on its way: the reader shows its outline, not « choose a document ». */
+  loading: boolean;
   links: DocumentLinks;
 }
 
 /** The document being read; reloaded when the list is refreshed (`version`). Its links to the base open in place. */
-function CurrentDocument({ current, item, version, empty, links }: CurrentDocumentProps) {
+function CurrentDocument({ current, item, version, empty, loading, links }: CurrentDocumentProps) {
   const { t } = useI18n();
+  if (!current && loading) {
+    return (
+      <div className="px-6 py-5">
+        <DocumentSkeleton label={t.documentView.loading} />
+      </div>
+    );
+  }
   if (current) {
     return (
       <>
@@ -106,7 +116,7 @@ function DocumentsTab({ items, error, loaded, version, current, onSelect, onOpen
     <div className="grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
       <DocumentList items={items} error={error} loaded={loaded} current={current} onSelect={select} />
       <Card ref={reader} className="min-w-0 scroll-mt-28 self-start lg:sticky lg:top-[4.5rem] lg:max-h-[calc(100dvh-5.5rem)] lg:overflow-y-auto">
-        <CurrentDocument current={current} item={items.find((item) => item.key === current)} version={version} empty={loaded && items.length === 0} links={links} />
+        <CurrentDocument current={current} item={items.find((item) => item.key === current)} version={version} empty={loaded && items.length === 0} loading={!loaded && !error} links={links} />
       </Card>
     </div>
   );

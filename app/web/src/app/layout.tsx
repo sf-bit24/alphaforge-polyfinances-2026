@@ -4,6 +4,7 @@ import { AccountProvider } from "@/lib/client/account";
 import { SessionProvider } from "@/lib/client/session";
 import { I18nProvider } from "@/lib/i18n/provider";
 import { serverDictionary } from "@/lib/i18n/server";
+import { TopLoadingBar } from "@/components/ui/top-loading-bar";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -29,6 +30,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang={locale}>
       <body className="font-sans antialiased">
         <I18nProvider initialLocale={locale}>
+          <TopLoadingBar />
           <AccountProvider>
             <SessionProvider>{children}</SessionProvider>
           </AccountProvider>

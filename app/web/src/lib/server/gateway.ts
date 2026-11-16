@@ -16,6 +16,7 @@ import {
 } from "./aws";
 import { ConfigError, getConfig, profileRuntimeName, type AgentMode, type GatewayConfig } from "./config";
 import { GatewayError, jsonResponse, localeOf, statusOfEnvelope, toGatewayError } from "./errors";
+import { withHeartbeat } from "./heartbeat";
 import { invokeLocal } from "./local";
 import { sseResponse, sseStreamOf, type Upstream } from "./upstream";
 
@@ -191,9 +192,25 @@ async function callPortfolio(config: GatewayConfig, request: PortfolioBuildReque
   }
 }
 
+/** The runtime's envelope as the gateway's JSON answer, or a 502 if there is none. */
+async function portfolioAnswer(config: GatewayConfig, build: PortfolioBuildRequest, locale: Locale, signal: AbortSignal): Promise<Response> {
+  const upstream = await callPortfolio(config, build, locale, signal);
+  if (upstream.kind === "stream" || !isRecord(upstream.body) || typeof upstream.body.ok !== "boolean") {
+    throw new GatewayError(
+      "internal",
+      { fr: "Réponse du runtime portfolio hors contrat (enveloppe absente).", en: "Portfolio runtime response outside the contract (no envelope)." },
+      502,
+      upstream.kind === "json" ? { upstream_status: upstream.status, body: JSON.stringify(upstream.body).slice(0, 500) } : { kind: "stream" },
+    );
+  }
+  return jsonResponse(statusOfEnvelope(upstream.body, upstream.status), upstream.body);
+}
+
 /**
  * `POST /api/portfolio`: validate a `build` request, call the `portfolio` runtime of the configured mode
  * (fixtures of the engine in `mock`), pass the JSON envelope through. The browser validates the Decision.
+ * A build longer than `HEARTBEAT_AFTER_MS` (the `llm` mode, about 2 min) is answered by `withHeartbeat`:
+ * CloudFront cuts an origin silent for 60 s (`infrastructure/infra/web.tf`).
  */
 export async function handlePortfolio(request: Request): Promise<Response> {
   const locale = localeOf(request);
@@ -213,16 +230,10 @@ export async function handlePortfolio(request: Request): Promise<Response> {
       throw new GatewayError("bad_request", { fr: "Corps JSON invalide.", en: "Invalid JSON body." }, 400);
     }
     const build = validatePortfolioRequest(raw);
-    const upstream = await callPortfolio(config, build, locale, request.signal);
-    if (upstream.kind === "stream" || !isRecord(upstream.body) || typeof upstream.body.ok !== "boolean") {
-      throw new GatewayError(
-        "internal",
-        { fr: "Réponse du runtime portfolio hors contrat (enveloppe absente).", en: "Portfolio runtime response outside the contract (no envelope)." },
-        502,
-        upstream.kind === "json" ? { upstream_status: upstream.status, body: JSON.stringify(upstream.body).slice(0, 500) } : { kind: "stream" },
-      );
-    }
-    return jsonResponse(statusOfEnvelope(upstream.body, upstream.status), upstream.body);
+    return await withHeartbeat(portfolioAnswer(config, build, locale, request.signal), {
+      fallback: (error) => errorResponse(error, locale),
+      signal: request.signal,
+    });
   } catch (error) {
     return errorResponse(error, locale);
   }

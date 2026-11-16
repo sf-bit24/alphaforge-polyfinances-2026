@@ -14,6 +14,7 @@ import type {
   Stage,
   TraceKind,
 } from "@/lib/contract/schemas";
+import { DELETE_CONFIRMATION } from "@/lib/contract/auth";
 import { portfolioEn, portfolioFr } from "./portfolio";
 import { screensEn, screensFr } from "./screens";
 
@@ -604,6 +605,26 @@ const fr = {
     adminOnly: "Seul le groupe admin lance une collecte ; la liste des exécutions reste visible.",
     accountCard: "Compte connecté",
     accountHelp: "Votre profil est rangé sous ce client_id, lié à votre compte : il vous suit sur tous vos appareils.",
+    deleted: "Compte supprimé : votre profil, vos documents et votre compte de connexion sont effacés.",
+    deleteAccount: {
+      open: "Supprimer mon compte",
+      title: "Supprimer mon compte",
+      lead: "Tout ce qui appartient à ce compte sera supprimé :",
+      items: [
+        "votre profil d’investisseur et vos réponses au questionnaire ;",
+        "votre portefeuille déclaré et ses versions ;",
+        "vos décisions simulées et les notes de votre base ;",
+        "la Knowledge Base de votre profil et son index de recherche ;",
+        "votre compte de connexion.",
+      ],
+      kept: "Reste, liée à un identifiant qui ne mène plus à votre courriel : la chaîne d’audit des décisions simulées (empreintes et copies verrouillées, qui ne se réécrivent pas). Les journaux techniques d’AWS (appels au modèle, journaux de l’application) ne sont pas rangés par compte : ils restent aussi.",
+      irreversible: "C’est irréversible : rien ne pourra être récupéré.",
+      word: DELETE_CONFIRMATION.fr as string,
+      confirmLabel: ((word: string) => `Pour confirmer, tapez ${word}`) as Fn<[string]>,
+      cancel: "Annuler",
+      confirm: "Supprimer définitivement",
+      deleting: "Suppression en cours…",
+    },
   },
   errors: {
     title: "Une erreur est survenue",
@@ -1226,6 +1247,26 @@ const en: Dictionary = {
     adminOnly: "Only the admin group starts a collection run; the list of executions stays visible.",
     accountCard: "Signed-in account",
     accountHelp: "Your profile is filed under this client_id, tied to your account: it follows you on all your devices.",
+    deleted: "Account deleted: your profile, your documents and your sign-in account are gone.",
+    deleteAccount: {
+      open: "Delete my account",
+      title: "Delete my account",
+      lead: "Everything that belongs to this account will be deleted:",
+      items: [
+        "your investor profile and your questionnaire answers;",
+        "your declared portfolio and its versions;",
+        "your simulated decisions and the notes of your base;",
+        "your profile’s Knowledge Base and its search index;",
+        "your sign-in account.",
+      ],
+      kept: "What stays, tied to an identifier that no longer leads to your email: the audit chain of simulated decisions (hashes and locked copies, which are never rewritten). AWS technical logs (model calls, application logs) are not filed by account: they stay too.",
+      irreversible: "This cannot be undone: nothing can be recovered.",
+      word: DELETE_CONFIRMATION.en,
+      confirmLabel: (word: string) => `To confirm, type ${word}`,
+      cancel: "Cancel",
+      confirm: "Delete permanently",
+      deleting: "Deleting…",
+    },
   },
   errors: {
     title: "Something went wrong",

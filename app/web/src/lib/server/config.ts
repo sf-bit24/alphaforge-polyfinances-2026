@@ -102,3 +102,30 @@ export function profileRuntimeName(config: GatewayConfig): string {
 export function portfolioRuntimeName(config: GatewayConfig): string {
   return `${config.ALPHAFORGE_PREFIX}_portfolio`;
 }
+
+/* ------------------------------------------------------------------ */
+/* Account deletion (CONTRACTS.md 7.1), AGENT_MODE=aws only            */
+/* ------------------------------------------------------------------ */
+
+const DeletionConfigSchema = z.object({
+  /** Bucket of the OKF bases, as for the runtimes (`aws_s3_bucket.this`). */
+  ALPHAFORGE_BUCKET: required(z.string().regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/)),
+  /** Prefix of the client Knowledge Bases `<prefix>-client-<client_id>` (`local.prefix`, client_kb.tf). */
+  ALPHAFORGE_CLIENT_KB_PREFIX: required(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9-]{0,40}$/)),
+  /** S3 Vectors bucket of the indexes `client-<client_id>` (client_kb.tf). */
+  ALPHAFORGE_CLIENT_KB_VECTOR_BUCKET: required(z.string().regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/)),
+});
+export type DeletionConfig = z.infer<typeof DeletionConfigSchema> & { USER_POOL_ID: string };
+
+/** What the deletion acts on, set by Terraform on the web task (auth.tf); the user pool comes from COGNITO_ISSUER. */
+export function getDeletionConfig(auth: CognitoConfig): DeletionConfig {
+  const parsed = DeletionConfigSchema.safeParse({
+    ALPHAFORGE_BUCKET: process.env.ALPHAFORGE_BUCKET,
+    ALPHAFORGE_CLIENT_KB_PREFIX: process.env.ALPHAFORGE_CLIENT_KB_PREFIX,
+    ALPHAFORGE_CLIENT_KB_VECTOR_BUCKET: process.env.ALPHAFORGE_CLIENT_KB_VECTOR_BUCKET,
+  });
+  if (!parsed.success) {
+    throw new ConfigError(parsed.error.issues.map((issue) => ({ variable: String(issue.path[0] ?? "?"), message: issue.message })));
+  }
+  return { ...parsed.data, USER_POOL_ID: new URL(auth.COGNITO_ISSUER).pathname.slice(1) };
+}

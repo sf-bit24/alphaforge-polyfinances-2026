@@ -11,7 +11,7 @@
   "decision_id": "dec-mateo-v1-fixture",
   "profile_id": "mateo",
   "profile_version": 1,
-  "created_utc": "2026-11-16T01:48:17.681138Z",
+  "created_utc": "2026-11-16T02:46:17.457875Z",
   "kind": "proposition",
   "simulation_only": true,
   "positions": [
@@ -8924,6 +8924,48 @@
      }
     ],
     "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "r2.window.first_year",
+    "label_fr": "Première année des rendements mensuels mesurés (titres réels)",
+    "value": 2018,
+    "unit": "année",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "alphaforge.finance.backtest (rendements mensuels, data/long)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "début de la fenêtre 2018-10-31..2026-09-30 des mesures historiques (r2.cvar_m)"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t015:lens.risk:evidence"
+   },
+   {
+    "fact_id": "r2.window.last_year",
+    "label_fr": "Dernière année des rendements mensuels mesurés (titres réels)",
+    "value": 2026,
+    "unit": "année",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "alphaforge.finance.backtest (rendements mensuels, data/long)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "fin de la fenêtre 2018-10-31..2026-09-30 des mesures historiques (r2.cvar_m)"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t015:lens.risk:evidence"
    }
   ],
   "constraints": [
@@ -9396,7 +9438,10 @@
    "limits": [
     {
      "text_fr": "Les chiffres décrivent le passé (2018-2026 pour les titres réels, proxys longs étiquetés HYPOTHESE) : ils ne prédisent pas les rendements futurs.",
-     "fact_ids": [],
+     "fact_ids": [
+      "r2.window.first_year",
+      "r2.window.last_year"
+     ],
      "label": "HYPOTHESE"
     },
     {
@@ -9452,8 +9497,8 @@
      "emphasis.diversity",
      "emphasis.constraints"
     ],
-    "started_utc": "2026-11-16T01:48:14.616710Z",
-    "ended_utc": "2026-11-16T01:48:14.624104Z",
+    "started_utc": "2026-11-16T02:46:14.962528Z",
+    "ended_utc": "2026-11-16T02:46:14.971148Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9482,8 +9527,8 @@
      "strat.pi",
      "strat.K"
     ],
-    "started_utc": "2026-11-16T01:48:14.626619Z",
-    "ended_utc": "2026-11-16T01:48:14.626966Z",
+    "started_utc": "2026-11-16T02:46:14.974628Z",
+    "ended_utc": "2026-11-16T02:46:14.975026Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9708,8 +9753,8 @@
      "strat.rank.SHOP.TO",
      "strat.ineligible.SHOP.TO"
     ],
-    "started_utc": "2026-11-16T01:48:14.627001Z",
-    "ended_utc": "2026-11-16T01:48:15.639044Z",
+    "started_utc": "2026-11-16T02:46:14.975061Z",
+    "ended_utc": "2026-11-16T02:46:15.866536Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9730,8 +9775,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:15.639111Z",
-    "ended_utc": "2026-11-16T01:48:15.639349Z",
+    "started_utc": "2026-11-16T02:46:15.866601Z",
+    "ended_utc": "2026-11-16T02:46:15.866722Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9763,8 +9808,8 @@
      "strat.risk_cost",
      "strat.applied"
     ],
-    "started_utc": "2026-11-16T01:48:15.639389Z",
-    "ended_utc": "2026-11-16T01:48:16.367971Z",
+    "started_utc": "2026-11-16T02:46:15.866748Z",
+    "ended_utc": "2026-11-16T02:46:16.312397Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9788,8 +9833,8 @@
      "r1.active.alloc.growth:min",
      "r1.active.alloc.cash_like:max"
     ],
-    "started_utc": "2026-11-16T01:48:16.373606Z",
-    "ended_utc": "2026-11-16T01:48:16.467855Z",
+    "started_utc": "2026-11-16T02:46:16.316193Z",
+    "ended_utc": "2026-11-16T02:46:16.400924Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9814,8 +9859,8 @@
      "r1.horizon_share_neg",
      "r1.recovery"
     ],
-    "started_utc": "2026-11-16T01:48:16.467941Z",
-    "ended_utc": "2026-11-16T01:48:16.510949Z",
+    "started_utc": "2026-11-16T02:46:16.401058Z",
+    "ended_utc": "2026-11-16T02:46:16.446662Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9847,8 +9892,8 @@
      "r1.stress.2020_covid",
      "r1.stress_cad.2020_covid"
     ],
-    "started_utc": "2026-11-16T01:48:16.510993Z",
-    "ended_utc": "2026-11-16T01:48:16.628522Z",
+    "started_utc": "2026-11-16T02:46:16.446723Z",
+    "ended_utc": "2026-11-16T02:46:16.544128Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9877,8 +9922,8 @@
      "r1.lt.energy",
      "r1.lt.financials"
     ],
-    "started_utc": "2026-11-16T01:48:16.628594Z",
-    "ended_utc": "2026-11-16T01:48:16.641513Z",
+    "started_utc": "2026-11-16T02:46:16.544181Z",
+    "ended_utc": "2026-11-16T02:46:16.557383Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9900,8 +9945,8 @@
     "fact_ids": [
      "r1.n_blocking"
     ],
-    "started_utc": "2026-11-16T01:48:16.641561Z",
-    "ended_utc": "2026-11-16T01:48:16.717104Z",
+    "started_utc": "2026-11-16T02:46:16.557561Z",
+    "ended_utc": "2026-11-16T02:46:16.628683Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9963,8 +10008,8 @@
      "dec-mateo-v1-fixture:t010:lens.constraints:evidence:judge:risk.vol:max",
      "dec-mateo-v1-fixture:t010:lens.constraints:evidence:judge:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-16T01:48:16.642194Z",
-    "ended_utc": "2026-11-16T01:48:16.714516Z",
+    "started_utc": "2026-11-16T02:46:16.558350Z",
+    "ended_utc": "2026-11-16T02:46:16.626686Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9984,8 +10029,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:16.717155Z",
-    "ended_utc": "2026-11-16T01:48:16.717200Z",
+    "started_utc": "2026-11-16T02:46:16.628727Z",
+    "ended_utc": "2026-11-16T02:46:16.628768Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10005,8 +10050,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:16.719533Z",
-    "ended_utc": "2026-11-16T01:48:16.720517Z",
+    "started_utc": "2026-11-16T02:46:16.630271Z",
+    "ended_utc": "2026-11-16T02:46:16.631295Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10031,8 +10076,8 @@
      "r2.active.alloc.growth:min",
      "r2.active.alloc.cash_like:max"
     ],
-    "started_utc": "2026-11-16T01:48:16.720614Z",
-    "ended_utc": "2026-11-16T01:48:16.721003Z",
+    "started_utc": "2026-11-16T02:46:16.631450Z",
+    "ended_utc": "2026-11-16T02:46:16.631578Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10057,8 +10102,8 @@
      "r2.horizon_share_neg",
      "r2.recovery"
     ],
-    "started_utc": "2026-11-16T01:48:16.721067Z",
-    "ended_utc": "2026-11-16T01:48:16.773772Z",
+    "started_utc": "2026-11-16T02:46:16.631612Z",
+    "ended_utc": "2026-11-16T02:46:16.678472Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10088,10 +10133,12 @@
      "r2.stress.2022_taux",
      "r2.stress_cad.2022_taux",
      "r2.stress.2020_covid",
-     "r2.stress_cad.2020_covid"
+     "r2.stress_cad.2020_covid",
+     "r2.window.first_year",
+     "r2.window.last_year"
     ],
-    "started_utc": "2026-11-16T01:48:16.773820Z",
-    "ended_utc": "2026-11-16T01:48:16.905517Z",
+    "started_utc": "2026-11-16T02:46:16.678538Z",
+    "ended_utc": "2026-11-16T02:46:16.780004Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10120,8 +10167,8 @@
      "r2.lt.energy",
      "r2.lt.financials"
     ],
-    "started_utc": "2026-11-16T01:48:16.905605Z",
-    "ended_utc": "2026-11-16T01:48:16.915055Z",
+    "started_utc": "2026-11-16T02:46:16.780054Z",
+    "ended_utc": "2026-11-16T02:46:16.791024Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10143,8 +10190,8 @@
     "fact_ids": [
      "r2.n_blocking"
     ],
-    "started_utc": "2026-11-16T01:48:16.915101Z",
-    "ended_utc": "2026-11-16T01:48:16.991803Z",
+    "started_utc": "2026-11-16T02:46:16.791071Z",
+    "ended_utc": "2026-11-16T02:46:16.875759Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10206,8 +10253,8 @@
      "dec-mateo-v1-fixture:t017:lens.constraints:evidence:judge:risk.vol:max",
      "dec-mateo-v1-fixture:t017:lens.constraints:evidence:judge:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-16T01:48:16.915727Z",
-    "ended_utc": "2026-11-16T01:48:16.986919Z",
+    "started_utc": "2026-11-16T02:46:16.791700Z",
+    "ended_utc": "2026-11-16T02:46:16.872618Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10227,8 +10274,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:16.991864Z",
-    "ended_utc": "2026-11-16T01:48:16.991920Z",
+    "started_utc": "2026-11-16T02:46:16.875818Z",
+    "ended_utc": "2026-11-16T02:46:16.875867Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10248,8 +10295,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:16.994817Z",
-    "ended_utc": "2026-11-16T01:48:16.994861Z",
+    "started_utc": "2026-11-16T02:46:16.877739Z",
+    "ended_utc": "2026-11-16T02:46:16.877781Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10269,8 +10316,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:16.994890Z",
-    "ended_utc": "2026-11-16T01:48:17.070441Z",
+    "started_utc": "2026-11-16T02:46:16.877809Z",
+    "ended_utc": "2026-11-16T02:46:16.948960Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10333,8 +10380,8 @@
      "dec-mateo-v1-fixture:t020:judge:check:final:risk.vol:max",
      "dec-mateo-v1-fixture:t020:judge:check:final:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-16T01:48:16.995613Z",
-    "ended_utc": "2026-11-16T01:48:17.068103Z",
+    "started_utc": "2026-11-16T02:46:16.878939Z",
+    "ended_utc": "2026-11-16T02:46:16.946629Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10359,8 +10406,8 @@
      "cf.style.up.risk",
      "cf.style.up.n_titres"
     ],
-    "started_utc": "2026-11-16T01:48:17.070487Z",
-    "ended_utc": "2026-11-16T01:48:17.678172Z",
+    "started_utc": "2026-11-16T02:46:16.949040Z",
+    "ended_utc": "2026-11-16T02:46:17.454782Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10420,8 +10467,8 @@
      "mix.sector.materials",
      "mix.sector.non_ventile"
     ],
-    "started_utc": "2026-11-16T01:48:17.678403Z",
-    "ended_utc": "2026-11-16T01:48:17.680686Z",
+    "started_utc": "2026-11-16T02:46:17.455011Z",
+    "ended_utc": "2026-11-16T02:46:17.457284Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",

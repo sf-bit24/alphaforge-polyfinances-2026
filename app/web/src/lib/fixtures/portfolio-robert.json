@@ -11,7 +11,7 @@
   "decision_id": "dec-robert-v1-fixture",
   "profile_id": "robert",
   "profile_version": 1,
-  "created_utc": "2026-11-16T01:48:20.530728Z",
+  "created_utc": "2026-11-16T02:46:21.342774Z",
   "kind": "refus_encadre",
   "simulation_only": true,
   "positions": [
@@ -9913,6 +9913,48 @@
      }
     ],
     "trace_id": "dec-robert-v1-fixture:t026:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "r2.window.first_year",
+    "label_fr": "Première année des rendements mensuels mesurés (titres réels)",
+    "value": 2011,
+    "unit": "année",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "alphaforge.finance.backtest (rendements mensuels, data/long)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "début de la fenêtre 2011-03-31..2026-09-30 des mesures historiques (r2.cvar_m)"
+     }
+    ],
+    "trace_id": "dec-robert-v1-fixture:t015:lens.risk:evidence"
+   },
+   {
+    "fact_id": "r2.window.last_year",
+    "label_fr": "Dernière année des rendements mensuels mesurés (titres réels)",
+    "value": 2026,
+    "unit": "année",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "alphaforge.finance.backtest (rendements mensuels, data/long)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "fin de la fenêtre 2011-03-31..2026-09-30 des mesures historiques (r2.cvar_m)"
+     }
+    ],
+    "trace_id": "dec-robert-v1-fixture:t015:lens.risk:evidence"
    }
   ],
   "constraints": [
@@ -10372,8 +10414,11 @@
    ],
    "limits": [
     {
-     "text_fr": "Les chiffres décrivent le passé (2018-2026 pour les titres réels, proxys longs étiquetés HYPOTHESE) : ils ne prédisent pas les rendements futurs.",
-     "fact_ids": [],
+     "text_fr": "Les chiffres décrivent le passé (2011-2026 pour les titres réels, proxys longs étiquetés HYPOTHESE) : ils ne prédisent pas les rendements futurs.",
+     "fact_ids": [
+      "r2.window.first_year",
+      "r2.window.last_year"
+     ],
      "label": "HYPOTHESE"
     },
     {
@@ -10429,8 +10474,8 @@
      "emphasis.diversity",
      "emphasis.constraints"
     ],
-    "started_utc": "2026-11-16T01:48:17.692944Z",
-    "ended_utc": "2026-11-16T01:48:17.702952Z",
+    "started_utc": "2026-11-16T02:46:17.463494Z",
+    "ended_utc": "2026-11-16T02:46:17.473636Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -10460,8 +10505,8 @@
      "strat.pi",
      "strat.K"
     ],
-    "started_utc": "2026-11-16T01:48:17.705526Z",
-    "ended_utc": "2026-11-16T01:48:17.705894Z",
+    "started_utc": "2026-11-16T02:46:17.476402Z",
+    "ended_utc": "2026-11-16T02:46:17.476793Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -10686,8 +10731,8 @@
      "strat.rank.SHOP.TO",
      "strat.ineligible.SHOP.TO"
     ],
-    "started_utc": "2026-11-16T01:48:17.705928Z",
-    "ended_utc": "2026-11-16T01:48:18.576838Z",
+    "started_utc": "2026-11-16T02:46:17.476829Z",
+    "ended_utc": "2026-11-16T02:46:18.508297Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -10708,8 +10753,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:18.576909Z",
-    "ended_utc": "2026-11-16T01:48:18.577004Z",
+    "started_utc": "2026-11-16T02:46:18.508362Z",
+    "ended_utc": "2026-11-16T02:46:18.508455Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -10736,8 +10781,8 @@
      "strat.risk_cost",
      "strat.applied"
     ],
-    "started_utc": "2026-11-16T01:48:18.577028Z",
-    "ended_utc": "2026-11-16T01:48:19.006763Z",
+    "started_utc": "2026-11-16T02:46:18.508481Z",
+    "ended_utc": "2026-11-16T02:46:18.922764Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -10760,8 +10805,8 @@
      "r1.opt_risk",
      "r1.active.strat.growth_floor:min"
     ],
-    "started_utc": "2026-11-16T01:48:19.010659Z",
-    "ended_utc": "2026-11-16T01:48:19.129858Z",
+    "started_utc": "2026-11-16T02:46:18.927061Z",
+    "ended_utc": "2026-11-16T02:46:19.042021Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -10786,8 +10831,8 @@
      "r1.horizon_share_neg",
      "r1.recovery"
     ],
-    "started_utc": "2026-11-16T01:48:19.129943Z",
-    "ended_utc": "2026-11-16T01:48:19.172108Z",
+    "started_utc": "2026-11-16T02:46:19.042090Z",
+    "ended_utc": "2026-11-16T02:46:19.083425Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10820,8 +10865,8 @@
      "r1.stress_cad.2020_covid",
      "r1.loss_declared"
     ],
-    "started_utc": "2026-11-16T01:48:19.172153Z",
-    "ended_utc": "2026-11-16T01:48:19.260895Z",
+    "started_utc": "2026-11-16T02:46:19.083475Z",
+    "ended_utc": "2026-11-16T02:46:19.166261Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10850,8 +10895,8 @@
      "r1.lt.energy",
      "r1.lt.financials"
     ],
-    "started_utc": "2026-11-16T01:48:19.260941Z",
-    "ended_utc": "2026-11-16T01:48:19.272493Z",
+    "started_utc": "2026-11-16T02:46:19.166321Z",
+    "ended_utc": "2026-11-16T02:46:19.182057Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10873,8 +10918,8 @@
     "fact_ids": [
      "r1.n_blocking"
     ],
-    "started_utc": "2026-11-16T01:48:19.272545Z",
-    "ended_utc": "2026-11-16T01:48:19.343287Z",
+    "started_utc": "2026-11-16T02:46:19.182116Z",
+    "ended_utc": "2026-11-16T02:46:19.271065Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10931,8 +10976,8 @@
      "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:risk.cdar_m:max",
      "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-16T01:48:19.273547Z",
-    "ended_utc": "2026-11-16T01:48:19.341190Z",
+    "started_utc": "2026-11-16T02:46:19.182771Z",
+    "ended_utc": "2026-11-16T02:46:19.265909Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10952,8 +10997,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:19.343329Z",
-    "ended_utc": "2026-11-16T01:48:19.343367Z",
+    "started_utc": "2026-11-16T02:46:19.271177Z",
+    "ended_utc": "2026-11-16T02:46:19.271275Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10973,8 +11018,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:19.345507Z",
-    "ended_utc": "2026-11-16T01:48:19.346526Z",
+    "started_utc": "2026-11-16T02:46:19.275032Z",
+    "ended_utc": "2026-11-16T02:46:19.276085Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10998,8 +11043,8 @@
      "r2.opt_risk",
      "r2.active.strat.growth_floor:min"
     ],
-    "started_utc": "2026-11-16T01:48:19.346661Z",
-    "ended_utc": "2026-11-16T01:48:19.346854Z",
+    "started_utc": "2026-11-16T02:46:19.276310Z",
+    "ended_utc": "2026-11-16T02:46:19.276473Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11024,8 +11069,8 @@
      "r2.horizon_share_neg",
      "r2.recovery"
     ],
-    "started_utc": "2026-11-16T01:48:19.346898Z",
-    "ended_utc": "2026-11-16T01:48:19.397350Z",
+    "started_utc": "2026-11-16T02:46:19.276512Z",
+    "ended_utc": "2026-11-16T02:46:19.346369Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11056,10 +11101,12 @@
      "r2.stress_cad.2022_taux",
      "r2.stress.2020_covid",
      "r2.stress_cad.2020_covid",
-     "r2.loss_declared"
+     "r2.loss_declared",
+     "r2.window.first_year",
+     "r2.window.last_year"
     ],
-    "started_utc": "2026-11-16T01:48:19.397425Z",
-    "ended_utc": "2026-11-16T01:48:19.499911Z",
+    "started_utc": "2026-11-16T02:46:19.346454Z",
+    "ended_utc": "2026-11-16T02:46:19.502055Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11088,8 +11135,8 @@
      "r2.lt.energy",
      "r2.lt.financials"
     ],
-    "started_utc": "2026-11-16T01:48:19.500010Z",
-    "ended_utc": "2026-11-16T01:48:19.513521Z",
+    "started_utc": "2026-11-16T02:46:19.502143Z",
+    "ended_utc": "2026-11-16T02:46:19.521330Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11111,8 +11158,8 @@
     "fact_ids": [
      "r2.n_blocking"
     ],
-    "started_utc": "2026-11-16T01:48:19.513567Z",
-    "ended_utc": "2026-11-16T01:48:19.575517Z",
+    "started_utc": "2026-11-16T02:46:19.521437Z",
+    "ended_utc": "2026-11-16T02:46:19.622734Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11169,8 +11216,8 @@
      "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:risk.cdar_m:max",
      "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-16T01:48:19.514214Z",
-    "ended_utc": "2026-11-16T01:48:19.573012Z",
+    "started_utc": "2026-11-16T02:46:19.522467Z",
+    "ended_utc": "2026-11-16T02:46:19.616500Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11190,8 +11237,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:19.575568Z",
-    "ended_utc": "2026-11-16T01:48:19.575617Z",
+    "started_utc": "2026-11-16T02:46:19.622846Z",
+    "ended_utc": "2026-11-16T02:46:19.622936Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11211,8 +11258,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:19.577801Z",
-    "ended_utc": "2026-11-16T01:48:19.577837Z",
+    "started_utc": "2026-11-16T02:46:19.627179Z",
+    "ended_utc": "2026-11-16T02:46:19.627287Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11235,8 +11282,8 @@
     "fact_ids": [
      "request.weight"
     ],
-    "started_utc": "2026-11-16T01:48:19.577883Z",
-    "ended_utc": "2026-11-16T01:48:19.577944Z",
+    "started_utc": "2026-11-16T02:46:19.627471Z",
+    "ended_utc": "2026-11-16T02:46:19.627615Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11269,8 +11316,8 @@
      "demande.stress_cad.2020_covid",
      "demande.loss_declared"
     ],
-    "started_utc": "2026-11-16T01:48:19.577971Z",
-    "ended_utc": "2026-11-16T01:48:19.709524Z",
+    "started_utc": "2026-11-16T02:46:19.627675Z",
+    "ended_utc": "2026-11-16T02:46:19.838138Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11290,8 +11337,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:19.709600Z",
-    "ended_utc": "2026-11-16T01:48:19.780242Z",
+    "started_utc": "2026-11-16T02:46:19.838233Z",
+    "ended_utc": "2026-11-16T02:46:19.952003Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11349,8 +11396,8 @@
      "dec-robert-v1-fixture:t022:judge:check:demande:risk.cdar_m:max",
      "dec-robert-v1-fixture:t022:judge:check:demande:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-16T01:48:19.710887Z",
-    "ended_utc": "2026-11-16T01:48:19.777351Z",
+    "started_utc": "2026-11-16T02:46:19.839139Z",
+    "ended_utc": "2026-11-16T02:46:19.948809Z",
     "status": "refus",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11370,8 +11417,8 @@
     "fact_ids": [
      "request.framed_method"
     ],
-    "started_utc": "2026-11-16T01:48:19.780295Z",
-    "ended_utc": "2026-11-16T01:48:20.074310Z",
+    "started_utc": "2026-11-16T02:46:19.952079Z",
+    "ended_utc": "2026-11-16T02:46:20.457817Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11428,8 +11475,8 @@
      "judge-check-optimum:risk.cdar_m:max",
      "judge-check-optimum:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-16T01:48:20.014922Z",
-    "ended_utc": "2026-11-16T01:48:20.070046Z",
+    "started_utc": "2026-11-16T02:46:20.323985Z",
+    "ended_utc": "2026-11-16T02:46:20.446767Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11449,8 +11496,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:20.074360Z",
-    "ended_utc": "2026-11-16T01:48:20.137153Z",
+    "started_utc": "2026-11-16T02:46:20.458327Z",
+    "ended_utc": "2026-11-16T02:46:20.566214Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11507,8 +11554,8 @@
      "dec-robert-v1-fixture:t024:judge:check:final:risk.cdar_m:max",
      "dec-robert-v1-fixture:t024:judge:check:final:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-16T01:48:20.075054Z",
-    "ended_utc": "2026-11-16T01:48:20.134209Z",
+    "started_utc": "2026-11-16T02:46:20.459628Z",
+    "ended_utc": "2026-11-16T02:46:20.563006Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11526,8 +11573,8 @@
     "inputs": {},
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:20.137212Z",
-    "ended_utc": "2026-11-16T01:48:20.528201Z",
+    "started_utc": "2026-11-16T02:46:20.566306Z",
+    "ended_utc": "2026-11-16T02:46:21.335567Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -11580,8 +11627,8 @@
      "mix.sector.materials",
      "mix.sector.non_ventile"
     ],
-    "started_utc": "2026-11-16T01:48:20.528388Z",
-    "ended_utc": "2026-11-16T01:48:20.530353Z",
+    "started_utc": "2026-11-16T02:46:21.335851Z",
+    "ended_utc": "2026-11-16T02:46:21.342109Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",

@@ -19,7 +19,9 @@ def store(tmp_path):
 @pytest.fixture
 def no_local_data(monkeypatch):
     monkeypatch.setattr(longdata, "long_data_available", lambda: False)
-    monkeypatch.delenv("ALPHAFORGE_BT_DATA", raising=False)
+    # setitem d'abord : la variable est retirée à la fin du test, même si ensure_long_data l'a posée entre-temps.
+    monkeypatch.setitem(os.environ, "ALPHAFORGE_BT_DATA", "")
+    monkeypatch.delenv("ALPHAFORGE_BT_DATA")
 
 
 def publish(store, files, digests=None):
@@ -30,7 +32,7 @@ def publish(store, files, digests=None):
     store.put(longdata.KEY_PREFIX + longdata.MANIFEST, manifest, content_type="application/json")
 
 
-def test_long_data_downloaded_and_verified(store, tmp_path, no_local_data, monkeypatch):
+def test_long_data_downloaded_and_verified(store, tmp_path, no_local_data):
     files = {n: f"contenu {n}".encode() for n in longdata.LONG_PARQUETS}
     publish(store, files)
     target = longdata.ensure_long_data(store, target=tmp_path / "long")
@@ -38,7 +40,6 @@ def test_long_data_downloaded_and_verified(store, tmp_path, no_local_data, monke
     assert (target / "assets.csv").is_file()  # métadonnées versionnées copiées du paquet
     assert json.loads((target / "data_version.json").read_text())
     assert os.environ["ALPHAFORGE_BT_DATA"] == str(target)
-    monkeypatch.delenv("ALPHAFORGE_BT_DATA")
 
 
 def test_long_data_with_wrong_sha_is_refused(store, tmp_path, no_local_data):

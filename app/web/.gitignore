@@ -14,7 +14,6 @@ coverage/
 # Variables locales (jamais commitées)
 .env*.local
 .env
-!.env.example
 
 # Divers
 .DS_Store

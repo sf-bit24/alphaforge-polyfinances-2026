@@ -28,11 +28,12 @@ export function writeClientDocs(record: ClientRecord, trace: Trace, action: stri
     outputs: { keys: [`${base}profil.md`, `${base}journal.md`, traceKey] },
     durationMs: 12,
   });
+  const count = trace.steps.length;
   record.docs.set(traceKey, {
     key: traceKey,
     title: fr ? `Trace : ${action}` : `Trace: ${action}`,
     type: "Trace",
-    description: fr ? `${trace.steps.length} étapes` : `${trace.steps.length} steps`,
+    description: fr ? `${count} ${count > 1 ? "étapes" : "étape"}` : `${count} ${count === 1 ? "step" : "steps"}`,
     updated_at: at,
     content: JSON.stringify({ action, at, steps: trace.steps }, null, 2),
   });

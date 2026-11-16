@@ -7,6 +7,7 @@ import type { Locale } from "@/lib/contract/schemas";
 import { ApiError, buildPortfolio, isAbort } from "@/lib/client/api";
 import { useHealth } from "@/lib/client/health";
 import { useSession } from "@/lib/client/session";
+import { formatMoney } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
 import { indexFacts, indexTrace } from "@/lib/portfolio/decision";
 import { formatCad } from "@/lib/portfolio/format";
@@ -145,8 +146,13 @@ function usePortfolioBuild({ target, engine, mock, clientId }: BuildTarget) {
   return { key, current: currentState(wanted, results[key]), ask };
 }
 
+/** The amount of a demo request: the engine's convention in French (« 50 000 $ »), the locale's elsewhere ($50,000). */
+function requestAmount(amount: number, locale: Locale): string {
+  return locale === "fr" ? formatCad(amount) : formatMoney(amount, locale);
+}
+
 function PersonaPicker({ targets, target, onPick }: { targets: Target[]; target: Target; onPick: (target: Target) => void }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const v = t.portfolioView;
   return (
     <fieldset className={p.picker}>
@@ -166,7 +172,7 @@ function PersonaPicker({ targets, target, onPick }: { targets: Target[]; target:
               ) : null}
             </span>
             <span className={p.personaLine}>{copy.tagline}</span>
-            {request?.amount_cad !== undefined ? <span className={p.personaLine}>{v.request(formatCad(request.amount_cad), request.ticker)}</span> : null}
+            {request?.amount_cad !== undefined ? <span className={p.personaLine}>{v.request(requestAmount(request.amount_cad, locale), request.ticker)}</span> : null}
           </label>
         );
       })}

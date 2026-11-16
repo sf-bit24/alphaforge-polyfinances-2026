@@ -16,6 +16,7 @@ from alphaforge.finance.contracts import Limit, PolicySpec, Selector
 from alphaforge.finance.policy.models import CompileResult
 
 from .config import StrategyConfig, StyleId, load_strategy
+from .labels import employment_fr, exclusion_fr, interest_fr, pct_fr, sector_fr, style_fr
 from .style import StyleDecision, StyleInputs, floor_step, limit
 
 STRAT = "strat."
@@ -130,7 +131,9 @@ def _market_reasons(c: Candidate, cfg: StrategyConfig) -> list[str]:
     if mdd is None:
         why.append("baisse maximale longue inconnue")
     elif mdd > cfg.eligibility.mdd_long_max + 1e-12:
-        why.append(f"baisse maximale longue {mdd:.0%} > {cfg.eligibility.mdd_long_max:.0%} (δ des titres individuels)")
+        why.append(
+            f"baisse maximale longue {pct_fr(mdd)} > {pct_fr(cfg.eligibility.mdd_long_max)} (δ des titres individuels)"
+        )
     liq = c.features.get("liquidity_cad")
     if liq is not None and liq < cfg.eligibility.min_median_dollar_volume_cad:
         why.append("liquidité insuffisante")
@@ -145,14 +148,14 @@ def _profile_reasons(c: Candidate, inputs: StyleInputs, cfg: StrategyConfig) -> 
     if emp in cfg.sectors.employment_to_sector and (
         c.sector == cfg.sectors.employment_to_sector[emp] or cfg.sectors.employment_to_tag[emp] in c.tags
     ):
-        why.append(f"secteur d'emploi ({emp}) : capital humain déjà exposé")
+        why.append(f"secteur d'emploi ({employment_fr(emp)}) : capital humain déjà exposé")
     if inputs.currency_preference == pc["currency_cad_only"] and c.currency != "CAD":
         why.append("préférence de devise : CAD seulement")
     strict = pc["exclusion_strictness"]
     for ex in inputs.exclusions:
         tag = pc["exclusion_tags"].get(ex)
         if tag and tag in c.tags and inputs.exclusion_strictness != strict["preference"]:
-            why.append(f"exclusion de valeurs : {ex}")
+            why.append(f"exclusion de valeurs : {exclusion_fr(ex)}")
     if c.sector in inputs.concentrated_sectors:
         why.append("secteur déjà concentré dans le portefeuille existant")
     return why
@@ -183,7 +186,7 @@ def rank_scores(  # noqa: PLR0913 - signature publique : select.py et les tests 
                 tag = pc["exclusion_tags"].get(ex)
                 if tag and tag in c.tags:
                     score += cfg.bonus.preference_penalty
-                    notes.append(f"préférence d'exclusion ({ex}) : pénalité de score")
+                    notes.append(f"préférence d'exclusion ({exclusion_fr(ex)}) : pénalité de score")
         ok, why = eligibility(c, excluded, inputs, cfg, employer_tickers)
         rows.append(
             (c, round(score, 6), {f: round(util[f][c.ticker], 6) for f in w}, tuple(bon), ok, tuple(why + notes))
@@ -236,7 +239,11 @@ def sector_caps(
             )
         elif tau < 0 or tag in selected_tags:
             cap = floor_step(e_cap * spec.s_ref * (1 + tau) + sectors.phi * l_star / spec.delta, sectors.rounding)
-            why = f"style {style} (τ={tau:+g})" if tau < 0 else "secteur d'un titre retenu : plafond affiché (Brain D7)"
+            why = (
+                f"style {style_fr(style)} (τ = {tau:+g})".replace(".", ",")
+                if tau < 0
+                else "secteur d'un titre retenu : plafond affiché (Brain D7)"
+            )
         else:
             continue
         cap = round(max(cap, 0.0), 6)
@@ -265,7 +272,7 @@ def stock_floors(
         f = min(floor_step(decision.floor_fraction * room, 0.0025), cfg.floors.f_abs)
         f = round(f, 6)
         if f < cfg.floors.min_floor:
-            notes.append(f"{r.ticker} : plancher {f:.4f} sous le minimum, retiré")
+            notes.append(f"{r.ticker} : plancher de {pct_fr(f, 2)} sous le minimum, retiré")
             continue
         if inputs.amount_cad and f * inputs.amount_cad < cfg.eligibility.min_line_cad:
             line, lmin = f * inputs.amount_cad, cfg.eligibility.min_line_cad
@@ -297,16 +304,18 @@ def interest_asset_floors(
             continue
         t = spec.asset
         if t not in base.universe or t in base.excluded:
-            notes.append(f"{t} ({interest}) : hors de l'univers investissable, aucun plancher")
+            notes.append(f"{t} (intérêt {interest_fr(interest)}) : hors de l'univers investissable, aucun plancher")
             continue
         cap_lim = limit(comp, spec.limit)
         cap = float(cap_lim.max) if cap_lim is not None and cap_lim.max is not None else 0.0
         f = round(min(floor_step(decision.floor_fraction * cap, 0.0025), cfg.floors.f_abs, cap), 6)
         if f < cfg.floors.min_floor:
-            notes.append(f"{t} ({interest}) : plafond {spec.limit} = {cap:g}, plancher sous le minimum, retiré")
+            what = f"{t} (intérêt {interest_fr(interest)})"
+            notes.append(f"{what} : plafond du niveau à {pct_fr(cap, 1)}, plancher sous le minimum, retiré")
             continue
         if inputs.amount_cad and f * inputs.amount_cad < cfg.eligibility.min_line_cad:
-            notes.append(f"{t} ({interest}) : ligne de {f * inputs.amount_cad:.0f} $ sous le minimum, retirée")
+            what = f"{t} (intérêt {interest_fr(interest)})"
+            notes.append(f"{what} : ligne de {f * inputs.amount_cad:.0f} $ sous le minimum, retirée")
             continue
         floors[t], owner[t] = f, interest
     return floors, owner, notes
@@ -340,11 +349,13 @@ def build_limits(plan: Plan, cfg: StrategyConfig | None = None) -> list[Limit]:
                 selector=Selector(assets=[t]),
                 min=f,
                 blocking=False,
-                derived_from=f"étape 0 : intérêt « {interest} » de l'investisseur"
+                derived_from=f"étape 0 : intérêt « {interest_fr(interest)} » de l'investisseur"
                 if interest
                 else "étape 0 : titre retenu par le classement du style",
                 source=cfg.src(f"{INTEREST_SRC}{interest}" if interest else "floors"),
-                description_fr=f"plancher de {t} (intérêt {interest})" if interest else f"plancher du satellite {t}",
+                description_fr=f"plancher de {t} (intérêt {interest_fr(interest)})"
+                if interest
+                else f"plancher du satellite {t}",
             )
         )
     for tag, (cap, why) in plan.sector_caps.items():
@@ -357,7 +368,7 @@ def build_limits(plan: Plan, cfg: StrategyConfig | None = None) -> list[Limit]:
                 blocking=False,
                 derived_from=f"étape 0 : {why}",
                 source=cfg.src("sectors"),
-                description_fr=f"plafond d'exposition {tag} (look-through)",
+                description_fr=f"plafond d'exposition au {sector_fr(tag)} (look-through)",
             )
         )
     return lims

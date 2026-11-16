@@ -16,7 +16,7 @@ from .. import clock, okf
 from ..store import ConflictError, Store
 from ..trace import Trace
 from . import rules
-from .questionnaire import Questionnaire, format_field_value
+from .questionnaire import Questionnaire, fact_band, format_fact, labeled
 
 UUID4 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 STAGES = ("base_questions", "existing_portfolio", "portfolio_review", "followups", "complete")
@@ -152,6 +152,12 @@ class ClientSession:
         une valeur qui attend sa confirmation."""
         return {field_id: fact.get("value") for field_id, fact in self.confirmed_facts().items()}
 
+    def bands(self) -> dict[str, dict[str, Any]]:
+        """Tranches des faits confirmés répondus par une tranche, par champ (``band`` du fait)."""
+        return {
+            field_id: band for field_id, fact in self.confirmed_facts().items() if (band := fact_band(fact)) is not None
+        }
+
     def unconfirmed(self) -> dict[str, dict[str, Any]]:
         """Faits tirés d'un texte libre qui attendent la confirmation de l'investisseur."""
         return {field_id: fact for field_id, fact in self.facts.items() if fact.get("confirmed") is False}
@@ -199,11 +205,14 @@ class ClientSession:
         question_id: str | None = None,
         at: str | None = None,
         option: str | None = None,
+        band: dict[str, Any] | None = None,
         confirmed: bool = True,
     ) -> Any:
         """Écrit un fait validé et l'inscrit au journal (``kind: answer``, ``field``, ``value``, ``question_id``?,
         ``option``?, ``previous``?). ``option`` est l'identifiant de la tranche choisie quand un clic écrit un
-        nombre. ``confirmed=False`` marque une valeur tirée d'un texte libre, à faire confirmer."""
+        nombre; ``band`` (``QuestionSpec.option_band``, ``tranche_bands``) est cette tranche, gardée avec le fait
+        pour que tout ce qui le montre la cite. ``confirmed=False`` marque une valeur tirée d'un texte libre, à
+        faire confirmer."""
         _check_provenance(provenance)
         at = at or clock.iso()
         existing = self.facts.get(field_id) or {}
@@ -212,12 +221,16 @@ class ClientSession:
             self.facts.pop(field_id, None)
         else:
             self.facts[field_id] = {"value": value, "provenance": provenance, "at": at}
+            if band:
+                self.facts[field_id]["band"] = band
             if not confirmed:
                 self.facts[field_id]["confirmed"] = False
                 # Une valeur confirmée remplacée par un texte libre reste en vigueur jusqu'à la confirmation.
                 replaced = existing.get("replaces") if existing.get("confirmed") is False else existing
                 if replaced:
-                    self.facts[field_id]["replaces"] = {k: replaced[k] for k in ("value", "provenance", "at")}
+                    self.facts[field_id]["replaces"] = {
+                        k: replaced[k] for k in ("value", "provenance", "at", "band") if k in replaced
+                    }
         entry: dict[str, Any] = {
             "at": at,
             "kind": "answer",
@@ -316,7 +329,7 @@ class ClientSession:
             {"actor": actor, "text": text, "locale": locale, "at": clock.iso()} if text else None
         )
 
-    def remember_questions(
+    def remember_questions(  # noqa: PLR0913 - une table par information gardée hors des questions, par mots-clés
         self,
         questions: list[dict[str, Any]],
         turn: int,
@@ -324,15 +337,20 @@ class ClientSession:
         choices: dict[str, dict[str, Any]] | None = None,
         confirmations: dict[str, str] | None = None,
         reasons: dict[str, str] | None = None,
+        bands: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         """Questions envoyées à l'investisseur. Les tables des tranches (identifiant → nombre) restent hors des
-        questions, dans ``pending_choices``, et le champ visé par une question de confirmation ``cf_`` dans
+        questions, dans ``pending_choices``, avec les tranches elles-mêmes (identifiant → ``band``) dans
+        ``pending_bands``, et le champ visé par une question de confirmation ``cf_`` dans
         ``pending_confirmations``. ``followup_counts`` compte les questions générées par A1 et les
         questions ouvertes envoyées dans la session (``asked`` est tronqué et contient aussi le secours)."""
         self.data["pending_questions"] = questions
         ids = {question["id"] for question in questions}
         self.data["pending_choices"] = {
             question_id: table for question_id, table in (choices or {}).items() if question_id in ids
+        }
+        self.data["pending_bands"] = {
+            question_id: table for question_id, table in (bands or {}).items() if question_id in ids
         }
         self.data["pending_confirmations"] = {
             question_id: field_id for question_id, field_id in (confirmations or {}).items() if question_id in ids
@@ -362,6 +380,7 @@ class ClientSession:
     def clear_pending(self) -> None:
         self.data["pending_questions"] = []
         self.data["pending_choices"] = {}
+        self.data["pending_bands"] = {}
         self.data["pending_confirmations"] = {}
 
     def mark_answered(self, question_id: str, value: Any) -> None:
@@ -573,15 +592,17 @@ def _risk_line(questionnaire: Questionnaire, risk: dict[str, Any], locale: str) 
     capacity = rules.level_label(questionnaire, risk["capacity"], locale) or "—"
     effective = rules.level_label(questionnaire, risk["effective"], locale, effective=True) or "—"
     if locale == "en":
-        return f"- Risk tolerance : {tolerance} · Risk capacity : {capacity} · Effective risk : {effective}"
-    return f"- Tolérance au risque : {tolerance} · Capacité : {capacity} · Risque effectif : {effective}"
+        parts = (("Risk tolerance", tolerance), ("Risk capacity", capacity), ("Effective risk", effective))
+    else:
+        parts = (("Tolérance au risque", tolerance), ("Capacité", capacity), ("Risque effectif", effective))
+    return "- " + " · ".join(labeled(label, text, locale) for label, text in parts)
 
 
 def _completeness_line(questionnaire: Questionnaire, score: float, locale: str) -> str:
     reached, threshold, cap = round(score * 100), round(questionnaire.threshold * 100), round(questionnaire.cap * 100)
     if locale == "en":
-        return f"- Completeness : {reached} % (threshold {threshold} %, displayed cap {cap} %)"
-    return f"- Complétude : {reached} % (seuil {threshold} %, plafond affiché {cap} %)"
+        return f"- Completeness: {reached}% (threshold {threshold}%, displayed cap {cap}%)"
+    return f"- {labeled('Complétude', f'{reached} % (seuil {threshold} %, plafond affiché {cap} %)', locale)}"
 
 
 def _fact_rows_by_dimension(questionnaire: Questionnaire, session: ClientSession, locale: str) -> dict[str, list[str]]:
@@ -592,7 +613,7 @@ def _fact_rows_by_dimension(questionnaire: Questionnaire, session: ClientSession
         fact = session.facts.get(spec.id)
         if not fact:
             continue
-        shown = format_field_value(spec, fact["value"], locale).replace("|", "/")
+        shown = format_fact(spec, fact, locale).replace("|", "/")
         if fact.get("confirmed") is False:
             shown += unconfirmed_mark
         row = f"| {spec.label_text(locale)} | {shown} | {fact.get('provenance', '')} | {fact.get('at', '')} |"
@@ -638,8 +659,8 @@ def render_profile_body(
             else "Profil fictif, simulation seulement : aucune transaction réelle ni conseil financier personnalisé."
         ),
         "",
-        f"- {'Stage' if is_english else 'Étape'} : `{session.stage}`",
-        f"- {'Knowledge level' if is_english else 'Niveau de connaissances'} : {level_text}",
+        f"- {labeled('Stage' if is_english else 'Étape', f'`{session.stage}`', locale)}",
+        f"- {labeled('Knowledge level' if is_english else 'Niveau de connaissances', level_text, locale)}",
         _risk_line(questionnaire, risk, locale),
         _completeness_line(questionnaire, score["score"], locale),
         "",

@@ -85,7 +85,9 @@ account_type (tfsa for CELI/TFSA, rrsp for REER/RRSP, resp for REEE/RESP, rrif f
 unknown) and asset_class_hint (equity, etf_equity, etf_bond, etf_commodity, bond, cash, crypto, fund, other). Cash \
 balances are positions with asset_class_hint cash and a market_value. Never invent or compute a ticker, quantity, \
 price or value; leave a field out when it is not shown. Put lines you cannot interpret in `unparsed` with a reason. \
-Ignore totals and subtotals. Do not include personal identifiers (names, account numbers) anywhere.
+Write every `notes` and every `unparsed` reason in the language given by `language`, whatever the language of the \
+input: the investor reads them next to the positions. Ignore totals and subtotals. Do not include personal \
+identifiers (names, account numbers) anywhere.
 2. The tool returns the code's resolution: identified securities, prices with their source and date, values in \
 CAD, exposures and flags. If you misread something, call record_positions again with the corrected full list.
 3. Call finish_turn with a Markdown message for the investor in the language given by `language`, adapted to the \
@@ -370,7 +372,10 @@ RECORD_POSITIONS_SCHEMA = {
                             "enum": ["tfsa", "rrsp", "resp", "rrif", "non_registered", "unknown"],
                         },
                         "asset_class_hint": {"type": "string", "enum": list(portfolio.ASSET_CLASSES)},
-                        "notes": {"type": "string"},
+                        "notes": {
+                            "type": "string",
+                            "description": "Short note for the investor, in the language given by `language`.",
+                        },
                     },
                     "required": ["raw"],
                 },
@@ -379,7 +384,13 @@ RECORD_POSITIONS_SCHEMA = {
                 "type": "array",
                 "items": {
                     "type": "object",
-                    "properties": {"raw": {"type": "string"}, "reason": {"type": "string"}},
+                    "properties": {
+                        "raw": {"type": "string"},
+                        "reason": {
+                            "type": "string",
+                            "description": "Why the line was not read, in the language given by `language`.",
+                        },
+                    },
                     "required": ["raw", "reason"],
                 },
             },
@@ -409,14 +420,13 @@ RESOLVED_POSITION_FIELDS = (
 )
 
 
-def _add_unparsed_lines(view: dict[str, Any], unparsed: list[dict[str, Any]]) -> None:
+def _add_unparsed_lines(view: dict[str, Any], unparsed: list[dict[str, Any]], locale: str) -> None:
     """Joint aux lignes non résolues celles que A2 n'a pas su lire; la vue signale alors des positions non
     évaluées."""
     for item in unparsed[:50]:
         if isinstance(item, dict) and item.get("raw"):
-            view["unresolved"].append(
-                {"raw": str(item["raw"])[:300], "reason": str(item.get("reason") or "illisible")[:200]}
-            )
+            reason = item.get("reason") or pick(locale, "illisible", "unreadable")
+            view["unresolved"].append({"raw": str(item["raw"])[:300], "reason": str(reason)[:200]})
     if any(entry.get("position_id") is None for entry in view["unresolved"]):
         flags = view["exposures"]["flags"]
         if "unvalued_positions" not in flags:
@@ -445,10 +455,12 @@ def _resolution(view: dict[str, Any]) -> dict[str, Any]:
 
 
 class A2Turn:
-    """État d'un tour de A2 : la vue que le code calcule à partir des lignes lues, puis le message de fin."""
+    """État d'un tour de A2 : la vue que le code calcule à partir des lignes lues, puis le message de fin.
+    ``locale`` est la langue de la session, celle des notes et des raisons écrites par le code."""
 
-    def __init__(self, quote_fetcher: portfolio.QuoteFetcher | None):
+    def __init__(self, quote_fetcher: portfolio.QuoteFetcher | None, locale: str = "fr"):
         self.quote_fetcher = quote_fetcher
+        self.locale = locale
         self.view: dict[str, Any] | None = None
         self.message: str | None = None
         self.record_calls = 0
@@ -485,8 +497,8 @@ class A2Turn:
         if self.record_calls > MAX_RECORD_CALLS:
             return {"status": "error", "reason": "record_positions may be called at most 3 times"}
         raws = [portfolio.raw_from_dict(item) for item in positions[:MAX_POSITIONS] if isinstance(item, dict)]
-        view = portfolio.build_view(raws, status="draft", quote_fetcher=self.quote_fetcher)
-        _add_unparsed_lines(view, unparsed)
+        view = portfolio.build_view(raws, status="draft", quote_fetcher=self.quote_fetcher, locale=self.locale)
+        _add_unparsed_lines(view, unparsed, self.locale)
         self.view = view
         return _resolution(view)
 
@@ -575,7 +587,7 @@ def run_a2(
     runner: AgentRunner,
 ) -> A2Outcome:
     """A2 lit l'entrée et enregistre les lignes brutes; le code les résout, puis A2 explique le résultat."""
-    state = A2Turn(quote_fetcher)
+    state = A2Turn(quote_fetcher, locale)
     spec = _agent_spec(state.tools(runner.stream_message), guardrail=runner.guardrail)
     run = runner.run(spec, _prompt(prepared, locale, knowledge_level))
     if state.view is None or state.message is None:

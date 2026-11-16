@@ -185,11 +185,27 @@ export const DimensionView = z.object({
 export type DimensionView = z.infer<typeof DimensionView>;
 export type DimensionStatus = DimensionView["status"];
 
+/**
+ * Range chosen for a numeric answer (optional, CONTRACTS.md 3.3): `value` is then only the figure the code
+ * computes with, and the interface shows `label` (already in the language of the view). A malformed band is
+ * dropped rather than failing the whole response.
+ */
+export const FactBand = z.object({
+  option: z.string().nullish(),
+  label: z.string().min(1),
+  min: z.number().nullish(),
+  max: z.number().nullish(),
+});
+export type FactBand = z.infer<typeof FactBand>;
+
 export const Fact = z.object({
   field: z.string(),
   value: z.unknown(),
   provenance: z.string(),
   at: timestamp,
+  band: FactBand.optional().catch(undefined),
+  /** The value as the investor reads it, in the language of the view (optional, CONTRACTS.md 3.3); dropped if malformed. */
+  label: z.string().min(1).optional().catch(undefined),
 });
 export type Fact = z.infer<typeof Fact>;
 

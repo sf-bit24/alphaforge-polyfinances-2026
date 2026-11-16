@@ -26,7 +26,8 @@ from alphaforge.finance.contracts.policy import Limit, PolicySpec, Selector
 from alphaforge.finance.strategy.okf_facts import ESG_FACT_PREFIX, FILING_FACT_PREFIX, NEWS_FACT_PREFIX
 from alphaforge.finance.strategy.rules import clamp_strategy_floors
 
-from .schemas import PRIORITY, Amendment, AppliedAmendment, LensReport
+from .facts import fmt
+from .schemas import LENS_FR, PRIORITY, Amendment, AppliedAmendment, LensReport
 
 FLOOR_RATIO = 0.6
 NEWS_REJECT_FR = "une actualité ne justifie jamais un changement du mandat (rumeur ≠ fait)"
@@ -34,6 +35,13 @@ ESG_NO_PREFERENCE_FR = "une preuve ESG ne change le mandat que si l'investisseur
 ESG_OTHER_ASSET_FR = "la preuve ESG citée concerne un autre titre que celui à exclure"
 FILING_REJECT_FR = "un dépôt réglementaire est signalé, jamais une preuve de changement du mandat (contenu non lu)"
 _MEASURE_ORDER = {"VARIANCE": 0, "CVAR": 1, "CDAR": 2}  # CDaR = plus prudente (drawdown)
+
+
+def _missing_evidence_fr(n_missing: int) -> str:
+    """Rejet pour preuve absente, sans l'identifiant : il reste dans ``amendment.evidence_fact_ids`` (audit)."""
+    if n_missing == 1:
+        return "preuve inconnue : le fait cité est introuvable dans la décision"
+    return f"preuve inconnue : {n_missing} faits cités sont introuvables dans la décision"
 
 
 def _limit(policy: PolicySpec, rule_id: str) -> Limit | None:
@@ -112,7 +120,7 @@ def _check_evidence(a: Amendment, guards: _Guards) -> None:
         raise _RejectedError(FILING_REJECT_FR)
     missing = [f for f in a.evidence_fact_ids if f not in guards.known_fact_ids]
     if missing:
-        raise _RejectedError(f"preuve inconnue : {missing}")
+        raise _RejectedError(_missing_evidence_fr(len(missing)))
 
 
 def _change(new: PolicySpec, lens: str, a: Amendment, guards: _Guards) -> tuple:
@@ -131,14 +139,14 @@ def _change(new: PolicySpec, lens: str, a: Amendment, guards: _Guards) -> tuple:
 def _lower_max(new: PolicySpec, a: Amendment, guards: _Guards) -> tuple:
     lim = _limit(new, a.target)
     if lim is None:
-        raise _RejectedError(f"limite inconnue : {a.target}")
+        raise _RejectedError("limite inconnue : la limite visée n'est pas dans le mandat")
     if a.value is None or lim.max is None or not a.value < lim.max - 1e-12:
         raise _RejectedError("ne resserre pas la limite (le max doit baisser)")
     if a.kind == "cap_group" and lim.kind not in ("group_weight", "exposure", "asset_weight"):
-        raise _RejectedError("cap_group vise une limite de poids ou d'exposition")
+        raise _RejectedError("un plafond de groupe ne vise qu'une limite de poids ou d'exposition")
     floor = _ratchet_floor(_limit(guards.original, a.target), lim, guards.floor_ratio)
     if a.value < floor or a.value < 0 or (lim.min is not None and a.value < lim.min):
-        raise _RejectedError(f"sous le plancher anti-cliquet ({floor:.4f}) ou sous le min")
+        raise _RejectedError(f"sous le plancher anti-cliquet ({fmt(floor, '%')}) ou sous le minimum")
     before, after = lim.max, a.value
     lim.max = a.value
     return before, after
@@ -154,7 +162,7 @@ def _raise_group_min(new: PolicySpec, a: Amendment) -> tuple:
     if a.target.startswith("strat."):
         raise _RejectedError("un plancher de style (strat.*) ne peut que baisser : le relever ajouterait du risque")
     if lim is None or lim.kind != "group_weight":
-        raise _RejectedError(f"limite de groupe inconnue : {a.target}")
+        raise _RejectedError("limite de groupe inconnue : la limite visée n'est pas une limite de groupe du mandat")
     cur_min = lim.min or 0.0
     if a.value is None or not a.value > cur_min + 1e-12 or (lim.max is not None and a.value > lim.max):
         raise _RejectedError("doit relever le min sans dépasser le max")
@@ -176,7 +184,7 @@ def _exclude_asset(new: PolicySpec, lens: str, a: Amendment) -> tuple:
             selector=Selector(assets=[a.target]),
             max=0.0,
             blocking=True,
-            derived_from=f"lentille {lens}",
+            derived_from=f"lentille {LENS_FR.get(lens, lens)}",
             source=f"fact:{a.evidence_fact_ids[0]}",
             description_fr=a.reason_fr[:200],
         )

@@ -22,6 +22,7 @@ from alphaforge.finance.portfolio.judge import check
 from alphaforge.finance.portfolio.optimizer import optimize
 
 from .config import StrategyConfig, load_strategy
+from .labels import evidence_text, flag_fr, interest_fr, sector_fr, style_fr
 from .rules import (
     Candidate,
     Plan,
@@ -183,6 +184,7 @@ class _Outcome:
     policy: PolicySpec
     plan: Plan
     fallback: list[str]
+    steps: list[tuple[str, str | None]]  # (palier lisible, limites en cause) : un Fact par palier
     applied: bool
     base_risk: float | None  # risque minimisé du mandat de base
     risk_cost: float | None
@@ -267,16 +269,16 @@ def _with_preference(inputs: StyleInputs, preference: str | None) -> StyleInputs
 
 def _record_style(run: _Run, d: StyleDecision) -> None:
     """Facts du style retenu, du style tiré du niveau et de la préférence."""
-    shift = f"niveau {run.comp.level} → {d.from_level}, décalage {d.shift:+d}"
+    from_level = f"niveau {run.comp.level} → {d.from_level}"
     run.add(
         "rule",
         _Fact(
             "strat.style",
             "style de composition retenu (étape 0)",
-            d.style,
+            style_fr(d.style),
             "texte",
             path="level_to_style",
-            processing=shift,
+            processing=f"{from_level}, décalage {d.shift:+d} → {d.style}",
         ),
     )
     run.add(
@@ -284,9 +286,10 @@ def _record_style(run: _Run, d: StyleDecision) -> None:
         _Fact(
             "strat.style_from_level",
             "style tiré du niveau (convention d'équipe)",
-            d.from_level,
+            style_fr(d.from_level),
             "texte",
             path="level_to_style",
+            processing=from_level,
         ),
     )
     run.add(
@@ -294,10 +297,10 @@ def _record_style(run: _Run, d: StyleDecision) -> None:
         _Fact(
             "strat.preference",
             "préférence de style",
-            d.preference or "aucune",
+            style_fr(d.preference) if d.preference else "aucune",
             "texte",
             path="preference",
-            processing=d.preference_source,
+            processing=f"{d.preference_source} → {d.preference}" if d.preference else d.preference_source,
         ),
     )
 
@@ -321,10 +324,17 @@ def _record_guardrails(run: _Run, d: StyleDecision) -> None:
             ),
         )
     for f in d.flags.active():
-        label = f"signal de comportement : {f} (garde-fou, jamais une allocation)"
+        evidence = d.flags.evidence.get(f, [])
         run.add(
             "rule",
-            _Fact(f"strat.flag.{f}", label, " ; ".join(d.flags.evidence.get(f, [])), "texte", path="profile_codes"),
+            _Fact(
+                f"strat.flag.{f}",
+                f"signal de comportement : {flag_fr(f)} (garde-fou, jamais une allocation)",
+                evidence_text(evidence),
+                "texte",
+                path="profile_codes",
+                processing=f"{f} : " + " ; ".join(evidence),
+            ),
         )
 
 
@@ -388,7 +398,7 @@ def _record_ranking(run: _Run, cands: list[Candidate], ranked: list[Ranked], sty
             "ranking",
             _Fact(
                 f"strat.score.{r.ticker}",
-                f"score du style {style} ({r.ticker})",
+                f"score du style {style_fr(style)} ({r.ticker})",
                 round(r.score, 6),
                 "ratio",
                 path=f"weights.{style}",
@@ -528,6 +538,7 @@ def _settle(run: _Run, plan: Plan) -> _Outcome:
     base, cfg = run.base, run.cfg
     feas = _Feasibility(base, run.as_of)
     fallback: list[str] = []
+    steps: list[tuple[str, str | None]] = []
     policy = apply_to_policy(base, plan, cfg)
     ok, res, new_viol = feas(policy)
     if not ok:
@@ -535,6 +546,7 @@ def _settle(run: _Run, plan: Plan) -> _Outcome:
         e_min = float(g_lim.min or 0.0) if g_lim else 0.0
         for label, step in degrade_steps(plan, e_min, cfg.band.rounding):
             fallback.append(f"{label} (violations : {sorted(new_viol) or 'optimiseur'})")
+            steps.append((label, f"violations : {', '.join(sorted(new_viol)) or 'optimiseur'}"))
             plan = _without_small_lines(run, step)
             policy = apply_to_policy(base, plan, cfg)
             ok, res, new_viol = feas(policy)
@@ -544,19 +556,23 @@ def _settle(run: _Run, plan: Plan) -> _Outcome:
     if not ok:
         policy, plan = base, Plan(None, {}, {}, {})
         fallback.append("mandat de base conservé")
+        steps.append(("mandat de base conservé", None))
     b_res = feas.base_result
     rc = (
         (res.risk_value - b_res.risk_value)
         if (applied and res is not None and res.risk_value is not None and b_res.risk_value is not None)
         else None
     )
-    return _Outcome(policy, plan, fallback, applied, b_res.risk_value, rc)
+    return _Outcome(policy, plan, fallback, steps, applied, b_res.risk_value, rc)
 
 
 def _record_outcome(run: _Run, out: _Outcome) -> None:
     """Facts du résultat : paliers de repli, plan final, risque minimisé et son écart, application."""
-    for i, f in enumerate(out.fallback):
-        run.add("result", _Fact(f"strat.fallback.{i}", "palier de repli de l'étape 0", f, "texte", path="floors"))
+    for i, (label, why) in enumerate(out.steps):
+        run.add(
+            "result",
+            _Fact(f"strat.fallback.{i}", "palier de repli de l'étape 0", label, "texte", path="floors", processing=why),
+        )
     _record_plan(run, out.plan)
     if out.base_risk is not None:
         run.add(
@@ -600,7 +616,7 @@ def _floor_fact(ticker: str, floor: float, interest: str | None) -> _Fact:
     if interest:
         return _Fact(
             f"strat.floor.{ticker}",
-            f"plancher de {ticker} (intérêt {interest})",
+            f"plancher de {ticker} (intérêt {interest_fr(interest)})",
             floor,
             "%",
             path="bonus.interest_assets",
@@ -653,7 +669,7 @@ def _record_plan(run: _Run, plan: Plan) -> None:
             "result",
             _Fact(
                 f"strat.sector_cap.{tag}",
-                f"plafond d'exposition {tag} (look-through)",
+                f"plafond d'exposition au {sector_fr(tag)} (look-through)",
                 cap,
                 "%",
                 path="sectors",

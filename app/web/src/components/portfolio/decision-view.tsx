@@ -15,6 +15,20 @@ import { Ranking } from "./ranking-table";
 
 const KIND_TONE = { proposition: d.ok, refus_encadre: d.stop, position_attente: d.wait, incomplet: d.wait, protection: d.wait } as const;
 
+/** The language the engine writes its texts in (facts, statements, checks, trace): French only for now. */
+const ENGINE_LOCALE = "fr";
+
+/** In another language than the engine's, says that the decision's own texts stay in French. */
+function EngineLanguageNote() {
+  const { t, locale } = useI18n();
+  if (locale === ENGINE_LOCALE) return null;
+  return (
+    <p className={p.engineNote} role="note">
+      {t.portfolioView.engineLanguage}
+    </p>
+  );
+}
+
 /** The investor's precise request, when there is one: its weight, its framing and the Judge's checks of it. */
 function RequestCheck({ decision }: { decision: Decision }) {
   const { t } = useI18n();
@@ -30,7 +44,9 @@ function RequestCheck({ decision }: { decision: Decision }) {
       </div>
       {req.checks.map((event) => (
         <p key={event.trace_id}>
-          <b>{v.constraints.requestCheck}</b> : {event.output_summary ?? v.trace.status[event.status]}
+          <b>{v.constraints.requestCheck}</b>
+          {v.colon}
+          {event.output_summary ?? v.trace.status[event.status]}
         </p>
       ))}
     </div>
@@ -93,6 +109,7 @@ function Summary({ response, fixture }: { response: PortfolioBuildResponse; fixt
             <FactChip id="level" />
           </div>
           <p className={p.kindText}>{v.kindText[decision.kind]}</p>
+          <EngineLanguageNote />
           <RequestCheck decision={decision} />
         </div>
         <SummaryMeta response={response} fixture={fixture} />

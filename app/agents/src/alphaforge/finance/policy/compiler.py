@@ -1434,6 +1434,29 @@ def _derived_from(template: dict[str, Any], biases: set[str]) -> str:
     return derived_from
 
 
+# Libellé lu d'une limite du gabarit (contrôles du Judge, explication, contrefactuels). Le rule_id reste dans
+# Limit.rule_id et ConstraintCheck.rule_id ; aucun chiffre ici, pour le vérificateur des nombres de l'explication.
+LIMIT_LABELS_FR = {
+    "alloc.growth": "part des actifs de croissance",
+    "alloc.cash_like": "part des liquidités",
+    "alloc.long_duration": "part des obligations à long terme",
+    "alloc.gold": "part de l'or",
+    "alloc.crypto": "part des cryptoactifs",
+    "conc.etf_equity_each": "poids de chaque FNB d'actions",
+    "conc.etf_bond_each": "poids de chaque FNB d'obligations",
+    "conc.single_each": "poids de chaque titre individuel",
+    "conc.single_total": "poids total des titres individuels",
+    "sat.sandbox": "bac à sable des demandes",
+    "exp.tech": "exposition au secteur de la technologie (look-through)",
+    "risk.cvar_m": "CVaR mensuelle",
+    "risk.cvar_12m": "CVaR des rendements sur douze mois glissants",
+    "risk.mdd": "baisse maximale",
+    "risk.vol": "volatilité annualisée",
+    "risk.cdar_m": "CDaR mensuelle (risque mesuré par les baisses)",
+    "risk.stress_2022": "perte dans le scénario de crise de 2022",
+}
+
+
 def _template_limits(
     bounds: dict[str, _Bounds], inputs: _CompileInputs, level: str, context: _CompileContext
 ) -> list[Limit]:
@@ -1457,7 +1480,7 @@ def _template_limits(
                 blocking=template.get("blocking", True),
                 derived_from=_derived_from(template, inputs.biases),
                 source=source,
-                description_fr=f"{rule_id} niveau {level}",
+                description_fr=f"{LIMIT_LABELS_FR.get(rule_id, rule_id)}, niveau {level}",
             )
         )
         context.record(f"limit.{rule_id}", {"level": level}, {"min": minimum, "max": maximum}, source.split(" ; ")[0])

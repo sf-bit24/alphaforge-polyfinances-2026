@@ -19,8 +19,10 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from alphaforge.finance.contracts.decision import Explanation, Statement
+from alphaforge.finance.strategy.labels import STYLE_FR, flag_fr, sector_fr
 
 from .facts import FactBook, fmt
+from .schemas import LENS_FR
 
 _NUM = re.compile(
     r"(?<![A-Za-z_.])-?\d[\d\s]*(?:[.,]\d+)?(?![A-Za-z_])"
@@ -44,13 +46,51 @@ def allowed_numbers(book: FactBook, fact_ids: list[str]) -> set[str]:
     return out
 
 
-def verify(book: FactBook, st: Statement) -> list[str]:
-    """Liste des problèmes (vide = phrase acceptée)."""
-    problems = [f"fact_id inconnu : {fid}" for fid in st.fact_ids if fid not in book.facts]
+def _unsourced(book: FactBook, st: Statement) -> tuple[list[str], list[str]]:
+    """fact_id cités absents du registre, et nombres du texte qu'aucun Fact cité ne porte (triés)."""
+    unknown = [fid for fid in st.fact_ids if fid not in book.facts]
     extra = numbers(st.text_fr) - allowed_numbers(book, st.fact_ids) - {"1", "2", "3", "4", "12", "95", "2022"}
+    return unknown, sorted(extra)
+
+
+def verify(book: FactBook, st: Statement) -> list[str]:
+    """Liste des problèmes (vide = phrase acceptée), avec les identifiants : pour le code et ses erreurs."""
+    unknown, extra = _unsourced(book, st)
+    problems = [f"fact_id inconnu : {fid}" for fid in unknown]
     if extra:
-        problems.append(f"nombres non sourcés : {sorted(extra)}")
+        problems.append(f"nombres non sourcés : {extra}")
     return problems
+
+
+def verify_fr(book: FactBook, st: Statement) -> list[str]:
+    """Les mêmes problèmes que ``verify`` (vide dans les mêmes cas), rédigés pour l'investisseur : sans identifiant
+    ni liste Python. Les nombres sont écrits à la française (« 12,5 »)."""
+    unknown, extra = _unsourced(book, st)
+    out = []
+    if unknown:
+        n = len(unknown)
+        out.append("fait cité introuvable dans la décision" if n == 1 else f"{n} faits cités introuvables")
+    if extra:
+        nums = ", ".join(x.replace(".", ",") for x in extra)
+        out.append(f"nombre non sourcé : {nums}" if len(extra) == 1 else f"nombres non sourcés : {nums}")
+    return out
+
+
+# Les quatre questions de l'atelier, comme l'interface les titre (app/web/src/lib/i18n/portfolio.ts).
+SECTION_FR = {
+    "data_used": "Quelles données ?",
+    "why": "Pourquoi ce choix ?",
+    "limits": "Quelles limites ?",
+    "what_would_change": "Qu'est-ce qui changerait la réponse ?",
+}
+
+
+def kept_template_fr(section: str, index: int, problems: list[str]) -> str:
+    """Ligne du rapport de reformulation : « 4e énoncé de « Pourquoi ce choix ? » : reformulation écartée
+    (nombre non sourcé : 50), gabarit conservé. » ; ``index`` part de 0."""
+    n = index + 1
+    where = f"{n}{'er' if n == 1 else 'e'} énoncé de « {SECTION_FR.get(section, section)} »"
+    return f"{where} : reformulation écartée ({' ; '.join(problems)}), gabarit conservé."
 
 
 def _s(book: FactBook, text: str, ids: list[str], label="FAIT") -> Statement:
@@ -106,7 +146,8 @@ def skeleton(
         if a.status == "applique" and a.amendment.kind != "flag_only":
             why.append(
                 Statement(
-                    text_fr=f"La lentille « {a.lens} » a resserré le mandat : {a.amendment.reason_fr}.",
+                    text_fr=f"La lentille « {LENS_FR.get(a.lens, a.lens)} » a resserré le mandat : "
+                    f"{a.amendment.reason_fr}.",
                     fact_ids=[i for i in a.amendment.evidence_fact_ids if i in f],
                 )
             )
@@ -134,9 +175,6 @@ def skeleton(
         why += extra["why"]
         limits += extra["limits"]
     return Explanation(data_used=data_used, why=why, limits=limits, what_would_change=counterfactual_stmts)
-
-
-STYLE_FR = {"defensive": "défensif", "dynamique": "dynamique", "offensive": "offensif"}  # accordé à « style »
 
 
 def strategy_statements(book: FactBook, final: dict | None = None) -> dict[str, list[Statement]]:
@@ -211,7 +249,9 @@ def strategy_statements(book: FactBook, final: dict | None = None) -> dict[str, 
         tag = fid[len("strat.sector_cap.") :]
         out["why"].append(
             Statement(
-                text_fr=f"Plafond d'exposition {tag} (look-through) : {v(fid)}.", fact_ids=[fid], label="HYPOTHESE"
+                text_fr=f"Plafond d'exposition au {sector_fr(tag)} (look-through) : {v(fid)}.",
+                fact_ids=[fid],
+                label="HYPOTHESE",
             )
         )
     for fid in [k for k in f if k.startswith("strat.preference_refused.")]:
@@ -231,8 +271,8 @@ def strategy_statements(book: FactBook, final: dict | None = None) -> dict[str, 
     for fid in [k for k in f if k.startswith("strat.flag.")]:
         out["limits"].append(
             Statement(
-                text_fr=f"Signal de comportement « {fid[len('strat.flag.') :]} » : il règle des garde-fous, jamais "
-                "l'allocation.",
+                text_fr=f"Signal de comportement « {flag_fr(fid[len('strat.flag.') :])} » : il règle des garde-fous, "
+                "jamais l'allocation.",
                 fact_ids=[fid],
                 label="HYPOTHESE",
             )
@@ -291,11 +331,11 @@ def rephrase(
             alt = cand[i] if i < len(cand) else None
             if alt is not None:
                 alt = alt.model_copy(update={"fact_ids": st.fact_ids, "label": st.label})
-                probs = verify(book, alt)
+                probs = verify_fr(book, alt)
                 if not probs:
                     kept.append(alt)
                     continue
-                report.append(f"{sec}[{i}] gabarit conservé : {probs}")
+                report.append(kept_template_fr(sec, i, probs))
             kept.append(st)
         out[sec] = kept
     return Explanation(**out), report

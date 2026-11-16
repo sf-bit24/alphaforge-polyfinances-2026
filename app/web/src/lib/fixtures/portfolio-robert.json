@@ -11,7 +11,7 @@
   "decision_id": "dec-robert-v1-fixture",
   "profile_id": "robert",
   "profile_version": 1,
-  "created_utc": "2026-11-15T17:33:25.779181Z",
+  "created_utc": "2026-11-15T21:44:57.385599Z",
   "kind": "refus_encadre",
   "simulation_only": true,
   "positions": [
@@ -35,7 +35,7 @@
    },
    {
     "asset_id": "GLD",
-    "weight": 0.04041672222555168,
+    "weight": 0.04041672222555167,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": [
@@ -44,14 +44,14 @@
    },
    {
     "asset_id": "XIU.TO",
-    "weight": 0.03758720555296569,
+    "weight": 0.037587205552965706,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": []
    },
    {
     "asset_id": "SPY",
-    "weight": 0.012412793398313096,
+    "weight": 0.012412793398313082,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": []
@@ -81,7 +81,7 @@
    },
    {
     "fact_id": "emphasis.timeline",
-    "label_fr": "Poids de la lentille timeline",
+    "label_fr": "Poids de la lentille horizon",
     "value": 0.3,
     "unit": "%",
     "currency": null,
@@ -102,7 +102,7 @@
    },
    {
     "fact_id": "emphasis.risk",
-    "label_fr": "Poids de la lentille risk",
+    "label_fr": "Poids de la lentille risque",
     "value": 0.3,
     "unit": "%",
     "currency": null,
@@ -123,7 +123,7 @@
    },
    {
     "fact_id": "emphasis.diversity",
-    "label_fr": "Poids de la lentille diversity",
+    "label_fr": "Poids de la lentille diversité et préférences",
     "value": 0.2,
     "unit": "%",
     "currency": null,
@@ -144,7 +144,7 @@
    },
    {
     "fact_id": "emphasis.constraints",
-    "label_fr": "Poids de la lentille constraints",
+    "label_fr": "Poids de la lentille contraintes",
     "value": 0.2,
     "unit": "%",
     "currency": null,
@@ -166,7 +166,7 @@
    {
     "fact_id": "strat.style",
     "label_fr": "style de composition retenu (étape 0)",
-    "value": "defensive",
+    "value": "défensif",
     "unit": "texte",
     "currency": null,
     "as_of": "2026-09-30",
@@ -179,7 +179,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": "niveau N0 → defensive, décalage +0"
+      "processing": "niveau N0 → defensive, décalage +0 → defensive"
      }
     ],
     "trace_id": "dec-robert-v1-fixture:t002:s0b.strategy:strategy.derive_style"
@@ -187,7 +187,7 @@
    {
     "fact_id": "strat.style_from_level",
     "label_fr": "style tiré du niveau (convention d'équipe)",
-    "value": "defensive",
+    "value": "défensif",
     "unit": "texte",
     "currency": null,
     "as_of": "2026-09-30",
@@ -200,7 +200,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": null
+      "processing": "niveau N0 → defensive"
      }
     ],
     "trace_id": "dec-robert-v1-fixture:t002:s0b.strategy:strategy.derive_style"
@@ -228,8 +228,8 @@
    },
    {
     "fact_id": "strat.flag.low_composure",
-    "label_fr": "signal de comportement : low_composure (garde-fou, jamais une allocation)",
-    "value": "risk.cdar_m (aversion aux pertes ou composure < 40, risk_levels.yaml#biases)",
+    "label_fr": "signal de comportement : faible sang-froid face aux baisses (garde-fou, jamais une allocation)",
+    "value": "limite de baisse conditionnelle du mandat (aversion aux pertes ou sang-froid faible)",
     "unit": "texte",
     "currency": null,
     "as_of": "2026-09-30",
@@ -242,7 +242,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": null
+      "processing": "low_composure : risk.cdar_m (aversion aux pertes ou composure < 40, risk_levels.yaml#biases)"
      }
     ],
     "trace_id": "dec-robert-v1-fixture:t002:s0b.strategy:strategy.derive_style"
@@ -3714,7 +3714,7 @@
    },
    {
     "fact_id": "strat.score.FTS.TO",
-    "label_fr": "score du style defensive (FTS.TO)",
+    "label_fr": "score du style défensif (FTS.TO)",
     "value": 1.035307,
     "unit": "ratio",
     "currency": null,
@@ -3756,7 +3756,7 @@
    },
    {
     "fact_id": "strat.score.JNJ",
-    "label_fr": "score du style defensive (JNJ)",
+    "label_fr": "score du style défensif (JNJ)",
     "value": 0.953618,
     "unit": "ratio",
     "currency": null,
@@ -3798,7 +3798,7 @@
    },
    {
     "fact_id": "strat.score.PG",
-    "label_fr": "score du style defensive (PG)",
+    "label_fr": "score du style défensif (PG)",
     "value": 0.935526,
     "unit": "ratio",
     "currency": null,
@@ -3840,7 +3840,7 @@
    },
    {
     "fact_id": "strat.score.ENB.TO",
-    "label_fr": "score du style defensive (ENB.TO)",
+    "label_fr": "score du style défensif (ENB.TO)",
     "value": 0.850877,
     "unit": "ratio",
     "currency": null,
@@ -3882,7 +3882,7 @@
    },
    {
     "fact_id": "strat.score.XOM",
-    "label_fr": "score du style defensive (XOM)",
+    "label_fr": "score du style défensif (XOM)",
     "value": 0.656798,
     "unit": "ratio",
     "currency": null,
@@ -3924,7 +3924,7 @@
    },
    {
     "fact_id": "strat.score.RY.TO",
-    "label_fr": "score du style defensive (RY.TO)",
+    "label_fr": "score du style défensif (RY.TO)",
     "value": 0.646382,
     "unit": "ratio",
     "currency": null,
@@ -3966,7 +3966,7 @@
    },
    {
     "fact_id": "strat.score.ATD.TO",
-    "label_fr": "score du style defensive (ATD.TO)",
+    "label_fr": "score du style défensif (ATD.TO)",
     "value": 0.643311,
     "unit": "ratio",
     "currency": null,
@@ -4008,7 +4008,7 @@
    },
    {
     "fact_id": "strat.score.TD.TO",
-    "label_fr": "score du style defensive (TD.TO)",
+    "label_fr": "score du style défensif (TD.TO)",
     "value": 0.640899,
     "unit": "ratio",
     "currency": null,
@@ -4050,7 +4050,7 @@
    },
    {
     "fact_id": "strat.score.CNR.TO",
-    "label_fr": "score du style defensive (CNR.TO)",
+    "label_fr": "score du style défensif (CNR.TO)",
     "value": 0.600877,
     "unit": "ratio",
     "currency": null,
@@ -4092,7 +4092,7 @@
    },
    {
     "fact_id": "strat.score.CNQ.TO",
-    "label_fr": "score du style defensive (CNQ.TO)",
+    "label_fr": "score du style défensif (CNQ.TO)",
     "value": 0.568531,
     "unit": "ratio",
     "currency": null,
@@ -4134,7 +4134,7 @@
    },
    {
     "fact_id": "strat.score.MFC.TO",
-    "label_fr": "score du style defensive (MFC.TO)",
+    "label_fr": "score du style défensif (MFC.TO)",
     "value": 0.459978,
     "unit": "ratio",
     "currency": null,
@@ -4176,7 +4176,7 @@
    },
    {
     "fact_id": "strat.score.MSFT",
-    "label_fr": "score du style defensive (MSFT)",
+    "label_fr": "score du style défensif (MSFT)",
     "value": 0.401316,
     "unit": "ratio",
     "currency": null,
@@ -4218,7 +4218,7 @@
    },
    {
     "fact_id": "strat.score.JPM",
-    "label_fr": "score du style defensive (JPM)",
+    "label_fr": "score du style défensif (JPM)",
     "value": 0.387061,
     "unit": "ratio",
     "currency": null,
@@ -4260,7 +4260,7 @@
    },
    {
     "fact_id": "strat.score.CSU.TO",
-    "label_fr": "score du style defensive (CSU.TO)",
+    "label_fr": "score du style défensif (CSU.TO)",
     "value": 0.368421,
     "unit": "ratio",
     "currency": null,
@@ -4302,7 +4302,7 @@
    },
    {
     "fact_id": "strat.score.GOOGL",
-    "label_fr": "score du style defensive (GOOGL)",
+    "label_fr": "score du style défensif (GOOGL)",
     "value": 0.275219,
     "unit": "ratio",
     "currency": null,
@@ -4344,7 +4344,7 @@
    },
    {
     "fact_id": "strat.score.AAPL",
-    "label_fr": "score du style defensive (AAPL)",
+    "label_fr": "score du style défensif (AAPL)",
     "value": 0.268092,
     "unit": "ratio",
     "currency": null,
@@ -4386,7 +4386,7 @@
    },
    {
     "fact_id": "strat.score.TSLA",
-    "label_fr": "score du style defensive (TSLA)",
+    "label_fr": "score du style défensif (TSLA)",
     "value": 0.184211,
     "unit": "ratio",
     "currency": null,
@@ -4428,7 +4428,7 @@
    },
    {
     "fact_id": "strat.score.NVDA",
-    "label_fr": "score du style defensive (NVDA)",
+    "label_fr": "score du style défensif (NVDA)",
     "value": 0.106908,
     "unit": "ratio",
     "currency": null,
@@ -4471,7 +4471,7 @@
    {
     "fact_id": "strat.ineligible.NVDA",
     "label_fr": "NVDA écarté",
-    "value": "baisse maximale longue 87% > 80% (δ des titres individuels)",
+    "value": "baisse maximale longue 87 % > 80 % (δ des titres individuels)",
     "unit": "texte",
     "currency": null,
     "as_of": "2026-09-30",
@@ -4491,7 +4491,7 @@
    },
    {
     "fact_id": "strat.score.AMZN",
-    "label_fr": "score du style defensive (AMZN)",
+    "label_fr": "score du style défensif (AMZN)",
     "value": 0.096491,
     "unit": "ratio",
     "currency": null,
@@ -4534,7 +4534,7 @@
    {
     "fact_id": "strat.ineligible.AMZN",
     "label_fr": "AMZN écarté",
-    "value": "baisse maximale longue 93% > 80% (δ des titres individuels)",
+    "value": "baisse maximale longue 93 % > 80 % (δ des titres individuels)",
     "unit": "texte",
     "currency": null,
     "as_of": "2026-09-30",
@@ -4554,7 +4554,7 @@
    },
    {
     "fact_id": "strat.score.SHOP.TO",
-    "label_fr": "score du style defensive (SHOP.TO)",
+    "label_fr": "score du style défensif (SHOP.TO)",
     "value": 0.070175,
     "unit": "ratio",
     "currency": null,
@@ -4597,7 +4597,7 @@
    {
     "fact_id": "strat.ineligible.SHOP.TO",
     "label_fr": "SHOP.TO écarté",
-    "value": "baisse maximale longue 81% > 80% (δ des titres individuels)",
+    "value": "baisse maximale longue 81 % > 80 % (δ des titres individuels)",
     "unit": "texte",
     "currency": null,
     "as_of": "2026-09-30",
@@ -4638,7 +4638,7 @@
    },
    {
     "fact_id": "strat.sector_cap.tech",
-    "label_fr": "plafond d'exposition tech (look-through)",
+    "label_fr": "plafond d'exposition au secteur de la technologie (look-through)",
     "value": 0.0475,
     "unit": "%",
     "currency": null,
@@ -4652,14 +4652,14 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": "style defensive (τ=-0.25)"
+      "processing": "style défensif (τ = -0,25)"
      }
     ],
     "trace_id": "dec-robert-v1-fixture:t005:s0b.feasibility:optimize+check"
    },
    {
     "fact_id": "strat.sector_cap.energy",
-    "label_fr": "plafond d'exposition energy (look-through)",
+    "label_fr": "plafond d'exposition au secteur de l'énergie (look-through)",
     "value": 0.0225,
     "unit": "%",
     "currency": null,
@@ -4673,7 +4673,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": "style defensive (τ=-0.25)"
+      "processing": "style défensif (τ = -0,25)"
      }
     ],
     "trace_id": "dec-robert-v1-fixture:t005:s0b.feasibility:optimize+check"
@@ -4744,7 +4744,7 @@
    {
     "fact_id": "r1.opt_risk",
     "label_fr": "Risque minimisé (CVAR, mensuel)",
-    "value": 0.004356569048337684,
+    "value": 0.004356569048337685,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -4806,8 +4806,8 @@
    },
    {
     "fact_id": "r1.horizon_worst",
-    "label_fr": "Pire rendement composé sur 7 an(s), historique",
-    "value": 0.153679797087935,
+    "label_fr": "Pire rendement composé sur 7 ans, historique",
+    "value": 0.15367979708793494,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -4870,7 +4870,7 @@
    {
     "fact_id": "r1.cvar_m",
     "label_fr": "CVaR 95 % mensuelle (historique)",
-    "value": 0.0048552664938694935,
+    "value": 0.004855266493869493,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -4912,7 +4912,7 @@
    {
     "fact_id": "r1.vol",
     "label_fr": "Volatilité annualisée (historique)",
-    "value": 0.014036723371647209,
+    "value": 0.014036723371647207,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -4954,7 +4954,7 @@
    {
     "fact_id": "r1.rc.GLD",
     "label_fr": "Part de la CVaR portée par GLD",
-    "value": 0.3576252091816779,
+    "value": 0.35762520918167784,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -4975,7 +4975,7 @@
    {
     "fact_id": "r1.rc.AGG",
     "label_fr": "Part de la CVaR portée par AGG",
-    "value": 0.34616288971469383,
+    "value": 0.3461628897146939,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -4996,7 +4996,7 @@
    {
     "fact_id": "r1.rc.ZST.TO",
     "label_fr": "Part de la CVaR portée par ZST.TO",
-    "value": 0.14627359466854034,
+    "value": 0.14627359466854037,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5051,7 +5051,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": "perte × patrimoine investissable déclaré (900,000 $)"
+      "processing": "perte × patrimoine investissable déclaré (900 000 $)"
      }
     ],
     "trace_id": "dec-robert-v1-fixture:t008:lens.risk:evidence"
@@ -5059,7 +5059,7 @@
    {
     "fact_id": "r1.stress.2020_covid",
     "label_fr": "Rendement pendant Choc COVID-19",
-    "value": -0.0009158721205408948,
+    "value": -0.0009158721205406728,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5080,7 +5080,7 @@
    {
     "fact_id": "r1.stress_cad.2020_covid",
     "label_fr": "Perte en dollars pendant Choc COVID-19",
-    "value": 824.2849084868053,
+    "value": 824.2849084866056,
     "unit": "CAD",
     "currency": null,
     "as_of": null,
@@ -5093,7 +5093,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": "perte × patrimoine investissable déclaré (900,000 $)"
+      "processing": "perte × patrimoine investissable déclaré (900 000 $)"
      }
     ],
     "trace_id": "dec-robert-v1-fixture:t008:lens.risk:evidence"
@@ -5122,7 +5122,7 @@
    {
     "fact_id": "r1.n_eff_risk",
     "label_fr": "Nombre effectif de sources de risque",
-    "value": 3.792677407850781,
+    "value": 3.792677407850783,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -5143,7 +5143,7 @@
    {
     "fact_id": "r1.div_ratio",
     "label_fr": "Ratio de diversification",
-    "value": 1.8692007087543763,
+    "value": 1.8692007087543767,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -5206,7 +5206,7 @@
    {
     "fact_id": "r1.cluster2",
     "label_fr": "Poids d'un groupe très corrélé (GLD)",
-    "value": 0.0404167221761556,
+    "value": 0.04041672217615559,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5226,8 +5226,8 @@
    },
    {
     "fact_id": "r1.lt.tech",
-    "label_fr": "Exposition consolidée « tech » (look-through)",
-    "value": 0.009164395752949745,
+    "label_fr": "Exposition consolidée au secteur de la technologie (look-through)",
+    "value": 0.00916439575294974,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5247,8 +5247,8 @@
    },
    {
     "fact_id": "r1.lt.energy",
-    "label_fr": "Exposition consolidée « energy » (look-through)",
-    "value": 0.000386574555564765,
+    "label_fr": "Exposition consolidée au secteur de l'énergie (look-through)",
+    "value": 0.0003865745555647646,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5268,8 +5268,8 @@
    },
    {
     "fact_id": "r1.lt.financials",
-    "label_fr": "Exposition consolidée « financials » (look-through)",
-    "value": 0.0014047947981693319,
+    "label_fr": "Exposition consolidée au secteur de la finance (look-through)",
+    "value": 0.0014047947981693303,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5331,7 +5331,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:alloc.growth:max",
-    "label_fr": "alloc.growth niveau N0",
+    "label_fr": "part des actifs de croissance, niveau N0",
     "value": 0.05,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5352,7 +5352,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:alloc.growth:min",
-    "label_fr": "alloc.growth niveau N0",
+    "label_fr": "part des actifs de croissance, niveau N0",
     "value": 0.05,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5373,7 +5373,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:alloc.cash_like:max",
-    "label_fr": "alloc.cash_like niveau N0",
+    "label_fr": "part des liquidités, niveau N0",
     "value": 0.814916,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5394,7 +5394,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:alloc.cash_like:min",
-    "label_fr": "alloc.cash_like niveau N0",
+    "label_fr": "part des liquidités, niveau N0",
     "value": 0.814916,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5415,7 +5415,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:alloc.long_duration:max",
-    "label_fr": "alloc.long_duration niveau N0",
+    "label_fr": "part des obligations à long terme, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5436,7 +5436,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:alloc.gold:max",
-    "label_fr": "alloc.gold niveau N0",
+    "label_fr": "part de l'or, niveau N0",
     "value": 0.040417,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5457,7 +5457,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:alloc.crypto:max",
-    "label_fr": "alloc.crypto niveau N0",
+    "label_fr": "part des cryptoactifs, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5478,7 +5478,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:conc.etf_equity_each[XIU.TO]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.037587,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5499,7 +5499,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:conc.etf_equity_each[SPY]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.012413,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5520,7 +5520,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:conc.etf_equity_each[ESGV]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5541,7 +5541,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:conc.etf_equity_each[QQQ]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5562,7 +5562,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:conc.etf_bond_each[XBB.TO]:max",
-    "label_fr": "conc.etf_bond_each niveau N0",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5583,7 +5583,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:conc.etf_bond_each[AGG]:max",
-    "label_fr": "conc.etf_bond_each niveau N0",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N0",
     "value": 0.094668,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5604,7 +5604,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:conc.etf_bond_each[TLT]:max",
-    "label_fr": "conc.etf_bond_each niveau N0",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5625,7 +5625,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:conc.single_each[TSLA]:max",
-    "label_fr": "conc.single_each niveau N0",
+    "label_fr": "poids de chaque titre individuel, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5646,7 +5646,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:conc.single_total:max",
-    "label_fr": "conc.single_total niveau N0",
+    "label_fr": "poids total des titres individuels, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5667,7 +5667,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:exp.tech:max",
-    "label_fr": "exp.tech niveau N0",
+    "label_fr": "exposition au secteur de la technologie (look-through), niveau N0",
     "value": 0.009164,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5709,7 +5709,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:strat.sector_cap.tech:max",
-    "label_fr": "plafond d'exposition tech (look-through)",
+    "label_fr": "plafond d'exposition au secteur de la technologie (look-through)",
     "value": 0.009164,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5730,7 +5730,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:strat.sector_cap.energy:max",
-    "label_fr": "plafond d'exposition energy (look-through)",
+    "label_fr": "plafond d'exposition au secteur de l'énergie (look-through)",
     "value": 0.000387,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5751,7 +5751,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:risk.cvar_m:max",
-    "label_fr": "risk.cvar_m niveau N0",
+    "label_fr": "CVaR mensuelle, niveau N0",
     "value": 0.00431,
     "unit": "perte (fraction)",
     "currency": null,
@@ -5772,7 +5772,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:risk.cvar_12m:max",
-    "label_fr": "risk.cvar_12m niveau N0",
+    "label_fr": "CVaR des rendements sur douze mois glissants, niveau N0",
     "value": -0.005078,
     "unit": "perte (fraction)",
     "currency": null,
@@ -5793,7 +5793,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:risk.mdd:max",
-    "label_fr": "risk.mdd niveau N0",
+    "label_fr": "baisse maximale, niveau N0",
     "value": 0.017563,
     "unit": "perte (fraction)",
     "currency": null,
@@ -5814,7 +5814,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:risk.vol:max",
-    "label_fr": "risk.vol niveau N0",
+    "label_fr": "volatilité annualisée, niveau N0",
     "value": 0.014225,
     "unit": "volatilité annualisée",
     "currency": null,
@@ -5835,7 +5835,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:risk.cdar_m:max",
-    "label_fr": "risk.cdar_m niveau N0",
+    "label_fr": "CDaR mensuelle (risque mesuré par les baisses), niveau N0",
     "value": 0.013304,
     "unit": "perte (fraction)",
     "currency": null,
@@ -5856,7 +5856,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:risk.stress_2022:max",
-    "label_fr": "risk.stress_2022 niveau N0",
+    "label_fr": "perte dans le scénario de crise de 2022, niveau N0",
     "value": 0.0,
     "unit": "perte (fraction)",
     "currency": null,
@@ -5899,7 +5899,7 @@
    {
     "fact_id": "r2.opt_risk",
     "label_fr": "Risque minimisé (CVAR, mensuel)",
-    "value": 0.004356569048337684,
+    "value": 0.004356569048337685,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5961,8 +5961,8 @@
    },
    {
     "fact_id": "r2.horizon_worst",
-    "label_fr": "Pire rendement composé sur 7 an(s), historique",
-    "value": 0.153679797087935,
+    "label_fr": "Pire rendement composé sur 7 ans, historique",
+    "value": 0.15367979708793494,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6025,7 +6025,7 @@
    {
     "fact_id": "r2.cvar_m",
     "label_fr": "CVaR 95 % mensuelle (historique)",
-    "value": 0.0048552664938694935,
+    "value": 0.004855266493869493,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6067,7 +6067,7 @@
    {
     "fact_id": "r2.vol",
     "label_fr": "Volatilité annualisée (historique)",
-    "value": 0.014036723371647209,
+    "value": 0.014036723371647207,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6109,7 +6109,7 @@
    {
     "fact_id": "r2.rc.GLD",
     "label_fr": "Part de la CVaR portée par GLD",
-    "value": 0.3576252091816779,
+    "value": 0.35762520918167784,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6130,7 +6130,7 @@
    {
     "fact_id": "r2.rc.AGG",
     "label_fr": "Part de la CVaR portée par AGG",
-    "value": 0.34616288971469383,
+    "value": 0.3461628897146939,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6151,7 +6151,7 @@
    {
     "fact_id": "r2.rc.ZST.TO",
     "label_fr": "Part de la CVaR portée par ZST.TO",
-    "value": 0.14627359466854034,
+    "value": 0.14627359466854037,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6206,7 +6206,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": "perte × patrimoine investissable déclaré (900,000 $)"
+      "processing": "perte × patrimoine investissable déclaré (900 000 $)"
      }
     ],
     "trace_id": "dec-robert-v1-fixture:t015:lens.risk:evidence"
@@ -6214,7 +6214,7 @@
    {
     "fact_id": "r2.stress.2020_covid",
     "label_fr": "Rendement pendant Choc COVID-19",
-    "value": -0.0009158721205408948,
+    "value": -0.0009158721205406728,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6235,7 +6235,7 @@
    {
     "fact_id": "r2.stress_cad.2020_covid",
     "label_fr": "Perte en dollars pendant Choc COVID-19",
-    "value": 824.2849084868053,
+    "value": 824.2849084866056,
     "unit": "CAD",
     "currency": null,
     "as_of": null,
@@ -6248,7 +6248,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": "perte × patrimoine investissable déclaré (900,000 $)"
+      "processing": "perte × patrimoine investissable déclaré (900 000 $)"
      }
     ],
     "trace_id": "dec-robert-v1-fixture:t015:lens.risk:evidence"
@@ -6277,7 +6277,7 @@
    {
     "fact_id": "r2.n_eff_risk",
     "label_fr": "Nombre effectif de sources de risque",
-    "value": 3.792677407850781,
+    "value": 3.792677407850783,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -6298,7 +6298,7 @@
    {
     "fact_id": "r2.div_ratio",
     "label_fr": "Ratio de diversification",
-    "value": 1.8692007087543763,
+    "value": 1.8692007087543767,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -6361,7 +6361,7 @@
    {
     "fact_id": "r2.cluster2",
     "label_fr": "Poids d'un groupe très corrélé (GLD)",
-    "value": 0.0404167221761556,
+    "value": 0.04041672217615559,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6381,8 +6381,8 @@
    },
    {
     "fact_id": "r2.lt.tech",
-    "label_fr": "Exposition consolidée « tech » (look-through)",
-    "value": 0.009164395752949745,
+    "label_fr": "Exposition consolidée au secteur de la technologie (look-through)",
+    "value": 0.00916439575294974,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6402,8 +6402,8 @@
    },
    {
     "fact_id": "r2.lt.energy",
-    "label_fr": "Exposition consolidée « energy » (look-through)",
-    "value": 0.000386574555564765,
+    "label_fr": "Exposition consolidée au secteur de l'énergie (look-through)",
+    "value": 0.0003865745555647646,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6423,8 +6423,8 @@
    },
    {
     "fact_id": "r2.lt.financials",
-    "label_fr": "Exposition consolidée « financials » (look-through)",
-    "value": 0.0014047947981693319,
+    "label_fr": "Exposition consolidée au secteur de la finance (look-through)",
+    "value": 0.0014047947981693303,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6486,7 +6486,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:alloc.growth:max",
-    "label_fr": "alloc.growth niveau N0",
+    "label_fr": "part des actifs de croissance, niveau N0",
     "value": 0.05,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6507,7 +6507,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:alloc.growth:min",
-    "label_fr": "alloc.growth niveau N0",
+    "label_fr": "part des actifs de croissance, niveau N0",
     "value": 0.05,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6528,7 +6528,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:alloc.cash_like:max",
-    "label_fr": "alloc.cash_like niveau N0",
+    "label_fr": "part des liquidités, niveau N0",
     "value": 0.814916,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6549,7 +6549,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:alloc.cash_like:min",
-    "label_fr": "alloc.cash_like niveau N0",
+    "label_fr": "part des liquidités, niveau N0",
     "value": 0.814916,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6570,7 +6570,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:alloc.long_duration:max",
-    "label_fr": "alloc.long_duration niveau N0",
+    "label_fr": "part des obligations à long terme, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6591,7 +6591,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:alloc.gold:max",
-    "label_fr": "alloc.gold niveau N0",
+    "label_fr": "part de l'or, niveau N0",
     "value": 0.040417,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6612,7 +6612,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:alloc.crypto:max",
-    "label_fr": "alloc.crypto niveau N0",
+    "label_fr": "part des cryptoactifs, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6633,7 +6633,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:conc.etf_equity_each[XIU.TO]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.037587,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6654,7 +6654,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:conc.etf_equity_each[SPY]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.012413,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6675,7 +6675,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:conc.etf_equity_each[ESGV]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6696,7 +6696,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:conc.etf_equity_each[QQQ]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6717,7 +6717,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:conc.etf_bond_each[XBB.TO]:max",
-    "label_fr": "conc.etf_bond_each niveau N0",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6738,7 +6738,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:conc.etf_bond_each[AGG]:max",
-    "label_fr": "conc.etf_bond_each niveau N0",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N0",
     "value": 0.094668,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6759,7 +6759,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:conc.etf_bond_each[TLT]:max",
-    "label_fr": "conc.etf_bond_each niveau N0",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6780,7 +6780,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:conc.single_each[TSLA]:max",
-    "label_fr": "conc.single_each niveau N0",
+    "label_fr": "poids de chaque titre individuel, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6801,7 +6801,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:conc.single_total:max",
-    "label_fr": "conc.single_total niveau N0",
+    "label_fr": "poids total des titres individuels, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6822,7 +6822,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:exp.tech:max",
-    "label_fr": "exp.tech niveau N0",
+    "label_fr": "exposition au secteur de la technologie (look-through), niveau N0",
     "value": 0.009164,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6864,7 +6864,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:strat.sector_cap.tech:max",
-    "label_fr": "plafond d'exposition tech (look-through)",
+    "label_fr": "plafond d'exposition au secteur de la technologie (look-through)",
     "value": 0.009164,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6885,7 +6885,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:strat.sector_cap.energy:max",
-    "label_fr": "plafond d'exposition energy (look-through)",
+    "label_fr": "plafond d'exposition au secteur de l'énergie (look-through)",
     "value": 0.000387,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6906,7 +6906,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:risk.cvar_m:max",
-    "label_fr": "risk.cvar_m niveau N0",
+    "label_fr": "CVaR mensuelle, niveau N0",
     "value": 0.00431,
     "unit": "perte (fraction)",
     "currency": null,
@@ -6927,7 +6927,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:risk.cvar_12m:max",
-    "label_fr": "risk.cvar_12m niveau N0",
+    "label_fr": "CVaR des rendements sur douze mois glissants, niveau N0",
     "value": -0.005078,
     "unit": "perte (fraction)",
     "currency": null,
@@ -6948,7 +6948,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:risk.mdd:max",
-    "label_fr": "risk.mdd niveau N0",
+    "label_fr": "baisse maximale, niveau N0",
     "value": 0.017563,
     "unit": "perte (fraction)",
     "currency": null,
@@ -6969,7 +6969,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:risk.vol:max",
-    "label_fr": "risk.vol niveau N0",
+    "label_fr": "volatilité annualisée, niveau N0",
     "value": 0.014225,
     "unit": "volatilité annualisée",
     "currency": null,
@@ -6990,7 +6990,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:risk.cdar_m:max",
-    "label_fr": "risk.cdar_m niveau N0",
+    "label_fr": "CDaR mensuelle (risque mesuré par les baisses), niveau N0",
     "value": 0.013304,
     "unit": "perte (fraction)",
     "currency": null,
@@ -7011,7 +7011,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:risk.stress_2022:max",
-    "label_fr": "risk.stress_2022 niveau N0",
+    "label_fr": "perte dans le scénario de crise de 2022, niveau N0",
     "value": 0.0,
     "unit": "perte (fraction)",
     "currency": null,
@@ -7180,7 +7180,7 @@
    {
     "fact_id": "demande.rc.XIU.TO",
     "label_fr": "Part de la CVaR portée par XIU.TO",
-    "value": 0.07598581887366418,
+    "value": 0.07598581887366422,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -7256,7 +7256,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": "perte × patrimoine investissable déclaré (900,000 $)"
+      "processing": "perte × patrimoine investissable déclaré (900 000 $)"
      }
     ],
     "trace_id": "dec-robert-v1-fixture:t021:lens.risk:evidence"
@@ -7298,7 +7298,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": "perte × patrimoine investissable déclaré (900,000 $)"
+      "processing": "perte × patrimoine investissable déclaré (900 000 $)"
      }
     ],
     "trace_id": "dec-robert-v1-fixture:t021:lens.risk:evidence"
@@ -7368,7 +7368,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:alloc.growth:max",
-    "label_fr": "alloc.growth niveau N0",
+    "label_fr": "part des actifs de croissance, niveau N0",
     "value": 0.102778,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7389,7 +7389,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:alloc.growth:min",
-    "label_fr": "alloc.growth niveau N0",
+    "label_fr": "part des actifs de croissance, niveau N0",
     "value": 0.102778,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7410,7 +7410,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:alloc.cash_like:max",
-    "label_fr": "alloc.cash_like niveau N0",
+    "label_fr": "part des liquidités, niveau N0",
     "value": 0.769643,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7431,7 +7431,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:alloc.cash_like:min",
-    "label_fr": "alloc.cash_like niveau N0",
+    "label_fr": "part des liquidités, niveau N0",
     "value": 0.769643,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7452,7 +7452,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:alloc.long_duration:max",
-    "label_fr": "alloc.long_duration niveau N0",
+    "label_fr": "part des obligations à long terme, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7473,7 +7473,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:alloc.gold:max",
-    "label_fr": "alloc.gold niveau N0",
+    "label_fr": "part de l'or, niveau N0",
     "value": 0.038171,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7494,7 +7494,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:alloc.crypto:max",
-    "label_fr": "alloc.crypto niveau N0",
+    "label_fr": "part des cryptoactifs, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7515,7 +7515,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:conc.etf_equity_each[XIU.TO]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.035499,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7536,7 +7536,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:conc.etf_equity_each[SPY]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.011723,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7557,7 +7557,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:conc.etf_equity_each[ESGV]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7578,7 +7578,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:conc.etf_equity_each[QQQ]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7599,7 +7599,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:conc.etf_bond_each[XBB.TO]:max",
-    "label_fr": "conc.etf_bond_each niveau N0",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7620,7 +7620,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:conc.etf_bond_each[AGG]:max",
-    "label_fr": "conc.etf_bond_each niveau N0",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N0",
     "value": 0.089408,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7641,7 +7641,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:conc.etf_bond_each[TLT]:max",
-    "label_fr": "conc.etf_bond_each niveau N0",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7662,7 +7662,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:conc.single_each[TSLA]:max",
-    "label_fr": "conc.single_each niveau N0",
+    "label_fr": "poids de chaque titre individuel, niveau N0",
     "value": 0.055556,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7683,7 +7683,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:conc.single_total:max",
-    "label_fr": "conc.single_total niveau N0",
+    "label_fr": "poids total des titres individuels, niveau N0",
     "value": 0.055556,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7704,7 +7704,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:exp.tech:max",
-    "label_fr": "exp.tech niveau N0",
+    "label_fr": "exposition au secteur de la technologie (look-through), niveau N0",
     "value": 0.008655,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7746,7 +7746,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:strat.sector_cap.tech:max",
-    "label_fr": "plafond d'exposition tech (look-through)",
+    "label_fr": "plafond d'exposition au secteur de la technologie (look-through)",
     "value": 0.008655,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7767,7 +7767,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:strat.sector_cap.energy:max",
-    "label_fr": "plafond d'exposition energy (look-through)",
+    "label_fr": "plafond d'exposition au secteur de l'énergie (look-through)",
     "value": 0.000365,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7788,7 +7788,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:risk.cvar_m:max",
-    "label_fr": "risk.cvar_m niveau N0",
+    "label_fr": "CVaR mensuelle, niveau N0",
     "value": 0.014797,
     "unit": "perte (fraction)",
     "currency": null,
@@ -7809,7 +7809,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:risk.cvar_12m:max",
-    "label_fr": "risk.cvar_12m niveau N0",
+    "label_fr": "CVaR des rendements sur douze mois glissants, niveau N0",
     "value": -0.000858,
     "unit": "perte (fraction)",
     "currency": null,
@@ -7830,7 +7830,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:risk.mdd:max",
-    "label_fr": "risk.mdd niveau N0",
+    "label_fr": "baisse maximale, niveau N0",
     "value": 0.043176,
     "unit": "perte (fraction)",
     "currency": null,
@@ -7851,7 +7851,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:risk.vol:max",
-    "label_fr": "risk.vol niveau N0",
+    "label_fr": "volatilité annualisée, niveau N0",
     "value": 0.041381,
     "unit": "volatilité annualisée",
     "currency": null,
@@ -7872,7 +7872,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:risk.cdar_m:max",
-    "label_fr": "risk.cdar_m niveau N0",
+    "label_fr": "CDaR mensuelle (risque mesuré par les baisses), niveau N0",
     "value": 0.032634,
     "unit": "perte (fraction)",
     "currency": null,
@@ -7893,7 +7893,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t022:judge:check:demande:risk.stress_2022:max",
-    "label_fr": "risk.stress_2022 niveau N0",
+    "label_fr": "perte dans le scénario de crise de 2022, niveau N0",
     "value": 0.040225,
     "unit": "perte (fraction)",
     "currency": null,
@@ -7956,7 +7956,7 @@
    },
    {
     "fact_id": "judge-check-optimum:alloc.growth:max",
-    "label_fr": "alloc.growth niveau N0",
+    "label_fr": "part des actifs de croissance, niveau N0",
     "value": 0.05,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7977,7 +7977,7 @@
    },
    {
     "fact_id": "judge-check-optimum:alloc.growth:min",
-    "label_fr": "alloc.growth niveau N0",
+    "label_fr": "part des actifs de croissance, niveau N0",
     "value": 0.05,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7998,7 +7998,7 @@
    },
    {
     "fact_id": "judge-check-optimum:alloc.cash_like:max",
-    "label_fr": "alloc.cash_like niveau N0",
+    "label_fr": "part des liquidités, niveau N0",
     "value": 0.814916,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8019,7 +8019,7 @@
    },
    {
     "fact_id": "judge-check-optimum:alloc.cash_like:min",
-    "label_fr": "alloc.cash_like niveau N0",
+    "label_fr": "part des liquidités, niveau N0",
     "value": 0.814916,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8040,7 +8040,7 @@
    },
    {
     "fact_id": "judge-check-optimum:alloc.long_duration:max",
-    "label_fr": "alloc.long_duration niveau N0",
+    "label_fr": "part des obligations à long terme, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8061,7 +8061,7 @@
    },
    {
     "fact_id": "judge-check-optimum:alloc.gold:max",
-    "label_fr": "alloc.gold niveau N0",
+    "label_fr": "part de l'or, niveau N0",
     "value": 0.040417,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8082,7 +8082,7 @@
    },
    {
     "fact_id": "judge-check-optimum:alloc.crypto:max",
-    "label_fr": "alloc.crypto niveau N0",
+    "label_fr": "part des cryptoactifs, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8103,7 +8103,7 @@
    },
    {
     "fact_id": "judge-check-optimum:conc.etf_equity_each[XIU.TO]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.037587,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8124,7 +8124,7 @@
    },
    {
     "fact_id": "judge-check-optimum:conc.etf_equity_each[SPY]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.012413,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8145,7 +8145,7 @@
    },
    {
     "fact_id": "judge-check-optimum:conc.etf_equity_each[ESGV]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8166,7 +8166,7 @@
    },
    {
     "fact_id": "judge-check-optimum:conc.etf_equity_each[QQQ]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8187,7 +8187,7 @@
    },
    {
     "fact_id": "judge-check-optimum:conc.etf_bond_each[XBB.TO]:max",
-    "label_fr": "conc.etf_bond_each niveau N0",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8208,7 +8208,7 @@
    },
    {
     "fact_id": "judge-check-optimum:conc.etf_bond_each[AGG]:max",
-    "label_fr": "conc.etf_bond_each niveau N0",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N0",
     "value": 0.094668,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8229,7 +8229,7 @@
    },
    {
     "fact_id": "judge-check-optimum:conc.etf_bond_each[TLT]:max",
-    "label_fr": "conc.etf_bond_each niveau N0",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8250,7 +8250,7 @@
    },
    {
     "fact_id": "judge-check-optimum:conc.single_each[TSLA]:max",
-    "label_fr": "conc.single_each niveau N0",
+    "label_fr": "poids de chaque titre individuel, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8271,7 +8271,7 @@
    },
    {
     "fact_id": "judge-check-optimum:conc.single_total:max",
-    "label_fr": "conc.single_total niveau N0",
+    "label_fr": "poids total des titres individuels, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8292,7 +8292,7 @@
    },
    {
     "fact_id": "judge-check-optimum:exp.tech:max",
-    "label_fr": "exp.tech niveau N0",
+    "label_fr": "exposition au secteur de la technologie (look-through), niveau N0",
     "value": 0.009164,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8334,7 +8334,7 @@
    },
    {
     "fact_id": "judge-check-optimum:strat.sector_cap.tech:max",
-    "label_fr": "plafond d'exposition tech (look-through)",
+    "label_fr": "plafond d'exposition au secteur de la technologie (look-through)",
     "value": 0.009164,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8355,7 +8355,7 @@
    },
    {
     "fact_id": "judge-check-optimum:strat.sector_cap.energy:max",
-    "label_fr": "plafond d'exposition energy (look-through)",
+    "label_fr": "plafond d'exposition au secteur de l'énergie (look-through)",
     "value": 0.000387,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8376,7 +8376,7 @@
    },
    {
     "fact_id": "judge-check-optimum:risk.cvar_m:max",
-    "label_fr": "risk.cvar_m niveau N0",
+    "label_fr": "CVaR mensuelle, niveau N0",
     "value": 0.00431,
     "unit": "perte (fraction)",
     "currency": null,
@@ -8397,7 +8397,7 @@
    },
    {
     "fact_id": "judge-check-optimum:risk.cvar_12m:max",
-    "label_fr": "risk.cvar_12m niveau N0",
+    "label_fr": "CVaR des rendements sur douze mois glissants, niveau N0",
     "value": -0.005078,
     "unit": "perte (fraction)",
     "currency": null,
@@ -8418,7 +8418,7 @@
    },
    {
     "fact_id": "judge-check-optimum:risk.mdd:max",
-    "label_fr": "risk.mdd niveau N0",
+    "label_fr": "baisse maximale, niveau N0",
     "value": 0.017563,
     "unit": "perte (fraction)",
     "currency": null,
@@ -8439,7 +8439,7 @@
    },
    {
     "fact_id": "judge-check-optimum:risk.vol:max",
-    "label_fr": "risk.vol niveau N0",
+    "label_fr": "volatilité annualisée, niveau N0",
     "value": 0.014225,
     "unit": "volatilité annualisée",
     "currency": null,
@@ -8460,7 +8460,7 @@
    },
    {
     "fact_id": "judge-check-optimum:risk.cdar_m:max",
-    "label_fr": "risk.cdar_m niveau N0",
+    "label_fr": "CDaR mensuelle (risque mesuré par les baisses), niveau N0",
     "value": 0.013304,
     "unit": "perte (fraction)",
     "currency": null,
@@ -8481,7 +8481,7 @@
    },
    {
     "fact_id": "judge-check-optimum:risk.stress_2022:max",
-    "label_fr": "risk.stress_2022 niveau N0",
+    "label_fr": "perte dans le scénario de crise de 2022, niveau N0",
     "value": 0.0,
     "unit": "perte (fraction)",
     "currency": null,
@@ -8565,7 +8565,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:alloc.growth:max",
-    "label_fr": "alloc.growth niveau N0",
+    "label_fr": "part des actifs de croissance, niveau N0",
     "value": 0.05,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8586,7 +8586,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:alloc.growth:min",
-    "label_fr": "alloc.growth niveau N0",
+    "label_fr": "part des actifs de croissance, niveau N0",
     "value": 0.05,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8607,7 +8607,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:alloc.cash_like:max",
-    "label_fr": "alloc.cash_like niveau N0",
+    "label_fr": "part des liquidités, niveau N0",
     "value": 0.814916,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8628,7 +8628,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:alloc.cash_like:min",
-    "label_fr": "alloc.cash_like niveau N0",
+    "label_fr": "part des liquidités, niveau N0",
     "value": 0.814916,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8649,7 +8649,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:alloc.long_duration:max",
-    "label_fr": "alloc.long_duration niveau N0",
+    "label_fr": "part des obligations à long terme, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8670,7 +8670,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:alloc.gold:max",
-    "label_fr": "alloc.gold niveau N0",
+    "label_fr": "part de l'or, niveau N0",
     "value": 0.040417,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8691,7 +8691,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:alloc.crypto:max",
-    "label_fr": "alloc.crypto niveau N0",
+    "label_fr": "part des cryptoactifs, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8712,7 +8712,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.etf_equity_each[XIU.TO]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.037587,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8733,7 +8733,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.etf_equity_each[SPY]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.012413,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8754,7 +8754,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.etf_equity_each[ESGV]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8775,7 +8775,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.etf_equity_each[QQQ]:max",
-    "label_fr": "conc.etf_equity_each niveau N0",
+    "label_fr": "poids de chaque FNB d'actions, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8796,7 +8796,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.etf_bond_each[XBB.TO]:max",
-    "label_fr": "conc.etf_bond_each niveau N0",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8817,7 +8817,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.etf_bond_each[AGG]:max",
-    "label_fr": "conc.etf_bond_each niveau N0",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N0",
     "value": 0.094668,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8838,7 +8838,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.etf_bond_each[TLT]:max",
-    "label_fr": "conc.etf_bond_each niveau N0",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8859,7 +8859,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.single_each[TSLA]:max",
-    "label_fr": "conc.single_each niveau N0",
+    "label_fr": "poids de chaque titre individuel, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8880,7 +8880,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.single_total:max",
-    "label_fr": "conc.single_total niveau N0",
+    "label_fr": "poids total des titres individuels, niveau N0",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8901,7 +8901,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:exp.tech:max",
-    "label_fr": "exp.tech niveau N0",
+    "label_fr": "exposition au secteur de la technologie (look-through), niveau N0",
     "value": 0.009164,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8943,7 +8943,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:strat.sector_cap.tech:max",
-    "label_fr": "plafond d'exposition tech (look-through)",
+    "label_fr": "plafond d'exposition au secteur de la technologie (look-through)",
     "value": 0.009164,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8964,7 +8964,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:strat.sector_cap.energy:max",
-    "label_fr": "plafond d'exposition energy (look-through)",
+    "label_fr": "plafond d'exposition au secteur de l'énergie (look-through)",
     "value": 0.000387,
     "unit": "part du portefeuille",
     "currency": null,
@@ -8985,7 +8985,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:risk.cvar_m:max",
-    "label_fr": "risk.cvar_m niveau N0",
+    "label_fr": "CVaR mensuelle, niveau N0",
     "value": 0.00431,
     "unit": "perte (fraction)",
     "currency": null,
@@ -9006,7 +9006,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:risk.cvar_12m:max",
-    "label_fr": "risk.cvar_12m niveau N0",
+    "label_fr": "CVaR des rendements sur douze mois glissants, niveau N0",
     "value": -0.005078,
     "unit": "perte (fraction)",
     "currency": null,
@@ -9027,7 +9027,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:risk.mdd:max",
-    "label_fr": "risk.mdd niveau N0",
+    "label_fr": "baisse maximale, niveau N0",
     "value": 0.017563,
     "unit": "perte (fraction)",
     "currency": null,
@@ -9048,7 +9048,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:risk.vol:max",
-    "label_fr": "risk.vol niveau N0",
+    "label_fr": "volatilité annualisée, niveau N0",
     "value": 0.014225,
     "unit": "volatilité annualisée",
     "currency": null,
@@ -9069,7 +9069,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:risk.cdar_m:max",
-    "label_fr": "risk.cdar_m niveau N0",
+    "label_fr": "CDaR mensuelle (risque mesuré par les baisses), niveau N0",
     "value": 0.013304,
     "unit": "perte (fraction)",
     "currency": null,
@@ -9090,7 +9090,7 @@
    },
    {
     "fact_id": "dec-robert-v1-fixture:t024:judge:check:final:risk.stress_2022:max",
-    "label_fr": "risk.stress_2022 niveau N0",
+    "label_fr": "perte dans le scénario de crise de 2022, niveau N0",
     "value": 0.0,
     "unit": "perte (fraction)",
     "currency": null,
@@ -9135,7 +9135,7 @@
    },
    {
     "rule_id": "alloc.growth:max",
-    "description_fr": "alloc.growth niveau N0",
+    "description_fr": "part des actifs de croissance, niveau N0",
     "derived_from": "profile->R->level ; dollar_rule.e_cap",
     "limit": 0.1,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:alloc.growth:max",
@@ -9146,7 +9146,7 @@
    },
    {
     "rule_id": "alloc.growth:min",
-    "description_fr": "alloc.growth niveau N0",
+    "description_fr": "part des actifs de croissance, niveau N0",
     "derived_from": "profile->R->level ; dollar_rule.e_cap",
     "limit": 0.0,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:alloc.growth:min",
@@ -9157,7 +9157,7 @@
    },
    {
     "rule_id": "alloc.cash_like:max",
-    "description_fr": "alloc.cash_like niveau N0",
+    "description_fr": "part des liquidités, niveau N0",
     "derived_from": "level",
     "limit": 1.0,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:alloc.cash_like:max",
@@ -9168,7 +9168,7 @@
    },
    {
     "rule_id": "alloc.cash_like:min",
-    "description_fr": "alloc.cash_like niveau N0",
+    "description_fr": "part des liquidités, niveau N0",
     "derived_from": "level",
     "limit": 0.5,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:alloc.cash_like:min",
@@ -9179,7 +9179,7 @@
    },
    {
     "rule_id": "alloc.long_duration:max",
-    "description_fr": "alloc.long_duration niveau N0",
+    "description_fr": "part des obligations à long terme, niveau N0",
     "derived_from": "level",
     "limit": 0.0,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:alloc.long_duration:max",
@@ -9190,7 +9190,7 @@
    },
    {
     "rule_id": "alloc.gold:max",
-    "description_fr": "alloc.gold niveau N0",
+    "description_fr": "part de l'or, niveau N0",
     "derived_from": "level",
     "limit": 0.05,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:alloc.gold:max",
@@ -9201,7 +9201,7 @@
    },
    {
     "rule_id": "alloc.crypto:max",
-    "description_fr": "alloc.crypto niveau N0",
+    "description_fr": "part des cryptoactifs, niveau N0",
     "derived_from": "level ; profile.preferences.crypto ; profile.knowledge",
     "limit": 0.0,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:alloc.crypto:max",
@@ -9212,7 +9212,7 @@
    },
    {
     "rule_id": "conc.etf_equity_each[XIU.TO]:max",
-    "description_fr": "conc.etf_equity_each niveau N0",
+    "description_fr": "poids de chaque FNB d'actions, niveau N0",
     "derived_from": "level",
     "limit": 0.1,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.etf_equity_each[XIU.TO]:max",
@@ -9223,7 +9223,7 @@
    },
    {
     "rule_id": "conc.etf_equity_each[SPY]:max",
-    "description_fr": "conc.etf_equity_each niveau N0",
+    "description_fr": "poids de chaque FNB d'actions, niveau N0",
     "derived_from": "level",
     "limit": 0.1,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.etf_equity_each[SPY]:max",
@@ -9234,7 +9234,7 @@
    },
    {
     "rule_id": "conc.etf_equity_each[ESGV]:max",
-    "description_fr": "conc.etf_equity_each niveau N0",
+    "description_fr": "poids de chaque FNB d'actions, niveau N0",
     "derived_from": "level",
     "limit": 0.1,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.etf_equity_each[ESGV]:max",
@@ -9245,7 +9245,7 @@
    },
    {
     "rule_id": "conc.etf_equity_each[QQQ]:max",
-    "description_fr": "conc.etf_equity_each niveau N0",
+    "description_fr": "poids de chaque FNB d'actions, niveau N0",
     "derived_from": "level",
     "limit": 0.1,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.etf_equity_each[QQQ]:max",
@@ -9256,7 +9256,7 @@
    },
    {
     "rule_id": "conc.etf_bond_each[XBB.TO]:max",
-    "description_fr": "conc.etf_bond_each niveau N0",
+    "description_fr": "poids de chaque FNB d'obligations, niveau N0",
     "derived_from": "level",
     "limit": 0.65,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.etf_bond_each[XBB.TO]:max",
@@ -9267,7 +9267,7 @@
    },
    {
     "rule_id": "conc.etf_bond_each[AGG]:max",
-    "description_fr": "conc.etf_bond_each niveau N0",
+    "description_fr": "poids de chaque FNB d'obligations, niveau N0",
     "derived_from": "level",
     "limit": 0.65,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.etf_bond_each[AGG]:max",
@@ -9278,7 +9278,7 @@
    },
    {
     "rule_id": "conc.etf_bond_each[TLT]:max",
-    "description_fr": "conc.etf_bond_each niveau N0",
+    "description_fr": "poids de chaque FNB d'obligations, niveau N0",
     "derived_from": "level",
     "limit": 0.65,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.etf_bond_each[TLT]:max",
@@ -9289,7 +9289,7 @@
    },
    {
     "rule_id": "conc.single_each[TSLA]:max",
-    "description_fr": "conc.single_each niveau N0",
+    "description_fr": "poids de chaque titre individuel, niveau N0",
     "derived_from": "level ; dollar_rule.l_star ; profile.knowledge",
     "limit": 0.0,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.single_each[TSLA]:max",
@@ -9300,7 +9300,7 @@
    },
    {
     "rule_id": "conc.single_total:max",
-    "description_fr": "conc.single_total niveau N0",
+    "description_fr": "poids total des titres individuels, niveau N0",
     "derived_from": "dollar_rule.l_star",
     "limit": 0.0,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:conc.single_total:max",
@@ -9311,7 +9311,7 @@
    },
    {
     "rule_id": "exp.tech:max",
-    "description_fr": "exp.tech niveau N0",
+    "description_fr": "exposition au secteur de la technologie (look-through), niveau N0",
     "derived_from": "level ; profile.biases[familiarite]",
     "limit": 0.06,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:exp.tech:max",
@@ -9333,8 +9333,8 @@
    },
    {
     "rule_id": "strat.sector_cap.tech:max",
-    "description_fr": "plafond d'exposition tech (look-through)",
-    "derived_from": "étape 0 : style defensive (τ=-0.25)",
+    "description_fr": "plafond d'exposition au secteur de la technologie (look-through)",
+    "derived_from": "étape 0 : style défensif (τ = -0,25)",
     "limit": 0.0475,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:strat.sector_cap.tech:max",
     "active": false,
@@ -9344,8 +9344,8 @@
    },
    {
     "rule_id": "strat.sector_cap.energy:max",
-    "description_fr": "plafond d'exposition energy (look-through)",
-    "derived_from": "étape 0 : style defensive (τ=-0.25)",
+    "description_fr": "plafond d'exposition au secteur de l'énergie (look-through)",
+    "derived_from": "étape 0 : style défensif (τ = -0,25)",
     "limit": 0.0225,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:strat.sector_cap.energy:max",
     "active": false,
@@ -9355,7 +9355,7 @@
    },
    {
     "rule_id": "risk.cvar_m:max",
-    "description_fr": "risk.cvar_m niveau N0",
+    "description_fr": "CVaR mensuelle, niveau N0",
     "derived_from": "level",
     "limit": 0.015,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:risk.cvar_m:max",
@@ -9366,7 +9366,7 @@
    },
    {
     "rule_id": "risk.cvar_12m:max",
-    "description_fr": "risk.cvar_12m niveau N0",
+    "description_fr": "CVaR des rendements sur douze mois glissants, niveau N0",
     "derived_from": "level",
     "limit": 0.025,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:risk.cvar_12m:max",
@@ -9377,7 +9377,7 @@
    },
    {
     "rule_id": "risk.mdd:max",
-    "description_fr": "risk.mdd niveau N0",
+    "description_fr": "baisse maximale, niveau N0",
     "derived_from": "level",
     "limit": 0.09,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:risk.mdd:max",
@@ -9388,7 +9388,7 @@
    },
    {
     "rule_id": "risk.vol:max",
-    "description_fr": "risk.vol niveau N0",
+    "description_fr": "volatilité annualisée, niveau N0",
     "derived_from": "level",
     "limit": 0.04,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:risk.vol:max",
@@ -9399,7 +9399,7 @@
    },
    {
     "rule_id": "risk.cdar_m:max",
-    "description_fr": "risk.cdar_m niveau N0",
+    "description_fr": "CDaR mensuelle (risque mesuré par les baisses), niveau N0",
     "derived_from": "profile.composure<40",
     "limit": 0.015,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:risk.cdar_m:max",
@@ -9410,7 +9410,7 @@
    },
    {
     "rule_id": "risk.stress_2022:max",
-    "description_fr": "risk.stress_2022 niveau N0",
+    "description_fr": "perte dans le scénario de crise de 2022, niveau N0",
     "derived_from": "level",
     "limit": 0.06,
     "value_fact_id": "dec-robert-v1-fixture:t024:judge:check:final:risk.stress_2022:max",
@@ -9542,14 +9542,14 @@
      "label": "HYPOTHESE"
     },
     {
-     "text_fr": "Plafond d'exposition tech (look-through) : 4,8 %.",
+     "text_fr": "Plafond d'exposition au secteur de la technologie (look-through) : 4,8 %.",
      "fact_ids": [
       "strat.sector_cap.tech"
      ],
      "label": "HYPOTHESE"
     },
     {
-     "text_fr": "Plafond d'exposition energy (look-through) : 2,2 %.",
+     "text_fr": "Plafond d'exposition au secteur de l'énergie (look-through) : 2,2 %.",
      "fact_ids": [
       "strat.sector_cap.energy"
      ],
@@ -9563,12 +9563,12 @@
      "label": "HYPOTHESE"
     },
     {
-     "text_fr": "Objection maintenue par la lentille « diversity » au second tour.",
+     "text_fr": "Objection maintenue par la lentille « diversité et préférences » au second tour.",
      "fact_ids": [],
      "label": "HYPOTHESE"
     },
     {
-     "text_fr": "Signal de comportement « low_composure » : il règle des garde-fous, jamais l'allocation.",
+     "text_fr": "Signal de comportement « faible sang-froid face aux baisses » : il règle des garde-fous, jamais l'allocation.",
      "fact_ids": [
       "strat.flag.low_composure"
      ],
@@ -9615,8 +9615,8 @@
      "emphasis.diversity",
      "emphasis.constraints"
     ],
-    "started_utc": "2026-11-15T17:33:24.465176Z",
-    "ended_utc": "2026-11-15T17:33:24.472974Z",
+    "started_utc": "2026-11-15T21:44:56.685508Z",
+    "ended_utc": "2026-11-15T21:44:56.688442Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9646,8 +9646,8 @@
      "strat.pi",
      "strat.K"
     ],
-    "started_utc": "2026-11-15T17:33:24.482662Z",
-    "ended_utc": "2026-11-15T17:33:24.482893Z",
+    "started_utc": "2026-11-15T21:44:56.689386Z",
+    "ended_utc": "2026-11-15T21:44:56.689462Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9872,8 +9872,8 @@
      "strat.rank.SHOP.TO",
      "strat.ineligible.SHOP.TO"
     ],
-    "started_utc": "2026-11-15T17:33:24.482911Z",
-    "ended_utc": "2026-11-15T17:33:24.680347Z",
+    "started_utc": "2026-11-15T21:44:56.689470Z",
+    "ended_utc": "2026-11-15T21:44:56.934148Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9894,8 +9894,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T17:33:24.680381Z",
-    "ended_utc": "2026-11-15T17:33:24.680426Z",
+    "started_utc": "2026-11-15T21:44:56.934166Z",
+    "ended_utc": "2026-11-15T21:44:56.934190Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9922,8 +9922,8 @@
      "strat.risk_cost",
      "strat.applied"
     ],
-    "started_utc": "2026-11-15T17:33:24.680438Z",
-    "ended_utc": "2026-11-15T17:33:24.948797Z",
+    "started_utc": "2026-11-15T21:44:56.934197Z",
+    "ended_utc": "2026-11-15T21:44:57.028604Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9946,8 +9946,8 @@
      "r1.opt_risk",
      "r1.active.strat.growth_floor:min"
     ],
-    "started_utc": "2026-11-15T17:33:24.950119Z",
-    "ended_utc": "2026-11-15T17:33:25.058114Z",
+    "started_utc": "2026-11-15T21:44:57.030129Z",
+    "ended_utc": "2026-11-15T21:44:57.056995Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9972,8 +9972,8 @@
      "r1.horizon_share_neg",
      "r1.recovery"
     ],
-    "started_utc": "2026-11-15T17:33:25.058148Z",
-    "ended_utc": "2026-11-15T17:33:25.070228Z",
+    "started_utc": "2026-11-15T21:44:57.057017Z",
+    "ended_utc": "2026-11-15T21:44:57.066790Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10006,8 +10006,8 @@
      "r1.stress_cad.2020_covid",
      "r1.loss_declared"
     ],
-    "started_utc": "2026-11-15T17:33:25.070246Z",
-    "ended_utc": "2026-11-15T17:33:25.095384Z",
+    "started_utc": "2026-11-15T21:44:57.066805Z",
+    "ended_utc": "2026-11-15T21:44:57.090088Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10036,8 +10036,8 @@
      "r1.lt.energy",
      "r1.lt.financials"
     ],
-    "started_utc": "2026-11-15T17:33:25.095405Z",
-    "ended_utc": "2026-11-15T17:33:25.098914Z",
+    "started_utc": "2026-11-15T21:44:57.090106Z",
+    "ended_utc": "2026-11-15T21:44:57.092856Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10059,8 +10059,8 @@
     "fact_ids": [
      "r1.n_blocking"
     ],
-    "started_utc": "2026-11-15T17:33:25.098930Z",
-    "ended_utc": "2026-11-15T17:33:25.117893Z",
+    "started_utc": "2026-11-15T21:44:57.092872Z",
+    "ended_utc": "2026-11-15T21:44:57.108001Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10086,7 +10086,7 @@
       "GLD": 0.040417
      }
     },
-    "output_summary": "approuve ; 0 violation(s) bloquante(s)",
+    "output_summary": "approuvée ; aucune violation bloquante",
     "fact_ids": [
      "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:positivite",
      "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:somme_poids",
@@ -10117,8 +10117,8 @@
      "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:risk.cdar_m:max",
      "dec-robert-v1-fixture:t010:lens.constraints:evidence:judge:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-15T17:33:25.099084Z",
-    "ended_utc": "2026-11-15T17:33:25.116953Z",
+    "started_utc": "2026-11-15T21:44:57.093073Z",
+    "ended_utc": "2026-11-15T21:44:57.107157Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10138,8 +10138,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T17:33:25.117918Z",
-    "ended_utc": "2026-11-15T17:33:25.117945Z",
+    "started_utc": "2026-11-15T21:44:57.108018Z",
+    "ended_utc": "2026-11-15T21:44:57.108032Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10159,8 +10159,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T17:33:25.119443Z",
-    "ended_utc": "2026-11-15T17:33:25.119917Z",
+    "started_utc": "2026-11-15T21:44:57.108343Z",
+    "ended_utc": "2026-11-15T21:44:57.108608Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10184,8 +10184,8 @@
      "r2.opt_risk",
      "r2.active.strat.growth_floor:min"
     ],
-    "started_utc": "2026-11-15T17:33:25.119946Z",
-    "ended_utc": "2026-11-15T17:33:25.119995Z",
+    "started_utc": "2026-11-15T21:44:57.108624Z",
+    "ended_utc": "2026-11-15T21:44:57.108655Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10210,8 +10210,8 @@
      "r2.horizon_share_neg",
      "r2.recovery"
     ],
-    "started_utc": "2026-11-15T17:33:25.120009Z",
-    "ended_utc": "2026-11-15T17:33:25.131775Z",
+    "started_utc": "2026-11-15T21:44:57.108663Z",
+    "ended_utc": "2026-11-15T21:44:57.117726Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10244,8 +10244,8 @@
      "r2.stress_cad.2020_covid",
      "r2.loss_declared"
     ],
-    "started_utc": "2026-11-15T17:33:25.131793Z",
-    "ended_utc": "2026-11-15T17:33:25.158245Z",
+    "started_utc": "2026-11-15T21:44:57.117740Z",
+    "ended_utc": "2026-11-15T21:44:57.141280Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10274,8 +10274,8 @@
      "r2.lt.energy",
      "r2.lt.financials"
     ],
-    "started_utc": "2026-11-15T17:33:25.158267Z",
-    "ended_utc": "2026-11-15T17:33:25.161640Z",
+    "started_utc": "2026-11-15T21:44:57.141298Z",
+    "ended_utc": "2026-11-15T21:44:57.143959Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10297,8 +10297,8 @@
     "fact_ids": [
      "r2.n_blocking"
     ],
-    "started_utc": "2026-11-15T17:33:25.161654Z",
-    "ended_utc": "2026-11-15T17:33:25.181582Z",
+    "started_utc": "2026-11-15T21:44:57.143973Z",
+    "ended_utc": "2026-11-15T21:44:57.159476Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10324,7 +10324,7 @@
       "GLD": 0.040417
      }
     },
-    "output_summary": "approuve ; 0 violation(s) bloquante(s)",
+    "output_summary": "approuvée ; aucune violation bloquante",
     "fact_ids": [
      "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:positivite",
      "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:somme_poids",
@@ -10355,8 +10355,8 @@
      "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:risk.cdar_m:max",
      "dec-robert-v1-fixture:t017:lens.constraints:evidence:judge:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-15T17:33:25.161791Z",
-    "ended_utc": "2026-11-15T17:33:25.180600Z",
+    "started_utc": "2026-11-15T21:44:57.144167Z",
+    "ended_utc": "2026-11-15T21:44:57.158660Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10376,8 +10376,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T17:33:25.181604Z",
-    "ended_utc": "2026-11-15T17:33:25.181626Z",
+    "started_utc": "2026-11-15T21:44:57.159492Z",
+    "ended_utc": "2026-11-15T21:44:57.159505Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10397,8 +10397,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T17:33:25.184217Z",
-    "ended_utc": "2026-11-15T17:33:25.184258Z",
+    "started_utc": "2026-11-15T21:44:57.159881Z",
+    "ended_utc": "2026-11-15T21:44:57.159893Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10421,8 +10421,8 @@
     "fact_ids": [
      "request.weight"
     ],
-    "started_utc": "2026-11-15T17:33:25.184288Z",
-    "ended_utc": "2026-11-15T17:33:25.184320Z",
+    "started_utc": "2026-11-15T21:44:57.159906Z",
+    "ended_utc": "2026-11-15T21:44:57.159923Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10455,8 +10455,8 @@
      "demande.stress_cad.2020_covid",
      "demande.loss_declared"
     ],
-    "started_utc": "2026-11-15T17:33:25.184336Z",
-    "ended_utc": "2026-11-15T17:33:25.214692Z",
+    "started_utc": "2026-11-15T21:44:57.159930Z",
+    "ended_utc": "2026-11-15T21:44:57.187149Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10476,8 +10476,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T17:33:25.214722Z",
-    "ended_utc": "2026-11-15T17:33:25.233074Z",
+    "started_utc": "2026-11-15T21:44:57.187165Z",
+    "ended_utc": "2026-11-15T21:44:57.202800Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10504,7 +10504,7 @@
       "TSLA": 0.055556
      }
     },
-    "output_summary": "refuse ; 4 violation(s) bloquante(s)",
+    "output_summary": "refusée ; 4 violations bloquantes",
     "fact_ids": [
      "dec-robert-v1-fixture:t022:judge:check:demande:positivite",
      "dec-robert-v1-fixture:t022:judge:check:demande:somme_poids",
@@ -10535,8 +10535,8 @@
      "dec-robert-v1-fixture:t022:judge:check:demande:risk.cdar_m:max",
      "dec-robert-v1-fixture:t022:judge:check:demande:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-15T17:33:25.214984Z",
-    "ended_utc": "2026-11-15T17:33:25.232274Z",
+    "started_utc": "2026-11-15T21:44:57.187392Z",
+    "ended_utc": "2026-11-15T21:44:57.201955Z",
     "status": "refus",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10556,8 +10556,8 @@
     "fact_ids": [
      "request.framed_method"
     ],
-    "started_utc": "2026-11-15T17:33:25.233092Z",
-    "ended_utc": "2026-11-15T17:33:25.472350Z",
+    "started_utc": "2026-11-15T21:44:57.202818Z",
+    "ended_utc": "2026-11-15T21:44:57.273818Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10583,7 +10583,7 @@
       "GLD": 0.040417
      }
     },
-    "output_summary": "approuve ; 0 violation(s) bloquante(s)",
+    "output_summary": "approuvée ; aucune violation bloquante",
     "fact_ids": [
      "judge-check-optimum:positivite",
      "judge-check-optimum:somme_poids",
@@ -10614,8 +10614,8 @@
      "judge-check-optimum:risk.cdar_m:max",
      "judge-check-optimum:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-15T17:33:25.453026Z",
-    "ended_utc": "2026-11-15T17:33:25.471054Z",
+    "started_utc": "2026-11-15T21:44:57.257752Z",
+    "ended_utc": "2026-11-15T21:44:57.272648Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10635,8 +10635,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T17:33:25.472373Z",
-    "ended_utc": "2026-11-15T17:33:25.491090Z",
+    "started_utc": "2026-11-15T21:44:57.273834Z",
+    "ended_utc": "2026-11-15T21:44:57.288649Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10662,7 +10662,7 @@
       "GLD": 0.040417
      }
     },
-    "output_summary": "approuve ; 0 violation(s) bloquante(s)",
+    "output_summary": "approuvée ; aucune violation bloquante",
     "fact_ids": [
      "dec-robert-v1-fixture:t024:judge:check:final:positivite",
      "dec-robert-v1-fixture:t024:judge:check:final:somme_poids",
@@ -10693,8 +10693,8 @@
      "dec-robert-v1-fixture:t024:judge:check:final:risk.cdar_m:max",
      "dec-robert-v1-fixture:t024:judge:check:final:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-15T17:33:25.472578Z",
-    "ended_utc": "2026-11-15T17:33:25.490256Z",
+    "started_utc": "2026-11-15T21:44:57.274044Z",
+    "ended_utc": "2026-11-15T21:44:57.287906Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10712,8 +10712,8 @@
     "inputs": {},
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T17:33:25.491110Z",
-    "ended_utc": "2026-11-15T17:33:25.778994Z",
+    "started_utc": "2026-11-15T21:44:57.288660Z",
+    "ended_utc": "2026-11-15T21:44:57.385479Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",

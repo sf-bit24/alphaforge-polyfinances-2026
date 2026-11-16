@@ -8,7 +8,9 @@ import { listKb } from "@/lib/client/api";
 import { useSession } from "@/lib/client/session";
 import { useAsync } from "@/lib/client/use-async";
 import type { Dictionary } from "@/lib/i18n/dictionary";
+import { factValueText } from "@/lib/fact-value";
 import { formatDateTime, formatTime } from "@/lib/i18n/locale";
+import { okfTypeLabel } from "@/lib/i18n/okf-types";
 import { useI18n } from "@/lib/i18n/provider";
 import { DocumentDialog } from "@/components/kb/document-view";
 import { Badge } from "@/components/ui/badge";
@@ -76,12 +78,6 @@ export function riskCaption(profile: ClientState["profile"], t: Dictionary): str
   return t.panel.riskDetail(level(risk.tolerance), level(risk.capacity));
 }
 
-function shortValue(value: unknown): string {
-  if (typeof value === "string") return value;
-  const text = JSON.stringify(value);
-  return text.length > 60 ? `${text.slice(0, 57)}…` : text;
-}
-
 function FactsList({ facts }: { facts: Fact[] }) {
   const { t, locale } = useI18n();
   if (facts.length === 0) return <p className="text-sm text-ink-500">{t.panel.noFacts}</p>;
@@ -95,7 +91,7 @@ function FactsList({ facts }: { facts: Fact[] }) {
               {formatTime(fact.at, locale)}
             </time>
           </p>
-          <p className="mt-0.5 text-sm font-medium break-words text-ink-900">{shortValue(fact.value)}</p>
+          <p className="mt-0.5 text-sm font-medium break-words text-ink-900">{factValueText(fact)}</p>
           <Badge tone="outline" className="mt-1 font-mono">
             {provenanceLabel(fact.provenance, t)}
           </Badge>
@@ -137,7 +133,7 @@ interface DocumentRowProps {
 }
 
 function DocumentRow({ item, prefix, json = false, onOpen }: DocumentRowProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   return (
     <li>
       <button
@@ -157,7 +153,7 @@ function DocumentRow({ item, prefix, json = false, onOpen }: DocumentRowProps) {
         </span>
         {item.type && !json ? (
           <Badge tone="outline" className="mt-0.5">
-            {item.type}
+            {okfTypeLabel(item.type, locale)}
           </Badge>
         ) : null}
       </button>

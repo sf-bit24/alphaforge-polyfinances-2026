@@ -51,7 +51,7 @@ export function FactChip({ id, compact = false }: { id: string; compact?: boolea
       onClick={() => open([id])}
       aria-haspopup="dialog"
       aria-label={`${t.portfolioView.fact.open(fact.label_fr)} (${value}, ${t.portfolioView.labels[fact.status]})`}
-      title={`${fact.label_fr} : ${value} · ${t.portfolioView.labels[fact.status]}`}
+      title={`${fact.label_fr}${t.portfolioView.colon}${value} · ${t.portfolioView.labels[fact.status]}`}
     >
       <span aria-hidden className={cn(p.dot, fact.status === "HYPOTHESE" && p.dotHyp, fact.status === "FICTION" && p.dotFic)} />
       {compact ? null : <span className={p.factLabel}>{fact.label_fr}</span>}

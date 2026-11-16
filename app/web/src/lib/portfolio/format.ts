@@ -59,9 +59,25 @@ export function formatEngineValue(value: number | string | null | undefined, uni
  */
 export const FRACTION_UNITS: ReadonlySet<string> = new Set(["%", "part du portefeuille", "poids", "perte (fraction)", "volatilité annualisée"]);
 
+/**
+ * Units of a whole duration (`WHOLE_UNITS` in finance/debate/explain.py): `fmt` writes the number alone (« 12 »)
+ * and the engine's sentence adds the word (« 12 mois »). A chip has no sentence around it, so it adds the word
+ * itself: « 12 mois », « 5 ans », « 1 an ». The word follows the French rule (below 2, singular).
+ */
+const WHOLE_DURATION_WORDS: Readonly<Record<string, (count: number) => string>> = {
+  "nombre de mois": () => "mois",
+  "nombre d'années": (count) => (Math.abs(count) >= 2 ? "ans" : "an"),
+};
+
 /** A fact as displayed on a chip or in a table cell. */
 export function formatFact(fact: Pick<DecisionFact, "value" | "unit">): string {
   if (typeof fact.value === "number" && FRACTION_UNITS.has(fact.unit)) return formatEngineValue(fact.value, "%");
+  const word = Object.hasOwn(WHOLE_DURATION_WORDS, fact.unit) ? WHOLE_DURATION_WORDS[fact.unit] : undefined;
+  if (typeof fact.value === "number" && word) {
+    // Whole by construction; a fractional value would keep one decimal, as « mois » and « ans ».
+    const digits = Number.isInteger(fact.value) ? 0 : 1;
+    return `${pythonFixed(fact.value, digits).replace(".", ",")} ${word(fact.value)}`;
+  }
   return formatEngineValue(fact.value, fact.unit);
 }
 

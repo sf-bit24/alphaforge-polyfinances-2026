@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { AppliedAmendment, ConstraintCheck, DebateRoundSummary, LensVerdict, PortfolioBuildResponse } from "@/lib/contract/portfolio";
 import { curly } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
-import { constraintUnit, type FactIndex } from "@/lib/portfolio/decision";
+import { constraintUnit, derivedFromLabel, showsRawProvenance, type FactIndex } from "@/lib/portfolio/decision";
 import { formatLimit } from "@/lib/portfolio/format";
 import d from "@/components/details/details.module.css";
 import { cn } from "@/components/ui/cn";
@@ -49,15 +49,25 @@ function Amendments({ amendments }: { amendments: AppliedAmendment[] }) {
         <p className={p.sub}>{v.noAmendment}</p>
       ) : (
         <ul className={p.list}>
-          {amendments.map((item, index) => (
-            <li key={index}>
-              <p>
-                <b>{v.lenses[item.lens] ?? item.lens}</b> · {item.status === "applique" ? v.applied : v.rejected} · {curly(item.amendment.reason_fr)}
-              </p>
-              <p className={p.sub}>{curly(item.why_fr)}</p>
-              <FactChips ids={item.amendment.evidence_fact_ids.filter((id) => facts.has(id))} limit={3} />
-            </li>
-          ))}
+          {amendments.map((item, index) => {
+            // Evidence the lens cited that the decision does not hold (a rule_id instead of a fact_id…): its id
+            // is shown small, for the audit; the reason above says it in words.
+            const missing = item.amendment.evidence_fact_ids.filter((id) => !facts.has(id));
+            return (
+              <li key={index}>
+                <p>
+                  <b>{v.lenses[item.lens] ?? item.lens}</b> · {item.status === "applique" ? v.applied : v.rejected} · {curly(item.amendment.reason_fr)}
+                </p>
+                <p className={p.sub}>{curly(item.why_fr)}</p>
+                {missing.length > 0 ? (
+                  <p className={p.auditIds} title={v.missingEvidence}>
+                    {missing.join(" ; ")}
+                  </p>
+                ) : null}
+                <FactChips ids={item.amendment.evidence_fact_ids.filter((id) => facts.has(id))} limit={3} />
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -91,13 +101,17 @@ export function Debate({ response }: { response: PortfolioBuildResponse }) {
 function ConstraintRow({ check, facts }: { check: ConstraintCheck; facts: FactIndex }) {
   const { t } = useI18n();
   const v = t.portfolioView.constraints;
+  const derived = derivedFromLabel(check.derived_from, v.derivedFrom);
   return (
     <tr className={check.violated ? p.rowViolated : undefined}>
       <td>
         {check.description_fr}
         <span className={p.rule}>{check.rule_id}</span>
       </td>
-      <td>{check.derived_from}</td>
+      <td>
+        {derived}
+        {showsRawProvenance(derived, check.derived_from) ? <span className={p.rule}>{check.derived_from}</span> : null}
+      </td>
       <td className={cn(d.n, p.num)}>{formatLimit(check.limit, constraintUnit(facts, check.value_fact_id))}</td>
       <td>{check.value_fact_id ? <FactChip id={check.value_fact_id} compact /> : "—"}</td>
       <td>

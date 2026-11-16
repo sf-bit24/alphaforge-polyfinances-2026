@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from alphaforge import okf
+from alphaforge import clock, okf
 from alphaforge.collect import data as data_collector
 from alphaforge.collect import edgar, fundamentals, http, staging, supervisor
 from alphaforge.finance.strategy.okf_facts import fundamentals_facts, parse_company_fundamentals
@@ -230,9 +230,11 @@ def stage_with_sic(store, code, label, ticker="ENB.TO", cik=895728, name="Enbrid
     return staged[0]
 
 
-def test_a6_writes_a_sector_activity_fact_from_a_fossil_sic_code(store):
+def test_a6_writes_a_sector_activity_fact_from_a_fossil_sic_code(store, monkeypatch):
     from alphaforge.finance.debate.okf_bridge import OkfMarketStore
 
+    # A5 date l'élément à l'heure réelle et A6 en tire la période du fait : l'horloge est figée sur NOW.
+    monkeypatch.setattr(clock, "utcnow", lambda: clock.parse_datetime(NOW))
     item = stage_with_sic(store, 4610, "PIPE LINES (NO NATURAL GAS)")
     assert item["data"]["sic"]["code"] == 4610
     result = curate(store)

@@ -64,6 +64,8 @@ Le risque effectif est le **minimum** de la tolérance et de la capacité, calcu
 
 Trois questions rapides (fréquence des placements, suivi de l'actualité, auto-évaluation) donnent le niveau : débutant, intermédiaire ou avancé. Il change le langage des explications, jamais les chiffres.
 
+Voir aussi : [la complétude du profil](completude-du-profil.md) et [le cadre responsable](cadre-responsable.md).
+
 [^bncd]: Atelier BNCD : comprendre l'investisseur avant de bâtir la solution`,
   },
   {
@@ -79,7 +81,7 @@ La complétude est la **part pondérée des champs requis connus**, calculée pa
 - **Seuil de 70 %** : à partir de là, le profil suffit pour continuer et l'investisseur peut s'arrêter.
 - **Plafond de 95 %** : l'affichage ne dépasse jamais 95 %. Un profil n'est jamais parfaitement connu; le plafond garde visible cette part d'incertitude.
 
-Les champs qui pèsent le plus sont l'objectif, l'horizon, la réaction à une baisse et le fonds d'urgence : ce sont eux qui changent le plus la réponse.`,
+Les champs qui pèsent le plus sont l'objectif, l'horizon, la réaction à une baisse et le fonds d'urgence : ce sont eux qui changent le plus la réponse. Les dimensions elles-mêmes sont décrites dans [le profil investisseur](profil-investisseur.md).`,
   },
   {
     slug: "expositions-du-portefeuille",
@@ -92,7 +94,7 @@ Les champs qui pèsent le plus sont l'objectif, l'horizon, la réaction à une b
 A2 propose des positions normalisées; l'investisseur les corrige puis les confirme. Le **code** calcule ensuite les expositions, jamais le modèle.
 
 1. Valeur de chaque position = quantité × dernier cours de clôture du jeu de départ (ou valeur déclarée).
-2. Les montants en USD sont convertis au dernier taux USD/CAD de la Banque du Canada.
+2. Les montants en USD sont convertis au dernier [taux USD/CAD](../donnees/usdcad/usdcad-2026-11.md) de la Banque du Canada.
 3. Chaque exposition est une part de 0 à 1 de la valeur totale en CAD.
 
 | Signal | Règle |

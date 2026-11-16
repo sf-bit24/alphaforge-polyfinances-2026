@@ -60,6 +60,13 @@
   --color-kind-storage: #e87ba4;
   --color-kind-guardrail: #008300;
 
+  /* Families of the knowledge graph (components/kb/graph-style.ts): categorical slots 1 to 3 only,
+     validated all-pairs on white (any two nodes can be neighbours). "Other" stays neutral. */
+  --color-kb-concepts: #2a78d6;
+  --color-kb-markets: #eb6834;
+  --color-kb-news: #1baf7a;
+  --color-kb-other: #8d9bad;
+
   /* Status colors, reserved for state and always paired with an icon and a label. */
   --color-good: #1f8a50;
   --color-good-ink: #176b40;

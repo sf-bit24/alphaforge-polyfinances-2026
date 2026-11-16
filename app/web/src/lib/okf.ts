@@ -46,3 +46,49 @@ export function generalGroup(key: string): string {
   const folder = parts[1] ?? "";
   return (GENERAL_FOLDERS as readonly string[]).includes(folder) ? folder : "other";
 }
+
+/** Root of the base a key belongs to: `general/` or `clients/<client_id>/`. */
+export function okfBaseRoot(key: string): string {
+  const parts = key.split("/");
+  return `${parts.slice(0, parts[0] === "clients" ? 2 : 1).join("/")}/`;
+}
+
+const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+
+/** `.` and `..` segments resolved; null when the path climbs above its first segment. */
+function normalizePath(path: string): string | null {
+  const segments: string[] = [];
+  for (const segment of path.split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment !== "..") segments.push(segment);
+    else if (segments.pop() === undefined) return null;
+  }
+  return segments.join("/");
+}
+
+/** Path of a Markdown link, without anchor or query; null for an external or absolute address. */
+function linkPath(href: string): string | null {
+  const bare = href.split("#", 1)[0]?.split("?", 1)[0] ?? "";
+  let path = bare.trim();
+  try {
+    path = decodeURIComponent(bare).trim();
+  } catch {
+    // a malformed escape stays as written
+  }
+  return !path || path.startsWith("/") || SCHEME.test(path) ? null : path;
+}
+
+/**
+ * The key, among `known`, that a link of the document `fromKey` points to: relative to the document's folder
+ * (`../methodologie/x.md`), else to the root of its base (`faits/<source>/<date>.md`). The runtime applies the
+ * same rule to the `links` of `kb.list` (CONTRACTS.md, section 3.2).
+ */
+export function resolveOkfLink(fromKey: string, href: string, known: ReadonlySet<string>): string | null {
+  const path = linkPath(href);
+  if (path === null) return null;
+  const root = okfBaseRoot(fromKey);
+  const folder = fromKey.slice(0, fromKey.lastIndexOf("/") + 1);
+  const candidates = [normalizePath(folder + path), normalizePath(root + path)];
+  // A link never leaves its base: `../../../general/x.md` from a client's note points nowhere.
+  return candidates.find((candidate): candidate is string => candidate !== null && candidate.startsWith(root) && known.has(candidate)) ?? null;
+}

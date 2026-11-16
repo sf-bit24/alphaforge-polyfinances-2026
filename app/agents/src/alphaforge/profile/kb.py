@@ -19,6 +19,7 @@ from .. import okf
 from ..config import Settings
 from ..errors import AppError, pick
 from ..store import Store, StoreError, validate_key, validate_prefix
+from . import kb_links
 from .state import is_client_id
 
 logger = logging.getLogger("alphaforge.kb")
@@ -62,30 +63,34 @@ def check_prefix(prefix: Any, locale: str) -> str:
 
 
 def list_documents(store: Store, prefix: str) -> list[dict[str, Any]]:
+    """Documents d'une base, avec leurs liens vers les autres documents listés et leurs symboles (``kb_links``)."""
     infos = [info for info in store.list(prefix, limit=MAX_LIST * 2) if info.key.endswith(".md")][:MAX_LIST]
+    known = {info.key for info in infos}
 
-    def describe(info: Any) -> dict[str, Any] | None:
+    def describe(info: Any) -> tuple[dict[str, Any], kb_links.Relations] | None:
         obj = store.get(info.key)
         if obj is None:
             return None
         try:
             doc = okf.parse(obj.text)
         except okf.OkfError:
-            return {"key": info.key, "title": None, "type": None, "description": None, "updated_at": info.last_modified}
+            unreadable = {"key": info.key, "title": None, "type": None, "description": None}
+            return {**unreadable, "updated_at": info.last_modified}, kb_links.Relations()
         if doc.data.get("retired") is True:
             return None  # note retirée de la base du client (le runtime n'a pas s3:DeleteObject)
         summary = okf.summary(doc)
-        return {
+        item = {
             "key": info.key,
             "title": summary["title"],
             "type": summary["type"],
             "description": summary["description"],
             "updated_at": summary["generated_at"] or info.last_modified,
         }
+        return item, kb_links.relations(info.key, doc, known)
 
     with ThreadPoolExecutor(max_workers=8) as pool:
-        items = [item for item in pool.map(describe, infos) if item is not None]
-    return sorted(items, key=lambda item: item["key"])
+        described = [entry for entry in pool.map(describe, infos) if entry is not None]
+    return sorted(kb_links.attach(described), key=lambda item: item["key"])
 
 
 def check_key(key: Any, client_id: Any, locale: str) -> str:

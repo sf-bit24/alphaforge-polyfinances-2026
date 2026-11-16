@@ -8,6 +8,8 @@ Aide à la décision d'investissement agentique et explicable, construite pour l
 
 **Architecture AWS :** la plateforme et les trois flux de bout en bout (profil, portefeuille, veille web) sont dans [`docs/architecture/`](docs/architecture/README.md).
 
+**En une page :** le [one-pager](docs/one-pager/alphaforge-one-pager.pdf) suit une vraie décision de l'application, de la demande de l'investisseur à sa trace d'audit. Les trois cas d'utilisation sont dans [`docs/use-cases/`](docs/use-cases/README.md).
+
 La mémoire du produit (besoin, personas, décisions, architecture) est le Brain de l'équipe : [`sf-bit24/brain`](https://github.com/sf-bit24/brain). Le contrat entre les composants est dans [`app/CONTRACTS.md`](app/CONTRACTS.md).
 
 ## Démo vidéo
@@ -20,9 +22,9 @@ https://github.com/user-attachments/assets/b2629c28-754f-4717-b255-53ac79fe743f
 
 ## Architecture
 
-![Plateforme AlphaForge AI sur AWS](docs/architecture/img/alphaforge-plateforme-aws.png)
+![Plateforme AlphaForge AI sur AWS](docs/architecture/assets/alphaforge-plateforme-aws.png)
 
-Les trois flux de bout en bout ont chacun leur diagramme, avec ses étapes numérotées : [création du profil](docs/architecture/img/alphaforge-flux-profil.png), [création du portefeuille](docs/architecture/img/alphaforge-flux-portefeuille.png) et [veille web](docs/architecture/img/alphaforge-flux-veille-web.png). Les sources modifiables (`.drawio`) sont dans [`docs/architecture/`](docs/architecture/README.md). Les 8 agents déployés et les buckets sont décrits dans [`docs/architecture/agents-et-stockage.md`](docs/architecture/agents-et-stockage.md).
+Les trois flux de bout en bout ont chacun leur diagramme, avec ses étapes numérotées : [création du profil](docs/architecture/assets/alphaforge-flux-profil.png), [création du portefeuille](docs/architecture/assets/alphaforge-flux-portefeuille.png) et [veille web](docs/architecture/assets/alphaforge-flux-veille-web.png). Les sources modifiables (`.drawio`) et les images sont dans [`docs/architecture/assets/`](docs/architecture/assets/). Les 8 agents déployés et les buckets sont décrits dans [`docs/architecture/agents-et-stockage.md`](docs/architecture/agents-et-stockage.md). Les trois cas d'utilisation (profil, portefeuille, veille web), avec des exemples réels, sont dans [`docs/use-cases/`](docs/use-cases/README.md).
 
 - **Profil** (runtime `profile`) : questions de base déterministes, sans modèle ; A2 lit un portefeuille existant sous n'importe quelle forme, le code le valorise ; A1 relance sur ce qui manque. La complétude est calculée par le code (seuil de 70 %, plafond affiché de 95 %). Chaque investisseur a aussi sa propre Knowledge Base, un index de recherche construit à partir de sa base OKF, où A1 retrouve un passage (une décision passée, une note) ; les chiffres viennent toujours des documents OKF.
 - **Portefeuille simulé** (runtime `portfolio`) : profil traduit en mandat, étape 0 (style et sélection), optimiseur, avocat A3 et quatre lentilles sur deux tours, Judge déterministe, explication ancrée sur des faits sourcés. Aucun poids ni chiffre ne vient d'un modèle.

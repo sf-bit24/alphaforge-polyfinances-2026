@@ -5,6 +5,7 @@
  */
 import type { AgentRequest } from "@/lib/contract/requests";
 import type { Exposures, KnowledgeLevel, Locale, PortfolioView, Position, UnresolvedItem } from "@/lib/contract/schemas";
+import { formatDate } from "@/lib/i18n/locale";
 import { composeA2Message, MODEL_ID, screenMessage, type Screening } from "./agents";
 import { portfolioDoc, writeClientDocs } from "./client-docs";
 import { knowledgeLevelOf, requireStage, setFact, setStage, type ClientRecord } from "./client-record";
@@ -43,7 +44,7 @@ function inputGuardrailStep(screening: Screening, locale: Locale): TraceStepInpu
   return {
     kind: "guardrail",
     actor: "guardrail",
-    title: locale === "fr" ? "Entrée vérifiée par le garde-fou" : "Input checked by the guardrail",
+    title: locale === "fr" ? "Vos renseignements personnels protégés" : "Your personal details protected",
     detail: tr(detail, locale),
     outputs: { masked: screening.masked, action: "NONE" },
     durationMs: 140,
@@ -56,10 +57,10 @@ function analysisStep({ text, files }: PortfolioSubmitRequest, locale: Locale): 
   return {
     kind: "agent",
     actor: "A2",
-    title: fr ? "A2 analyse le portefeuille fourni" : "A2 analyses the provided portfolio",
+    title: fr ? "Yan lit votre portefeuille" : "Yan reads your portfolio",
     detail: fr
-      ? `${pastedChars ? `${pastedChars} caractères collés` : "aucun texte"}, ${files?.length ?? 0} fichier(s)`
-      : `${pastedChars ? `${pastedChars} pasted characters` : "no text"}, ${files?.length ?? 0} file(s)`,
+      ? `${pastedChars ? "texte collé" : "aucun texte"}, ${files?.length ?? 0} fichier(s)`
+      : `${pastedChars ? "pasted text" : "no text"}, ${files?.length ?? 0} file(s)`,
     inputs: {
       text_chars: pastedChars,
       files: (files ?? []).map((file) => ({ name: file.name, media_type: file.media_type })),
@@ -70,15 +71,15 @@ function analysisStep({ text, files }: PortfolioSubmitRequest, locale: Locale): 
 
 function readFileStep(file: FileReport, locale: Locale): TraceStepInput {
   const detail: L = file.readable
-    ? { fr: `${file.lines} ligne(s) lues (${file.media_type})`, en: `${file.lines} line(s) read (${file.media_type})` }
+    ? { fr: `${file.lines} ligne(s) lue(s)`, en: `${file.lines} line(s) read` }
     : {
-        fr: `Contenu binaire (${file.media_type}) : le simulateur ne le lit pas`,
-        en: `Binary content (${file.media_type}): the simulator does not read it`,
+        fr: "Le simulateur ne lit pas ce type de fichier (PDF, image ou tableur)",
+        en: "The simulator does not read this type of file (PDF, image or spreadsheet)",
       };
   return {
     kind: "tool",
     actor: "A2",
-    title: locale === "fr" ? `Outil read_file : ${file.name}` : `Tool read_file: ${file.name}`,
+    title: locale === "fr" ? `Lecture du fichier ${file.name}` : `Reading the file ${file.name}`,
     detail: tr(detail, locale),
     inputs: { name: file.name, media_type: file.media_type, bytes: file.bytes },
     outputs: { readable: file.readable, lines: file.lines },
@@ -91,10 +92,10 @@ function resolveSecuritiesStep(extraction: Extraction, resolved: Position[], loc
   return {
     kind: "tool",
     actor: "A2",
-    title: fr ? "Outil resolve_securities : univers du jeu de départ" : "Tool resolve_securities: starter universe",
+    title: fr ? "Titres reconnus" : "Securities recognized",
     detail: fr
-      ? `${resolved.length} titre(s) reconnu(s), ${extraction.unresolved.length} élément(s) non résolu(s)`
-      : `${resolved.length} security(ies) recognized, ${extraction.unresolved.length} unresolved item(s)`,
+      ? `${resolved.length} titre(s) reconnu(s), ${extraction.unresolved.length} élément(s) non reconnu(s)`
+      : `${resolved.length} security(ies) recognized, ${extraction.unresolved.length} item(s) not recognized`,
     inputs: { lines: extraction.lines },
     outputs: {
       resolved: resolved.map((position) => position.ticker),
@@ -110,8 +111,8 @@ function pricesStep(resolved: Position[], locale: Locale): TraceStepInput {
   return {
     kind: "tool",
     actor: "A2",
-    title: fr ? "Outil get_prices : derniers cours de clôture" : "Tool get_prices: last closing prices",
-    detail: fr ? `Cours du ${PRICE_DATE}, devise de cotation` : `Prices of ${PRICE_DATE}, listing currency`,
+    title: fr ? "Derniers cours de clôture" : "Last closing prices",
+    detail: fr ? `Cours du ${formatDate(PRICE_DATE, locale)}, dans la devise de cotation` : `Prices of ${formatDate(PRICE_DATE, locale)}, in the listing currency`,
     outputs: Object.fromEntries(resolved.map((position) => [position.ticker ?? position.id, position.price])),
     sources: [STARTER_SOURCES.prices],
     durationMs: 190,
@@ -123,8 +124,8 @@ function fxStep(locale: Locale): TraceStepInput {
   return {
     kind: "tool",
     actor: "A2",
-    title: fr ? "Outil get_fx : USD/CAD" : "Tool get_fx: USD/CAD",
-    detail: fr ? `1 USD = 1,4255 CAD le ${PRICE_DATE}` : `1 USD = 1.4255 CAD on ${PRICE_DATE}`,
+    title: fr ? "Taux de change USD/CAD" : "USD/CAD exchange rate",
+    detail: fr ? `1 USD = 1,4255 CAD le ${formatDate(PRICE_DATE, locale)}` : `1 USD = 1.4255 CAD on ${formatDate(PRICE_DATE, locale)}`,
     outputs: { usdcad: USDCAD, date: PRICE_DATE },
     sources: [STARTER_SOURCES.fx],
     durationMs: 120,
@@ -146,10 +147,8 @@ function summaryModelStep(level: KnowledgeLevel | null, summary: string, locale:
   return {
     kind: "model",
     actor: "A2",
-    title: fr ? "Modèle Bedrock : synthèse pour l'investisseur" : "Bedrock model: summary for the investor",
-    detail: fr
-      ? `Rédaction au niveau ${level ?? "beginner"}; le modèle ne calcule aucun chiffre`
-      : `Written at ${level ?? "beginner"} level; the model computes no figure`,
+    title: fr ? "Yan rédige le résumé" : "Yan writes the summary",
+    detail: fr ? "Yan rédige les phrases; les chiffres sont calculés, jamais inventés" : "Yan writes the sentences; the figures are computed, never made up",
     inputs: { model_id: MODEL_ID, simulated: true, knowledge_level: level },
     outputs: { message_chars: summary.length },
     durationMs: 1_450,
@@ -161,10 +160,10 @@ function draftExposuresStep(exposures: Exposures, positions: Position[], locale:
   return {
     kind: "deterministic",
     actor: "A2",
-    title: fr ? "Expositions calculées par le code" : "Exposures computed by code",
+    title: fr ? "Expositions calculées selon des règles fixes" : "Exposures computed with fixed rules",
     detail: fr
-      ? `Total ${exposures.total_value_cad.toLocaleString("fr-CA")} $ CA; signaux : ${exposures.flags.join(", ") || "aucun"}`
-      : `Total CAD ${exposures.total_value_cad.toLocaleString("en-CA")}; flags: ${exposures.flags.join(", ") || "none"}`,
+      ? `Total ${exposures.total_value_cad.toLocaleString("fr-CA")} $ CA; ${exposures.flags.length || "aucun"} signal(aux) à regarder`
+      : `Total CAD ${exposures.total_value_cad.toLocaleString("en-CA")}; ${exposures.flags.length || "no"} signal(s) to look at`,
     outputs: { total_value_cad: exposures.total_value_cad, flags: exposures.flags },
     sources: portfolioSources(positions),
     durationMs: 4,
@@ -201,7 +200,7 @@ export function submitPortfolio(record: ClientRecord, request: PortfolioSubmitRe
 
   record.portfolio = { positions, unresolved, fx: fxRate(), exposures, status: "draft", sources: portfolioSources(positions) };
   record.message = message;
-  setStage(record, "portfolio_review", { provenance, at: trace.now, note: "positions proposées par A2" });
+  setStage(record, "portfolio_review", { provenance, at: trace.now, note: "positions proposées par Yan" });
   setFact(record, {
     field: PORTFOLIO_DRAFT_FIELD,
     value: { positions: positions.length, total_value_cad: exposures.total_value_cad },
@@ -219,10 +218,10 @@ function correctedPositionsStep(positions: Position[], locale: Locale): TraceSte
   return {
     kind: "deterministic",
     actor: "A2",
-    title: fr ? "Positions corrigées relues par le code" : "Corrected positions re-read by code",
+    title: fr ? "Vos positions corrigées, relues" : "Your corrected positions, read again",
     detail: fr
-      ? `${count} ${count > 1 ? "positions" : "position"}, ${outsideUniverse} hors du jeu de départ`
-      : `${count} ${count === 1 ? "position" : "positions"}, ${outsideUniverse} outside the starter universe`,
+      ? `${count} ${count > 1 ? "positions" : "position"}, ${outsideUniverse} hors des titres suivis`
+      : `${count} ${count === 1 ? "position" : "positions"}, ${outsideUniverse} outside the tracked securities`,
     inputs: { positions: count },
     outputs: { tickers: positions.map((position) => position.ticker) },
     sources: [STARTER_SOURCES.universe, STARTER_SOURCES.prices],
@@ -235,7 +234,7 @@ function confirmedExposuresStep(exposures: Exposures, positions: Position[], loc
   return {
     kind: "deterministic",
     actor: "A2",
-    title: fr ? "Expositions calculées par le code" : "Exposures computed by code",
+    title: fr ? "Expositions calculées selon des règles fixes" : "Exposures computed with fixed rules",
     detail: fr
       ? `Par classe d'actifs, devise, marché et secteur; total ${exposures.total_value_cad.toLocaleString("fr-CA")} $ CA`
       : `By asset class, currency, market and sector; total CAD ${exposures.total_value_cad.toLocaleString("en-CA")}`,
@@ -263,8 +262,8 @@ function portfolioWrittenStep(key: string, locale: Locale): TraceStepInput {
   return {
     kind: "storage",
     actor: "store",
-    title: locale === "fr" ? "Portefeuille existant écrit" : "Existing portfolio written",
-    detail: key,
+    title: locale === "fr" ? "Votre portefeuille est enregistré" : "Your portfolio is saved",
+    detail: locale === "fr" ? "Ajouté à vos documents personnels" : "Added to your personal documents",
     outputs: { key },
     durationMs: 11,
   };
@@ -315,7 +314,7 @@ export function skipPortfolio(record: ClientRecord, trace: Trace): Envelope {
     kind: "deterministic",
     actor: "questionnaire",
     title: fr ? "Portefeuille existant passé" : "Existing portfolio skipped",
-    detail: fr ? "Étape followups sans portefeuille : le champ reste manquant" : "Followups stage without a portfolio: the field stays missing",
+    detail: fr ? "La suite du parcours continue sans portefeuille existant : vous pourrez l'ajouter plus tard" : "The journey goes on without an existing portfolio: you can add it later",
     outputs: { stage: "followups" },
     durationMs: 1,
   });

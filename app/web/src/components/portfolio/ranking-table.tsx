@@ -4,10 +4,10 @@ import { useState } from "react";
 import type { DecisionFact, PortfolioBuildResponse } from "@/lib/contract/portfolio";
 import { useI18n } from "@/lib/i18n/provider";
 import { RANKING_FEATURES, rankingRows, rowFacts, type RankingRow } from "@/lib/portfolio/decision";
-import { formatFact } from "@/lib/portfolio/format";
+import { engineText } from "@/lib/portfolio/wording";
 import { cn } from "@/components/ui/cn";
 import d from "./base.module.css";
-import { FactChip, useDecisionLookup } from "./facts";
+import { FactChip, factValue, useDecisionLookup } from "./facts";
 import p from "./portfolio.module.css";
 
 const RANKING_PREVIEW = 10;
@@ -16,7 +16,7 @@ const RANKING_PREVIEW = 10;
 const SCORED_FEATURES = RANKING_FEATURES.filter((feature) => feature !== "momentum");
 
 function cell(fact: DecisionFact | undefined, className?: string) {
-  return <td className={cn(d.n, p.num, className)}>{fact ? formatFact(fact) : "—"}</td>;
+  return <td className={cn(d.n, p.num, className)}>{fact ? factValue(fact) : "—"}</td>;
 }
 
 function RankingHead() {
@@ -63,7 +63,7 @@ function RankingStatus({ row }: { row: RankingRow }) {
     return (
       <>
         <span className={cn(d.chip, d.wait)}>{v.setAside}</span>
-        <span className={p.reason}>{String(row.ineligible.value ?? "")}</span>
+        <span className={p.reason}>{engineText(String(row.ineligible.value ?? ""))}</span>
       </>
     );
   }
@@ -84,7 +84,7 @@ function RankingLine({ row }: { row: RankingRow }) {
       {cell(row.score)}
       {SCORED_FEATURES.map((feature) => (
         <td key={feature} className={cn(d.n, p.num)}>
-          {row.features[feature] ? formatFact(row.features[feature]) : "—"}
+          {row.features[feature] ? factValue(row.features[feature]) : "—"}
         </td>
       ))}
       {cell(row.features.momentum, p.sens)}

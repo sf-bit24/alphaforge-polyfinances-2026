@@ -277,11 +277,6 @@ export function StylePanel({ response }: { response: PortfolioBuildResponse }) {
     <section className={cn(d.tile, p.half)} aria-labelledby="pf-style">
       <header>
         <h2 id="pf-style">{v.title}</h2>
-        {strategy ? (
-          <span className={d.cap} style={{ margin: 0 }}>
-            strategy.yaml@{strategy.version}
-          </span>
-        ) : null}
       </header>
       {strategy ? <StyleDetails strategy={strategy} /> : <p className={p.empty}>{v.off}</p>}
     </section>

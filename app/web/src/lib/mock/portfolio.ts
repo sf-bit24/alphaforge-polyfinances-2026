@@ -53,8 +53,8 @@ const NOTES = {
     en: "No quantity: add it to compute the value.",
   },
   not_in_universe: {
-    fr: "Titre absent du jeu de départ : valeur déclarée utilisée, sans cours.",
-    en: "Security not in the starter universe: declared value used, no price.",
+    fr: "Titre hors de la liste des titres suivis : valeur déclarée utilisée, sans cours.",
+    en: "Security outside the list of tracked securities: declared value used, no price.",
   },
   cash_missing: {
     fr: "Montant de l'encaisse absent : ajoutez-le.",
@@ -66,12 +66,12 @@ const CASH_LABEL = { fr: "Encaisse", en: "Cash" } as const;
 
 const UNRESOLVED_REASONS = {
   unread_file: {
-    fr: "contenu non lu par le simulateur (PDF, image ou tableur); en mode AWS, A2 le lit avec le modèle",
-    en: "content not read by the simulator (PDF, image or spreadsheet); in AWS mode, A2 reads it with the model",
+    fr: "contenu non lu par le simulateur (PDF, image ou tableur) : collez le texte du relevé ou ajoutez les positions à la main",
+    en: "content not read by the simulator (PDF, image or spreadsheet): paste the statement text or add the positions by hand",
   },
   not_in_universe: {
-    fr: "titre introuvable dans l'univers du jeu de départ",
-    en: "security not found in the starter universe",
+    fr: "titre introuvable dans la liste des titres suivis",
+    en: "security not found in the list of tracked securities",
   },
   cash_missing: {
     fr: "montant de l'encaisse manquant",

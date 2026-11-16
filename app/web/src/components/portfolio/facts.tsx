@@ -6,6 +6,7 @@ import { formatDateTime, formatDate } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
 import type { FactIndex, TraceIndex } from "@/lib/portfolio/decision";
 import { formatFact } from "@/lib/portfolio/format";
+import { engineText, plainProcessing, sourceKind, stepTitle } from "@/lib/portfolio/wording";
 import { cn } from "@/components/ui/cn";
 import p from "./portfolio.module.css";
 
@@ -37,24 +38,30 @@ export function LabelBadge({ label }: { label: FactLabel }) {
   );
 }
 
-/** One fact: its label and its value as the engine formats it; opens the fact panel. */
+/** A fact's value as a chip or a cell shows it: the engine's format, a text value in the client's words. */
+export function factValue(fact: Pick<DecisionFact, "value" | "unit">): string {
+  return engineText(formatFact(fact));
+}
+
+/** One fact: its label and its value as the engine formats it; opens the fact panel. A fact the decision lacks shows nothing. */
 export function FactChip({ id, compact = false }: { id: string; compact?: boolean }) {
   const { t } = useI18n();
   const { facts, open } = useDecisionLookup();
   const fact = facts.get(id);
-  if (!fact) return <span className={cn(p.fact, p.mono)}>{id}</span>;
-  const value = formatFact(fact);
+  if (!fact) return null;
+  const value = factValue(fact);
+  const label = engineText(fact.label_fr);
   return (
     <button
       type="button"
       className={cn(p.fact, fact.status !== "FAIT" && p.factHyp)}
       onClick={() => open([id])}
       aria-haspopup="dialog"
-      aria-label={`${t.portfolioView.fact.open(fact.label_fr)} (${value}, ${t.portfolioView.labels[fact.status]})`}
-      title={`${fact.label_fr}${t.portfolioView.colon}${value} · ${t.portfolioView.labels[fact.status]}`}
+      aria-label={`${t.portfolioView.fact.open(label)} (${value}, ${t.portfolioView.labels[fact.status]})`}
+      title={`${label}${t.portfolioView.colon}${value} · ${t.portfolioView.labels[fact.status]}`}
     >
       <span aria-hidden className={cn(p.dot, fact.status === "HYPOTHESE" && p.dotHyp, fact.status === "FICTION" && p.dotFic)} />
-      {compact ? null : <span className={p.factLabel}>{fact.label_fr}</span>}
+      {compact ? null : <span className={p.factLabel}>{label}</span>}
       <span className={p.factValue}>{value}</span>
     </button>
   );
@@ -87,25 +94,24 @@ export function FactChips({ ids, limit = 6 }: { ids: readonly string[]; limit?: 
 }
 
 /** A term of a definition list and its value. */
-function Entry({ term, mono = false, children }: { term: string; mono?: boolean; children: ReactNode }) {
+function Entry({ term, children }: { term: string; children: ReactNode }) {
   return (
     <>
       <dt>{term}</dt>
-      <dd className={mono ? p.mono : undefined}>{children}</dd>
+      <dd>{children}</dd>
     </>
   );
 }
 
-/** Where a fact comes from: dataset, processing, link, licence, retrieval time and checksum. */
+/** Where a fact comes from: the source by what it is (never its key), how it was computed, link, licence, date. */
 function SourceEntries({ source }: { source: FactSource }) {
   const { t, locale } = useI18n();
   const f = t.portfolioView.fact;
+  const processing = plainProcessing(source.processing);
   return (
     <dl className={p.kv}>
-      <Entry term={f.dataset} mono>
-        {source.dataset}
-      </Entry>
-      {source.processing ? <Entry term={f.processing}>{source.processing}</Entry> : null}
+      <Entry term={f.dataset}>{f.sourceKinds[sourceKind(source.dataset)]}</Entry>
+      {processing ? <Entry term={f.processing}>{processing}</Entry> : null}
       {source.url ? (
         <Entry term={f.url}>
           <a href={source.url} target="_blank" rel="noreferrer noopener">
@@ -115,47 +121,26 @@ function SourceEntries({ source }: { source: FactSource }) {
       ) : null}
       {source.licence ? <Entry term={f.licence}>{source.licence}</Entry> : null}
       {source.retrieved_utc ? <Entry term={f.retrieved}>{formatDateTime(source.retrieved_utc, locale)}</Entry> : null}
-      {source.sha256 ? (
-        <Entry term={f.sha} mono>
-          {source.sha256}
-        </Entry>
-      ) : null}
     </dl>
   );
 }
 
-/** The step of the trace that produced a fact: agent, tool, outcome, summary, model and time. */
+/** The step of the simulator that produced a fact, by what it did, with its outcome when it wrote one. */
 function TraceStep({ traceId }: { traceId: string }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const { trace } = useDecisionLookup();
-  const f = t.portfolioView.fact;
+  const v = t.portfolioView;
   const event = trace.get(traceId);
+  if (!event) return null;
   return (
     <div className={p.subCard}>
-      <h4>{f.trace}</h4>
-      <dl className={p.kv}>
-        <Entry term={f.id} mono>
-          {traceId}
-        </Entry>
-        {event ? (
-          <>
-            <Entry term={f.agent}>{event.agent}</Entry>
-            {event.tool ? (
-              <Entry term={f.tool} mono>
-                {event.tool}
-              </Entry>
-            ) : null}
-            <Entry term={t.portfolioView.constraints.state}>{t.portfolioView.trace.status[event.status] ?? event.status}</Entry>
-            {event.output_summary ? <Entry term={f.summary}>{event.output_summary}</Entry> : null}
-            {event.model_id ? (
-              <Entry term={f.model} mono>
-                {event.model_id}
-              </Entry>
-            ) : null}
-            <Entry term={t.portfolioView.meta.created}>{formatDateTime(event.started_utc, locale)}</Entry>
-          </>
-        ) : null}
-      </dl>
+      <h4>{v.fact.trace}</h4>
+      <p>{stepTitle(event, v)}</p>
+      {event.output_summary || event.status !== "ok" ? (
+        <dl className={p.kv}>
+          <Entry term={v.fact.summary}>{event.output_summary ? engineText(event.output_summary) : (v.trace.status[event.status] ?? v.trace.status.erreur)}</Entry>
+        </dl>
+      ) : null}
     </div>
   );
 }
@@ -166,21 +151,16 @@ function FactCard({ fact }: { fact: DecisionFact }) {
   return (
     <article className={p.factCard}>
       <div className={p.statementHead}>
-        <h3 style={{ flex: 1 }}>{fact.label_fr}</h3>
+        <h3 style={{ flex: 1 }}>{engineText(fact.label_fr)}</h3>
         <LabelBadge label={fact.status} />
       </div>
-      <p className={p.factBig}>{formatFact(fact)}</p>
-      <dl className={p.kv}>
-        <Entry term={f.id} mono>
-          {fact.fact_id}
-        </Entry>
-        <Entry term={f.unit}>
-          {fact.unit}
-          {fact.currency ? ` (${fact.currency})` : ""}
-        </Entry>
-        {fact.as_of ? <Entry term={f.asOf}>{formatDate(fact.as_of, locale)}</Entry> : null}
-        {fact.published ? <Entry term={f.published}>{formatDate(fact.published, locale)}</Entry> : null}
-      </dl>
+      <p className={p.factBig}>{factValue(fact)}</p>
+      {fact.as_of || fact.published ? (
+        <dl className={p.kv}>
+          {fact.as_of ? <Entry term={f.asOf}>{formatDate(fact.as_of, locale)}</Entry> : null}
+          {fact.published ? <Entry term={f.published}>{formatDate(fact.published, locale)}</Entry> : null}
+        </dl>
+      ) : null}
       <div className={p.subCard}>
         <h4>{f.sources}</h4>
         {fact.sources.map((source, index) => (
@@ -205,7 +185,7 @@ export function FactPanel({ ids, title }: { ids: readonly string[]; title: strin
           <FactCard key={id} fact={fact} />
         ) : (
           <p key={id} className={p.empty}>
-            <span className={p.mono}>{id}</span> : {t.portfolioView.fact.missing}
+            {t.portfolioView.fact.missing}
           </p>
         );
       })}

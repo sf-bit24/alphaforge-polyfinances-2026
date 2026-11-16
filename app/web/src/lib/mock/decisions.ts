@@ -23,9 +23,9 @@ export function mockPortfolioBuild(request: PortfolioBuildRequest, locale: Local
         code: "not_found",
         message:
           locale === "en"
-            ? "In mock mode, only the demo profiles (Amira, Mateo, Robert) have a simulated portfolio."
-            : "En mode mock, seuls les profils de démonstration (Amira, Mateo, Robert) ont un portefeuille simulé.",
-        details: { mode: "mock", personas: DEMO_PERSONAS },
+            ? "In the simulator, only the demo profiles (Amira, Mateo, Robert) have a simulated portfolio."
+            : "Dans le simulateur, seuls les profils de démonstration (Amira, Mateo, Robert) ont un portefeuille simulé.",
+        details: { personas: DEMO_PERSONAS },
       },
     };
   }

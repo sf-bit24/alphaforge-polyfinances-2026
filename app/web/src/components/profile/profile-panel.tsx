@@ -86,7 +86,8 @@ export function riskCaption(profile: ClientState["profile"], t: Dictionary): str
   return t.panel.riskDetail(level(risk.tolerance), level(risk.capacity));
 }
 
-function FactsList({ facts }: { facts: Fact[] }) {
+/** What the investor told us, newest first, each with its dimension and its origin. */
+export function FactsList({ facts }: { facts: Fact[] }) {
   const { t, locale } = useI18n();
   if (facts.length === 0) return <p className="text-sm text-ink-500">{t.panel.noFacts}</p>;
   return (
@@ -207,11 +208,55 @@ function DocumentsSection({ clientId, revision }: { clientId: string; revision: 
   );
 }
 
-/** The always-visible profile: completeness, level, risk, dimensions, facts, documents. */
-export function ProfilePanel({ state }: { state: ClientState }) {
+/** Completeness, knowledge level and effective risk: the profile at a glance. */
+export function ProfileSummary({ state }: { state: ClientState }) {
   const { t } = useI18n();
+  const { profile, completeness } = state;
+  return (
+    <>
+      <CompletenessMeter completeness={completeness} />
+      <div className="mt-5 grid grid-cols-2 gap-4">
+        <KnowledgeMeter level={profile.knowledge_level} />
+        <RiskMeter level={profile.effective_risk} />
+      </div>
+      <p className="mt-2 text-xs text-ink-500">{riskCaption(profile, t)}</p>
+    </>
+  );
+}
+
+/** The information the profile still lacks, or a line saying nothing is missing. */
+export function MissingList({ missing }: { missing: ClientState["completeness"]["missing"] }) {
+  const { t } = useI18n();
+  if (missing.length === 0) return <p className="text-sm text-good-ink">{t.panel.missingNone}</p>;
+  return (
+    <ul className="flex flex-wrap gap-1.5">
+      {missing.map((item) => (
+        <li key={`${item.dimension}.${item.field}`}>
+          <Badge tone="outline" title={t.dimensions[item.dimension]}>
+            {item.label}
+          </Badge>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The investor's own documents; the team's view also sees the state of their search. */
+export function ClientDocuments({ state }: { state: ClientState }) {
   const session = useSession();
   const operator = useOperator();
+  return (
+    <>
+      {/* Absent when the runtime has no client knowledge base; "disabled" came from the first runtime version. The team's view only. */}
+      {operator && state.client_kb && state.client_kb.status !== "disabled" ? <ClientKbStatusCard kb={state.client_kb} /> : null}
+      <DocumentsSection clientId={state.client_id} revision={session.revision} />
+    </>
+  );
+}
+
+/** The profile in the journey's side panel: completeness, level, risk, dimensions, facts, documents. */
+export function ProfilePanel({ state }: { state: ClientState }) {
+  const { t } = useI18n();
   const { profile, completeness } = state;
   return (
     <div className="overflow-hidden rounded-xl bg-surface shadow-card ring-1 ring-ink-200/80">
@@ -220,38 +265,19 @@ export function ProfilePanel({ state }: { state: ClientState }) {
         <h2 className="flex-1 text-[0.95rem] font-semibold tracking-tight text-ink-950">{t.panel.title}</h2>
       </header>
       <div className="px-5 pt-4 pb-5">
-        <CompletenessMeter completeness={completeness} />
-        <div className="mt-5 grid grid-cols-2 gap-4">
-          <KnowledgeMeter level={profile.knowledge_level} />
-          <RiskMeter level={profile.effective_risk} />
-        </div>
-        <p className="mt-2 text-xs text-ink-500">{riskCaption(profile, t)}</p>
+        <ProfileSummary state={state} />
       </div>
       <Section title={t.panel.dimensions} defaultOpen>
         <DimensionList profile={profile} />
       </Section>
       <Section title={t.panel.missing} defaultOpen={completeness.missing.length > 0}>
-        {completeness.missing.length === 0 ? (
-          <p className="text-sm text-good-ink">{t.panel.missingNone}</p>
-        ) : (
-          <ul className="flex flex-wrap gap-1.5">
-            {completeness.missing.map((item) => (
-              <li key={`${item.dimension}.${item.field}`}>
-                <Badge tone="outline" title={t.dimensions[item.dimension]}>
-                  {item.label}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-        )}
+        <MissingList missing={completeness.missing} />
       </Section>
       <Section title={t.panel.facts(profile.facts.length)}>
         <FactsList facts={profile.facts} />
       </Section>
       <Section title={t.panel.documentsTitle} icon={<FolderOpen aria-hidden className="size-4 text-ink-500" />} defaultOpen>
-        {/* Absent when the runtime has no client knowledge base; "disabled" came from the first runtime version. The team's view only. */}
-        {operator && state.client_kb && state.client_kb.status !== "disabled" ? <ClientKbStatusCard kb={state.client_kb} /> : null}
-        <DocumentsSection clientId={state.client_id} revision={session.revision} />
+        <ClientDocuments state={state} />
       </Section>
     </div>
   );

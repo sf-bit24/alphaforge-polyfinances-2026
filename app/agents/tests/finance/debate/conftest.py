@@ -15,6 +15,7 @@ NEEDS_ENGINE = {
     "test_monotonicity.py",
     "test_status_emphasis.py",
     "test_adapter.py",
+    "test_allocation_pipeline.py",
 }
 
 

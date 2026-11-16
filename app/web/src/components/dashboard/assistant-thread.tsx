@@ -5,8 +5,6 @@ import type { ClientState, Question, TraceStep } from "@/lib/contract/schemas";
 import { emptyDraft } from "@/lib/client/answers";
 import type { ConversationEntry, TraceRun } from "@/lib/client/session-store";
 import { useSession, type SessionValue } from "@/lib/client/session";
-import type { Dictionary } from "@/lib/i18n/dictionary";
-import { formatDuration } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
 import { DEMO, type DemoKey } from "@/lib/sample/assistant-demo";
 import { tr } from "@/lib/sample/portfolio";
@@ -49,15 +47,12 @@ function stepTone(run: TraceRun, step: TraceStep, index: number): HowStep["tone"
   return step.kind === "guardrail" ? "ok" : "neutral";
 }
 
-function stepsOfRun(run: TraceRun | undefined, t: Dictionary, locale: "fr" | "en"): HowStep[] {
+function stepsOfRun(run: TraceRun | undefined): HowStep[] {
   if (!run) return [];
   return run.steps.map((step: TraceStep, index) => ({
     tone: stepTone(run, step, index),
     title: step.title,
     detail: step.detail,
-    meta: [t.trace.kinds[step.kind], step.actor, typeof step.duration_ms === "number" ? formatDuration(step.duration_ms, locale) : null]
-      .filter(Boolean)
-      .join(" · "),
   }));
 }
 
@@ -129,13 +124,13 @@ function AskedQuestions({ questions }: { questions: Question[] }) {
 
 /** A message of A1; `children` shows its questions. */
 function AgentTurn({ entry, run, asks, children }: { entry: AgentEntry; run: TraceRun | undefined; asks: boolean; children: ReactNode }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   return (
     <AgentMessage asks={asks}>
       {entry.message ? <Markdown>{entry.message}</Markdown> : null}
       {children}
       <Sources items={sourcesOfRun(run)} />
-      <HowIAnswered steps={stepsOfRun(run, t, locale)} t={t} />
+      <HowIAnswered steps={stepsOfRun(run)} t={t} />
     </AgentMessage>
   );
 }

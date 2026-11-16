@@ -7,6 +7,12 @@ import { tr, type L } from "./questions";
 
 export const MOCK_RELEASE = "mock";
 
+/** What the investor reads when the simulator fails on something it did not foresee (LANGAGE.md). */
+const SERVICE_DOWN: L = {
+  fr: "Le service ne répond pas pour l'instant : réessayez dans un instant.",
+  en: "The service is not answering right now: try again in a moment.",
+};
+
 export type Envelope = { ok: true; release: string; [key: string]: unknown } | { ok: false; release: string; error: ErrorBody };
 
 export class MockError extends Error {
@@ -31,6 +37,10 @@ export function errorEnvelope(error: unknown, locale: Locale): Envelope {
   return {
     ok: false,
     release: MOCK_RELEASE,
-    error: { code: "internal", message: error instanceof Error ? error.message : String(error), details: {} },
+    error: {
+      code: "internal",
+      message: tr(SERVICE_DOWN, locale),
+      details: { cause: error instanceof Error ? error.message : String(error) },
+    },
   };
 }

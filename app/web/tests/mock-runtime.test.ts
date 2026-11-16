@@ -108,13 +108,13 @@ describe("mock runtime: health and sessions", () => {
     const start = await state(runtime, { action: "session.start", locale: "fr" });
     expect(start.client_kb).toMatchObject({ status: "creating", documents: 0, pending: 3 });
     expect(start.client_kb?.knowledge_base_id).toMatch(/^MOCK/);
-    expect(start.trace.map((step) => step.title)).toContain("Knowledge Base du client créée");
+    expect(start.trace.map((step) => step.title)).toContain("Espace de vos documents personnels préparé");
     const resumed = await state(runtime, { action: "session.resume", client_id: start.client_id });
     expect(resumed.client_kb).toMatchObject({ status: "active", documents: 3, pending: 0 });
-    expect(resumed.trace.map((step) => step.title)).toContain("Documents indexés dans la Knowledge Base du client");
+    expect(resumed.trace.map((step) => step.title)).toContain("Vos documents personnels sont mis à jour");
     const profile = await state(runtime, { action: "profile.get", client_id: start.client_id });
     expect(profile.client_kb).toMatchObject({ status: "active", documents: 3, pending: 0 });
-    expect(profile.trace.map((step) => step.title)).not.toContain("Documents indexés dans la Knowledge Base du client");
+    expect(profile.trace.map((step) => step.title)).not.toContain("Vos documents personnels sont mis à jour");
   });
 
   it("returns not_found for an unknown client", async () => {
@@ -162,6 +162,14 @@ describe("mock runtime: base questions", () => {
     expect(after.profile.knowledge_level).toBe("intermediate");
     expect(after.profile.effective_risk).not.toBeNull();
     expect(after.profile.facts.find((fact) => fact.field === "horizon.horizon_band")).toMatchObject({ value: "gt10", provenance: "base:q_horizon" });
+    // Every fact carries its value as the investor reads it, in the language of the view (`Fact.label`).
+    const labels = new Map(after.profile.facts.map((fact) => [fact.field, fact.label]));
+    expect(labels.get("horizon.horizon_band")).toBe("10 ans et plus");
+    expect(labels.get("constraints.accounts")).toBe("CELI, REER");
+    expect(labels.get("context.has_portfolio")).toBe("Oui");
+    expect(labels.get("objective.amount")).toMatch(/^50\s000\s\$$/);
+    expect(labels.get("risk_tolerance.risk_scale")).toBe("7 sur 10");
+    expect(after.profile.facts.every((fact) => typeof fact.label === "string" && fact.label.length > 0)).toBe(true);
     expect(after.completeness.ready).toBe(false);
   });
 

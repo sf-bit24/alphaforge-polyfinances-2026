@@ -20,18 +20,16 @@ export function openSession(record: ClientRecord, trace: Trace): Envelope {
   trace.add({
     kind: "storage",
     actor: "store",
-    title: fr ? "Base du client créée" : "Client base created",
-    detail: base,
+    title: fr ? "Votre profil est créé" : "Your profile is created",
+    detail: fr ? "Vos réponses y seront enregistrées au fur et à mesure" : "Your answers will be saved there as you go",
     outputs: { keys: [`${base}index.md`, `${base}profil.md`, `${base}journal.md`] },
     durationMs: 9,
   });
   trace.add({
     kind: "deterministic",
     actor: "questionnaire",
-    title: fr ? "Première question choisie par les règles" : "First question picked by the rules",
-    detail: fr
-      ? `${record.pendingBase} : le niveau de connaissances vient en premier`
-      : `${record.pendingBase}: knowledge level comes first`,
+    title: fr ? "Première question choisie selon des règles fixes" : "First question picked with fixed rules",
+    detail: fr ? "Votre niveau de connaissances vient en premier" : "Your knowledge level comes first",
     outputs: { next: record.pendingBase },
     durationMs: 2,
   });
@@ -45,8 +43,8 @@ export function reopenSession(record: ClientRecord, locale: Locale, trace: Trace
   trace.add({
     kind: "storage",
     actor: "store",
-    title: locale === "fr" ? "Base du client retrouvée" : "Client base found",
-    detail: `clients/${record.id}/`,
+    title: locale === "fr" ? "Votre profil est retrouvé" : "Your profile is found",
+    detail: locale === "fr" ? "On reprend là où vous en étiez" : "We pick up where you left off",
     outputs: { stage: record.stage },
     durationMs: 5,
   });
@@ -59,8 +57,8 @@ export function resumeSession(record: ClientRecord, request: SessionResumeReques
   trace.add({
     kind: "storage",
     actor: "store",
-    title: locale === "fr" ? "État du client lu" : "Client state read",
-    detail: `clients/${record.id}/profil.md`,
+    title: locale === "fr" ? "Votre profil est lu" : "Your profile is read",
+    detail: locale === "fr" ? "Vos réponses enregistrées sont reprises" : "Your saved answers are loaded",
     outputs: { stage: record.stage },
     durationMs: 4,
   });
@@ -82,8 +80,28 @@ function applySettings(record: ClientRecord, request: SettingsUpdateRequest, at:
   return changes;
 }
 
+/** A changed setting in words: « Langue : anglais », "Knowledge level: advanced". */
+const SETTING_WORDS: Record<string, { name: Record<Locale, string>; values: Record<string, Record<Locale, string>> }> = {
+  locale: {
+    name: { fr: "Langue", en: "Language" },
+    values: { fr: { fr: "français", en: "French" }, en: { fr: "anglais", en: "English" } },
+  },
+  knowledge_level: {
+    name: { fr: "Niveau de connaissances", en: "Knowledge level" },
+    values: {
+      beginner: { fr: "débutant", en: "beginner" },
+      intermediate: { fr: "intermédiaire", en: "intermediate" },
+      advanced: { fr: "avancé", en: "advanced" },
+    },
+  },
+};
+
 function changesDetail(changes: Record<string, unknown>, locale: Locale): string {
-  const listed = Object.entries(changes).map(([key, value]) => `${key} = ${String(value)}`);
+  const listed = Object.entries(changes).map(([key, value]) => {
+    const words = SETTING_WORDS[key];
+    if (!words) return String(value);
+    return `${words.name[locale]}${locale === "fr" ? " : " : ": "}${words.values[String(value)]?.[locale] ?? String(value)}`;
+  });
   if (listed.length > 0) return listed.join(", ");
   return locale === "fr" ? "Aucun changement" : "No change";
 }

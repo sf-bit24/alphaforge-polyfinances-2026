@@ -13,7 +13,7 @@ const STATUS_TONE: Record<ClientKbStatus, "neutral" | "brand" | "good" | "warnin
   quota: "warning",
 };
 
-/** The client's own knowledge base (`client_kb`): a search index built from the OKF documents listed below it. */
+/** The client's own knowledge base (`client_kb`): a search index built from the OKF documents listed below it. The team's view only (ProfilePanel). */
 export function ClientKbStatusCard({ kb }: { kb: ClientKb }) {
   const { t } = useI18n();
   const text = t.panel.clientKb;

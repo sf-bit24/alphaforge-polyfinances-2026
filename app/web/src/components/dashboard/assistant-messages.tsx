@@ -11,7 +11,6 @@ export interface HowStep {
   tone: "neutral" | "stop" | "ok";
   title: string;
   detail?: string | null;
-  meta?: string;
 }
 
 /** The trace of a request, in the draft's timeline style, folded under the message. */
@@ -34,7 +33,6 @@ export function HowIAnswered({ steps, t }: { steps: HowStep[]; t: Dictionary }) 
           <li key={`${step.title}-${index}`} className={step.tone === "neutral" ? undefined : styles[step.tone]}>
             <b>{step.title}</b>
             {step.detail}
-            {step.meta ? <small>{step.meta}</small> : null}
           </li>
         ))}
       </ul>

@@ -4,6 +4,7 @@
  * Messages are produced in both languages at once, so a locale change re-renders them.
  */
 import type { Exposures, KnowledgeLevel, Locale } from "@/lib/contract/schemas";
+import { formatDate } from "@/lib/i18n/locale";
 import { MockError } from "./envelope";
 import { containsSin } from "./personal-data";
 import { formatMoney, formatPercent } from "./profile";
@@ -387,7 +388,7 @@ function topicParagraphs(input: A1MessageInput, locale: Locale): string[] {
   const level = input.level ?? "beginner";
   if (level !== "beginner" && level !== "intermediate") {
     const labels = input.missingLabels.slice(0, input.questions.length).map((label) => label[locale].toLowerCase());
-    return [fr ? `Champs prioritaires : ${labels.join(", ")}.` : `Priority fields: ${labels.join(", ")}.`];
+    return [fr ? `À préciser en priorité : ${labels.join(", ")}.` : `To clarify first: ${labels.join(", ")}.`];
   }
   const dimensions = [...new Set(input.questions.map((question) => question.dimension))];
   const topics = joinList(dimensions.map((dimension) => DIMENSION_WORDS[dimension]?.[locale] ?? dimension), locale);
@@ -433,16 +434,16 @@ export interface A2MessageInput {
 }
 
 const NOTHING_RECOGNIZED: L = {
-  fr: "Je n'ai reconnu aucun titre du jeu de départ dans ce que vous avez fourni. Ajoutez vos positions à la main dans le tableau, ou passez cette étape.",
-  en: "I did not recognize any security from the starter universe in what you provided. Add your positions by hand in the table, or skip this step.",
+  fr: "Je n'ai reconnu aucun titre de notre liste dans ce que vous avez fourni. Ajoutez vos positions à la main dans le tableau, ou passez cette étape.",
+  en: "I did not recognize any security from our list in what you provided. Add your positions by hand in the table, or skip this step.",
 };
 const POSITION_EXPLAINER: L = {
   fr: "Une **position**, c'est un titre que vous détenez, par exemple 100 actions d'une banque. Les pourcentages plus bas montrent la part de chaque catégorie dans le total.",
   en: "A **position** is a security you hold, for example 100 shares of a bank. The percentages below show each category's share of the total.",
 };
 const EXPOSURES_BY_CODE: L = {
-  fr: "Les expositions sont calculées par le code sur la valeur en CAD; aucune n'est estimée par le modèle.",
-  en: "Exposures are computed by code on the CAD value; none is estimated by the model.",
+  fr: "Les expositions sont calculées selon des règles fixes sur la valeur en CAD : aucun chiffre n'est inventé.",
+  en: "Exposures are computed with fixed rules on the CAD value: no figure is made up.",
 };
 const CHECK_AND_CONFIRM: L = {
   fr: "Vérifiez les quantités et les comptes, corrigez au besoin, puis confirmez.",
@@ -458,8 +459,8 @@ function positionsFound(input: A2MessageInput, locale: Locale): string {
   const conversion = input.usesUsd ? USD_CONVERSION[locale] : "";
   const plural = input.positions > 1 ? "s" : "";
   return locale === "fr"
-    ? `J'ai repéré **${input.positions} position${plural}** pour une valeur estimée de **${total}** (cours de clôture du ${PRICE_DATE}, jeu de départ${conversion}).`
-    : `I found **${input.positions} position${plural}** worth an estimated **${total}** (closing prices of ${PRICE_DATE}, starter dataset${conversion}).`;
+    ? `J'ai repéré **${input.positions} position${plural}** pour une valeur estimée de **${total}** (cours de clôture du ${formatDate(PRICE_DATE, locale)}${conversion}).`
+    : `I found **${input.positions} position${plural}** worth an estimated **${total}** (closing prices of ${formatDate(PRICE_DATE, locale)}${conversion}).`;
 }
 
 /** The items A2 could not identify: their number, and the first three as the investor wrote them. */

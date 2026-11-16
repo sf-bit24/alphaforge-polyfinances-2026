@@ -23,27 +23,27 @@ export const USDCAD = 1.4255;
 export const STARTER_SOURCES = {
   universe: {
     id: "starter-universe",
-    title: "Jeu de départ, assets_universe.csv",
+    title: "Liste des titres reconnus",
     resource: "starter:assets_universe.csv",
     retrieved_at: "2026-11-13",
   },
   prices: {
     id: "starter-prices",
-    title: "Jeu de départ, prices_daily.csv (Yahoo Finance via yfinance)",
+    title: "Cours de clôture quotidiens (Yahoo Finance)",
     resource: "starter:prices_daily.csv",
     observed_at: PRICE_DATE,
     retrieved_at: "2026-11-13",
   },
   fx: {
     id: "starter-fx",
-    title: "Jeu de départ, fx_usdcad_daily.csv (Banque du Canada, FXUSDCAD)",
+    title: "Taux de change USD/CAD (Banque du Canada)",
     resource: "starter:fx_usdcad_daily.csv",
     observed_at: PRICE_DATE,
     retrieved_at: "2026-11-13",
   },
   macro: {
     id: "starter-macro",
-    title: "Jeu de départ, macro_rates.csv (Banque du Canada, FRED)",
+    title: "Taux d'intérêt (Banque du Canada, FRED)",
     resource: "starter:macro_rates.csv",
     observed_at: PRICE_DATE,
     retrieved_at: "2026-11-13",

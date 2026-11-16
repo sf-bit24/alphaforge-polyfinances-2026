@@ -64,7 +64,7 @@ function AgentMessage({ message }: { message: string }) {
           <Bot aria-hidden className="size-4" />
         </span>
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-ink-600">A2 · {t.stages.portfolio_review}</p>
+          <p className="text-xs font-semibold text-ink-600">Yan · {t.stages.portfolio_review}</p>
           <Markdown className="mt-1">{message}</Markdown>
         </div>
       </div>

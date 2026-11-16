@@ -11,6 +11,7 @@ Compte AWS Workshop Studio du Datathon, `us-east-1`, environnement `sandbox`, pr
 | AgentCore Runtime | `infra/agentcore.tf` | Quatre runtimes tirés d'un seul zip Python : `profile` (questions de base, A1, A2), `press` (A4), `data` (A5), `supervisor` (A6). Un rôle IAM par runtime, limité à ses préfixes S3. Facultatif (`portfolio_enabled`) : `portfolio`, le portefeuille simulé du volet finance, avec son propre zip. |
 | S3 + KMS | `infra/s3.tf` | Bases OKF : `general/`, `clients/<id>/`, `staging/`, `runtime/`. Clé KMS du projet, versionnement, TLS obligatoire, accès public bloqué. |
 | Knowledge Base + Guardrail | `infra/bedrock.tf` | Knowledge Base sur S3 Vectors (Titan Text Embeddings V2) qui n'indexe que `general/`; Guardrail du cadre responsable (pas de transaction réelle, renseignements personnels bloqués ou masqués). |
+| Knowledge Base de chaque client | `infra/client_kb.tf` | Socle des Knowledge Bases des clients, créées par le runtime `profile` (une par investisseur, hors de l'état Terraform) : bucket S3 Vectors `<préfixe>-client-vectors` chiffré par sa clé KMS (les vecteurs portent le texte des passages), rôle de service des bases, droits de `profile` (création) et de `portfolio` (ingestion, recherche) par étiquette `alphaforge:scope=client`. `client_kb_enabled` (vrai par défaut) pose les variables des runtimes. |
 | Step Functions | `infra/stepfunctions.tf` | Collecte : A4 et A5 en parallèle, A6, puis ingestion de la Knowledge Base. |
 | EventBridge Scheduler | `infra/scheduler.tf` | Veille : lance la collecte toutes les 6 heures. |
 | SageMaker Processing + Step Functions | `infra/scenarios.tf` | Scénarios probabilistes (facultatif, `scenarios_enabled`) : un job sur l'image scikit-learn d'AWS calcule la table des scénarios hors du poste, de façon reproductible (image et code figés, entrées et sorties dans S3). Step Functions le lance (`.sync`), écrit `_done.json` puis `scenarios/latest.json`. |
@@ -32,6 +33,8 @@ flowchart LR
     KB -->|"indexe general/"| S3
     P -->|"clients/"| S3
     P -->|"Retrieve"| KB
+    P -->|"crée, IngestKnowledgeBaseDocuments, Retrieve"| CKB["Knowledge Base de chaque client (S3 Vectors + KMS)"]
+    PF["Runtime portfolio"] -->|"décisions .md : ingestion"| CKB
     P -->|"Converse + Guardrail"| M["Bedrock : Claude Opus 5.5"]
     A4 --> M
     A5 --> M
@@ -78,7 +81,8 @@ infrastructure/
   deploy/
     envs/sandbox.tfvars   valeurs de l'environnement
     release.auto.tfvars   artefact du run : release_id (jamais commité)
-  scripts/            ci-context, init, upload-config, plan, apply, destroy, validate, write-release-tfvars
+  scripts/            ci-context, init, upload-config, plan, apply, destroy, validate, write-release-tfvars,
+                      clean-client-kbs (Knowledge Bases des clients, à la main)
 ```
 
 ## Mise en place (déjà faite le 2026-11-14, sauf le bootstrap AWS)
@@ -118,4 +122,15 @@ GITHUB_EVENT_NAME=push GITHUB_REF_NAME=master DEFAULT_BRANCH=master sh scripts/c
 - **Scénarios : image AWS figée** : `scenarios_image_uri` refuse les étiquettes mobiles (`1.4-2-py312`); changer d'image demande de vérifier la version de Python et de reconstruire le bundle.
 - **Scénarios : journal SageMaker** : Terraform crée `/aws/sagemaker/ProcessingJobs` (clé des journaux, 14 jours). Si le groupe existe déjà dans le compte (job lancé à la main), l'apply échoue : l'importer ou le supprimer d'abord.
 - **Scénarios : démontage** : le bucket a `force_destroy`, donc les objets écrits par le job et la machine (toutes versions) partent avec lui; le groupe Athena a `force_destroy`; la base et la table Glue sont gérées par Terraform. Restent hors Terraform, sans coût : l'historique des jobs SageMaker (métadonnées) et la règle EventBridge gérée `StepFunctionsGetEventsForSageMakerProcessingJobsRule` créée par Step Functions. `scripts/destroy.sh` refuse `sandbox` : démontage par l'interface HCP Terraform, comme le reste de la pile.
+- **Knowledge Bases des clients, hors de l'état Terraform** : le runtime `profile` les crée (une par investisseur, `app/agents/src/alphaforge/profile/client_kb.py`), donc un destroy ne les supprime pas (le bucket de vecteurs, en `force_destroy`, emporte seulement les index). Les lister ou les supprimer, avec les identifiants de l'équipe :
+
+  ```sh
+  cd infrastructure
+  sh scripts/clean-client-kbs.sh            # --dry-run par défaut : liste les bases (étiquette alphaforge:scope=client) et les index client-*
+  sh scripts/clean-client-kbs.sh --apply    # supprime ; PREFIX et AWS_REGION pour un autre environnement
+  ```
+
+  Les sources des clients sont en `dataDeletionPolicy: RETAIN` : supprimer une base ne dépend pas de son index ni de son rôle, l'ordre par rapport au destroy n'importe pas. Les `clients/<id>/kb.json` restent dans le bucket des bases OKF.
+- **Knowledge Bases des clients : quotas du compte** (relevés le 2026-11-15) : 100 Knowledge Bases par compte, non ajustable, dont la base générale ; au-delà, le runtime range l'état `quota` et réessaie après une heure, le questionnaire continue. `StartIngestionJob` est limité à 0,1 requête par seconde pour le compte et sert à la collecte : les clients passent par l'ingestion directe (`IngestKnowledgeBaseDocuments`, 5 requêtes par seconde). `CreateKnowledgeBase` et `CreateDataSource` : 2 requêtes par seconde.
+- **Knowledge Bases des clients : clé KMS** : comme celle du bucket, la clé `alias/<préfixe>-client-vectors` ne délègue pas à IAM. Elle nomme le rôle des bases des clients et le runtime `profile` (par S3 Vectors seulement) et le principal `indexing.s3vectors.amazonaws.com`. Le chiffrement d'un bucket de vecteurs ne change pas après sa création : le changer remplace le bucket et ses index.
 - **Compte supprimé le 2026-11-16** : exporter les bases des clients avant (voir le README racine).

@@ -27,6 +27,8 @@ flowchart LR
     A2 --> M
     P -->|"base OKF du client"| S3[("S3 + KMS")]
     A1 -->|"Retrieve"| KB["Knowledge Base : base générale"]
+    P -->|"chaque document .md : ingestion directe"| CKB["Knowledge Base de chaque client : index de sa base OKF"]
+    A1 -->|"Retrieve, base du client de la session"| CKB
     SCH["EventBridge Scheduler"] --> SF["Step Functions : collecte"]
     W -->|"StartExecution"| SF
     SF --> A4["A4 : presse"]
@@ -38,7 +40,7 @@ flowchart LR
 ```
 
 - **Version 1** (ce dépôt aujourd'hui) : construire le profil (complétude calculée par le code, seuil de 70 %, plafond affiché de 95 %) et alimenter la base générale. Le portefeuille guidé (A3, agents d'analyse, Judge) viendra ensuite sur ces deux bases.
-- **AWS** : AgentCore Runtime (quatre runtimes tirés d'un seul zip de code), Bedrock (Claude Opus 5.5 partout, effort réglé par agent), Knowledge Base sur S3 Vectors, Guardrails, S3 chiffré par KMS, Step Functions, EventBridge Scheduler. Détail et justification : [`infrastructure/README.md`](infrastructure/README.md).
+- **AWS** : AgentCore Runtime (quatre runtimes tirés d'un seul zip de code), Bedrock (Claude Opus 5.5 partout, effort réglé par agent), Knowledge Bases sur S3 Vectors (la base générale, et une par client), Guardrails, S3 chiffré par KMS, Step Functions, EventBridge Scheduler. Détail et justification : [`infrastructure/README.md`](infrastructure/README.md).
 - **Explicabilité** : chaque requête renvoie sa trace (étape déterministe, agent, outil, modèle, stockage, garde-fou, avec leurs sources), affichée à côté du dialogue.
 
 ## Dépôt

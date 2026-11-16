@@ -22,6 +22,8 @@ Chaque rôle n'a `s3:ListBucket` que sous ses propres préfixes. Pour un objet a
 
 Ajout facultatif (section 12), seulement si `portfolio_enabled = true` : runtime `alphaforge_sandbox_portfolio` (`AGENT_ROLE=portfolio`), appelé par le serveur Next.js; mêmes droits S3 que `profile` (lit `general/`, lit et écrit `clients/`, dont `clients/<id>/decisions/`), Knowledge Base et Guardrail, plus le journal des décisions et le rejeu LLM (`finance_trace_runtimes`). Son zip est `runtime/agents-portfolio-<release>.zip` (groupe uv `finance` en plus).
 
+Knowledge Base de chaque client (section 5.3), si `client_kb_enabled = true` (vrai par défaut) : `profile` crée l'index S3 Vectors `client-<client_id>`, la Knowledge Base étiquetée `alphaforge:scope=client` et sa source `CUSTOM` (`iam:PassRole` sur le seul rôle des Knowledge Bases des clients); `profile` et `portfolio` y ingèrent, y retirent des documents et y cherchent (`IngestKnowledgeBaseDocuments`, `DeleteKnowledgeBaseDocuments`, `Retrieve`), sur les seules bases étiquetées client. Aucun runtime ne peut supprimer une Knowledge Base.
+
 Ajout facultatif (section 10), seulement si `scenarios_enabled = true` : les rôles de `profile` et de `portfolio` (si `portfolio_enabled`) lisent aussi `scenarios/latest.json` et `scenarios/output/` (lecture et liste seulement), pour l'outil `scenario_risk` (état cible : l'outil n'est encore branché dans aucun runtime; le débat finance de `portfolio` en est l'appelant probable).
 
 Variables d'environnement posées par Terraform sur chaque runtime :
@@ -38,6 +40,10 @@ Variables d'environnement posées par Terraform sur chaque runtime :
 | `ALPHAFORGE_MODEL_ID` | `us.anthropic.claude-opus-5-5` | Profil d'inférence Bedrock de tous les agents. |
 | `ALPHAFORGE_KB_ID` | `ABCDEFGHIJ` | Knowledge Base de la base générale (vide en local). |
 | `ALPHAFORGE_GUARDRAIL_ID` / `ALPHAFORGE_GUARDRAIL_VERSION` | `abc123` / `1` | Guardrail du cadre responsable, appliqué aux agents du runtime `profile` (vide en local). |
+| `ALPHAFORGE_CLIENT_KB_VECTOR_BUCKET` | `alphaforge-sandbox-client-vectors` | `profile` et `portfolio` : bucket S3 Vectors des index des clients (section 5.3). Avec les quatre suivantes; une seule absente, ou `ALPHAFORGE_STORE=local`, et la Knowledge Base des clients est désactivée. |
+| `ALPHAFORGE_CLIENT_KB_ROLE_ARN` | `arn:aws:iam::…:role/alphaforge-sandbox-client-knowledge-base` | Rôle de service des Knowledge Bases des clients. |
+| `ALPHAFORGE_CLIENT_KB_PREFIX` | `alphaforge-sandbox` | Préfixe des noms (`<préfixe>-client-<client_id>`) et des `clientToken`. |
+| `ALPHAFORGE_CLIENT_KB_EMBEDDING_MODEL_ARN` / `ALPHAFORGE_CLIENT_KB_EMBEDDING_DIMENSIONS` | `arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0` / `1024` | Mêmes réglages d'embedding que la base générale. |
 | `ALPHAFORGE_RESEARCHER_NAME` | `alphaforge_sandbox_researcher` | Runtime `expert` : nom du runtime des chercheurs, dont l'ARN est trouvé par `ListAgentRuntimes`. `ALPHAFORGE_RESEARCHER_ARN` le remplace s'il est posé; sans l'un ni l'autre (local), les chercheurs tournent dans des fils. |
 | `ALPHAFORGE_RESEARCHER_MODEL_ID` | (vide) | Facultatif : modèle des chercheurs; par défaut `ALPHAFORGE_MODEL_ID`. Le rôle IAM n'autorise que `ALPHAFORGE_MODEL_ID`. |
 | `ALPHAFORGE_CONTACT_EMAIL` | (vide) | Facultatif : courriel ajouté au User-Agent pour la SEC seulement (accès équitable d'EDGAR); sans lui, la SEC répond 403 et ses hôtes sont déclarés bloqués, et A5 ne lit pas les fondamentaux EDGAR (avertissement dans son marqueur). Posé par Terraform (`sec_contact_email`) sur `press`, `data` et `researcher` seulement. |
@@ -87,15 +93,15 @@ stateDiagram-v2
 
 | Action | Entrée (en plus de `action`) | Effet |
 | --- | --- | --- |
-| `session.start` | `locale` (`fr`, `en`), `client_id` facultatif | Crée la base du client si elle n'existe pas; renvoie la première question en attente. |
-| `session.resume` | `client_id`, `locale` facultatif | Renvoie l'état courant, sans rien modifier. |
+| `session.start` | `locale` (`fr`, `en`), `client_id` facultatif | Crée la base du client si elle n'existe pas, puis lance la création de sa Knowledge Base (section 5.3); renvoie la première question en attente. |
+| `session.resume` | `client_id`, `locale` facultatif | Renvoie l'état courant, sans rien modifier du profil. Le rapprochement de la Knowledge Base du client peut écrire `kb.json` (section 5.3). |
 | `base.answer` | `client_id`, `question_id`, `value` | Valide la réponse, l'écrit dans la base du client, renvoie la question suivante ou l'étape suivante. |
 | `portfolio.submit` | `client_id`, `text` facultatif, `files` facultatif : `[{ "name", "media_type", "data_base64" }]` | A2 extrait des positions; étape `portfolio_review`. Au moins `text` ou un fichier. 10 Mo au plus par fichier, 5 fichiers. |
 | `portfolio.confirm` | `client_id`, `positions` (liste de `Position`, corrigée par l'investisseur) | Calcule les expositions par le code, écrit `portefeuille-existant.md`; étape `followups`. |
 | `portfolio.skip` | `client_id` | Passe aux relances sans portefeuille. |
 | `followup.reply` | `client_id`, `answers` facultatif : `[{ "question_id", "value" }]`, `message` facultatif, `stop` facultatif (booléen) | A1 enregistre, met le profil à jour, renvoie ses relances ou passe à `complete`. `stop: true` n'est accepté qu'à partir de 70 %. Sans `answers` ni `message` à l'arrivée en `followups`, A1 pose ses premières relances. Au passage à `complete` (y compris par `stop: true`), A1 écrit la base du client avec son skill (section 5) ; un échec est inscrit à la trace et n'empêche pas l'étape. |
 | `settings.update` | `client_id`, `locale` facultatif, `knowledge_level` facultatif | Change la langue ou le niveau de connaissances (réglages). |
-| `profile.get` | `client_id` | Comme `session.resume`, avec en plus `documents`. |
+| `profile.get` | `client_id` | Comme `session.resume`, avec en plus `documents`. Comme lui, renvoie `client_kb`. |
 | `kb.list` | `prefix` (`general/` ou `clients/<client_id>/`) | `{ "items": [{ "key", "title", "type", "description", "updated_at" }] }` |
 | `kb.get` | `key` | `{ "key", "content" }` : le document OKF complet (frontmatter et corps). Une clé `clients/` n'est servie qu'avec le `client_id` correspondant. |
 
@@ -113,7 +119,8 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
   "profile": "ProfileView",
   "completeness": "Completeness",
   "portfolio": null,
-  "trace": [ "TraceStep" ]
+  "trace": [ "TraceStep" ],
+  "client_kb": "ClientKb"
 }
 ```
 
@@ -121,6 +128,7 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
 - `message` : texte Markdown de l'agent (A1 ou A2) dans la langue de `locale`, adapté au niveau de connaissances. Il vaut `null` après une transition déterministe.
 - `portfolio` : `PortfolioView` dès que A2 a proposé des positions, sinon `null`.
 - `trace` : les étapes de cette requête seulement. L'historique complet est dans la base du client.
+- `client_kb` (facultatif) : état de la Knowledge Base du client (`ClientKb`, section 3.3). Chaque action qui porte sur un client le renvoie, dont `session.resume` et `profile.get`; un runtime plus ancien l'omet.
 
 ### 3.3 Types
 
@@ -217,6 +225,16 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
 - `status` : `draft` après `portfolio.submit`, `confirmed` après `portfolio.confirm`. `portefeuille-existant.md` est écrit dès `portfolio.submit`, avec le statut OKF `draft`, puis `stable` après `portfolio.confirm`.
 - Un titre absent du jeu de départ est cherché sur Yahoo Finance (au plus 10 appels) : symbole américain, puis `.TO` si la devise est inconnue. L'URL est citée dans `sources`.
 
+`ClientKb` (section 5.3) :
+
+```json
+{ "status": "active", "knowledge_base_id": "ABCDEFGHIJ", "documents": 6, "pending": 0 }
+```
+
+- `status` : `creating` (index et base en création, ou base pas encore `ACTIVE`), `active`, `failed` ou `quota` (nouvel essai plus tard, le questionnaire n'en dépend jamais), `disabled` (magasin local ou variables absentes : aucune base, rien d'écrit).
+- `documents` : documents de la base du client indexés. `pending` : documents écrits mais pas encore indexés (base pas encore active, ou appel limité).
+- La trace de l'action montre la création et les ingestions (`kind: storage`, `actor: store`); une recherche d'A1 est une étape `kind: tool`.
+
 `TraceStep` :
 
 ```json
@@ -282,6 +300,7 @@ clients/<client_id>/portefeuille-existant.md   écrit par profile (A2); lu par l
 clients/<client_id>/journal.md              chaque réponse, avec sa provenance et sa date
 clients/<client_id>/<note>.md               notes écrites par A1 avec son skill (Profile Note), par exemple dimensions/horizon.md et synthese.md
 clients/<client_id>/traces/<horodatage>-<action>.json
+clients/<client_id>/kb.json                 état de la Knowledge Base du client (section 5.3), écrit par le code seul
 clients/<client_id>/decisions/<decision_id>.md         Portfolio Decision : résumé OKF d'une décision simulée (runtime portfolio)
 clients/<client_id>/decisions/<decision_id>.json       Decision complète (Facts, contrôles, trace)
 clients/<client_id>/decisions/<decision_id>.policy.json   mandat (PolicySpec) appliqué
@@ -319,13 +338,13 @@ data: {}                          # données structurées lues par le code (prof
 ```
 
 - Dans `profil.md`, un fait tiré d'un texte libre porte `confirmed: false` (`data.facts.<champ>`) jusqu'à la réponse à sa question `cf_`. Il n'entre ni dans `ProfileView`, ni dans la complétude, ni dans les scores. S'il remplace une valeur confirmée, il la garde dans `replaces` (`value`, `provenance`, `at`, facultatif) : elle reste en vigueur jusqu'à la réponse, et « non » la rétablit. Un fait sans la clé `confirmed` est confirmé.
-- Notes du client (`Profile Note`) : à la fin du questionnaire, le runtime `profile` invoque A1 avec le skill `app/agents/src/alphaforge/profile/skills/client-brain-init/SKILL.md`, qui fixe la structure des notes ; ensuite, `client-brain-update` les met à jour quand les faits confirmés ou les skills changent. Changer la structure dans le skill suffit : la mise à jour suivante réorganise chaque base. A1 écrit le chemin, le titre et le texte ; le code construit le frontmatter (`sources` tirées des champs cités, `data.skill`, `data.skills_version`, `data.cites`), vérifie l'OKF, refuse les chemins hors du dossier du client et les documents écrits par le code (`index.md`, `profil.md`, `journal.md`, `portefeuille-existant.md`, `traces/`), et n'y admet aucune valeur à confirmer. Le runtime n'a pas `s3:DeleteObject` : une note retirée est réécrite avec `data.retired: true`, et `kb.list` comme `index.md` l'omettent. L'état est dans `profil.md`, `data.brain` (`skills_version`, `values`, `documents`).
+- Notes du client (`Profile Note`) : à la fin du questionnaire, le runtime `profile` invoque A1 avec le skill `app/agents/src/alphaforge/profile/skills/client-brain-init/SKILL.md`, qui fixe la structure des notes ; ensuite, `client-brain-update` les met à jour quand les faits confirmés ou les skills changent. Changer la structure dans le skill suffit : la mise à jour suivante réorganise chaque base. A1 écrit le chemin, le titre et le texte ; le code construit le frontmatter (`sources` tirées des champs cités, `data.skill`, `data.skills_version`, `data.cites`), vérifie l'OKF, refuse les chemins hors du dossier du client et les documents écrits par le code (`index.md`, `profil.md`, `journal.md`, `portefeuille-existant.md`, `kb.json`, `traces/`), et n'y admet aucune valeur à confirmer. Le runtime n'a pas `s3:DeleteObject` : une note retirée est réécrite avec `data.retired: true`, et `kb.list` comme `index.md` l'omettent. L'état est dans `profil.md`, `data.brain` (`skills_version`, `values`, `documents`).
 - `journal.md` porte ses entrées dans `data.entries[]`, en ajout seulement, une entrée par événement : `{at, kind, provenance, ...}`.
   - `kind` vaut `answer` (`field`, `value`, `question_id`?, `option`?, `previous`?), `message` ou `stage` (`value`, `previous`, `note`).
   - `option` (facultatif) : identifiant de la tranche choisie quand une question à choix renseigne un champ numérique (`number`, `money`, `percent`). `value` est alors le nombre que le code a écrit dans le champ, tiré de `questionnaire.yaml` (option `number`) ou calculé par le code pour une relance.
   - Une entrée `message` garde le texte libre de l'investisseur (`followup.reply.message`) avec sa provenance `a1:<tour>`, `text` et `locale`. Elle n'est écrite qu'après un tour d'A1 réussi, donc jamais quand le garde-fou bloque.
   - Une requête écrit le journal au plus une fois.
-- La base générale ne contient rien d'un client; une base de client ne recopie pas la base générale.
+- La base générale ne contient rien d'un client; une base de client ne recopie pas la base générale. La Knowledge Base générale n'indexe que `general/`; chaque client a la sienne (section 5.3).
 - **Arborescence fermée de `general/`.** Un document n'y est écrit que sous l'un de ces neuf dossiers : `methodologie/`, `notions/`, `societes/` (seeds), `actualites/`, `donnees/`, `faits/`, `signaux/`, `depots/` et `recherches/` (A6), plus `index.md`. Le code calcule la clé à partir du type de l'élément et de champs fixés par le code (`research.checks.target`). Ni A6 ni un autre agent ne choisit un dossier ou n'en crée un : le modèle d'A6 décide du résumé, des tags, des liens et du rejet, jamais de l'adresse.
   - Un dossier correspond à un type de document. Un sous-dossier ne sert qu'à l'identité (série, ticker, source) ou au temps (`AAAA/MM`). Un thème (ESG, logement, taux) est un tag, jamais un dossier.
   - `<source>` d'un fait ou d'un signal est l'hôte lu, sans `www.`, passé par `staging.slugify` (`www.bankofcanada.ca` donne `bankofcanada-ca`), et `<hash>` vient de l'identifiant de l'élément, lui-même tiré de l'adresse, des localisateurs et de la date d'observation. Les tickers d'un fait ou d'un signal vont dans ses tags. Deux sources qui publient la même valeur donnent deux documents, chacun dans le dossier de sa source.
@@ -386,6 +405,27 @@ Les prix, le change et les opérations sur titres ne sont pas de l'OKF : ce sont
 - **Version** : bloc `daily` de `data_version.json` (`data_sha256`, `built_utc`, `last_date`, sha256 de chaque fichier, manifestes des téléchargements bruts), repris dans `runtime/data/long/manifest.json`. Une décision du runtime `portfolio` qui lit ces parquets ajoute `+market:<data_sha256>` à sa `data_version`.
 - **Repli** : sans ces parquets (CI, développement local, runtimes qui ne téléchargent pas les données longues) ou avec `ALPHAFORGE_MARKET_SOURCE=starter`, `alphaforge.market` lit le jeu de départ, et ses sources restent `starter:…`. Avec les parquets, elles deviennent `market:daily_prices.parquet`, `market:fx_daily.parquet` ou `market:universe.yaml`.
 - Le runtime `portfolio` télécharge les parquets quotidiens avec les parquets longs quand le manifeste les déclare tous les trois, et vérifie leur sha256.
+
+### 5.3 Knowledge Base de chaque client
+
+Chaque investisseur a sa propre Knowledge Base Bedrock, construite à partir de sa base OKF `clients/<client_id>/` (`app/agents/src/alphaforge/profile/client_kb.py`). L'OKF reste la source de vérité : le code lit toujours les valeurs exactes dans les documents, la Knowledge Base ne sert qu'à retrouver un passage. Isolation par silo : une Knowledge Base et un index par client, aucun filtre de métadonnées.
+
+- **Création** (runtime `profile` seulement, à `session.start` d'une base nouvelle, ou à la première action d'une base plus ancienne) : index `client-<client_id>` dans le bucket S3 Vectors des clients (`float32`, dimension de l'embedding, `cosine`, `AMAZON_BEDROCK_TEXT` et `AMAZON_BEDROCK_METADATA` non filtrables), puis Knowledge Base `<préfixe>-client-<client_id>` (Titan Text Embeddings V2, 1024, comme la base générale; étiquettes `alphaforge:scope=client`, `alphaforge:client_id`, `alphaforge:prefix`; `clientToken` `<préfixe>-kb-<client_id>`), puis, quand `GetKnowledgeBase` la dit `ACTIVE`, sa source `CUSTOM` `client-okf` (passages de 400 jetons, 15 % de recouvrement, `dataDeletionPolicy: RETAIN`). Deux requêtes simultanées obtiennent la même base (`clientToken`, index en `ConflictException` repris par `GetIndex`).
+- **Rapprochement**, à la fin de chaque action qui porte sur un client (après les écritures OKF, avant la trace) : une lecture de `kb.json`; tant que la base n'est pas active, une lecture `GetKnowledgeBase`; ensuite, aucun appel si rien n'attend. Aucune erreur de Knowledge Base ne fait échouer l'action : elle va dans la trace et dans `kb.json`.
+- **Ingestion directe** (`IngestKnowledgeBaseDocuments`, jamais `StartIngestionJob`) : chaque document `.md` écrit dans la base du client (profil, journal, index, portefeuille existant, notes d'A1, décisions `.md` du runtime `portfolio`, versions `portefeuilles/*.md`) est envoyé en ligne, identifiant = clé OKF (une réingestion remplace le document), métadonnées `type`, `updated_at` et `client_id`. Jamais `traces/`, jamais un `.json`. Une note retirée (`data.retired: true`) sort par `DeleteKnowledgeBaseDocuments`. Lots de 10 documents (borne du client botocore; le service en accepte 25). Base pas encore active, appel limité (`ThrottlingException`) : les clés restent dans `pending` et partent au rapprochement suivant. Le runtime `portfolio` ingère ou met en attente, sans jamais créer de base ni lire son état Bedrock.
+- **Recherche** : A1 a l'outil `search_client_knowledge` quand la fonction est active. La base interrogée est celle du client de la session, lue dans `kb.json`, jamais donnée par le modèle; chaque passage cite sa clé OKF (`customDocumentLocation.id`), et un passage hors du dossier du client est écarté. Les chiffres cités viennent toujours du contexte, pas des extraits. Base pas encore active : l'outil le dit (`status`).
+- **État** `clients/<client_id>/kb.json`, écrit par le code seul (A1 n'écrit que des notes `.md`; `kb.get` ne le sert pas), avec une précondition sur l'ETag : une écriture concurrente relit l'état et y reporte ses changements.
+
+  ```json
+  { "schema": "alphaforge.client_kb/1", "client_id": "8f0c…", "status": "active",
+    "vector_bucket": "alphaforge-sandbox-client-vectors", "index_name": "client-8f0c…", "index_arn": "arn:aws:s3vectors:…",
+    "knowledge_base_name": "alphaforge-sandbox-client-8f0c…", "knowledge_base_id": "ABCDEFGHIJ", "knowledge_base_arn": "arn:aws:bedrock:…",
+    "data_source_id": "KLMNOPQRST", "created_at": "…", "updated_at": "…", "active_at": "…", "ingested_at": "…",
+    "retry_at": null, "error": null, "pending": [], "indexed": ["clients/8f0c…/profil.md", "…"], "document_errors": {} }
+  ```
+
+- **Statuts** : `creating`, `active`, `failed` (nouvel essai après 30 minutes), `quota` (`ServiceQuotaExceededException` : 100 Knowledge Bases par compte, non ajustable, dont la base générale; nouvel essai après une heure), `disabled` (aucun `kb.json`).
+- **Hors de l'état Terraform** : `infrastructure/scripts/clean-client-kbs.sh` liste les bases et index des clients (`--dry-run`, par défaut) ou les supprime (`--apply`).
 
 ## 6. Step Functions de collecte
 
@@ -672,9 +712,10 @@ Construction du portefeuille simulé d'un client par le volet finance (section 9
 | Action | Entrée (en plus de `action`) | Réponse |
 | --- | --- | --- |
 | `health` | — | `{"ok": true, "role": "portfolio", "release", "env"}`, sans charger le moteur |
-| `build` | `client_id` (UUID v4) **ou** `persona` (`amira`, `mateo`, `robert` : profils FICTION de démonstration, `finance/personas/`), `as_of` facultatif (`AAAA-MM-JJ`, par défaut `DEFAULT_AS_OF` du moteur), `strategy` facultatif (booléen, `true` par défaut : étape 0 active), `style_preference` facultatif (`defensive`, `dynamique` ou `offensive`, `finance.strategy.STYLES`), `request` facultatif (`{ticker, amount_cad?, weight?}`, demande précise de l'investisseur), `mode` facultatif (`llm` par défaut, `rules` pour le repli déterministe), `locale` facultatif (`fr`, `en`) | `{"client_id", "persona", "persona_label", "fiction", "audit", "xray_trace_id", "as_of", "mode", "simulation_only": true, "decision_key": "clients/<id>/decisions/<decision_id>.md", "decision": Decision, "rounds": [{"round", "verdicts", "amendments"}], "explanation_report", "grounding", "strategy": StrategyResult.summary() \| null}` |
+| `build` | `client_id` (UUID v4) **ou** `persona` (`amira`, `mateo`, `robert` : profils FICTION de démonstration, `finance/personas/`), `as_of` facultatif (`AAAA-MM-JJ`, par défaut `DEFAULT_AS_OF` du moteur), `strategy` facultatif (booléen, `true` par défaut : étape 0 active), `style_preference` facultatif (`defensive`, `dynamique` ou `offensive`, `finance.strategy.STYLES`), `request` facultatif (`{ticker, amount_cad?, weight?}`, demande précise de l'investisseur), `mode` facultatif (`llm` par défaut, `rules` pour le repli déterministe), `locale` facultatif (`fr`, `en`) | `{"client_id", "persona", "persona_label", "fiction", "audit", "xray_trace_id", "as_of", "mode", "simulation_only": true, "decision_key": "clients/<id>/decisions/<decision_id>.md", "decision": Decision, "rounds": [{"round", "verdicts", "amendments"}], "explanation_report", "grounding", "strategy": StrategyResult.summary() \| null, "client_kb": ClientKb \| null}` |
 
 - Étape 0 (`strategy: true`) : les variables de style viennent du profil court (`style_inputs_from_view` sur `OkfClientStore.view`), comme `finance/debate/app.py`; `style_preference` est prioritaire sur l'objectif du profil. `strategy` vaut `null` dans la réponse quand l'étape 0 est désactivée.
+- `client_kb` : après l'écriture de `decisions/<decision_id>.md`, le document est ingéré dans la Knowledge Base du client si elle est active, sinon mis en attente (section 5.3). `null` pour une persona ou un client sans Knowledge Base : ce runtime n'en crée jamais.
 - Erreurs : `bad_request` (requête mal formée ou style inconnu, refusée avant tout calcul), `not_found` (pas de `profil.md`), `model_error` (Bedrock ou Strands), `conflict`, `internal`.
 - Réponse JSON seulement (pas de streaming en version 1); une construction en mode `llm` prend plusieurs appels de modèle.
 - `persona` (démo, FICTION) : profil de test du moteur (`demo-<persona>`), variables de style et demande précise de `finance/personas/demo.yaml` (Robert : TSLA). La décision est écrite sous `clients/demo-<persona>/decisions/`; aucun vrai profil n'est lu.

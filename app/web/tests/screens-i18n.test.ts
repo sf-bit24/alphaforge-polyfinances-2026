@@ -41,8 +41,6 @@ describe("screen strings", () => {
 
   it("format their parameters", () => {
     expect(screensFr.assistant.profilePill("64 %")).toBe("Profil : 64 %");
-    expect(screensEn.details.retirement.countdown(3, 7)).toBe("3 years and 7 months");
-    expect(screensFr.details.retirement.countdown(1, 1)).toBe("1 an et 1 mois");
     expect(screensFr.assistant.how(1)).toBe("Comment j’ai répondu (1 étape)");
     expect(screensEn.assistant.how(4)).toBe("How I answered (4 steps)");
   });

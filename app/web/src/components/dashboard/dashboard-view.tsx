@@ -64,12 +64,11 @@ export function DashboardView() {
           <h1>{t.dash.hello}</h1>
           <p>{sample ? t.dash.leadSample : t.dash.leadReal}</p>
         </div>
-        <div className={styles.headRight}>
-          {sample ? <span className={styles.example}>{t.dash.exampleChip}</span> : null}
-          <Link className={styles.btn} href="/details">
-            {t.dash.allDetails}
-          </Link>
-        </div>
+        {sample ? (
+          <div className={styles.headRight}>
+            <span className={styles.example}>{t.dash.exampleChip}</span>
+          </div>
+        ) : null}
       </section>
 
       <KeyFigures sample={sample} state={state} />

@@ -19,6 +19,7 @@ https://github.com/user-attachments/assets/b2629c28-754f-4717-b255-53ac79fe743f
 ```mermaid
 flowchart LR
     U["Investisseur"] --> W["Interface Next.js locale, FR et EN"]
+    W -->|"connexion OIDC"| COG["Cognito : un compte = un client_id"]
     W -->|"InvokeAgentRuntime"| P["AgentCore : runtime profile"]
     P --> Q["Questions de base déterministes, sans modèle"]
     P --> A1["A1 : relances sur ce qui manque"]
@@ -38,7 +39,7 @@ flowchart LR
 ```
 
 - **Version 1** (ce dépôt aujourd'hui) : construire le profil (complétude calculée par le code, seuil de 70 %, plafond affiché de 95 %) et alimenter la base générale. Le portefeuille guidé (A3, agents d'analyse, Judge) viendra ensuite sur ces deux bases.
-- **AWS** : AgentCore Runtime (quatre runtimes tirés d'un seul zip de code), Bedrock (Claude Opus 5.5 partout, effort réglé par agent), Knowledge Base sur S3 Vectors, Guardrails, S3 chiffré par KMS, Step Functions, EventBridge Scheduler. Détail et justification : [`infrastructure/README.md`](infrastructure/README.md).
+- **AWS** : AgentCore Runtime (quatre runtimes tirés d'un seul zip de code), Bedrock (Claude Opus 5.5 partout, effort réglé par agent), Knowledge Base sur S3 Vectors, Guardrails, S3 chiffré par KMS, Step Functions, EventBridge Scheduler, Cognito (connexion des investisseurs, un compte par profil). Détail et justification : [`infrastructure/README.md`](infrastructure/README.md).
 - **Explicabilité** : chaque requête renvoie sa trace (étape déterministe, agent, outil, modèle, stockage, garde-fou, avec leurs sources), affichée à côté du dialogue.
 
 ## Dépôt

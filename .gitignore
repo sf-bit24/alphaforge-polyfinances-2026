@@ -5,10 +5,10 @@
 
 # Documents du Datathon, copies dans le Brain : non versionnes ici.
 # Exceptions : l'architecture (docs/architecture/) et les cas d'utilisation
-# (docs/cas-d-utilisation/).
+# (docs/use-cases/).
 /docs/*
 !/docs/architecture/
-!/docs/cas-d-utilisation/
+!/docs/use-cases/
 
 # Traces du moteur de backtest (défaut ./backtest-results, où qu'on le lance)
 backtest-results/

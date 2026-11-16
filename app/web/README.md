@@ -170,7 +170,7 @@ AUTH_MODE=cognito APP_URL=http://localhost:3000 AUTH_SESSION_SECRET=$(openssl ra
 | Route | Rôle |
 | --- | --- |
 | `POST /api/agent` | Une action du contrat (`session.start`, `base.answer`, `portfolio.submit`, `followup.reply`, `kb.list`, etc.). Validée par zod, puis transmise au mode choisi. Avec `"stream": true`, `portfolio.submit` et `followup.reply` répondent en `text/event-stream`. |
-| `POST /api/portfolio` | L'action `build` du runtime `portfolio` : `{ "client_id"? , "persona"?: "amira" \| "mateo" \| "robert", "as_of"?, "strategy"?, "style_preference"?, "request"?, "mode"?, "locale"? }`, `client_id` ou `persona` requis. JSON seulement; la `Decision` est validée par zod dans le navigateur (`src/lib/contract/portfolio.ts`). |
+| `POST /api/portfolio` | L'action `build` du runtime `portfolio` : `{ "client_id"? , "persona"?: "amira" \| "mateo" \| "robert", "as_of"?, "strategy"?, "style_preference"?, "request"?, "mode"?, "locale"? }`, `client_id` ou `persona` requis. JSON seulement; au-delà de 20 s (mode `llm`), la réponse part en 200 tout de suite et envoie un espace toutes les 15 s jusqu'à l'enveloppe, car CloudFront coupe une réponse muette après 60 s (`src/lib/server/heartbeat.ts`); la `Decision` est validée par zod dans le navigateur (`src/lib/contract/portfolio.ts`). |
 | `GET /api/health` | Mode courant, santé du runtime et, en mode `aws`, runtime résolu. |
 | `GET /api/collect` | Collectes récentes, avec le statut de chaque collecteur (`collected.press`, `collected.data`). `?execution_arn=` donne le détail d'une exécution de la machine configurée. |
 | `POST /api/collect` | Lance une collecte : `{ "since"?: "AAAA-MM-JJ", "tickers"?: ["RY.TO"] }`. Groupe `admin` exigé en `AUTH_MODE=cognito`. |

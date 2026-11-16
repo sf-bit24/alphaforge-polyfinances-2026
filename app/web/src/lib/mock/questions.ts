@@ -47,17 +47,17 @@ const BRANCHES: Record<string, { trigger: string; when: (answers: Record<string,
   q_income_need: {
     trigger: "q_goal",
     when: (answers) => answers.q_goal === "income",
-    why: { fr: "objectif = revenu régulier", en: "goal = regular income" },
+    why: { fr: "votre objectif est un revenu régulier", en: "your goal is a regular income" },
   },
   q_liquidity: {
     trigger: "q_horizon",
     when: (answers) => answers.q_horizon === "lt3",
-    why: { fr: "horizon de moins de 3 ans", en: "horizon under 3 years" },
+    why: { fr: "votre horizon est de moins de 3 ans", en: "your horizon is under 3 years" },
   },
   q_exclusions_other: {
     trigger: "q_exclusions",
     when: (answers) => Array.isArray(answers.q_exclusions) && answers.q_exclusions.includes("other"),
-    why: { fr: "exclusion « Autre » cochée", en: "\"Other\" exclusion selected" },
+    why: { fr: "vous avez coché « Autre » dans les exclusions", en: "you selected \"Other\" in the exclusions" },
   },
 };
 
@@ -175,12 +175,12 @@ function validateSingleChoice(question: Question, value: unknown): ValidationRes
 function validateMultiChoice(question: Question, value: unknown): ValidationResult {
   const allowed = allowedValues(question);
   if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
-    return invalid(question, { fr: "Une liste d'options est attendue.", en: "A list of options is expected." }, { allowed });
+    return invalid(question, { fr: "Cochez une ou plusieurs options.", en: "Select one or more options." }, { allowed });
   }
   const unique = [...new Set(value as string[])];
   const unknown = unique.filter((item) => !allowed.includes(item));
   if (unknown.length > 0) {
-    return invalid(question, { fr: "Certaines options sont inconnues.", en: "Some options are unknown." }, { allowed, unknown });
+    return invalid(question, { fr: "Certaines options ne font pas partie des choix proposés.", en: "Some options are not among the choices offered." }, { allowed, unknown });
   }
   if (question.required && unique.length === 0) {
     return invalid(question, { fr: "Cochez au moins une option.", en: "Select at least one option." }, { allowed });
@@ -219,7 +219,7 @@ function validateScale(question: Question, value: unknown): ValidationResult {
 
 /** The text is kept trimmed. */
 function validateText(question: Question, value: unknown): ValidationResult {
-  if (typeof value !== "string") return invalid(question, { fr: "Un texte est attendu.", en: "Text is expected." });
+  if (typeof value !== "string") return invalid(question, { fr: "Écrivez votre réponse.", en: "Write your answer." });
   const text = value.trim();
   if (text.length < 1 || text.length > MAX_TEXT_LENGTH) {
     return invalid(

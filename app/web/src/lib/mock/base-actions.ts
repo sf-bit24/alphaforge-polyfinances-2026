@@ -4,7 +4,7 @@
  * question or end the base questions.
  */
 import type { AgentRequest } from "@/lib/contract/requests";
-import type { AnswerValue, Completeness, Locale } from "@/lib/contract/schemas";
+import type { AnswerValue, Completeness, KnowledgeLevel, Locale } from "@/lib/contract/schemas";
 import { writeClientDocs } from "./client-docs";
 import { knowledgeLevelOf, requireStage, setFact, setStage, type ClientRecord } from "./client-record";
 import { clientState } from "./client-state";
@@ -40,14 +40,20 @@ function checkAnswer(record: ClientRecord, request: BaseAnswerRequest): CheckedA
     throw new MockError(
       "conflict",
       {
-        fr: `La question attendue est ${record.pendingBase}, pas ${questionId}.`,
-        en: `The expected question is ${record.pendingBase}, not ${questionId}.`,
+        fr: "Cette question a déjà reçu une réponse. Rechargez la page pour voir la question en cours.",
+        en: "This question has already been answered. Reload the page to see the current question.",
       },
       { expected: record.pendingBase, received: questionId },
     );
   }
   const def = baseQuestion(questionId);
-  if (!def) throw new MockError("not_found", { fr: "Question inconnue.", en: "Unknown question." }, { question_id: questionId });
+  if (!def) {
+    throw new MockError(
+      "not_found",
+      { fr: "Nous ne retrouvons pas cette question. Rechargez la page pour continuer.", en: "We cannot find this question. Reload the page to continue." },
+      { question_id: questionId },
+    );
+  }
   const checked = validateAnswer(renderQuestion(def, record.locale, knowledgeLevelOf(record)), request.value);
   if (!checked.ok) throw new MockError("invalid_answer", checked.reason, checked.details);
   return { def, value: checked.value };
@@ -58,8 +64,8 @@ function validatedStep({ def, value }: CheckedAnswer, locale: Locale): TraceStep
   return {
     kind: "deterministic",
     actor: "questionnaire",
-    title: fr ? "Réponse validée par les règles" : "Answer validated by the rules",
-    detail: fr ? `${def.id} : ${def.kind}, valeur conforme` : `${def.id}: ${def.kind}, valid value`,
+    title: fr ? "Réponse vérifiée" : "Answer checked",
+    detail: fr ? `Réponse valide à la question « ${tr(def.prompt, locale)} »` : `Valid answer to the question "${tr(def.prompt, locale)}"`,
     inputs: { question_id: def.id, value },
     outputs: { valid: true, field: def.field },
     durationMs: 2,
@@ -76,16 +82,25 @@ function storeAnswer(record: ClientRecord, { def, value }: CheckedAnswer, at: st
   }
 }
 
+const TO_DETERMINE: L = { fr: "à déterminer", en: "to be determined" };
+
+const KNOWLEDGE_WORDS: Record<KnowledgeLevel, L> = {
+  beginner: { fr: "débutant", en: "beginner" },
+  intermediate: { fr: "intermédiaire", en: "intermediate" },
+  advanced: { fr: "avancé", en: "advanced" },
+};
+
 function knowledgeLevelStep(values: FieldValues, locale: Locale): TraceStepInput {
   const computed = knowledgeLevel(values);
+  const level = tr(computed.level ? KNOWLEDGE_WORDS[computed.level] : TO_DETERMINE, locale);
   return {
     kind: "deterministic",
     actor: "questionnaire",
-    title: locale === "fr" ? "Niveau de connaissances calculé par le code" : "Knowledge level computed by code",
+    title: locale === "fr" ? "Niveau de connaissances calculé selon des règles fixes" : "Knowledge level computed with fixed rules",
     detail:
       locale === "fr"
-        ? `Auto-évaluation pondérée deux fois l'expérience observée (${computed.reason})`
-        : `Self-assessment weighted twice the observed experience (${computed.reason})`,
+        ? `Votre propre évaluation compte deux fois plus que votre expérience : niveau ${level}`
+        : `Your own assessment counts twice as much as your experience: ${level} level`,
     outputs: { knowledge_level: computed.level },
     durationMs: 1,
   };
@@ -115,11 +130,14 @@ function effectiveRiskStep(values: FieldValues, locale: Locale): TraceStepInput 
   return {
     kind: "deterministic",
     actor: "completeness",
-    title: locale === "fr" ? "Risque effectif = min(tolérance, capacité)" : "Effective risk = min(tolerance, capacity)",
+    title:
+      locale === "fr"
+        ? "Risque retenu : le plus prudent de votre tolérance et de votre capacité"
+        : "Risk retained: the more cautious of your tolerance and your capacity",
     detail:
       locale === "fr"
-        ? `tolérance ${tolerance}/5, capacité ${capacity?.level}/5`
-        : `tolerance ${tolerance}/5, capacity ${capacity?.level}/5`,
+        ? `Tolérance ${tolerance} sur 5, capacité ${capacity?.level} sur 5`
+        : `Tolerance ${tolerance} out of 5, capacity ${capacity?.level} out of 5`,
     outputs: { effective_risk: risk, limited_by: capacity?.limitedBy ?? null },
     durationMs: 1,
   };
@@ -136,12 +154,14 @@ function recomputedSteps(record: ClientRecord, def: QuestionDef, before: Complet
   return steps;
 }
 
-function nextQuestionDetail(next: NextQuestion, answeredId: string, locale: Locale): L {
-  if (!next.branch) return { fr: `${next.id} après ${answeredId}`, en: `${next.id} after ${answeredId}` };
+function nextQuestionDetail(next: NextQuestion, locale: Locale): L {
+  const def = baseQuestion(next.id);
+  const prompt = def ? tr(def.prompt, locale) : "";
+  if (!next.branch) return { fr: `« ${prompt} »`, en: `"${prompt}"` };
   const branch = tr(next.branch, locale);
   return {
-    fr: `${next.id} après ${answeredId} (branche : ${branch})`,
-    en: `${next.id} after ${answeredId} (branch: ${branch})`,
+    fr: `« ${prompt} », posée parce que ${branch}`,
+    en: `"${prompt}", asked because ${branch}`,
   };
 }
 
@@ -155,8 +175,8 @@ function nextQuestionStep(record: ClientRecord, answeredId: string, next: NextQu
   return {
     kind: "deterministic",
     actor: "questionnaire",
-    title: locale === "fr" ? "Question suivante choisie par les règles" : "Next question picked by the rules",
-    detail: tr(nextQuestionDetail(next, answeredId, locale), locale),
+    title: locale === "fr" ? "Question suivante choisie selon des règles fixes" : "Next question picked with fixed rules",
+    detail: tr(nextQuestionDetail(next, locale), locale),
     inputs: { question_id: answeredId },
     outputs: { next: next.id, branches },
     durationMs: 2,
@@ -167,10 +187,10 @@ const hasPortfolio = (record: ClientRecord) => record.baseAnswers[HAS_PORTFOLIO_
 
 function questionnaireDoneStep(record: ClientRecord): TraceStepInput {
   const detail: L = hasPortfolio(record)
-    ? { fr: "Portefeuille existant = oui : étape existing_portfolio", en: "Existing portfolio = yes: existing_portfolio stage" }
+    ? { fr: "Vous avez un portefeuille existant : Yan va le lire avec vous", en: "You have an existing portfolio: Yan will read it with you" }
     : {
-        fr: "Portefeuille existant = non : étape followups (relances A1)",
-        en: "Existing portfolio = no: followups stage (A1 follow-ups)",
+        fr: "Pas de portefeuille existant : Yan passe à ses questions de suivi",
+        en: "No existing portfolio: Yan moves on to its follow-up questions",
       };
   return {
     kind: "deterministic",
@@ -193,7 +213,7 @@ function advanceQuestionnaire(record: ClientRecord, answeredId: string, trace: T
   setStage(record, hasPortfolio(record) ? "existing_portfolio" : "followups", {
     provenance: `base:${answeredId}`,
     at: trace.now,
-    note: hasPortfolio(record) ? "portefeuille existant = oui" : "portefeuille existant = non",
+    note: hasPortfolio(record) ? "vous avez un portefeuille existant" : "pas de portefeuille existant",
   });
   trace.add(questionnaireDoneStep(record));
 }

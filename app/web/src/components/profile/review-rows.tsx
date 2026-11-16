@@ -245,7 +245,7 @@ function PriceCell({ position }: { position: Position }) {
       {typeof position.price === "number" ? (
         <span
           title={
-            position.price_date && position.price_source ? t.review.priceSource(formatDate(position.price_date, locale), position.price_source) : undefined
+            position.price_date ? t.review.priceSource(formatDate(position.price_date, locale)) : undefined
           }
         >
           {formatNumber(position.price, locale)} <span className="text-xs text-ink-500">{position.currency}</span>

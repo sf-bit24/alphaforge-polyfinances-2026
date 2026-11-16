@@ -174,7 +174,6 @@ export function FlagList({ flags }: { flags: string[] }) {
             <div className="min-w-0">
               <p className="text-sm font-semibold text-ink-950">{title}</p>
               {known ? <p className="mt-0.5 text-[0.8rem] leading-snug text-ink-700">{known.text}</p> : null}
-              <p className="mt-0.5 font-mono text-[0.65rem] text-ink-500">{flag}</p>
             </div>
           </li>
         );
@@ -206,8 +205,7 @@ export function FxNote({ fx, className }: { fx: FxRate | null | undefined; class
   const quote = fx.pair.slice(3) || "CAD";
   return (
     <p className={cn("text-xs text-ink-500", className)}>
-      {t.exposures.fx(`1 ${base} = ${formatNumber(fx.rate, locale, 4)} ${quote}`, formatDate(fx.date, locale))}{" "}
-      <span className="font-mono text-[0.7rem] text-ink-400">{fx.source}</span>
+      {t.exposures.fx(`1 ${base} = ${formatNumber(fx.rate, locale, 4)} ${quote}`, formatDate(fx.date, locale))}
     </p>
   );
 }

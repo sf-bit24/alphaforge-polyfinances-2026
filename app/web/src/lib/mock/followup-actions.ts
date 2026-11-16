@@ -80,14 +80,20 @@ function acceptAnswers(record: ClientRecord, answers: NonNullable<FollowupReplyR
       throw new MockError(
         "invalid_answer",
         {
-          fr: `La question ${answer.question_id} n'est pas une relance en attente.`,
-          en: `Question ${answer.question_id} is not a pending follow-up.`,
+          fr: "Cette question n'attend plus de réponse. Rechargez la page pour voir les questions en cours.",
+          en: "This question no longer awaits an answer. Reload the page to see the current questions.",
         },
         { question_id: answer.question_id, pending: record.pendingA1.map((item) => item.id) },
       );
     }
     const def = a1Question(pending.def);
-    if (!def) throw new MockError("invalid_answer", { fr: "Question inconnue.", en: "Unknown question." }, { question_id: answer.question_id });
+    if (!def) {
+      throw new MockError(
+        "invalid_answer",
+        { fr: "Nous ne retrouvons pas cette question. Rechargez la page pour continuer.", en: "We cannot find this question. Reload the page to continue." },
+        { question_id: answer.question_id },
+      );
+    }
     const checked = validateAnswer(renderQuestion(def, record.locale, level), answer.value);
     if (!checked.ok) throw new MockError("invalid_answer", checked.reason, checked.details);
     return { def, value: checked.value, questionId: answer.question_id };
@@ -101,7 +107,7 @@ function refuseTransactionRequest(text: string, locale: Locale, trace: Trace): n
     kind: "guardrail",
     actor: "guardrail",
     title: fr ? "Demande de transaction bloquée" : "Transaction request blocked",
-    detail: fr ? "Sujet interdit par le cadre responsable : aucune transaction réelle" : "Denied topic under the responsible framework: no real transaction",
+    detail: fr ? "AlphaForge AI est une simulation : aucune transaction réelle n'est passée" : "AlphaForge AI is a simulation: no real transaction is placed",
     inputs: { message_chars: text.length },
     outputs: { action: "BLOCKED", policy: NO_TRANSACTION_POLICY },
     durationMs: 150,
@@ -164,12 +170,16 @@ function openTurn(record: ClientRecord): Turn {
 function messageGuardrailDetail(screening: Screening): L {
   if (screening.adviceRequest) {
     return {
-      fr: "A1 répond dans le cadre responsable : information générale, aucune recommandation d'achat ou de vente",
-      en: "A1 answers within the responsible framework: general information, no buy or sell recommendation",
+      fr: "Yan répond par de l'information générale, sans recommandation d'achat ou de vente",
+      en: "Yan answers with general information, without any buy or sell recommendation",
     };
   }
   if (screening.masked > 0) {
-    return { fr: `${screening.masked} renseignement(s) personnel(s) masqué(s)`, en: `${screening.masked} personal detail(s) masked` };
+    const several = screening.masked > 1;
+    return {
+      fr: several ? `${screening.masked} renseignements personnels masqués` : "1 renseignement personnel masqué",
+      en: several ? `${screening.masked} personal details masked` : "1 personal detail masked",
+    };
   }
   return { fr: "Aucun sujet interdit, aucun renseignement personnel", en: "No denied topic, no personal detail" };
 }
@@ -177,7 +187,7 @@ function messageGuardrailDetail(screening: Screening): L {
 function messageGuardrailStep(screening: Screening, text: string, locale: Locale): TraceStepInput {
   const title: L = screening.adviceRequest
     ? { fr: "Demande de conseil personnalisé détectée", en: "Personalized advice request detected" }
-    : { fr: "Message vérifié par le garde-fou", en: "Message checked by the guardrail" };
+    : { fr: "Votre message est vérifié", en: "Your message is checked" };
   return {
     kind: "guardrail",
     actor: "guardrail",
@@ -194,10 +204,10 @@ function readingStep(turn: Turn, { accepted, text, stop }: TurnInput): TraceStep
   return {
     kind: "agent",
     actor: "A1",
-    title: fr ? "A1 lit le profil et la réponse de l'investisseur" : "A1 reads the profile and the investor's reply",
+    title: fr ? "Yan lit votre profil et votre réponse" : "Yan reads your profile and your reply",
     detail: fr
-      ? `${accepted.length} réponse(s) structurée(s)${text ? ", un message libre" : ""}${stop ? ", demande d'arrêt" : ""}`
-      : `${accepted.length} structured answer(s)${text ? ", one free-text message" : ""}${stop ? ", stop request" : ""}`,
+      ? `${accepted.length > 1 ? `${accepted.length} réponses aux questions` : `${accepted.length} réponse aux questions`}${text ? ", un message écrit avec vos mots" : ""}${stop ? ", une demande d'arrêt" : ""}`
+      : `${accepted.length === 1 ? "1 answer to the questions" : `${accepted.length} answers to the questions`}${text ? ", one message in your own words" : ""}${stop ? ", a request to stop" : ""}`,
     inputs: { answers: accepted.map(({ questionId }) => questionId), message: Boolean(text), stop, turn: turn.number },
     durationMs: 210,
   };
@@ -208,8 +218,8 @@ function offTopicStep(locale: Locale): TraceStepInput {
   return {
     kind: "agent",
     actor: "A1",
-    title: fr ? "Message hors sujet : A1 recentre l'échange" : "Off-topic message: A1 refocuses",
-    detail: fr ? "A1 ne s'écarte pas du profil d'investisseur" : "A1 does not stray from the investor profile",
+    title: fr ? "Message hors sujet : Yan revient à votre profil" : "Off-topic message: Yan comes back to your profile",
+    detail: fr ? "Yan s'en tient à votre profil d'investisseur" : "Yan sticks to your investor profile",
     durationMs: 40,
   };
 }
@@ -243,11 +253,16 @@ function writeTurn(record: ClientRecord, turn: Turn, input: TurnInput, at: strin
 }
 
 function updateKbStep(turn: Turn, written: WrittenFact[]): TraceStepInput {
+  const fr = turn.locale === "fr";
+  const count = written.length;
+  const labels = [...new Set(written.map((fact) => fieldDef(fact.field)?.label).filter((label) => label !== undefined).map((label) => tr(label, turn.locale)))];
   return {
     kind: "tool",
     actor: "A1",
-    title: turn.locale === "fr" ? `Outil update-KB : ${written.length} fait(s) enregistré(s)` : `Tool update-KB: ${written.length} fact(s) saved`,
-    detail: written.map((fact) => fact.field).join(", "),
+    title: fr
+      ? `${count > 1 ? `${count} réponses ajoutées` : `${count} réponse ajoutée`} à votre profil`
+      : `${count === 1 ? "1 answer" : `${count} answers`} added to your profile`,
+    detail: labels.join(", "),
     inputs: { provenance: turn.provenance },
     outputs: { facts: written },
     durationMs: 120,
@@ -260,7 +275,7 @@ function completenessStep(before: Completeness, after: Completeness, locale: Loc
   return {
     kind: "deterministic",
     actor: "completeness",
-    title: fr ? "Complétude recalculée par le code" : "Completeness recomputed by code",
+    title: fr ? "Complétude recalculée selon des règles fixes" : "Completeness recomputed with fixed rules",
     detail: `${percent(before.score)} → ${percent(after.score)} (${fr ? "seuil" : "threshold"} ${percent(after.threshold)}, ${fr ? "plafond" : "cap"} ${percent(after.cap)})`,
     outputs: { score: after.score, displayed: after.displayed, ready: after.ready, missing: after.missing.map((item) => item.field) },
     durationMs: 2,
@@ -296,11 +311,13 @@ function decideFollowups(record: ClientRecord, turn: Turn, input: TurnInput, aft
 const closesProfile = (outcome: TurnOutcome) => outcome === "stopped" || outcome === "complete";
 
 function checkCompletedDetail({ questions, outcome }: Decision, after: Completeness): L {
-  if (outcome === "stopped") return { fr: "L'investisseur s'arrête au-dessus du seuil", en: "The investor stops above the threshold" };
-  if (outcome === "complete") return { fr: "Plus de relance utile : profil complet", en: "No useful follow-up left: profile complete" };
+  if (outcome === "stopped") return { fr: "Vous vous arrêtez au-dessus du seuil", en: "You stop above the threshold" };
+  if (outcome === "complete") return { fr: "Plus de question utile : votre profil est complet", en: "No useful question left: your profile is complete" };
+  const asked = questions.length;
+  const missing = after.missing.length;
   return {
-    fr: `${questions.length} relance(s) utile(s) sur ${after.missing.length} champ(s) manquant(s)`,
-    en: `${questions.length} useful follow-up(s) for ${after.missing.length} missing field(s)`,
+    fr: `${asked > 1 ? `${asked} questions utiles` : `${asked} question utile`} pour ${missing > 1 ? `${missing} renseignements manquants` : `${missing} renseignement manquant`}`,
+    en: `${asked === 1 ? "1 useful question" : `${asked} useful questions`} for ${missing === 1 ? "1 missing detail" : `${missing} missing details`}`,
   };
 }
 
@@ -308,7 +325,7 @@ function checkCompletedStep(decision: Decision, after: Completeness, locale: Loc
   return {
     kind: "tool",
     actor: "A1",
-    title: locale === "fr" ? "Outil check_completed" : "Tool check_completed",
+    title: locale === "fr" ? "Yan vérifie ce qui manque encore" : "Yan checks what is still missing",
     detail: tr(checkCompletedDetail(decision, after), locale),
     outputs: { complete: closesProfile(decision.outcome), ready: after.ready, next: decision.pending.map((item) => item.id) },
     durationMs: 30,
@@ -331,17 +348,25 @@ function replyInput(turn: Turn, input: TurnInput, decision: Decision, after: Com
   };
 }
 
+/** The knowledge level in words, as Yan's reply step names it. */
+const LEVEL_NAMES: Record<KnowledgeLevel, L> = {
+  beginner: { fr: "débutant", en: "beginner" },
+  intermediate: { fr: "intermédiaire", en: "intermediate" },
+  advanced: { fr: "avancé", en: "advanced" },
+};
+
 function replyModelStep(turn: Turn, decision: Decision, after: Completeness, replyText: string): TraceStepInput {
   const { level } = turn;
   const count = decision.questions.length;
+  const levelName = tr(LEVEL_NAMES[level ?? "beginner"], turn.locale);
   return {
     kind: "model",
     actor: "A1",
-    title: turn.locale === "fr" ? "Modèle Bedrock : relance rédigée" : "Bedrock model: follow-up written",
+    title: turn.locale === "fr" ? "Yan rédige sa réponse" : "Yan writes its reply",
     detail:
       turn.locale === "fr"
-        ? `${count} question(s) formulée(s) au niveau ${level ?? "beginner"}, sans s'écarter du profil`
-        : `${count} question(s) phrased at ${level ?? "beginner"} level, staying on the profile`,
+        ? `${count > 1 ? `${count} questions adaptées` : `${count} question adaptée`} au niveau ${levelName}, sans s'écarter de votre profil`
+        : `${count === 1 ? "1 question" : `${count} questions`} suited to the ${levelName} level, staying on your profile`,
     inputs: { model_id: MODEL_ID, simulated: true, knowledge_level: level, missing: after.missing.slice(0, 5).map((item) => item.field) },
     outputs: { questions: decision.pending.map((item) => item.id), message_chars: replyText.length },
     durationMs: 1_650,
@@ -353,7 +378,7 @@ function replyGuardrailStep(locale: Locale): TraceStepInput {
   return {
     kind: "guardrail",
     actor: "guardrail",
-    title: fr ? "Réponse vérifiée par le garde-fou" : "Reply checked by the guardrail",
+    title: fr ? "Réponse de Yan vérifiée" : "Yan's reply checked",
     detail: fr ? "Aucun conseil personnalisé, aucune transaction" : "No personalized advice, no transaction",
     outputs: { action: "NONE" },
     durationMs: 130,
@@ -363,9 +388,9 @@ function replyGuardrailStep(locale: Locale): TraceStepInput {
 /** Journal notes of the stage change that ends a turn. */
 const STAGE_NOTES: Record<TurnOutcome, string> = {
   stopped: "arrêt demandé par l'investisseur",
-  complete: "A1 juge le profil complet",
-  idle: "relances d'A1",
-  ask: "relances d'A1",
+  complete: "Yan juge le profil complet",
+  idle: "questions de suivi de Yan",
+  ask: "questions de suivi de Yan",
 };
 
 export function replyToFollowups(record: ClientRecord, request: FollowupReplyRequest, trace: Trace): Envelope {

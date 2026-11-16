@@ -18,19 +18,20 @@ export function newMockClientKb(): MockClientKb {
 }
 
 /** Markdown documents of the base that the index holds (no trace, no JSON). */
-function indexable(record: ClientRecord): Array<{ key: string; updated_at: string }> {
+function indexable(record: ClientRecord): Array<{ key: string; title: string; updated_at: string }> {
   return [...record.docs.values()].filter((doc) => doc.key.endsWith(".md") && !doc.key.includes("/traces/"));
 }
 
 interface KbStep {
   title: { fr: string; en: string };
-  detail: string;
+  detail: { fr: string; en: string };
   outputs: unknown;
 }
 
 function storageStep(trace: Trace, record: ClientRecord, step: KbStep) {
   const title = record.locale === "fr" ? step.title.fr : step.title.en;
-  trace.add({ kind: "storage", actor: "store", title, detail: step.detail, outputs: step.outputs, durationMs: 40 });
+  const detail = record.locale === "fr" ? step.detail.fr : step.detail.en;
+  trace.add({ kind: "storage", actor: "store", title, detail, outputs: step.outputs, durationMs: 40 });
 }
 
 /** Reconciliation at the end of an action: one creation step, then the activation, then each new version sent. */
@@ -40,15 +41,15 @@ export function reconcileClientKb(record: ClientRecord, trace: Trace): ClientKb 
   if (kb.knowledgeBaseId === null) {
     kb.knowledgeBaseId = `MOCK${record.id.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
     storageStep(trace, record, {
-      title: { fr: "Knowledge Base du client créée", en: "Client knowledge base created" },
-      detail: kb.knowledgeBaseId,
+      title: { fr: "Espace de vos documents personnels préparé", en: "Space for your personal documents prepared" },
+      detail: { fr: "Vos documents y seront ajoutés dès votre prochaine action", en: "Your documents will be added there from your next action" },
       outputs: { knowledge_base_id: kb.knowledgeBaseId, index: `client-${record.id}`, status: "CREATING" },
     });
   } else if (kb.status === "creating") {
     kb.status = "active";
     storageStep(trace, record, {
-      title: { fr: "Knowledge Base du client active", en: "Client knowledge base active" },
-      detail: kb.knowledgeBaseId,
+      title: { fr: "Vos documents personnels sont prêts", en: "Your personal documents are ready" },
+      detail: { fr: "Yan peut maintenant y chercher pour vous répondre", en: "Yan can now search them to answer you" },
       outputs: { pending: docs.length },
     });
   }
@@ -56,8 +57,8 @@ export function reconcileClientKb(record: ClientRecord, trace: Trace): ClientKb 
   if (kb.status === "active" && changed.length > 0) {
     for (const doc of changed) kb.indexed.set(doc.key, doc.updated_at);
     storageStep(trace, record, {
-      title: { fr: "Documents indexés dans la Knowledge Base du client", en: "Documents indexed in the client knowledge base" },
-      detail: kb.knowledgeBaseId,
+      title: { fr: "Vos documents personnels sont mis à jour", en: "Your personal documents are updated" },
+      detail: { fr: changed.map((doc) => doc.title).join(", "), en: changed.map((doc) => doc.title).join(", ") },
       outputs: { ingested: changed.map((doc) => doc.key), deleted: [], pending: [] },
     });
   }

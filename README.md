@@ -4,7 +4,7 @@ Aide à la décision d'investissement agentique et explicable, construite par l'
 
 > **Simulation seulement** : aucune transaction réelle, aucun conseil financier personnalisé.
 
-[Application déployée](https://d2gsaqmfxygugx.cloudfront.net) (jusqu'au 16 novembre 2026, 13 h 59) · [Architecture (PDF)](docs/architecture/alphaforge-architecture-aws.pdf) · [One-pager](docs/one-pager/alphaforge-one-pager.pdf) · [Cas d'utilisation](docs/use-cases/README.md)
+[Application déployée](https://d2gsaqmfxygugx.cloudfront.net) (jusqu'au 16 novembre 2026, 13 h 59) · [Remise](remise/README.md) : [one-pager](remise/alphaforge-one-pager.pdf), [architecture AWS](remise/alphaforge-architecture-aws.pdf), [documentation technique](remise/alphaforge-documentation-technique.pdf) · [Cas d'utilisation](docs/use-cases/README.md)
 
 ## Démo vidéo
 

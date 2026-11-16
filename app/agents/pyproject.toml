@@ -99,9 +99,8 @@ max-statements = 30
 # Ils ne tournent qu'avec les données longues ; les réécrire sans pouvoir les rejouer changerait la preuve.
 "scripts/calibration/**" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
 # En attente : code pas encore mis aux règles de code propre. allocation.py (répartition, PR #128) est à refaire
-# après la démo ; portfolio_service.py sort à la fusion de son refactor. Retirer la ligne d'un fichier une fois refait.
+# après la démo. Retirer la ligne d'un fichier une fois refait.
 "src/alphaforge/finance/debate/allocation.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
-"src/alphaforge/portfolio_service.py" = ["N", "C90", "PLR09", "FBT", "SIM", "RET", "C4", "PIE", "ERA", "RUF100"]
 # Les tests du moteur appellent pytest.importorskip (numpy, pandas, scipy) avant leurs imports, pour sauter proprement
 # quand le groupe finance n'est pas installé (CI : uv sync --frozen).
 "tests/finance/backtest/**" = ["E402"]

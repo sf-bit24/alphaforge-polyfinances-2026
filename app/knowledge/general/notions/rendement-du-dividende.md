@@ -14,7 +14,7 @@ sources:
     resource: "starter:corporate_actions.csv (lignes dividend, montant par action en devise de cotation) et starter:prices_daily.csv (colonne close)"
     retrieved_at: "2026-11-15T04:20:00Z"
   - id: starter-readme
-    title: "README du jeu de départ AlphaForge AI"
+    title: "Guide du jeu de départ AlphaForge AI"
     resource: "alphaforge_starter/README.md, section « Things to know before using the data » (adj_close, fractionnements déjà appliqués, CNQ.TO le 2022-08-22)"
     retrieved_at: "2026-11-15T04:20:00Z"
   - id: atelier-bncd
@@ -69,28 +69,29 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 - **Fiscalité dans un CELI** : la Convention Canada–États-Unis fixe à 15 % la retenue à la source sur les dividendes
   versés par une société américaine à un particulier canadien (article X, paragraphe 2 b). L'exonération de
   l'article XXI vise les régimes de retraite, comme le REER; selon la lecture courante, le CELI n'en profite pas, et
-  la retenue y est perdue (voir [CELI, REER et CELIAPP](celi-reer.md)). Cette lecture est encore marquée « non
-  vérifiée » dans `canada_2026.yaml`.
+  la retenue y est perdue (voir [CELI, REER et CELIAPP](celi-reer.md)). AlphaForge AI marque encore cette lecture
+  « non vérifiée ».
 
 ## Comment AlphaForge AI le calcule
 
-Le code calcule le rendement du dividende; le modèle ne l'estime jamais.
+AlphaForge AI calcule le rendement du dividende selon des règles fixes. Yan l'explique; les chiffres sont calculés,
+jamais inventés.
 
-- **Numérateur** : somme des lignes `dividend` de `corporate_actions.csv` dont la date ex tombe dans les 12 mois qui
-  précèdent la date de calcul, en montant par action et en devise de cotation. Ces montants sont déjà ajustés des
+- **Numérateur** : somme des dividendes du jeu de départ dont la date ex tombe dans les 12 mois qui précèdent la
+  date de calcul, en montant par action et en devise de cotation. Ces montants sont déjà ajustés des
   fractionnements : NVDA y verse 0,004 $ US par trimestre en 2022, un montant ramené à l'échelle du fractionnement
   10 pour 1 de 2024.
-- **Dénominateur** : le cours de clôture `close` à la date, ajusté des fractionnements seulement, comme les
-  dividendes. `adj_close` est aussi ajusté des dividendes et fausserait le ratio.
+- **Dénominateur** : le cours de clôture à la date, ajusté des fractionnements seulement, comme les dividendes. Le
+  cours de clôture ajusté tient aussi compte des dividendes et fausserait le ratio.
 - **Devise** : numérateur et dénominateur sont dans la même devise; aucune conversion n'est nécessaire.
-- **Opérations spéciales** : les lignes `split` ne sont pas des dividendes. Le « fractionnement » de 1,021 de CNQ.TO
-  du 2022-08-22, probablement une distribution spéciale, n'entre donc pas dans le calcul (README du jeu de départ).
+- **Opérations spéciales** : les fractionnements ne sont pas des dividendes. Le « fractionnement » de 1,021 de CNQ.TO
+  du 2022-08-22, probablement une distribution spéciale, n'entre donc pas dans le calcul (guide du jeu de départ).
 - **Fenêtre** : dates ex dans les 365 jours qui précèdent la date de calcul, cette date comprise.
 - **Usage** : c'est un des critères de la [sélection de titres par règles](selection-par-regles.md). Les styles
   défensif et dynamique favorisent un rendement du dividende plus élevé, et un intérêt déclaré pour les dividendes
   augmente son poids, sans lever aucun plafond. Comme chez FTSE Russell, qui emploie la même mesure sur 12 mois
   glissants (§5.8), un titre sans dividende reçoit le rang le plus bas sur ce critère (voir
-  [Étape 0 : style et score des titres](../methodologie/scoring-par-style.md)).
+  [Choix et score des titres selon le style](../methodologie/scoring-par-style.md)).
 
 ## Limites
 
@@ -98,7 +99,8 @@ Le code calcule le rendement du dividende; le modèle ne l'estime jamais.
   sortir de la fenêtre.
 - **Passé seulement** : le rendement mesuré ne dit rien des dividendes à venir.
 - **Rachats d'actions** : une société qui redistribue par rachats plutôt que par dividendes paraît à tort sans revenu.
-- **Actions seulement** : l'étape 0 ne calcule pas de rendement de distribution pour les FNB.
+- **Actions seulement** : le choix des titres selon le style ne calcule pas de rendement de distribution pour les
+  FNB.
 
 ## À ne pas confondre
 

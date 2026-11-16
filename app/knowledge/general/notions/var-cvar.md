@@ -13,10 +13,10 @@ sources:
     title: "Atelier BNCD : comprendre l'investisseur avant de bâtir la solution"
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositive 8 (le risque, possibilité d'un résultat négatif important)"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), sections measurement, levels et limits_template (risk.cvar_m, risk.cvar_12m)"
   - id: moteur-metriques
-    title: "Moteur de backtest AlphaForge AI : métriques sur rendements mensuels"
+    title: "Simulateur d'AlphaForge AI : mesures sur rendements mensuels"
     resource: "app/agents/src/alphaforge/finance/backtest/metrics.py (var_cvar) et app/agents/src/alphaforge/finance/portfolio/analysis.py (cvar_rolling)"
 data:
   aliases: [VaR, CVaR, valeur à risque, perte attendue extrême, expected shortfall, pire mois, perte en queue]
@@ -40,7 +40,7 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
   La CVaR est plus prudente, parce qu'elle tient compte de la gravité des pires mois. »
 - **Avancé** : « VaR et CVaR historiques à β = 0,95, quantile *lower* puis moyenne de la queue, sur rendements mensuels
   et sur rendements composés de 12 mois glissants chevauchants. La CVaR est cohérente et convexe, d'où son usage
-  dans l'optimiseur (Rockafellar-Uryasev). »
+  dans le simulateur (Rockafellar-Uryasev). »
 
 ## Ce qu'il faut retenir
 
@@ -52,17 +52,17 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 
 ## Comment AlphaForge AI la calcule
 
-Le code calcule VaR et CVaR; le modèle ne les estime jamais. Les pertes sont exprimées en fractions positives
-(0,05 = −5 %), en CAD par défaut.
+AlphaForge AI calcule VaR et CVaR selon des règles fixes. Yan les explique; les chiffres sont calculés, jamais
+inventés. Les pertes sont exprimées en fractions positives (0,05 = −5 %), en CAD par défaut.
 
 | Mesure | Série | Utilisée par | Bloquante |
 | --- | --- | --- | --- |
-| `CVAR` (mensuelle, β = 0,95) | Rendements mensuels du portefeuille sur la fenêtre de la politique | Optimiseur et Judge | Oui |
-| `CVAR12M` (β = 0,95) | Rendements composés sur 12 mois glissants, série longue raccordée aux proxys, depuis 1971 au plus tôt | Judge seulement | Oui |
+| CVaR mensuelle (β = 0,95) | Rendements mensuels du portefeuille sur la fenêtre d'historique retenue | Simulateur et vérification finale | Oui |
+| CVaR sur 12 mois (β = 0,95) | Rendements composés sur 12 mois glissants, série longue raccordée aux proxys, depuis 1971 au plus tôt | Vérification finale seulement | Oui |
 
-- L'optimiseur minimise la CVaR sous les contraintes du profil; le Judge vérifie ensuite la CVaR mensuelle et la
-  CVaR sur 12 mois face aux budgets du niveau de risque (N0 à N5), dans `finance/policy/risk_levels.yaml`.
-- Un actif sans historique long (Bitcoin, Ether) est exclu de la série longue; le code ajoute une borne de perte
+- Le simulateur minimise la CVaR sous les contraintes du profil. La vérification finale contrôle ensuite la CVaR
+  mensuelle et la CVaR sur 12 mois face aux budgets du niveau de risque (N0 à N5).
+- Un actif sans historique long (Bitcoin, Ether) est exclu de la série longue; AlphaForge AI ajoute une borne de perte
   prudente, son poids multiplié par 0,90, à la CVaR sur 12 mois. Le budget de CVaR mensuelle est réduit de même, du
   poids en cryptoactifs multiplié par 0,55.
 - Le rapport de risque donne aussi la contribution de chaque actif à la CVaR.

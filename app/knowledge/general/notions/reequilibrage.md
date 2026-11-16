@@ -13,7 +13,7 @@ sources:
     title: "Atelier BNCD : comprendre l'investisseur avant de bâtir la solution"
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositive 9 (diversifier sur plusieurs dimensions) et diapositive 15 (idée 02 : rendement, risque et horizon sont indissociables)"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, reference_portfolios et measurement (séries rééquilibrées chaque mois)"
 data:
   aliases: [rééquilibrage, rééquilibrer, rebalancing, rebalancement, dérive des poids, revenir à la cible]
@@ -45,18 +45,18 @@ plus grossit, et le portefeuille devient plus risqué ou plus concentré que pr�
 
 ## Comment AlphaForge AI le simule
 
-Le code simule; le modèle explique. Aucune transaction réelle n'est passée.
+Le simulateur calcule selon des règles fixes; Yan explique. Aucune transaction réelle n'est passée.
 
 - **Mesures de risque** : les rendements d'un portefeuille proposé sont calculés comme s'il était ramené à ses poids
-  **chaque mois** (`portfolio_returns`). C'est le cas des mesures du Judge, du stress test 2022 et des portefeuilles de
-  référence qui calibrent les niveaux de risque (`risk_levels.yaml`).
-- **Moteur de backtest** : il simule aussi un rééquilibrage mensuel, trimestriel, annuel, jamais, ou par bandes (on
-  n'échange que si un poids s'écarte de la cible de plus que la bande, 5 points par défaut). Entre deux décisions, les
-  poids dérivent avec les rendements. Il compte la rotation (moitié de la somme des écarts de poids) et retire un coût
-  proportionnel aux échanges quand un coût en points de base est fourni.
-- **Optimiseur** : face à un portefeuille existant, il compte la rotation nécessaire, y compris la vente forcée des
-  titres hors de l'univers, peut la plafonner (`max_turnover`) et la pénaliser par un coût de transaction (zéro par
-  défaut).
+  **chaque mois**. C'est le cas des mesures de la vérification finale, du stress test 2022 et des portefeuilles de
+  référence qui calibrent les niveaux de risque.
+- **Simulation sur l'historique** : le simulateur teste aussi un rééquilibrage mensuel, trimestriel, annuel, jamais, ou
+  par bandes (on n'échange que si un poids s'écarte de la cible de plus que la bande, 5 points par défaut). Entre deux
+  décisions, les poids dérivent avec les rendements. Il compte la rotation (moitié de la somme des écarts de poids) et
+  retire un coût proportionnel aux échanges quand un coût en points de base est fourni.
+- **Votre portefeuille existant** : quand il part de votre portefeuille, le simulateur compte la rotation nécessaire,
+  y compris la vente forcée des titres hors de l'univers. Il peut la plafonner et la pénaliser par un coût de
+  transaction (zéro par défaut).
 
 ## Limites
 

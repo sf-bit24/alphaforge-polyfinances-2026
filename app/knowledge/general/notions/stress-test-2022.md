@@ -1,7 +1,7 @@
 ---
 type: Financial Concept
 title: Stress test 2022
-description: Ce qu'un portefeuille aurait perdu en 2022, quand actions et obligations ont baissé ensemble, comment le Judge le contrôle et ses limites.
+description: Ce qu'un portefeuille aurait perdu en 2022, quand actions et obligations ont baissé ensemble, comment la vérification finale le contrôle et ses limites.
 tags: [notion, risque, stress-test, scenario-historique]
 status: draft
 owners: [alphaforge-a1]
@@ -53,22 +53,22 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 
 ## Comment AlphaForge AI le calcule
 
-Le code calcule la perte; le modèle ne l'estime jamais.
+AlphaForge AI calcule la perte selon des règles fixes. Yan l'explique; les chiffres sont calculés, jamais inventés.
 
-| Outil | Ce qu'il fait |
+| Ce qui est calculé | Comment |
 | --- | --- |
-| `portfolio.loss_2022` (Judge) | Rendement composé de janvier à décembre 2022, sur les tickers réels, rééquilibrage mensuel, en dollars canadiens; renvoie une perte positive (0 si l'année est positive) |
-| `portfolio.stress_report` | Rejoue plusieurs épisodes (2022, COVID-19, crise de 2008, bulle technologique, choc pétrolier) : rendement de l'épisode, baisse maximale et perte pour 100 000 $ CAD |
+| Perte 2022 (vérification finale) | Rendement composé de janvier à décembre 2022, sur les tickers réels, rééquilibrage mensuel, en dollars canadiens; donne une perte positive (0 si l'année est positive) |
+| Épisodes de crise | Rejoue plusieurs épisodes (2022, COVID-19, crise de 2008, bulle technologique, choc pétrolier) : rendement de l'épisode, baisse maximale et perte pour 100 000 $ CAD |
 
-- La règle `risk.stress_2022` est **bloquante** et propre au Judge : l'optimiseur ne la vise pas. Les pertes sont
-  des fractions positives (0,145 = −14,5 %), en dollars canadiens, sur des rendements mensuels.
-- Chacun des six niveaux de risque (N0 à N5) a son budget `s2022`, fixé dans
-  `app/agents/src/alphaforge/finance/policy/risk_levels.yaml`. Il vient de la perte 2022 de portefeuilles de
+- Le contrôle de la perte 2022 est **bloquant** et propre à la vérification finale : le simulateur n'en fait pas un
+  objectif. Les pertes sont des fractions positives (0,145 = −14,5 %), en dollars canadiens, sur des rendements
+  mensuels.
+- Chacun des six niveaux de risque (N0 à N5) a son budget de perte 2022. Il vient de la perte 2022 de portefeuilles de
   référence (actions et obligations du Canada) au haut de la bande d'actions du niveau, arrondie au-dessus.
 - Le stress 2022 ne sert pas à choisir le niveau : sur l'historique long, 2022 sépare mal les profils prudents et
   audacieux. Il contrôle seulement le portefeuille proposé.
-- Si 2022 n'est pas couvert pour ce portefeuille (moins de 12 mois de données), le Judge ne peut pas vérifier et
-  refuse par prudence plutôt que de supposer.
+- Si 2022 n'est pas couvert pour ce portefeuille (moins de 12 mois de données), la vérification finale ne peut pas
+  conclure. Elle refuse alors par prudence plutôt que de supposer.
 
 ## Limites
 

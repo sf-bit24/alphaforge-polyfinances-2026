@@ -19,7 +19,7 @@ sources:
     title: "Paramètres canadiens d'AlphaForge AI : protection SADC"
     resource: "app/agents/src/alphaforge/finance/rules/canada_2026.yaml, cdic.insured_categories (vérifié, 2026, https://www.cdic.ca/your-coverage/whats-covered/)"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, sections satellites.crypto, knowledge, status et loss_bounds"
 data:
   aliases: [cryptoactif, crypto, bitcoin, btc, ether, eth, jeton, blockchain]
@@ -30,7 +30,7 @@ data:
 
 Un cryptoactif est un actif numérique inscrit sur une chaîne de blocs (*blockchain*). Les droits et les usages qu'il
 donne varient d'un jeton à l'autre (atelier BNCD, diapositive 4). Le jeu de départ en contient deux : Bitcoin
-(`BTC-USD`) et Ether (`ETH-USD`), cotés en dollars américains (énoncé, p. 10 et 12).
+(BTC-USD) et Ether (ETH-USD), cotés en dollars américains (énoncé, p. 10 et 12).
 
 ## Comment l'expliquer selon le niveau
 
@@ -51,21 +51,20 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 - Il faut aussi comprendre la liquidité, la garde (où et par qui les jetons sont conservés) et le risque technologique
   (atelier BNCD, diapositive 5).
 - Les cryptoactifs, y compris les jetons à valeur stable, ne sont pas couverts par la SADC, pas plus que les actions,
-  les obligations ou les FNB (`canada_2026.yaml`, catégories assurées par la SADC, vérifié en 2026).
+  les obligations ou les FNB (catégories assurées par la SADC, vérifié en 2026).
 - Une petite part peut déjà peser lourd dans le risque d'un portefeuille : il faut regarder le poids et la perte
   possible ensemble.
 
 ## Comment AlphaForge AI l'utilise
 
-- **Constat sur un portefeuille existant** : le code signale `crypto_exposure_high` quand les cryptoactifs dépassent
-  10 % de la valeur évaluée (`profile/portfolio.py`; seuil à relire par le volet finance).
-- **Plafond du mandat** : la limite `alloc.crypto` dépend du niveau de risque, de la préférence pour la crypto et du
+- **Constat sur votre portefeuille existant** : quand Yan lit votre portefeuille, AlphaForge AI signale une exposition
+  élevée aux cryptoactifs quand ils dépassent 10 % de la valeur évaluée. C'est un calcul selon des règles fixes.
+- **Plafond du mandat** : la limite de cryptoactifs dépend du niveau de risque, de la préférence pour la crypto et du
   niveau de connaissances. Elle est nulle sous le niveau N4, réduite de moitié pour un débutant, qui n'y accède que par
-  un FNB, et nulle quand le profil est incomplet ou en protection (`risk_levels.yaml`, sections `satellites.crypto`,
-  `knowledge` et `status`).
-- **Borne de perte** : Bitcoin et Ether n'ont pas d'historique long; ils sont exclus de la série raccordée et le code
-  ajoute une perte supposée de 90 % de leur poids à la CVaR sur 12 mois et à la baisse maximale vérifiées par le Judge
-  (`loss_bounds`). C'est une hypothèse prudente, affichée comme telle.
+  un FNB, et nulle quand le profil est incomplet ou en protection.
+- **Borne de perte** : Bitcoin et Ether n'ont pas d'historique long; ils sont exclus de la série raccordée. AlphaForge
+  AI ajoute une perte supposée de 90 % de leur poids à la CVaR sur 12 mois et à la baisse maximale que contrôle la
+  vérification finale. C'est une hypothèse prudente, affichée comme telle.
 
 ## Limites
 

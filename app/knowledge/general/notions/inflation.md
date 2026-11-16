@@ -54,15 +54,15 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 
 ## Comment AlphaForge AI l'utilise
 
-- Le jeu de départ fournit l'IPC du Canada (variation sur un an, Banque du Canada) et l'IPC des États-Unis (FRED), dans
-  `macro_rates.csv` (énoncé officiel, p. 12).
-- A5 recueille aussi ces séries, avec leur date d'observation (le mois de l'IPC) et leur date de publication, pour la
-  base générale.
-- Le fichier `rules/canada_2026.yaml` reprend l'hypothèse d'inflation à long terme des normes de projection 2026 de
-  FP Canada et de l'Institut de planification financière : 2,1 % par année. C'est une hypothèse de planification, pas
-  une prévision.
-- Les outils de l'application ne calculent pas aujourd'hui de rendement réel : les rendements affichés sont nominaux,
-  et l'explication doit le dire.
+- Le jeu de départ fournit l'IPC du Canada (variation sur un an, Banque du Canada) et l'IPC des États-Unis (FRED)
+  (énoncé officiel, p. 12).
+- Notre veille recueille aussi ces séries, vérifiées, avec leur date d'observation (le mois de l'IPC) et leur date de
+  publication, pour la base de connaissances générale.
+- Les paramètres canadiens d'AlphaForge AI reprennent l'hypothèse d'inflation à long terme des normes de projection
+  2026 de FP Canada et de l'Institut de planification financière : 2,1 % par année. C'est une hypothèse de
+  planification, pas une prévision.
+- AlphaForge AI ne calcule pas aujourd'hui de rendement réel. Les rendements affichés sont nominaux, et Yan le dit
+  dans son explication.
 
 ## Limites
 

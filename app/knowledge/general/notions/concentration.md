@@ -13,7 +13,7 @@ sources:
     title: "Atelier BNCD : comprendre l'investisseur avant de bâtir la solution"
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositives 8 (risque de concentration) et 9 (diversifier)"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), sections satellites et limits_template (conc.*, exp.tech)"
   - id: constats-portefeuille
     title: "Constats calculés sur un portefeuille existant"
@@ -52,26 +52,26 @@ Les faits et les limites sont les mêmes à tous les niveaux; seuls les mots cha
 
 ## Comment AlphaForge AI la repère et la limite
 
-Le code calcule les poids et les constats; le modèle ne les estime pas.
+AlphaForge AI calcule les poids et les constats selon des règles fixes. Yan les explique; les chiffres sont calculés,
+jamais inventés.
 
-- **Portefeuille existant** (A2) : le code évalue chaque ligne en CAD et lève des constats, à seuils versionnés dans
-  `profile/portfolio.py` : un titre individuel au-delà de 20 % du total, un secteur au-delà de 40 % des actions
-  individuelles, moins de cinq positions sans aucun FNB ni fonds. Ces seuils sont à relire par le volet finance.
-- **Proposition** : la politique du profil fixe des plafonds de poids, contrôlés par l'optimiseur puis par le Judge :
-  - `conc.single_each` et `conc.single_total` : chaque action individuelle et leur total, selon la perte acceptable du
-    profil; le plafond est plus serré pour un débutant;
-  - `conc.etf_equity_each` : chaque FNB d'actions, selon le niveau de risque;
-  - `exp.tech` : l'exposition consolidée à la technologie, FNB compris.
-- **Diversification** : le moteur calcule le nombre effectif de positions et regroupe les actifs dont la corrélation
-  dépasse 0,7.
-
-Les plafonds chiffrés par niveau sont dans `finance/policy/risk_levels.yaml`.
+- **Votre portefeuille existant** : quand Yan lit votre portefeuille, AlphaForge AI évalue chaque ligne en CAD et
+  relève trois constats : un titre individuel au-delà de 20 % du total, un secteur au-delà de 40 % des actions
+  individuelles, moins de cinq positions sans aucun FNB ni fonds.
+- **Proposition** : les règles de votre profil fixent des plafonds de poids. Le simulateur les respecte, puis la
+  vérification finale les contrôle :
+  - chaque action individuelle et leur total, selon la perte acceptable du profil; le plafond est plus serré pour un
+    débutant;
+  - chaque FNB d'actions, selon le niveau de risque;
+  - l'exposition consolidée à la technologie, FNB compris.
+- **Diversification** : le simulateur calcule le nombre effectif de positions et regroupe les actifs dont la
+  corrélation dépasse 0,7.
 
 ## Limites
 
 - **Seuils** : les seuils des constats sont des choix de l'équipe, pas une norme réglementaire.
 - **Exposition indirecte** : sans donnée de composition, l'exposition d'un FNB à un thème est une hypothèse déclarée
-  dans la politique, ou comptée à zéro.
+  dans les règles d'AlphaForge AI, ou comptée à zéro.
 - **Corrélation passée** : des actifs peu corrélés hier peuvent chuter ensemble lors d'une crise.
 - **Lignes non évaluées** : une position sans prix n'entre pas dans les poids, ce qui peut cacher une concentration.
 

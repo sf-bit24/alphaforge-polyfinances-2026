@@ -3,6 +3,7 @@
 import { BookOpen, FileText, LibraryBig, Radar, Search, Waypoints } from "lucide-react";
 import { Activity, useCallback, useId, useMemo, useState } from "react";
 import type { KbItem } from "@/lib/contract/schemas";
+import { useOperator } from "@/lib/client/account";
 import { callMessages, listKb, type ApiError } from "@/lib/client/api";
 import { useAsync } from "@/lib/client/use-async";
 import { useHashTab } from "@/lib/client/use-hash-tab";
@@ -28,6 +29,8 @@ const INDEX_KEY = "general/index.md";
 /** Sub-tabs of the page, named in the URL fragment: `/knowledge#graph`, `/knowledge#collect`. */
 const TABS = ["documents", "graph", "collect"] as const;
 type KnowledgeTab = (typeof TABS)[number];
+/** A client never sees the collection tab: `/knowledge#collect` opens the documents. */
+const CLIENT_TABS: readonly KnowledgeTab[] = ["documents", "graph"];
 
 function groupedItems(items: KbItem[]): Array<{ group: string; items: KbItem[] }> {
   const map = new Map<string, KbItem[]>();
@@ -89,19 +92,16 @@ interface ListStatusProps {
   loaded: boolean;
   itemCount: number;
   matchCount: number;
-  hasIndex: boolean;
-  query: string;
 }
 
 /** Loading, error and empty states of the document list. */
-function ListStatus({ error, loaded, itemCount, matchCount, hasIndex, query }: ListStatusProps) {
+function ListStatus({ error, loaded, itemCount, matchCount }: ListStatusProps) {
   const { t } = useI18n();
   return (
     <>
       {error ? <ErrorNotice className="mx-2" error={error} compact /> : null}
       {!loaded && !error ? <Spinner className="mx-2" label={t.common.loading} /> : null}
       {loaded && itemCount === 0 ? <p className="px-2 text-sm text-ink-500">{t.kb.emptyGeneral}</p> : null}
-      {loaded && itemCount > 0 && !hasIndex && !query ? <p className="px-2 pb-2 text-xs text-ink-500">{t.kb.noIndex}</p> : null}
       {itemCount > 0 && matchCount === 0 ? <p className="px-2 text-sm text-ink-500">{t.kb.noMatch}</p> : null}
     </>
   );
@@ -168,7 +168,7 @@ function CurrentDocument({ current, item, version, empty, links }: CurrentDocume
   if (current) {
     return (
       <>
-        <CardHeader title={item?.title ?? current} subtitle={<span className="font-mono text-xs">{current}</span>} />
+        <CardHeader title={item?.title ?? t.kb.documents} />
         <div className="px-6 py-5">
           <DocumentLoader key={`${current}|${version}`} documentKey={current} clientId={null} links={links} />
         </div>
@@ -204,14 +204,13 @@ function DocumentsTab({ items, error, loaded, version, current, onSelect, onOpen
   const filtered = useMemo(() => matchingItems(items, query, locale), [items, query, locale]);
   const groups = useMemo(() => groupedItems(filtered), [filtered]);
   const links = useMemo(() => ({ known: new Set(items.map((item) => item.key)), open: onOpen }), [items, onOpen]);
-  const hasIndex = items.some((item) => item.key === INDEX_KEY);
   return (
     <div className="grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
       <Card className="self-start lg:sticky lg:top-[4.5rem] lg:max-h-[calc(100dvh-5.5rem)] lg:overflow-y-auto">
         <CardHeader title={t.kb.documents} subtitle={t.kb.count(items.length)} icon={<BookOpen aria-hidden className="size-4" />} />
         <SearchField id={searchId} query={query} onChange={setQuery} />
         <div className="px-2 py-3">
-          <ListStatus error={error} loaded={loaded} itemCount={items.length} matchCount={filtered.length} hasIndex={hasIndex} query={query} />
+          <ListStatus error={error} loaded={loaded} itemCount={items.length} matchCount={filtered.length} />
           {groups.map(({ group, items: groupItems }) => (
             <DocumentGroup key={group} group={group} items={groupItems} current={current} onSelect={onSelect} />
           ))}
@@ -224,21 +223,22 @@ function DocumentsTab({ items, error, loaded, version, current, onSelect, onOpen
   );
 }
 
-function useKnowledgeTabs(): Array<TabItem<KnowledgeTab>> {
+function useKnowledgeTabs(operator: boolean): Array<TabItem<KnowledgeTab>> {
   const { t } = useI18n();
   return [
     { id: "documents", label: t.kb.tabs.documents, icon: <BookOpen aria-hidden className="size-4" /> },
     { id: "graph", label: t.kb.tabs.graph, icon: <Waypoints aria-hidden className="size-4" /> },
-    { id: "collect", label: t.kb.tabs.collect, icon: <Radar aria-hidden className="size-4" /> },
+    ...(operator ? [{ id: "collect" as const, label: t.kb.tabs.collect, icon: <Radar aria-hidden className="size-4" /> }] : []),
   ];
 }
 
-/** The general base in three tabs: read its documents, see how they link, feed it. */
+/** The general base in tabs: read its documents, see how they link; the team's view can also feed it. */
 export function KnowledgeView() {
   const { t, locale } = useI18n();
   const idPrefix = useId();
-  const tabs = useKnowledgeTabs();
-  const [tab, setTab] = useHashTab(TABS, "documents");
+  const operator = useOperator();
+  const tabs = useKnowledgeTabs(operator);
+  const [tab, setTab] = useHashTab(operator ? TABS : CLIENT_TABS, "documents");
   const [version, setVersion] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const { data, error, previous } = useAsync(`general/|${version}|${locale}`, (signal) =>
@@ -269,16 +269,18 @@ export function KnowledgeView() {
           <KnowledgeGraphPanel items={items} loaded={loaded} stale={!data && Boolean(previous)} error={error} onOpenDoc={openDocument} />
         </Activity>
       </div>
-      {/* Hidden but mounted: a run in progress keeps being polled, and the list refreshes when it ends. */}
-      <div {...tabPanelProps(idPrefix, "collect", tab === "collect")} className="pt-6">
-        <CollectPanel
-          onWritten={refresh}
-          onOpenDoc={(key) => {
-            refresh();
-            openDocument(key);
-          }}
-        />
-      </div>
+      {/* The team's view only. Hidden but mounted: a run in progress keeps being polled, and the list refreshes when it ends. */}
+      {operator ? (
+        <div {...tabPanelProps(idPrefix, "collect", tab === "collect")} className="pt-6">
+          <CollectPanel
+            onWritten={refresh}
+            onOpenDoc={(key) => {
+              refresh();
+              openDocument(key);
+            }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

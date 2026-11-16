@@ -13,7 +13,7 @@ sources:
     title: "Atelier BNCD : comprendre l'investisseur avant de bâtir la solution"
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositive 6 (un rendement n'est jamais qu'un chiffre)"
   - id: atelier-aws
-    title: "Atelier AWS : aide-mémoire, pièges classiques des données financières"
+    title: "Atelier du Datathon PolyFinances 2026 : aide-mémoire, pièges classiques des données financières"
     resource: "Atelier AWS du Datathon PolyFinances 2026, section 3 (prix brut ou ajusté, rendement sans risque, rendement passé)"
   - id: enonce-officiel
     title: "Énoncé officiel du défi AlphaForge AI (Datathon PolyFinances 2026)"
@@ -41,14 +41,15 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
   versé en chemin. »
 - **Intermédiaire** : « Gain en capital plus revenus, sur une période précise. Pour comparer des périodes de durées
   différentes, on le ramène à un rendement annuel moyen. »
-- **Avancé** : « Rendement calculé sur `adj_close`, donc dividendes réinvestis; rendement annualisé géométrique (TCAC).
+- **Avancé** : « Rendement calculé sur la clôture ajustée, donc dividendes réinvestis; rendement annualisé géométrique
+  (TCAC).
   Nominal, en devise de cotation sauf conversion explicite, avant impôt. »
 
 ## Ce qu'il faut retenir
 
 - Un rendement n'a de sens qu'avec sa période : +10 % sur un mois ou sur dix ans, ce n'est pas pareil, et le point de
   départ compte (atelier BNCD, diapositive 6).
-- Un rendement seul ne dit rien : il se lit avec la volatilité et la baisse maximale (atelier AWS, section 3).
+- Un rendement seul ne dit rien : il se lit avec la volatilité et la baisse maximale (aide-mémoire du Datathon, section 3).
 - Le rendement passé décrit le passé; il ne garantit pas le rendement futur. AlphaForge AI ne cherche pas le
   placement au meilleur rendement passé (énoncé officiel, p. 3).
 - Comparer des rendements exige des choses comparables : même période, même devise, mêmes frais, distributions
@@ -56,14 +57,15 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 
 ## Comment AlphaForge AI le calcule
 
-Le code calcule le rendement; le modèle ne l'estime jamais.
+AlphaForge AI calcule le rendement selon des règles fixes. Yan l'explique; les chiffres sont calculés, jamais
+inventés.
 
 | Où | Données | Résultat |
 | --- | --- | --- |
-| Risque d'un portefeuille (moteur) | Rendements mensuels d'un portefeuille rééquilibré chaque mois | Rendement historique annualisé, marqué « passé, pas une prévision » |
+| Risque d'un portefeuille (simulateur) | Rendements mensuels d'un portefeuille rééquilibré chaque mois | Rendement historique annualisé, marqué « passé, pas une prévision » |
 
-- `adj_close` est ajusté des dividendes et des fractionnements (énoncé officiel, p. 12) : le rendement calculé inclut
-  donc les dividendes, comme s'ils étaient réinvestis.
+- La clôture ajustée tient compte des dividendes et des fractionnements (énoncé officiel, p. 12) : le rendement
+  calculé inclut donc les dividendes, comme s'ils étaient réinvestis.
 - Le rendement annuel moyen est géométrique : il tient compte de l'effet composé, contrairement à une simple moyenne
   des rendements annuels.
 

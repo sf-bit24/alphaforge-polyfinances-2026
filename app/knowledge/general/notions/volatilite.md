@@ -13,7 +13,7 @@ sources:
     title: "Atelier BNCD : comprendre l'investisseur avant de bâtir la solution"
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositive 8 (le risque ne se résume pas à « ça peut baisser »)"
   - id: atelier-aws
-    title: "Atelier AWS : aide-mémoire, pièges classiques des données financières"
+    title: "Atelier du Datathon PolyFinances 2026 : aide-mémoire, pièges classiques des données financières"
     resource: "Atelier AWS du Datathon PolyFinances 2026, section 3 (rendement sans risque, rendement passé)"
   - id: enonce-officiel
     title: "Énoncé officiel du défi AlphaForge AI (Datathon PolyFinances 2026)"
@@ -22,7 +22,7 @@ sources:
     title: "Jeu de départ AlphaForge AI : prix quotidiens ajustés"
     resource: "starter:prices_daily.csv (colonne adj_close)"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), section measurement"
 data:
   aliases: [volatilité, fluctuations, écart-type, ça bouge, montagnes russes, yo-yo]
@@ -43,7 +43,7 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
   de grands hauts et de grands bas, souvent sans prévenir. »
 - **Intermédiaire** : « L'écart-type des rendements, ramené à l'année. Une volatilité de 15 % décrit des variations
   annuelles typiques de cet ordre autour de la moyenne, dans les deux sens. »
-- **Avancé** : « Écart-type annualisé (ddof = 1) des rendements, quotidiens ou mensuels selon l'outil. Mesure
+- **Avancé** : « Écart-type d'échantillon annualisé des rendements, quotidiens ou mensuels selon le calcul. Mesure
   symétrique, qui ne distingue pas les hausses des baisses et sous-estime les queues épaisses. »
 
 ## Ce qu'il faut retenir
@@ -51,25 +51,26 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 - La volatilité compte les hausses autant que les baisses : elle mesure l'incertitude, pas la perte.
 - Une action seule est en général plus volatile qu'un panier diversifié, parce que les variations des titres d'un
   panier se compensent en partie (voir [Diversification](diversification.md)).
-- Un rendement seul ne dit rien : il se lit avec la volatilité et la baisse maximale (atelier AWS, section 3).
+- Un rendement seul ne dit rien : il se lit avec la volatilité et la baisse maximale (aide-mémoire du Datathon, section 3).
 - La volatilité est un indicateur de risque parmi d'autres; l'horizon, la diversification et les préférences de
   l'investisseur comptent aussi (énoncé officiel, p. 18).
 - La volatilité passée ne garantit pas la volatilité future.
 
 ## Comment AlphaForge AI la calcule
 
-Le code calcule la volatilité; le modèle ne l'estime jamais.
+AlphaForge AI calcule la volatilité selon des règles fixes. Yan l'explique; les chiffres sont calculés, jamais
+inventés.
 
 | Où | Données | Calcul |
 | --- | --- | --- |
-| Risque d'un portefeuille (moteur, Judge) | Rendements mensuels d'un portefeuille rééquilibré chaque mois, en devise du mandat | Écart-type (ddof = 1) multiplié par √12 |
+| Risque d'un portefeuille (simulateur, vérification finale) | Rendements mensuels d'un portefeuille rééquilibré chaque mois, en devise du mandat | Écart-type d'échantillon multiplié par √12 |
 
-- Chaque niveau de risque (N0 à N5) porte un plafond de volatilité (mesure `VOL`), dans
-  `finance/policy/risk_levels.yaml`.
-- Ce plafond **n'est pas bloquant** : le Judge l'affiche et vérifie la cohérence, mais il ne refuse pas une
-  proposition pour ce seul motif. Les contrôles bloquants portent sur les pertes : CVaR mensuelle, CVaR sur 12 mois,
+- Chaque niveau de risque (N0 à N5) porte un plafond de volatilité.
+- Ce plafond **n'est pas bloquant** : la vérification finale l'affiche et vérifie la cohérence, mais elle ne refuse
+  pas une proposition pour ce seul motif. Les contrôles bloquants portent sur les pertes : CVaR mensuelle, CVaR sur 12 mois,
   baisse maximale et stress 2022 (voir [VaR et CVaR](var-cvar.md) et [Baisse maximale](baisse-maximale.md)).
-- Quand une limite de volatilité s'applique, l'optimiseur utilise la même covariance empirique que le Judge.
+- Quand une limite de volatilité s'applique, le simulateur utilise la même covariance empirique que la vérification
+  finale.
 
 ## Limites
 

@@ -9,6 +9,8 @@ Chaque diagramme existe en deux fichiers :
 
 Les pastilles bleues numérotent les étapes, décrites dans la légende à droite de chaque diagramme.
 
+Deux pages complètent les diagrammes : [les trois cas d'utilisation](cas-d-utilisation.md), du point de vue de l'investisseur, et [les agents déployés et le stockage](agents-et-stockage.md).
+
 ## Plateforme complète
 
 Interface web, agents AgentCore et Bedrock, veille et base de connaissances, scénarios probabilistes, traçabilité et déploiement. L'investisseur se connecte par la connexion gérée d'Amazon Cognito (code + PKCE, vérifié par Next.js) : un compte = un `client_id` = une base `clients/<client_id>/`, et le serveur refuse tout autre `client_id` (403). Chaque investisseur a aussi sa propre Knowledge Base, sur un index S3 Vectors dédié, que le runtime `profile` crée et alimente ; la Knowledge Base générale n'indexe que `general/`.

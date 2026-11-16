@@ -79,13 +79,13 @@ class InvalidValueError(ValueError):
 
 REASON_TEXT = {
     "required": ("Une réponse est requise.", "An answer is required."),
-    "not_a_string": ("La réponse doit être une chaîne.", "The answer must be a string."),
+    "not_a_string": ("La réponse doit être un texte.", "The answer must be text."),
     "not_in_options": ("La réponse doit être une des options proposées.", "The answer must be one of the options."),
-    "not_a_list": ("La réponse doit être une liste d'options.", "The answer must be a list of options."),
+    "not_a_list": ("Choisissez une ou plusieurs options.", "Choose one or more options."),
     "empty": ("Choisissez au moins une option.", "Choose at least one option."),
     "duplicate": ("Une option est répétée.", "An option is repeated."),
     "exclusive": ("Cette option ne se combine pas avec les autres.", "This option cannot be combined with others."),
-    "not_boolean": ("La réponse doit être oui ou non (booléen).", "The answer must be yes or no (boolean)."),
+    "not_boolean": ("La réponse doit être oui ou non.", "The answer must be yes or no."),
     "not_a_number": ("La réponse doit être un nombre.", "The answer must be a number."),
     "not_integer": ("La réponse doit être un nombre entier.", "The answer must be a whole number."),
     "below_min": ("La réponse est sous le minimum permis.", "The answer is below the allowed minimum."),

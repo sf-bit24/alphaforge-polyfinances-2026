@@ -44,6 +44,13 @@ DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MODES = ("llm", "rules")
 LOCALES = ("fr", "en")
 REQUEST_KEYS = {"ticker", "amount_cad", "weight"}
+# Messages à l'investisseur : jamais de chemin, de paquet ni de champ technique (gardés dans ``details``).
+BAD_REQUEST_FR = "Votre demande n'a pas pu être lue. Rechargez la page, puis réessayez."
+BAD_REQUEST_EN = "Your request could not be read. Reload the page, then try again."
+UNAVAILABLE_FR = "Le service ne répond pas pour l'instant : réessayez dans un instant."
+UNAVAILABLE_EN = "The service is not answering right now: try again in a moment."
+ENGINE_DOWN_FR = "Le simulateur ne répond pas pour l'instant : réessayez dans un instant."
+ENGINE_DOWN_EN = "The simulator is not answering right now: try again in a moment."
 
 
 class FinanceEngine:
@@ -76,9 +83,7 @@ class FinanceEngine:
                     except LongDataError as exc:
                         logger.error("long data unavailable: %s", exc)
                         raise AppError(
-                            "internal",
-                            "Les données de marché du moteur sont indisponibles (runtime/data/long/).",
-                            {"detail": str(exc)},
+                            "internal", ENGINE_DOWN_FR, {"detail": str(exc), "path": "runtime/data/long/"}
                         ) from exc
                 try:
                     from .finance.debate import okf_bridge, pipeline
@@ -107,9 +112,7 @@ class FinanceEngine:
         # Zip commun (sans le groupe finance) : Terraform s'y replie si agents-portfolio.zip manque.
         logger.error("finance engine unavailable: %s", exc)
         return AppError(
-            "internal",
-            "Le moteur du volet finance n'est pas dans ce paquet (agents-portfolio.zip attendu).",
-            {"missing_module": exc.name},
+            "internal", ENGINE_DOWN_FR, {"missing_module": exc.name, "expected_package": "agents-portfolio.zip"}
         )
 
 
@@ -137,10 +140,10 @@ class PortfolioService:
         locale = payload.get("locale") if isinstance(payload, dict) and payload.get("locale") in LOCALES else "fr"
         try:
             if not isinstance(payload, dict):
-                raise AppError("bad_request", "Le corps doit être un objet JSON.")
+                raise AppError("bad_request", BAD_REQUEST_FR)
             action = payload.get("action")
             if not isinstance(action, str) or not action:
-                raise AppError("bad_request", pick(locale, "action est requise.", "action is required."))
+                raise AppError("bad_request", pick(locale, BAD_REQUEST_FR, BAD_REQUEST_EN))
             if action == "health":
                 return ok_response(release, role=self.settings.role, env=self.settings.env)
             if action in EVOLUTION_ACTIONS:
@@ -148,7 +151,7 @@ class PortfolioService:
             if action != "build":
                 raise AppError(
                     "unknown_action",
-                    pick(locale, f"Action inconnue : {action}.", f"Unknown action: {action}."),
+                    pick(locale, BAD_REQUEST_FR, BAD_REQUEST_EN),
                     {"action": action, "expected": ["build", "health", *EVOLUTION_ACTIONS]},
                 )
             return ok_response(release, **self.build(payload, locale))
@@ -159,7 +162,11 @@ class PortfolioService:
                 release,
                 AppError(
                     "conflict",
-                    pick(locale, "La décision existe déjà. Réessayez.", "The decision already exists. Try again."),
+                    pick(
+                        locale,
+                        "Une autre simulation a été enregistrée au même moment. Réessayez.",
+                        "Another simulation was saved at the same moment. Try again.",
+                    ),
                 ),
             )
         except Exception as exc:
@@ -169,15 +176,11 @@ class PortfolioService:
                     release,
                     AppError(
                         "model_error",
-                        pick(
-                            locale,
-                            "Le modèle n'a pas pu répondre. Réessayez dans un instant.",
-                            "The model could not answer. Please try again in a moment.",
-                        ),
+                        pick(locale, UNAVAILABLE_FR, UNAVAILABLE_EN),
                         {"type": type(exc).__name__},
                     ),
                 )
-            return error_response(release, AppError("internal", pick(locale, "Erreur interne.", "Internal error.")))
+            return error_response(release, AppError("internal", pick(locale, UNAVAILABLE_FR, UNAVAILABLE_EN)))
 
     # ------------------------------------------------------------------ évolution dans le temps
     def _evolution(self, action: str, payload: dict[str, Any], release: str) -> dict[str, Any]:
@@ -235,7 +238,8 @@ class PortfolioService:
         from .profile.state import is_client_id
 
         def bad(fr: str, en: str, **details: Any) -> AppError:
-            return AppError("bad_request", pick(locale, fr, en), details)
+            # Demande mal formée par l'interface, jamais par l'investisseur : le motif reste dans ``details``.
+            return AppError("bad_request", pick(locale, BAD_REQUEST_FR, BAD_REQUEST_EN), {"reason": en, **details})
 
         client_id = payload.get("client_id")
         persona = payload.get("persona")
@@ -295,14 +299,18 @@ class PortfolioService:
 
     def build(self, payload: dict[str, Any], locale: str) -> dict[str, Any]:
         args = self._parse(payload, locale)
-        engine = self._engine()
+        try:
+            engine = self._engine()
+        except AppError as exc:
+            # Le moteur écrit son message en français : il suit ici la langue de la demande.
+            raise AppError(exc.code, pick(locale, ENGINE_DOWN_FR, ENGINE_DOWN_EN), exc.details) from exc
         pipeline, bridge = engine["pipeline"], engine["okf_bridge"]
         styles = engine["styles"]
         if args["style"] is not None and args["style"] not in styles:
             raise AppError(
                 "bad_request",
-                pick(locale, "style_preference inconnu.", "Unknown style_preference."),
-                {"allowed": list(styles)},
+                pick(locale, BAD_REQUEST_FR, BAD_REQUEST_EN),
+                {"reason": "Unknown style_preference.", "allowed": list(styles)},
             )
         if self._questionnaire is None:
             from .profile.questionnaire import Questionnaire
@@ -325,7 +333,14 @@ class PortfolioService:
             try:
                 profile = client_store.load_profile(args["client_id"])
             except KeyError as exc:
-                raise AppError("not_found", pick(locale, "Profil introuvable.", "Profile not found.")) from exc
+                raise AppError(
+                    "not_found",
+                    pick(
+                        locale,
+                        "Nous ne trouvons pas votre profil. Rechargez la page, puis réessayez.",
+                        "We cannot find your profile. Reload the page, then try again.",
+                    ),
+                ) from exc
             # Portefeuille existant lu avec le profil : sa clé et son ETag entrent dans la version des données.
             market_store.note_client_inputs(client_store.inputs)
             # Étape 0 : variables de style du profil court, lues comme dans finance/debate/app.py.

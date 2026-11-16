@@ -143,9 +143,13 @@ def status_view(state: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def _add_step(trace: Trace | None, title: tuple[str, str], detail: str | None, outputs: dict[str, Any]) -> None:
+def _add_step(
+    trace: Trace | None, title: tuple[str, str], detail: tuple[str, str] | None, outputs: dict[str, Any]
+) -> None:
+    """Étape de la trace : titre et détail en français et en anglais, sans identifiant ni code d'erreur (gardés
+    dans ``outputs``)."""
     if trace is not None:
-        trace.add("storage", "store", trace.t(*title), detail, outputs=outputs)
+        trace.add("storage", "store", trace.t(*title), trace.t(*detail) if detail else None, outputs=outputs)
 
 
 def _chunks(items: list[Any], size: int) -> Iterator[list[Any]]:
@@ -435,8 +439,14 @@ class ClientKnowledgeBases:
             self._restore(client_id, written)
             _add_step(
                 trace,
-                ("Knowledge Base du client : erreur", "Client knowledge base: error"),
-                error_code(exc),
+                (
+                    "Vos documents personnels n'ont pas pu être mis à jour",
+                    "Your personal documents could not be updated",
+                ),
+                (
+                    "Votre profil est enregistré. Nous réessaierons à votre prochaine action.",
+                    "Your profile is saved. We will try again at your next action.",
+                ),
                 {"error": error_code(exc)},
             )
             return status_view(None) if create else None
@@ -607,8 +617,8 @@ class ClientKnowledgeBases:
         state["knowledge_base_arn"] = kb.get("knowledgeBaseArn")
         _add_step(
             trace,
-            ("Knowledge Base du client créée", "Client knowledge base created"),
-            kb["knowledgeBaseId"],
+            ("Espace de vos documents personnels créé", "Space for your personal documents created"),
+            ("Il sera prêt dans quelques instants.", "It will be ready in a few moments."),
             {"knowledge_base_id": kb["knowledgeBaseId"], "index": index_name(client_id), "status": kb.get("status")},
         )
         return kb.get("status")
@@ -635,9 +645,13 @@ class ClientKnowledgeBases:
         state.update(status="active", active_at=clock.iso(), retry_at=None)
         _add_step(
             trace,
-            ("Knowledge Base du client active", "Client knowledge base active"),
-            state["knowledge_base_id"],
-            {"data_source_id": state["data_source_id"], "pending": len(state.get("pending") or [])},
+            ("Vos documents personnels sont prêts", "Your personal documents are ready"),
+            ("Yan peut maintenant les consulter pour vous répondre.", "Yan can now look them up to answer you."),
+            {
+                "knowledge_base_id": state["knowledge_base_id"],
+                "data_source_id": state["data_source_id"],
+                "pending": len(state.get("pending") or []),
+            },
         )
 
     def _create_data_source(self, client_id: str, kb_id: str) -> str:
@@ -671,19 +685,30 @@ class ClientKnowledgeBases:
             self._fail(state, "quota", code, trace)
         elif code in TRANSIENT_CODES:
             state["error"] = {"code": code, "at": clock.iso()}
-            _add_step(trace, ("Création de la Knowledge Base reportée", "Knowledge base creation deferred"), code, {})
+            _add_step(
+                trace,
+                ("Préparation de vos documents personnels reportée", "Preparing your personal documents postponed"),
+                ("Nous réessaierons dans un instant.", "We will try again in a moment."),
+                {"error": code},
+            )
         else:
             logger.warning("client knowledge base creation failed: %s", code)
             self._fail(state, "failed", code, trace)
 
     def _fail(self, state: dict[str, Any], status: str, code: str, trace: Trace | None) -> None:
         state.update(status=status, retry_at=_later(RETRY_AFTER[status]), error={"code": code, "at": clock.iso()})
-        title = (
-            ("Quota de Knowledge Bases atteint", "Knowledge base quota reached")
-            if status == "quota"
-            else ("Knowledge Base du client en échec", "Client knowledge base failed")
+        _add_step(
+            trace,
+            (
+                "Vos documents personnels ne sont pas encore disponibles",
+                "Your personal documents are not available yet",
+            ),
+            (
+                "Yan s'appuie sur votre profil en attendant. Nous réessaierons automatiquement.",
+                "Yan relies on your profile in the meantime. We will try again automatically.",
+            ),
+            {"status": status, "error": code, "retry_at": state["retry_at"]},
         )
-        _add_step(trace, title, code, {"status": status, "retry_at": state["retry_at"]})
 
     # ------------------------------------------------------------------ ingestion
     def _send(
@@ -697,9 +722,12 @@ class ClientKnowledgeBases:
             if written:
                 _add_step(
                     trace,
-                    ("Documents en attente de la Knowledge Base", "Documents waiting for the knowledge base"),
-                    state.get("status"),
-                    {"pending": len(keys), "keys": sorted(written)},
+                    ("Mise à jour de vos documents personnels en attente", "Update of your personal documents waiting"),
+                    (
+                        "Ils seront ajoutés dès que l'espace de vos documents sera prêt.",
+                        "They will be added as soon as the space for your documents is ready.",
+                    ),
+                    {"status": state.get("status"), "pending": len(keys), "keys": sorted(written)},
                 )
             return SendOutcome(waiting=set(written))
         now, later = _this_round(written, state)
@@ -711,8 +739,8 @@ class ClientKnowledgeBases:
         self._delete(state, prepared.removals, outcome)
         _add_step(
             trace,
-            ("Documents indexés dans la Knowledge Base du client", "Documents indexed in the client knowledge base"),
-            state.get("knowledge_base_id"),
+            ("Vos documents personnels sont à jour", "Your personal documents are up to date"),
+            ("Yan pourra s'y référer pour vous répondre.", "Yan can refer to them to answer you."),
             {
                 "ingested": sorted(outcome.sent),
                 "deleted": sorted(outcome.removed),

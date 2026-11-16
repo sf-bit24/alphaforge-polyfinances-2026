@@ -82,10 +82,19 @@ class QueueEmitter(Emitter):
         self.events.put({"type": "delta", "text": text})
 
 
+# Messages des erreurs que l'investisseur ne peut pas causer lui-même (demande mal formée, service en panne).
+BAD_REQUEST_FR = "Votre demande n'a pas pu être lue. Rechargez la page, puis réessayez."
+BAD_REQUEST_EN = "Your request could not be read. Reload the page, then try again."
+UNAVAILABLE_FR = "Le service ne répond pas pour l'instant : réessayez dans un instant."
+UNAVAILABLE_EN = "The service is not answering right now: try again in a moment."
+PROFILE_UNREADABLE_FR = "Votre profil sur cet appareil n'a pas pu être lu. Rechargez la page, puis réessayez."
+PROFILE_UNREADABLE_EN = "Your profile on this device could not be read. Reload the page, then try again."
+
+
 def _answers_param(payload: dict[str, Any], locale: str) -> list[Any]:
     answers = payload.get("answers") or []
     if not isinstance(answers, list):
-        raise AppError("bad_request", pick(locale, "answers doit être une liste.", "answers must be a list."))
+        raise AppError("bad_request", pick(locale, BAD_REQUEST_FR, BAD_REQUEST_EN))
     return answers
 
 
@@ -96,8 +105,8 @@ def _message_param(payload: dict[str, Any], locale: str) -> str | None:
             "bad_request",
             pick(
                 locale,
-                f"message doit être un texte de {MAX_MESSAGE} caractères au plus.",
-                f"message must be text of at most {MAX_MESSAGE} characters.",
+                f"Votre message est trop long : {MAX_MESSAGE} caractères au plus.",
+                f"Your message is too long: {MAX_MESSAGE} characters at most.",
             ),
         )
     return (message or "").strip() or None
@@ -128,7 +137,11 @@ class _PendingQuestions:
             if question is None:
                 raise AppError(
                     "invalid_answer",
-                    pick(locale, "Cette question n'est pas en attente.", "This question is not pending."),
+                    pick(
+                        locale,
+                        "Cette question n'attend plus de réponse. Rechargez la page pour voir les questions à jour.",
+                        "This question no longer needs an answer. Reload the page to see the current questions.",
+                    ),
                     {"question_id": question_id},
                 )
             try:
@@ -283,7 +296,7 @@ class ProfileService:
     def run(self, payload: Any, emitter: Emitter | None) -> dict[str, Any]:
         release = self.settings.release
         if not isinstance(payload, dict):
-            return error_response(release, AppError("bad_request", "Le corps doit être un objet JSON."))
+            return error_response(release, AppError("bad_request", BAD_REQUEST_FR))
         action = payload.get("action")
         request = Request(
             action=str(action), payload=payload, trace=Trace(self._initial_locale(payload), emitter), emitter=emitter
@@ -291,7 +304,7 @@ class ProfileService:
         if not isinstance(action, str) or not action:
             return error_response(
                 release,
-                AppError("bad_request", pick(request.locale_hint, "action est requise.", "action is required.")),
+                AppError("bad_request", pick(request.locale_hint, BAD_REQUEST_FR, BAD_REQUEST_EN)),
             )
         handler = self.actions.get(action)
         if handler is None:
@@ -299,7 +312,7 @@ class ProfileService:
                 release,
                 AppError(
                     "unknown_action",
-                    pick(request.locale_hint, f"Action inconnue : {action}.", f"Unknown action: {action}."),
+                    pick(request.locale_hint, BAD_REQUEST_FR, BAD_REQUEST_EN),
                     {"action": action},
                 ),
             )
@@ -319,8 +332,10 @@ class ProfileService:
                     "conflict",
                     pick(
                         request.locale_hint,
-                        "Le profil a été modifié par une autre requête. Rechargez puis réessayez.",
-                        "The profile was changed by another request. Reload and try again.",
+                        "Votre profil a été modifié entre-temps, peut-être dans un autre onglet. "
+                        "Rechargez la page, puis réessayez.",
+                        "Your profile was changed in the meantime, perhaps in another tab. "
+                        "Reload the page, then try again.",
                     ),
                 ),
             )
@@ -328,7 +343,7 @@ class ProfileService:
             logger.exception("profile action failed: %s", request.action)
             return error_response(
                 release,
-                AppError("internal", pick(request.locale_hint, "Erreur interne.", "Internal error.")),
+                AppError("internal", pick(request.locale_hint, UNAVAILABLE_FR, UNAVAILABLE_EN)),
             )
 
     def _stream(self, payload: dict[str, Any]) -> Iterator[dict[str, Any]]:
@@ -383,7 +398,11 @@ class ProfileService:
         if value not in LOCALES:
             raise AppError(
                 "bad_request",
-                pick(request.locale_hint, "locale doit valoir fr ou en.", "locale must be fr or en."),
+                pick(
+                    request.locale_hint,
+                    "Cette langue n'est pas offerte : choisissez le français ou l'anglais.",
+                    "This language is not offered: choose French or English.",
+                ),
                 {"locale": value},
             )
         return value
@@ -393,13 +412,17 @@ class ProfileService:
         if not is_client_id(client_id):
             raise AppError(
                 "bad_request",
-                pick(request.trace.locale, "client_id doit être un UUID v4.", "client_id must be a UUID v4."),
+                pick(request.trace.locale, PROFILE_UNREADABLE_FR, PROFILE_UNREADABLE_EN),
             )
         session = ClientSession.load(self.store, client_id)
         if session is None:
             raise AppError(
                 "not_found",
-                pick(request.trace.locale, "Client introuvable.", "Client not found."),
+                pick(
+                    request.trace.locale,
+                    "Nous ne trouvons pas votre profil. Rechargez la page pour en commencer un nouveau.",
+                    "We cannot find your profile. Reload the page to start a new one.",
+                ),
                 {"client_id": client_id},
             )
         return session
@@ -410,8 +433,9 @@ class ProfileService:
                 "conflict",
                 pick(
                     request.trace.locale,
-                    f"Action impossible à l'étape {session.stage}.",
-                    f"Action not allowed at stage {session.stage}.",
+                    "Cette action n'est pas possible à cette étape du profil. "
+                    "Rechargez la page pour voir où vous en êtes.",
+                    "This action is not possible at this step of your profile. Reload the page to see where you are.",
                 ),
                 {"stage": session.stage, "expected": list(stages)},
             )
@@ -454,7 +478,9 @@ class ProfileService:
         # Après les écritures OKF de l'action, avant la trace : la trace enregistrée montre aussi l'indexation.
         self._sync_client_kb(request, session.client_id)
         key = trace_key(session.client_id, request.action)
-        request.trace.add("storage", "store", request.trace.t("Trace enregistrée", "Trace saved"), key)
+        request.trace.add(
+            "storage", "store", request.trace.t("Étapes enregistrées", "Steps saved"), None, inputs={"key": key}
+        )
         self.store.put_json(
             key,
             {
@@ -472,8 +498,13 @@ class ProfileService:
         request.trace.add(
             "deterministic",
             "completeness",
-            request.trace.t("Complétude calculée par le code", "Completeness computed by code"),
-            f"{round(score['score'] * 100)} % / {round(self.questionnaire.threshold * 100)} %",
+            request.trace.t("Complétude calculée selon des règles fixes", "Completeness computed with fixed rules"),
+            request.trace.t(
+                f"{round(score['score'] * 100)} % du profil rempli; à partir de "
+                f"{round(self.questionnaire.threshold * 100)} %, vous pouvez passer à la suite.",
+                f"{round(score['score'] * 100)}% of the profile filled in; from "
+                f"{round(self.questionnaire.threshold * 100)}%, you can move on.",
+            ),
             outputs={"score": score["score"], "ready": score["ready"], "missing": len(score["missing"])},
         )
 
@@ -504,17 +535,15 @@ class ProfileService:
         client_id = request.payload.get("client_id")
         if client_id is not None:
             if not is_client_id(client_id):
-                raise AppError(
-                    "bad_request", pick(locale, "client_id doit être un UUID v4.", "client_id must be a UUID v4.")
-                )
+                raise AppError("bad_request", pick(locale, PROFILE_UNREADABLE_FR, PROFILE_UNREADABLE_EN))
             existing = ClientSession.load(self.store, client_id)
             if existing is not None:
                 request.trace.add(
                     "storage",
                     "store",
-                    request.trace.t("Base du client existante", "Existing client base"),
-                    client_id,
-                    outputs={"stage": existing.stage},
+                    request.trace.t("Profil retrouvé", "Profile found"),
+                    None,
+                    outputs={"client_id": client_id, "stage": existing.stage},
                 )
                 self._sync_client_kb(request, client_id)
                 return self._state(request, existing, locale, message=self._last_message(existing, locale))
@@ -525,16 +554,22 @@ class ProfileService:
         request.trace.add(
             "deterministic",
             "questionnaire",
-            request.trace.t("Base du client créée", "Client base created"),
-            client_id,
-            outputs={"questionnaire_version": self.questionnaire.version, "stage": session.stage},
+            request.trace.t("Profil créé", "Profile created"),
+            None,
+            outputs={
+                "client_id": client_id,
+                "questionnaire_version": self.questionnaire.version,
+                "stage": session.stage,
+            },
         )
         first = self.questionnaire.next_question(session.values(), session.answers)
         request.trace.add(
             "deterministic",
             "questionnaire",
-            request.trace.t("Première question choisie par les règles", "First question chosen by the rules"),
-            first.id if first else None,
+            request.trace.t(
+                "Première question choisie selon des règles fixes", "First question chosen with fixed rules"
+            ),
+            None,
             outputs={"next": first.id if first else None},
         )
         self._commit(request, session)
@@ -598,19 +633,28 @@ class ProfileService:
         locale = session.locale
         question_id = request.payload.get("question_id")
         if "value" not in request.payload:
-            raise AppError("bad_request", pick(locale, "value est requise.", "value is required."))
+            raise AppError(
+                "bad_request",
+                pick(locale, "Choisissez une réponse avant de continuer.", "Choose an answer before continuing."),
+            )
         question = self.questionnaire.question(question_id) if isinstance(question_id, str) else None
         if question is None:
             raise AppError(
-                "invalid_answer", pick(locale, "Question inconnue.", "Unknown question."), {"question_id": question_id}
+                "invalid_answer",
+                pick(
+                    locale,
+                    "Cette question n'existe plus. Rechargez la page pour voir les questions à jour.",
+                    "This question no longer exists. Reload the page to see the current questions.",
+                ),
+                {"question_id": question_id},
             )
         if not self.questionnaire.is_question_applicable(question, session.values()):
             raise AppError(
                 "invalid_answer",
                 pick(
                     locale,
-                    "Cette question ne s'applique pas à ce profil.",
-                    "This question does not apply to this profile.",
+                    "Cette question ne s'applique pas à votre profil.",
+                    "This question does not apply to your profile.",
                 ),
                 {"question_id": question_id},
             )
@@ -623,8 +667,8 @@ class ProfileService:
         with trace.step(
             "deterministic",
             "questionnaire",
-            trace.t("Réponse validée par les règles", "Answer validated by the rules"),
-            question.id,
+            trace.t("Réponse vérifiée selon des règles fixes", "Answer checked with fixed rules"),
+            question.field.label_text(trace.locale),
             inputs={"question_id": question.id, "kind": question.kind},
         ) as info:
             try:
@@ -653,7 +697,10 @@ class ProfileService:
             "deterministic",
             "questionnaire",
             trace.t("Niveau de connaissances calculé", "Knowledge level computed"),
-            trace.t("min(auto-évaluation, niveau mesuré + 1)", "min(self-assessment, measured level + 1)"),
+            trace.t(
+                "Votre propre évaluation, sans dépasser d'un niveau ce que montrent vos réponses.",
+                "Your own assessment, at most one level above what your answers show.",
+            ),
             outputs={
                 "knowledge_level": level,
                 "measured_points": rules.measured_knowledge_points(self.questionnaire, values),
@@ -670,8 +717,11 @@ class ProfileService:
             trace.add(
                 "deterministic",
                 "questionnaire",
-                trace.t("Question suivante choisie par les règles", "Next question chosen by the rules"),
-                trace.t(f"{next_question.id} après {question.id}", f"{next_question.id} after {question.id}"),
+                trace.t("Question suivante choisie selon des règles fixes", "Next question chosen with fixed rules"),
+                trace.t(
+                    f"Prochain sujet : {next_question.field.label_text(trace.locale)}",
+                    f"Next topic: {next_question.field.label_text(trace.locale)}",
+                ),
                 inputs={"question_id": question.id},
                 outputs={"next": next_question.id},
             )
@@ -681,11 +731,11 @@ class ProfileService:
         trace.add(
             "deterministic",
             "questionnaire",
+            trace.t("Risque effectif calculé", "Effective risk computed"),
             trace.t(
-                "Risque effectif calculé : min(tolérance, capacité)",
-                "Effective risk computed: min(tolerance, capacity)",
+                "Le plus prudent entre votre tolérance au risque et votre capacité à en prendre.",
+                "The more cautious of your risk tolerance and your capacity to take risk.",
             ),
-            None,
             outputs=risk,
         )
         session.set_stage(stage, f"base:{question.id}", trace, reason="questions de base terminées")
@@ -713,7 +763,11 @@ class ProfileService:
         if locale is None and not has_level:
             raise AppError(
                 "bad_request",
-                pick(session.locale, "Indiquez locale ou knowledge_level.", "Provide locale or knowledge_level."),
+                pick(
+                    session.locale,
+                    "Choisissez une langue ou un niveau de connaissances.",
+                    "Choose a language or a knowledge level.",
+                ),
             )
         if locale is not None:
             session.data["locale"] = locale
@@ -722,7 +776,7 @@ class ProfileService:
                 "deterministic",
                 "questionnaire",
                 request.trace.t("Langue changée", "Language changed"),
-                locale,
+                request.trace.t("Français", "English"),
                 outputs={"locale": locale},
             )
         else:
@@ -732,7 +786,11 @@ class ProfileService:
             if level is not None and level not in rules.LEVELS_KNOWLEDGE:
                 raise AppError(
                     "bad_request",
-                    pick(request.trace.locale, "knowledge_level invalide.", "Invalid knowledge_level."),
+                    pick(
+                        request.trace.locale,
+                        "Ce niveau de connaissances n'existe pas : choisissez-en un dans la liste.",
+                        "This knowledge level does not exist: choose one from the list.",
+                    ),
                     {"allowed": list(rules.LEVELS_KNOWLEDGE)},
                 )
             session.set_fact("knowledge.level", level, "settings")
@@ -763,7 +821,7 @@ class ProfileService:
         request.trace.locale = locale
         self._expect_stage(request, session, ("existing_portfolio", "portfolio_review"))
         with request.trace.step(
-            "deterministic", "A2", request.trace.t("Entrée du portefeuille validée", "Portfolio input validated")
+            "deterministic", "A2", request.trace.t("Portefeuille reçu et vérifié", "Portfolio received and checked")
         ) as info:
             prepared = a2_agent.prepare_input(request.payload.get("text"), request.payload.get("files"), locale)
             info["outputs"] = {"text_chars": prepared.text_chars, "files": prepared.files, "skipped": prepared.skipped}
@@ -780,8 +838,8 @@ class ProfileService:
             "deterministic",
             "A2",
             request.trace.t(
-                "Positions résolues et expositions calculées par le code",
-                "Positions resolved and exposures computed by code",
+                "Positions reconnues et expositions calculées selon des règles fixes",
+                "Positions identified and exposures computed with fixed rules",
             ),
             None,
             outputs=_view_summary(outcome.view),
@@ -802,12 +860,21 @@ class ProfileService:
         self._expect_stage(request, session, ("portfolio_review",))
         positions = request.payload.get("positions")
         if not isinstance(positions, list):
-            raise AppError("bad_request", pick(locale, "positions doit être une liste.", "positions must be a list."))
+            raise AppError("bad_request", pick(locale, BAD_REQUEST_FR, BAD_REQUEST_EN))
         raws = positions_to_raws(positions)
         if not raws:
-            raise AppError("invalid_answer", pick(locale, "Aucune position exploitable.", "No usable position."))
+            raise AppError(
+                "invalid_answer",
+                pick(
+                    locale,
+                    "Aucune position utilisable : ajoutez au moins une ligne avec un nom ou un symbole.",
+                    "No usable position: add at least one line with a name or a symbol.",
+                ),
+            )
         with request.trace.step(
-            "deterministic", "A2", request.trace.t("Expositions calculées par le code", "Exposures computed by code")
+            "deterministic",
+            "A2",
+            request.trace.t("Expositions calculées selon des règles fixes", "Exposures computed with fixed rules"),
         ) as info:
             view = build_view(raws, status="confirmed", quote_fetcher=self.quote_fetcher, locale=locale)
             info["outputs"] = _view_summary(view)
@@ -849,7 +916,11 @@ class ProfileService:
             type="Existing Portfolio",
             title="Portefeuille existant" if session.locale != "en" else "Existing portfolio",
             description=(
-                "Positions du portefeuille existant, prix sourcés, expositions et constats calculés par le code."
+                "Positions of your existing portfolio, with their prices and sources, and the exposures and findings "
+                "computed with fixed rules."
+                if session.locale == "en"
+                else "Positions de votre portefeuille existant, avec leurs prix et leurs sources, et les expositions "
+                "et constats calculés selon des règles fixes."
             ),
             tags=["portefeuille-existant", "profil-investisseur"],
             owners=["alphaforge-a2"],
@@ -863,7 +934,7 @@ class ProfileService:
             body=render_portfolio_body(view, session.locale),
         )
         with request.trace.step(
-            "storage", "store", request.trace.t("Écriture du portefeuille", "Portfolio written"), key
+            "storage", "store", request.trace.t("Portefeuille enregistré", "Portfolio saved"), inputs={"key": key}
         ):
             self.store.put_text(key, okf.render(doc))
 
@@ -890,7 +961,7 @@ class ProfileService:
             request.trace.add(
                 "deterministic",
                 "questionnaire",
-                request.trace.t("Réponses validées par les règles", "Answers validated by the rules"),
+                request.trace.t("Réponses vérifiées selon des règles fixes", "Answers checked with fixed rules"),
                 None,
                 outputs={
                     "answers": [
@@ -909,8 +980,9 @@ class ProfileService:
                 "conflict",
                 pick(
                     locale,
-                    "L'arrêt n'est possible qu'à partir de 70 % de complétude.",
-                    "Stopping is only possible from 70% completeness.",
+                    "Vous pourrez vous arrêter quand votre profil sera rempli à 70 %. "
+                    "Répondez encore à quelques questions.",
+                    "You can stop once your profile is 70% complete. Answer a few more questions.",
                 ),
                 {"score": score["score"], "threshold": score["threshold"]},
             )
@@ -979,10 +1051,11 @@ class ProfileService:
             request.trace.add(
                 "deterministic",
                 "questionnaire",
-                request.trace.t("Confirmations demandées par le code", "Confirmations asked by code"),
+                request.trace.t("Confirmations demandées", "Confirmations requested"),
                 request.trace.t(
-                    "Valeurs tirées d'un texte libre, retenues après un clic de l'investisseur.",
-                    "Values taken from free text, kept once the investor confirms them.",
+                    "Yan a compris ces réponses dans votre message : confirmez-les d'un clic pour qu'elles soient "
+                    "retenues.",
+                    "Yan understood these answers from your message: confirm them with one click so they are kept.",
                 ),
                 outputs={
                     "questions": [{"id": question_id, "field": field_id} for question_id, field_id in targets.items()]
@@ -1016,8 +1089,8 @@ class ProfileService:
             request.trace.add(
                 "deterministic",
                 "A1",
-                request.trace.t("Base du client non écrite", "Client base not written"),
-                getattr(exc, "code", type(exc).__name__),
+                request.trace.t("Notes de Yan non écrites", "Yan's notes not written"),
+                request.trace.t("Votre profil reste complet.", "Your profile stays complete."),
                 outputs={"error": getattr(exc, "code", type(exc).__name__)},
             )
 
@@ -1035,7 +1108,10 @@ class ProfileService:
         prefix = kb.check_prefix(request.payload.get("prefix"), request.locale_hint)
         client_id = request.payload.get("client_id")
         if prefix.startswith("clients/") and client_id is not None and prefix.split("/")[1] != client_id:
-            raise AppError("not_found", pick(request.locale_hint, "Base introuvable.", "Base not found."))
+            raise AppError(
+                "not_found",
+                pick(request.locale_hint, "Ces documents sont introuvables.", "These documents cannot be found."),
+            )
         return {"items": kb.list_documents(self.store, prefix)}
 
     def kb_get(self, request: Request) -> dict[str, Any]:
@@ -1048,46 +1124,82 @@ class ProfileService:
         return {"key": key, "content": stored.text}
 
 
+# Le document du portefeuille existant nomme les constats et les catégories comme l'écran (français, anglais).
+FLAG_LABELS = {
+    "concentration_single_position": ("Concentration sur une position", "Single-position concentration"),
+    "home_bias_canada": ("Biais domestique (Canada)", "Home bias (Canada)"),
+    "concentration_sector": ("Concentration sectorielle", "Sector concentration"),
+    "crypto_exposure_high": ("Cryptoactifs élevés", "High crypto-assets"),
+    "cash_heavy": ("Beaucoup d'encaisse", "Cash heavy"),
+    "few_holdings": ("Peu de positions", "Few holdings"),
+    "unvalued_positions": ("Lignes non évaluées", "Unvalued lines"),
+}
+ASSET_CLASS_LABELS = {
+    "equity": ("Action", "Stock"),
+    "etf_equity": ("FNB d'actions", "Equity ETF"),
+    "etf_bond": ("FNB d'obligations", "Bond ETF"),
+    "etf_commodity": ("FNB de matières premières", "Commodity ETF"),
+    "bond": ("Obligation", "Bond"),
+    "cash": ("Encaisse", "Cash"),
+    "crypto": ("Cryptoactif", "Crypto-asset"),
+    "fund": ("Fonds", "Fund"),
+    "other": ("Autre", "Other"),
+}
+
+
+def _label(labels: dict[str, tuple[str, str]], key: Any, *, en: bool) -> str:
+    pair = labels.get(str(key))
+    return (pair[1] if en else pair[0]) if pair else str(key)
+
+
 def _summary_lines(view: dict[str, Any], *, en: bool) -> list[str]:
     """Titre, avertissement, synthèse et en-tête du tableau des positions; le séparateur suit la langue."""
     exposures = view["exposures"]
     locale = "en" if en else "fr"
-    status, total = f"`{view['status']}`", f"{exposures['total_value_cad']} CAD"
+    status = {"draft": ("To be confirmed", "À confirmer"), "confirmed": ("Confirmed", "Confirmé")}.get(view["status"])
+    status = (status[0] if en else status[1]) if status else str(view["status"])
+    total = f"{exposures['total_value_cad']} CAD"
+    flags = ", ".join(_label(FLAG_LABELS, flag, en=en) for flag in exposures["flags"])
     return [
         "# " + ("Existing portfolio" if en else "Portefeuille existant"),
         "",
         "> "
         + (
-            "Fictitious portfolio, simulation only. Prices, values and exposures are computed by code."
+            "Fictitious portfolio, simulation only. Prices, values and exposures are computed with fixed rules."
             if en
-            else "Portefeuille fictif, simulation seulement. Prix, valeurs et expositions calculés par le code."
+            else "Portefeuille fictif, simulation seulement. "
+            "Prix, valeurs et expositions calculés selon des règles fixes."
         ),
         "",
         f"- {labeled('Status' if en else 'Statut', status, locale)}",
         f"- {labeled('Total value' if en else 'Valeur totale', total, locale)}",
         f"- {labeled('USD/CAD rate' if en else 'Taux USD/CAD', str(view['fx']['rate']), locale)}"
-        f" ({view['fx']['date']}, {view['fx']['source']})",
-        f"- {labeled('Flags' if en else 'Constats', ', '.join(exposures['flags']) or '—', locale)}",
+        f" ({view['fx']['date']}, {'Bank of Canada' if en else 'Banque du Canada'})",
+        f"- {labeled('Flags' if en else 'Constats', flags or '—', locale)}",
         "",
-        "| id | ticker | "
+        "| "
         + (
-            "name | class | qty | price | price date | source | value CAD"
+            "symbol | name | class | qty | price | price date | source | value CAD"
             if en
-            else "nom | classe | quantité | prix | date du prix | source | valeur CAD"
+            else "symbole | nom | classe | quantité | prix | date du prix | source | valeur CAD"
         )
         + " |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
 
 
-def _position_row(position: dict[str, Any]) -> str:
+def _position_row(position: dict[str, Any], source_titles: dict[str, str], *, en: bool) -> str:
+    """Ligne d'une position; sa source de prix est citée par son titre, jamais par sa clé."""
     name = str(position.get("name") or "").replace("|", "/")
+    source = position.get("price_source")
+    source_text = str(source_titles.get(source) or source or "—").replace("|", "/")
+    asset_class = _label(ASSET_CLASS_LABELS, position.get("asset_class"), en=en)
     return (
-        f"| {position['id']} | {position.get('ticker') or '—'} | {name or '—'} | {position.get('asset_class')} | "
+        f"| {position.get('ticker') or '—'} | {name or '—'} | {asset_class} | "
         f"{position.get('quantity') if position.get('quantity') is not None else '—'} | "
         f"{position.get('price') if position.get('price') is not None else '—'} | "
         f"{position.get('price_date') or '—'} | "
-        f"{position.get('price_source') or '—'} | "
+        f"{source_text} | "
         f"{position.get('value_cad') if position.get('value_cad') is not None else '—'} |"
     )
 
@@ -1121,10 +1233,10 @@ def _limit_lines(*, en: bool) -> list[str]:
         ),
         "- "
         + (
-            "Prices are the last close of the starter dataset (2026-11-12) or of Yahoo Finance; they are not "
+            "Prices are the last close in our market data (2026-11-12) or on Yahoo Finance; they are not "
             "exchange-certified."
             if en
-            else "Les prix sont la dernière clôture du jeu de départ (2026-11-12) ou de "
+            else "Les prix sont la dernière clôture de nos données de marché (2026-11-12) ou de "
             "Yahoo Finance; ils ne sont pas certifiés par une bourse."
         ),
         "",
@@ -1134,7 +1246,8 @@ def _limit_lines(*, en: bool) -> list[str]:
 def render_portfolio_body(view: dict[str, Any], locale: str) -> str:
     en = locale == "en"
     lines = _summary_lines(view, en=en)
-    lines += [_position_row(position) for position in view["positions"]]
+    titles = {source.get("resource"): source.get("title") for source in view.get("sources") or []}
+    lines += [_position_row(position, titles, en=en) for position in view["positions"]]
     lines += _unresolved_lines(view, en=en)
     lines += _limit_lines(en=en)
     return "\n".join(lines)

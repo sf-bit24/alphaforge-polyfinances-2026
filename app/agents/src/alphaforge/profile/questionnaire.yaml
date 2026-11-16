@@ -469,7 +469,7 @@ fields:
       - {value: none, label: {fr: "Aucune", en: "None"}}
       - {value: small, label: {fr: "Une petite part", en: "A small share"}}
       - {value: larger, label: {fr: "Une part plus importante", en: "A larger share"}}
-      - {value: let_system_decide, label: {fr: "Laisser le système décider", en: "Let the system decide"}}
+      - {value: let_system_decide, label: {fr: "Laisser le simulateur décider", en: "Let the simulator decide"}}
       - {value: dont_know, label: {fr: "Je ne sais pas ce que c'est", en: "I don't know what they are"}}
   - id: preferences.crypto_max_pct
     type: enum
@@ -804,7 +804,7 @@ questions:
       - {value: none, label: {fr: "Aucune : je n'en veux pas", en: "None: I don't want any"}}
       - {value: small, label: {fr: "Une petite part, pour essayer", en: "A small share, to try"}}
       - {value: larger, label: {fr: "Une part plus importante", en: "A larger share"}}
-      - {value: let_system_decide, label: {fr: "Pas d'avis : laissez le système décider dans mes limites", en: "No opinion: let the system decide within my limits"}}
+      - {value: let_system_decide, label: {fr: "Pas d'avis : laissez le simulateur décider dans mes limites", en: "No opinion: let the simulator decide within my limits"}}
       - {value: dont_know, label: {fr: "Je ne sais pas ce que c'est", en: "I don't know what they are"}}
   - id: q_crypto_max
     field: preferences.crypto_max_pct
@@ -856,7 +856,7 @@ questions:
     field: context.has_existing_portfolio
     kind: boolean
     prompt: {fr: "Avez-vous un portefeuille existant que vous aimeriez faire analyser ?", en: "Do you have an existing portfolio you would like analysed?"}
-    help: {fr: "Vous pourrez le fournir sous n'importe quelle forme : texte collé, CSV, tableur, PDF ou capture d'écran.", en: "You can provide it in any form: pasted text, CSV, spreadsheet, PDF or screenshot."}
+    help: {fr: "Vous pourrez le fournir sous n'importe quelle forme : texte collé, relevé, tableur, PDF ou photo.", en: "You can provide it in any form: pasted text, statement, spreadsheet, PDF or photo."}
 
 rules:
   knowledge_level:

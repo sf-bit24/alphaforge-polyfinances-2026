@@ -55,10 +55,10 @@ logger = logging.getLogger("alphaforge.market")
 
 UNIVERSE_FILE = Path(__file__).parent / "data" / "market" / "universe.yaml"
 _MARKET_FILES = {
-    "prices_daily.csv": ("daily_prices.parquet", "Données de marché, daily_prices.parquet (Yahoo Finance)"),
-    "fx_usdcad_daily.csv": ("fx_daily.parquet", "Données de marché, fx_daily.parquet (Banque du Canada, FXUSDCAD)"),
-    "corporate_actions.csv": ("corporate_actions.parquet", "Données de marché, corporate_actions.parquet (Yahoo)"),
-    "assets_universe.csv": ("universe.yaml", "Univers des données de marché, data/market/universe.yaml"),
+    "prices_daily.csv": ("daily_prices.parquet", "Données de marché : cours quotidiens (Yahoo Finance)"),
+    "fx_usdcad_daily.csv": ("fx_daily.parquet", "Données de marché : taux de change USD/CAD (Banque du Canada)"),
+    "corporate_actions.csv": ("corporate_actions.parquet", "Données de marché : opérations sur titres (Yahoo Finance)"),
+    "assets_universe.csv": ("universe.yaml", "Données de marché : liste des titres suivis"),
 }
 _warned: set[str] = set()
 

@@ -142,7 +142,7 @@ def test_base_answers_through_to_followups(service, store):
         "missing"
     ]
     titles = [step["title"] for step in response["trace"]]
-    assert "Changement d'étape" in titles and "Risque effectif calculé : min(tolérance, capacité)" in titles
+    assert "Changement d'étape" in titles and "Risque effectif calculé" in titles
     entries = okf.parse(store.get(journal_key(client_id)).text).data["entries"]
     answers = [e for e in entries if e["kind"] == "answer"]
     assert len(answers) == len(seen)

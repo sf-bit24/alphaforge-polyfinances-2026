@@ -4,23 +4,23 @@ Relevé sur le compte AWS du Datathon (us-east-1) le 15 novembre 2026, release `
 
 ## Les agents, en clair
 
-La documentation nomme chaque agent par son nom. L'application, elle, l'affiche par son code dans la trace de chaque requête (colonne « Code dans la trace »). « Modèle » veut dire Claude Opus 5.5 sur Bedrock ; « code » veut dire du Python déterministe, sans modèle.
+« Modèle » veut dire Claude Opus 5.5 sur Bedrock ; « code » veut dire du Python déterministe, sans modèle.
 
-| Agent | Code dans la trace | Ce qu'il fait | Moteur | Runtime |
-| --- | --- | --- | --- | --- |
-| Les questions de base | `questionnaire` | Pose les questions fixes du profil et valide chaque réponse. | code | `profile` |
-| L'agent du profil | A1 | Ne demande que ce qui manque pour compléter le profil, au plus trois questions par tour, puis l'écrit. | modèle | `profile` |
-| L'agent du portefeuille existant | A2 | Lit un relevé (PDF, tableur, image, texte) et en extrait les positions ; le code les valorise. | modèle | `profile` |
-| Le calcul du portefeuille (étape 0 et optimiseur) | `s0.*`, `s0b.*`, `s2.optimize` | Traduit le profil en limites, choisit le style et les titres, puis calcule les poids (cvxpy). | code | `portfolio` |
-| L'avocat | `a3.advocate` | Défend le portefeuille construit, puis répond aux critiques au second tour. | modèle | `portfolio` |
-| Les quatre lentilles critiques | `lens.*` | Horizon, risque, diversification, contraintes : contestent le portefeuille, et ne peuvent que resserrer une limite. | modèle | `portfolio` |
-| Le Judge | `judge` | Contrôle chaque limite du profil, sans dérogation ; refuse une demande qui dépasse une limite bloquante et propose une version encadrée. | code | `portfolio` |
-| L'agent de la presse | A4 | Collecte les communiqués et les actualités, datés et sourcés. | modèle | `press` |
-| L'agent des données | A5 | Collecte les séries économiques et les cours ; les fondamentaux SEC EDGAR viennent du code. | modèle | `data` |
-| Le superviseur | A6 | Relit tout ce qui est collecté, rejette ce qui n'a ni source ni date ou fait double emploi, et écrit la base générale. | modèle | `supervisor` |
-| Le routeur | A0 | Choisit les sujets d'une question de recherche, puis rédige la synthèse. | modèle | `router` |
-| Les experts de sujet | E1 à E7 | Un expert par sujet : consulte la base générale et lance ses chercheurs. | modèle | `expert` |
-| Les chercheurs | `researcher` | Une mission chacun : lisent les sites publics de leur liste, en respectant `robots.txt`. | modèle | `researcher` |
+| Agent | Ce qu'il fait | Moteur | Runtime |
+| --- | --- | --- | --- |
+| Les questions de base | Pose les questions fixes du profil et valide chaque réponse. | code | `profile` |
+| L'agent du profil | Ne demande que ce qui manque pour compléter le profil, au plus trois questions par tour, puis l'écrit. | modèle | `profile` |
+| L'agent du portefeuille existant | Lit un relevé (PDF, tableur, image, texte) et en extrait les positions ; le code les valorise. | modèle | `profile` |
+| Le calcul du portefeuille (étape 0 et optimiseur) | Traduit le profil en limites, choisit le style et les titres, puis calcule les poids (cvxpy). | code | `portfolio` |
+| L'avocat | Défend le portefeuille construit, puis répond aux critiques au second tour. | modèle | `portfolio` |
+| Les quatre lentilles critiques | Horizon, risque, diversification, contraintes : contestent le portefeuille, et ne peuvent que resserrer une limite. | modèle | `portfolio` |
+| Le Judge | Contrôle chaque limite du profil, sans dérogation ; refuse une demande qui dépasse une limite bloquante et propose une version encadrée. | code | `portfolio` |
+| L'agent de la presse | Collecte les communiqués et les actualités, datés et sourcés. | modèle | `press` |
+| L'agent des données | Collecte les séries économiques et les cours ; les fondamentaux SEC EDGAR viennent du code. | modèle | `data` |
+| Le superviseur | Relit tout ce qui est collecté, rejette ce qui n'a ni source ni date ou fait double emploi, et écrit la base générale. | modèle | `supervisor` |
+| Le routeur | Choisit les sujets d'une question de recherche, puis rédige la synthèse. | modèle | `router` |
+| Les experts de sujet | Un expert par sujet : consulte la base générale et lance ses chercheurs. | modèle | `expert` |
+| Les chercheurs | Une mission chacun : lisent les sites publics de leur liste, en respectant `robots.txt`. | modèle | `researcher` |
 
 ## Les 8 runtimes AgentCore
 

@@ -9,6 +9,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from alphaforge.config import ROLES, Settings
+from alphaforge.finance.backtest.paths import long_data_available
 from alphaforge.server import build_service, create_app
 
 CLIENT_ID = "8f0c3a8e-5d7b-4e2a-9f51-2c6d3b1a7e90"
@@ -293,9 +294,11 @@ def test_engine_failures_become_errors_of_the_envelope(portfolio_settings, store
 
 
 def test_rules_build_end_to_end_with_the_real_engine(portfolio_settings, store):
-    """Seulement avec le groupe finance installé (uv sync --group finance) : profil réel, mode rules, sans AWS."""
+    """Seulement avec le groupe finance et les données longues (./scripts/init.sh --data) : profil réel, mode rules,
+    sans AWS."""
     pytest.importorskip("cvxpy")
-    pytest.importorskip("pandas")
+    if not long_data_available():
+        pytest.skip("données longues absentes (python -m alphaforge.finance.backtest.build_data)")
     from .conftest import answer_base, make_service
 
     profile_settings = Settings.from_env({"AGENT_ROLE": "profile", "ALPHAFORGE_STORE": "local"})

@@ -359,6 +359,57 @@ export const AuditFailure = z.object({ error: z.string() });
 /** X-Ray trace id `1-<8 hex>-<24 hex>` of the `portfolio.build` root span. */
 export const XRAY_TRACE_ID = /^1-[0-9a-f]{8}-[0-9a-f]{24}$/;
 
+/* ------------------------------------------------------------------ */
+/* Allocation: where the money goes (finance engine, optional)          */
+/* ------------------------------------------------------------------ */
+
+/** `class_key` values the screen names itself; any other key is shown with the engine's `label_fr`. */
+export const ASSET_CLASS_KEYS = ["actions_individuelles", "fnb_actions", "obligations", "or_matieres", "crypto"] as const;
+export type AssetClassKey = (typeof ASSET_CLASS_KEYS)[number];
+
+/** A position with its amount in dollars, as the engine computed it (`amount_cad` is null without an amount). */
+export const AllocationPosition = z.object({
+  asset_id: z.string().min(1),
+  name: z.string().nullish(),
+  asset_class: z.string().nullish(),
+  class_key: z.string().nullish(),
+  currency: z.string().nullish(),
+  sector: z.string().nullish(),
+  role: z.string().nullish(),
+  weight: share,
+  amount_cad: z.number().nullish(),
+  fact_id: z.string().nullish(),
+});
+export type AllocationPosition = z.infer<typeof AllocationPosition>;
+
+/** One row of a breakdown (by class, by currency, by sector), sorted by the engine. */
+export const AllocationBucket = z.object({
+  key: z.string().min(1),
+  label_fr: z.string(),
+  weight: share,
+  amount_cad: z.number().nullish(),
+  fact_id: z.string().nullish(),
+});
+export type AllocationBucket = z.infer<typeof AllocationBucket>;
+
+/** `direct`: the sector of a stock; `lookthrough`: the sectors inside an ETF; `non_ventile`: not broken down. */
+export const SectorBasis = z.enum(["direct", "lookthrough", "non_ventile"]);
+export type SectorBasis = z.infer<typeof SectorBasis>;
+
+export const AllocationSectorBucket = AllocationBucket.extend({ basis: z.union([SectorBasis, z.string()]).nullish() });
+export type AllocationSectorBucket = z.infer<typeof AllocationSectorBucket>;
+
+export const Allocation = z.object({
+  amount_cad: z.number().nullish(),
+  currency: z.string().default("CAD"),
+  positions: z.array(AllocationPosition).default([]),
+  by_class: z.array(AllocationBucket).default([]),
+  by_currency: z.array(AllocationBucket).default([]),
+  by_sector: z.array(AllocationSectorBucket).default([]),
+  sector_coverage: share.nullish(),
+});
+export type Allocation = z.infer<typeof Allocation>;
+
 export const PortfolioBuildResponse = z.object({
   ok: z.literal(true),
   release: z.string(),
@@ -378,5 +429,7 @@ export const PortfolioBuildResponse = z.object({
   explanation_report: z.array(z.string()).default([]),
   grounding: Grounding.nullish(),
   strategy: StrategySummary.nullable(),
+  /** Where the money goes, by class, sector and currency; absent from older responses and decisions without positions. */
+  allocation: Allocation.nullish(),
 });
 export type PortfolioBuildResponse = z.infer<typeof PortfolioBuildResponse>;

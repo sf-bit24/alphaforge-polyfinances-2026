@@ -6,7 +6,7 @@ from typing import Any
 
 from ..trace import Trace
 from . import rules
-from .questionnaire import Questionnaire, format_field_value
+from .questionnaire import Questionnaire, band_brief, fact_band, fact_label, format_fact, labeled
 from .state import ClientSession
 
 VIEW_DIMENSIONS = (
@@ -21,8 +21,15 @@ VIEW_DIMENSIONS = (
 
 
 def dimension_summary(
-    questionnaire: Questionnaire, dimension: str, values: dict[str, Any], risk: dict[str, Any], locale: str
+    questionnaire: Questionnaire,
+    dimension: str,
+    facts: dict[str, dict[str, Any]],
+    risk: dict[str, Any],
+    locale: str,
 ) -> str | None:
+    """Résumé d'une dimension à partir des faits confirmés. Un fait répondu par une tranche montre la tranche,
+    pas la borne que le code retient (``format_fact``). Le séparateur suit la langue (``labeled``)."""
+    values = {field_id: fact.get("value") for field_id, fact in facts.items()}
     if dimension == "risk_tolerance":
         return rules.level_label(questionnaire, risk["tolerance"], locale)
     if dimension == "risk_capacity":
@@ -33,8 +40,8 @@ def dimension_summary(
             continue
         if not questionnaire.applicable(spec.when, values):
             continue
-        text = format_field_value(spec, values[spec.id], locale)
-        parts.append(text if spec.type == "enum" else f"{spec.label_text(locale)} : {text}")
+        text = format_fact(spec, facts[spec.id], locale)
+        parts.append(text if spec.type == "enum" else labeled(spec.label_text(locale), text, locale))
     return " · ".join(parts) or None
 
 
@@ -53,19 +60,31 @@ def _dimension_status(questionnaire: Questionnaire, dimension: str, values: dict
     return "missing"
 
 
-def _confirmed_facts_by_date(session: ClientSession) -> list[dict[str, Any]]:
+def _fact_view(questionnaire: Questionnaire, field_id: str, fact: dict[str, Any], locale: str) -> dict[str, Any]:
+    """Un fait de ``ProfileView``. Champs facultatifs, dans la langue de la vue : ``label``, la valeur telle que
+    l'investisseur la lit (« Plutôt stables », « CELI, REER », « Oui »), et ``band``, la tranche choisie pour une
+    réponse numérique. ``value`` reste le code ou le nombre que lit le volet finance."""
+    view = {"field": field_id, "value": fact.get("value"), "provenance": fact.get("provenance"), "at": fact.get("at")}
+    spec = questionnaire.fields.get(field_id)
+    if spec is not None:
+        view["label"] = fact_label(spec, fact, locale)
+    band = fact_band(fact)
+    if band is not None:
+        view["band"] = band_brief(band, locale)
+    return view
+
+
+def _confirmed_facts_by_date(questionnaire: Questionnaire, session: ClientSession, locale: str) -> list[dict[str, Any]]:
     # Une valeur à confirmer n'est pas encore un fait du profil (la valeur confirmée qu'elle remplace l'est).
     confirmed = sorted(session.confirmed_facts().items(), key=lambda item: (item[1].get("at") or "", item[0]))
-    return [
-        {"field": field_id, "value": fact.get("value"), "provenance": fact.get("provenance"), "at": fact.get("at")}
-        for field_id, fact in confirmed
-    ]
+    return [_fact_view(questionnaire, field_id, fact, locale) for field_id, fact in confirmed]
 
 
 def profile_view(
     questionnaire: Questionnaire, session: ClientSession, locale: str, documents: list[dict[str, Any]] | None = None
 ) -> dict[str, Any]:
     values = session.values()
+    confirmed = session.confirmed_facts()
     risk = rules.risk_profile(questionnaire, values)
     dimensions: dict[str, Any] = {}
     for dimension in VIEW_DIMENSIONS:
@@ -77,10 +96,10 @@ def profile_view(
         }
         dimensions[dimension] = {
             "status": status,
-            "summary": dimension_summary(questionnaire, dimension, values, risk, locale),
+            "summary": dimension_summary(questionnaire, dimension, confirmed, risk, locale),
             "fields": fields,
         }
-    facts = _confirmed_facts_by_date(session)
+    facts = _confirmed_facts_by_date(questionnaire, session, locale)
     return {
         "knowledge_level": rules.knowledge_level(questionnaire, values),
         "effective_risk": risk["effective"],

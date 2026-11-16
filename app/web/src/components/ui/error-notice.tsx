@@ -2,12 +2,27 @@
 
 import { CircleAlert, MessageSquareWarning, RefreshCw, ShieldCheck, X } from "lucide-react";
 import type { ApiError } from "@/lib/client/api";
+import type { Dictionary } from "@/lib/i18n/dictionary";
 import { useI18n } from "@/lib/i18n/provider";
 import { Button } from "./button";
 import { cn } from "./cn";
 import { JsonView } from "./json-view";
 
 type CalmNotice = { title: string; hint: string } | undefined;
+
+/** `details.reason` of a runtime error, when it gives one (`personal_data`: the guardrail refused personal data). */
+function reasonOf(details: unknown): string | undefined {
+  if (typeof details !== "object" || details === null) return undefined;
+  const { reason } = details as { reason?: unknown };
+  return typeof reason === "string" ? reason : undefined;
+}
+
+/** The calm notice of an error: the one of its `details.reason` when the dictionary has it, else the one of its code. */
+export function calmNoticeOf(t: Dictionary, error: Pick<ApiError, "code" | "details">): CalmNotice {
+  const calm = t.errors.calm[error.code];
+  const reason = reasonOf(error.details);
+  return (reason && calm?.reasons?.[reason]) || calm;
+}
 
 function hasDetails(details: unknown): boolean {
   return details !== undefined && details !== null && !(typeof details === "object" && Object.keys(details as object).length === 0);
@@ -32,7 +47,7 @@ function NoticeTitle({ code, calm }: { code: string; calm: CalmNotice }) {
           calm ? "text-warning-ink ring-warning/40" : "text-critical-ink ring-critical/25",
         )}
       >
-        {t.errors.code} : {code}
+        {t.errors.code(code)}
       </span>
     </p>
   );
@@ -77,6 +92,7 @@ function DismissButton({ onDismiss }: { onDismiss: () => void }) {
  * An error from the gateway or a runtime: its code, its message, and the details.
  * `guardrail_blocked` (guardrail intervened) and `model_error` (content filtered, refusal, model down)
  * get a calm notice of their own: they are expected outcomes, not failures of the application.
+ * A refused personal detail (`details.reason` = `personal_data`) gets its own notice, which says nothing of orders or advice.
  */
 export function ErrorNotice({
   error,
@@ -92,7 +108,7 @@ export function ErrorNotice({
   compact?: boolean;
 }) {
   const { t } = useI18n();
-  const calm = t.errors.calm[error.code];
+  const calm = calmNoticeOf(t, error);
   const hint = calm?.hint ?? t.errors.hints[error.code];
   const guardrail = error.code === "guardrail_blocked";
   const Icon = NOTICE_ICONS[noticeKind(error.code, calm)];

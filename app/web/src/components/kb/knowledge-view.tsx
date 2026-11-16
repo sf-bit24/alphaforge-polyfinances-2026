@@ -6,6 +6,7 @@ import type { KbItem } from "@/lib/contract/schemas";
 import { callMessages, listKb, type ApiError } from "@/lib/client/api";
 import { useAsync } from "@/lib/client/use-async";
 import { formatDate } from "@/lib/i18n/locale";
+import { okfTypeLabel } from "@/lib/i18n/okf-types";
 import { useI18n } from "@/lib/i18n/provider";
 import { GENERAL_FOLDERS, generalGroup } from "@/lib/okf";
 import { Badge } from "@/components/ui/badge";
@@ -15,18 +16,11 @@ import { ErrorNotice } from "@/components/ui/error-notice";
 import { Spinner } from "@/components/ui/spinner";
 import { CollectPanel } from "./collect-panel";
 import { DocumentLoader } from "./document-view";
+import { matchingItems } from "./match";
 
 const GROUP_ORDER = ["index", ...GENERAL_FOLDERS, "other"];
 
 const INDEX_KEY = "general/index.md";
-
-function matchingItems(items: KbItem[], query: string): KbItem[] {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return items;
-  return items.filter((item) =>
-    [item.key, item.title ?? "", item.description ?? "", item.type ?? ""].some((field) => field.toLowerCase().includes(needle)),
-  );
-}
 
 function groupedItems(items: KbItem[]): Array<{ group: string; items: KbItem[] }> {
   const map = new Map<string, KbItem[]>();
@@ -112,7 +106,7 @@ function DocumentButton({ item, active, onSelect }: { item: KbItem; active: bool
         <span className="block text-sm leading-snug font-medium text-ink-900">{item.title ?? item.key}</span>
         {item.description ? <span className="mt-0.5 line-clamp-2 block text-xs leading-snug text-ink-500">{item.description}</span> : null}
         <span className="mt-1 flex flex-wrap items-center gap-1.5">
-          {item.type ? <Badge tone="outline">{item.type}</Badge> : null}
+          {item.type ? <Badge tone="outline">{okfTypeLabel(item.type, locale)}</Badge> : null}
           {item.updated_at ? (
             <span className="text-[0.7rem] text-ink-400">
               {t.kb.updated} {formatDate(item.updated_at, locale)}
@@ -178,7 +172,7 @@ export function KnowledgeView() {
   );
   const items = useMemo(() => (data ?? previous)?.items ?? [], [data, previous]);
   const refresh = useCallback(() => setVersion((value) => value + 1), []);
-  const filtered = useMemo(() => matchingItems(items, query), [items, query]);
+  const filtered = useMemo(() => matchingItems(items, query, locale), [items, query, locale]);
   const groups = useMemo(() => groupedItems(filtered), [filtered]);
 
   // general/index.md is written by A6 and is absent before the first collection: fall back to the first document.

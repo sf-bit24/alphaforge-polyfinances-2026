@@ -11,13 +11,13 @@
   "decision_id": "dec-amira-v1-fixture",
   "profile_id": "amira",
   "profile_version": 1,
-  "created_utc": "2026-11-15T17:33:23.185378Z",
+  "created_utc": "2026-11-15T21:44:56.023949Z",
   "kind": "proposition",
   "simulation_only": true,
   "positions": [
    {
     "asset_id": "SPY",
-    "weight": 0.4800000005836851,
+    "weight": 0.4800000005836849,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": [
@@ -26,7 +26,7 @@
    },
    {
     "asset_id": "ESGV",
-    "weight": 0.21000000002079508,
+    "weight": 0.21000000002079514,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": [
@@ -35,21 +35,21 @@
    },
    {
     "asset_id": "AGG",
-    "weight": 0.14999999903694414,
+    "weight": 0.14999999903694441,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": []
    },
    {
     "asset_id": "GLD",
-    "weight": 0.1000000001508944,
+    "weight": 0.10000000015089433,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": []
    },
    {
     "asset_id": "ENB.TO",
-    "weight": 0.030000000132522527,
+    "weight": 0.03000000013252247,
     "goal_id": null,
     "role": "satellite",
     "rationale_fact_ids": [
@@ -60,7 +60,7 @@
    },
    {
     "asset_id": "TSLA",
-    "weight": 0.030000000075158767,
+    "weight": 0.03000000007515873,
     "goal_id": null,
     "role": "satellite",
     "rationale_fact_ids": [
@@ -95,7 +95,7 @@
    },
    {
     "fact_id": "emphasis.timeline",
-    "label_fr": "Poids de la lentille timeline",
+    "label_fr": "Poids de la lentille horizon",
     "value": 0.2,
     "unit": "%",
     "currency": null,
@@ -116,7 +116,7 @@
    },
    {
     "fact_id": "emphasis.risk",
-    "label_fr": "Poids de la lentille risk",
+    "label_fr": "Poids de la lentille risque",
     "value": 0.3,
     "unit": "%",
     "currency": null,
@@ -137,7 +137,7 @@
    },
    {
     "fact_id": "emphasis.diversity",
-    "label_fr": "Poids de la lentille diversity",
+    "label_fr": "Poids de la lentille diversité et préférences",
     "value": 0.3,
     "unit": "%",
     "currency": null,
@@ -158,7 +158,7 @@
    },
    {
     "fact_id": "emphasis.constraints",
-    "label_fr": "Poids de la lentille constraints",
+    "label_fr": "Poids de la lentille contraintes",
     "value": 0.2,
     "unit": "%",
     "currency": null,
@@ -180,7 +180,7 @@
    {
     "fact_id": "strat.style",
     "label_fr": "style de composition retenu (étape 0)",
-    "value": "offensive",
+    "value": "offensif",
     "unit": "texte",
     "currency": null,
     "as_of": "2026-09-30",
@@ -193,7 +193,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": "niveau N4 → dynamique, décalage +1"
+      "processing": "niveau N4 → dynamique, décalage +1 → offensive"
      }
     ],
     "trace_id": "dec-amira-v1-fixture:t002:s0b.strategy:strategy.derive_style"
@@ -214,7 +214,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": null
+      "processing": "niveau N4 → dynamique"
      }
     ],
     "trace_id": "dec-amira-v1-fixture:t002:s0b.strategy:strategy.derive_style"
@@ -222,7 +222,7 @@
    {
     "fact_id": "strat.preference",
     "label_fr": "préférence de style",
-    "value": "offensive",
+    "value": "offensif",
     "unit": "texte",
     "currency": null,
     "as_of": "2026-09-30",
@@ -235,7 +235,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": "objective.goal=growth"
+      "processing": "objective.goal=growth → offensive"
      }
     ],
     "trace_id": "dec-amira-v1-fixture:t002:s0b.strategy:strategy.derive_style"
@@ -3707,7 +3707,7 @@
    },
    {
     "fact_id": "strat.score.TSLA",
-    "label_fr": "score du style offensive (TSLA)",
+    "label_fr": "score du style offensif (TSLA)",
     "value": 0.810526,
     "unit": "ratio",
     "currency": null,
@@ -3749,7 +3749,7 @@
    },
    {
     "fact_id": "strat.score.GOOGL",
-    "label_fr": "score du style offensive (GOOGL)",
+    "label_fr": "score du style offensif (GOOGL)",
     "value": 0.752632,
     "unit": "ratio",
     "currency": null,
@@ -3792,7 +3792,7 @@
    {
     "fact_id": "strat.ineligible.GOOGL",
     "label_fr": "GOOGL écarté",
-    "value": "secteur d'emploi (technology) : capital humain déjà exposé",
+    "value": "secteur d'emploi (technologie) : capital humain déjà exposé",
     "unit": "texte",
     "currency": null,
     "as_of": "2026-09-30",
@@ -3812,7 +3812,7 @@
    },
    {
     "fact_id": "strat.score.AMZN",
-    "label_fr": "score du style offensive (AMZN)",
+    "label_fr": "score du style offensif (AMZN)",
     "value": 0.647368,
     "unit": "ratio",
     "currency": null,
@@ -3855,7 +3855,7 @@
    {
     "fact_id": "strat.ineligible.AMZN",
     "label_fr": "AMZN écarté",
-    "value": "baisse maximale longue 93% > 80% (δ des titres individuels)",
+    "value": "baisse maximale longue 93 % > 80 % (δ des titres individuels)",
     "unit": "texte",
     "currency": null,
     "as_of": "2026-09-30",
@@ -3875,7 +3875,7 @@
    },
    {
     "fact_id": "strat.score.CSU.TO",
-    "label_fr": "score du style offensive (CSU.TO)",
+    "label_fr": "score du style offensif (CSU.TO)",
     "value": 0.605263,
     "unit": "ratio",
     "currency": null,
@@ -3918,7 +3918,7 @@
    {
     "fact_id": "strat.ineligible.CSU.TO",
     "label_fr": "CSU.TO écarté",
-    "value": "secteur d'emploi (technology) : capital humain déjà exposé",
+    "value": "secteur d'emploi (technologie) : capital humain déjà exposé",
     "unit": "texte",
     "currency": null,
     "as_of": "2026-09-30",
@@ -3938,7 +3938,7 @@
    },
    {
     "fact_id": "strat.score.SHOP.TO",
-    "label_fr": "score du style offensive (SHOP.TO)",
+    "label_fr": "score du style offensif (SHOP.TO)",
     "value": 0.605263,
     "unit": "ratio",
     "currency": null,
@@ -3981,7 +3981,7 @@
    {
     "fact_id": "strat.ineligible.SHOP.TO",
     "label_fr": "SHOP.TO écarté",
-    "value": "baisse maximale longue 81% > 80% (δ des titres individuels) ; secteur d'emploi (technology) : capital humain déjà exposé",
+    "value": "baisse maximale longue 81 % > 80 % (δ des titres individuels) ; secteur d'emploi (technologie) : capital humain déjà exposé",
     "unit": "texte",
     "currency": null,
     "as_of": "2026-09-30",
@@ -4001,7 +4001,7 @@
    },
    {
     "fact_id": "strat.score.ENB.TO",
-    "label_fr": "score du style offensive (ENB.TO)",
+    "label_fr": "score du style offensif (ENB.TO)",
     "value": 0.513158,
     "unit": "ratio",
     "currency": null,
@@ -4043,7 +4043,7 @@
    },
    {
     "fact_id": "strat.score.MFC.TO",
-    "label_fr": "score du style offensive (MFC.TO)",
+    "label_fr": "score du style offensif (MFC.TO)",
     "value": 0.513158,
     "unit": "ratio",
     "currency": null,
@@ -4085,7 +4085,7 @@
    },
    {
     "fact_id": "strat.score.NVDA",
-    "label_fr": "score du style offensive (NVDA)",
+    "label_fr": "score du style offensif (NVDA)",
     "value": 0.513158,
     "unit": "ratio",
     "currency": null,
@@ -4128,7 +4128,7 @@
    {
     "fact_id": "strat.ineligible.NVDA",
     "label_fr": "NVDA écarté",
-    "value": "baisse maximale longue 87% > 80% (δ des titres individuels) ; secteur d'emploi (technology) : capital humain déjà exposé",
+    "value": "baisse maximale longue 87 % > 80 % (δ des titres individuels) ; secteur d'emploi (technologie) : capital humain déjà exposé",
     "unit": "texte",
     "currency": null,
     "as_of": "2026-09-30",
@@ -4148,7 +4148,7 @@
    },
    {
     "fact_id": "strat.score.FTS.TO",
-    "label_fr": "score du style offensive (FTS.TO)",
+    "label_fr": "score du style offensif (FTS.TO)",
     "value": 0.5,
     "unit": "ratio",
     "currency": null,
@@ -4190,7 +4190,7 @@
    },
    {
     "fact_id": "strat.score.MSFT",
-    "label_fr": "score du style offensive (MSFT)",
+    "label_fr": "score du style offensif (MSFT)",
     "value": 0.5,
     "unit": "ratio",
     "currency": null,
@@ -4233,7 +4233,7 @@
    {
     "fact_id": "strat.ineligible.MSFT",
     "label_fr": "MSFT écarté",
-    "value": "secteur d'emploi (technology) : capital humain déjà exposé",
+    "value": "secteur d'emploi (technologie) : capital humain déjà exposé",
     "unit": "texte",
     "currency": null,
     "as_of": "2026-09-30",
@@ -4253,7 +4253,7 @@
    },
    {
     "fact_id": "strat.score.PG",
-    "label_fr": "score du style offensive (PG)",
+    "label_fr": "score du style offensif (PG)",
     "value": 0.5,
     "unit": "ratio",
     "currency": null,
@@ -4295,7 +4295,7 @@
    },
    {
     "fact_id": "strat.score.ATD.TO",
-    "label_fr": "score du style offensive (ATD.TO)",
+    "label_fr": "score du style offensif (ATD.TO)",
     "value": 0.473684,
     "unit": "ratio",
     "currency": null,
@@ -4337,7 +4337,7 @@
    },
    {
     "fact_id": "strat.score.CNR.TO",
-    "label_fr": "score du style offensive (CNR.TO)",
+    "label_fr": "score du style offensif (CNR.TO)",
     "value": 0.473684,
     "unit": "ratio",
     "currency": null,
@@ -4379,7 +4379,7 @@
    },
    {
     "fact_id": "strat.score.JNJ",
-    "label_fr": "score du style offensive (JNJ)",
+    "label_fr": "score du style offensif (JNJ)",
     "value": 0.473684,
     "unit": "ratio",
     "currency": null,
@@ -4421,7 +4421,7 @@
    },
    {
     "fact_id": "strat.score.CNQ.TO",
-    "label_fr": "score du style offensive (CNQ.TO)",
+    "label_fr": "score du style offensif (CNQ.TO)",
     "value": 0.460526,
     "unit": "ratio",
     "currency": null,
@@ -4463,7 +4463,7 @@
    },
    {
     "fact_id": "strat.score.XOM",
-    "label_fr": "score du style offensive (XOM)",
+    "label_fr": "score du style offensif (XOM)",
     "value": 0.460526,
     "unit": "ratio",
     "currency": null,
@@ -4505,7 +4505,7 @@
    },
    {
     "fact_id": "strat.score.RY.TO",
-    "label_fr": "score du style offensive (RY.TO)",
+    "label_fr": "score du style offensif (RY.TO)",
     "value": 0.434211,
     "unit": "ratio",
     "currency": null,
@@ -4547,7 +4547,7 @@
    },
    {
     "fact_id": "strat.score.TD.TO",
-    "label_fr": "score du style offensive (TD.TO)",
+    "label_fr": "score du style offensif (TD.TO)",
     "value": 0.434211,
     "unit": "ratio",
     "currency": null,
@@ -4589,7 +4589,7 @@
    },
    {
     "fact_id": "strat.score.AAPL",
-    "label_fr": "score du style offensive (AAPL)",
+    "label_fr": "score du style offensif (AAPL)",
     "value": 0.421053,
     "unit": "ratio",
     "currency": null,
@@ -4632,7 +4632,7 @@
    {
     "fact_id": "strat.ineligible.AAPL",
     "label_fr": "AAPL écarté",
-    "value": "secteur d'emploi (technology) : capital humain déjà exposé",
+    "value": "secteur d'emploi (technologie) : capital humain déjà exposé",
     "unit": "texte",
     "currency": null,
     "as_of": "2026-09-30",
@@ -4652,7 +4652,7 @@
    },
    {
     "fact_id": "strat.score.JPM",
-    "label_fr": "score du style offensive (JPM)",
+    "label_fr": "score du style offensif (JPM)",
     "value": 0.407895,
     "unit": "ratio",
     "currency": null,
@@ -4799,7 +4799,7 @@
    },
    {
     "fact_id": "strat.sector_cap.tech",
-    "label_fr": "plafond d'exposition tech (look-through)",
+    "label_fr": "plafond d'exposition au secteur de la technologie (look-through)",
     "value": 0.35,
     "unit": "%",
     "currency": null,
@@ -4820,7 +4820,7 @@
    },
    {
     "fact_id": "strat.sector_cap.energy",
-    "label_fr": "plafond d'exposition energy (look-through)",
+    "label_fr": "plafond d'exposition au secteur de l'énergie (look-through)",
     "value": 0.1,
     "unit": "%",
     "currency": null,
@@ -4905,7 +4905,7 @@
    {
     "fact_id": "r1.opt_risk",
     "label_fr": "Risque minimisé (CVAR, mensuel)",
-    "value": 0.05056453729153095,
+    "value": 0.05056453729153094,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -4988,7 +4988,7 @@
    },
    {
     "fact_id": "r1.active.alloc.gold:max",
-    "label_fr": "Plafond atteint : alloc.gold niveau N4",
+    "label_fr": "Plafond atteint : part de l'or, niveau N4",
     "value": 0.1,
     "unit": "%",
     "currency": null,
@@ -5052,7 +5052,7 @@
    {
     "fact_id": "r1.cvar_m",
     "label_fr": "CVaR 95 % mensuelle (historique)",
-    "value": 0.050349506259566724,
+    "value": 0.050349506259566745,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5094,7 +5094,7 @@
    {
     "fact_id": "r1.vol",
     "label_fr": "Volatilité annualisée (historique)",
-    "value": 0.10957688672358538,
+    "value": 0.10957688672358545,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5115,7 +5115,7 @@
    {
     "fact_id": "r1.worst12",
     "label_fr": "Pire rendement sur 12 mois (historique)",
-    "value": -0.12133695726295234,
+    "value": -0.12133695726295243,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5157,7 +5157,7 @@
    {
     "fact_id": "r1.rc.ESGV",
     "label_fr": "Part de la CVaR portée par ESGV",
-    "value": 0.2759294721065815,
+    "value": 0.27592947210658164,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5178,7 +5178,7 @@
    {
     "fact_id": "r1.rc.TSLA",
     "label_fr": "Part de la CVaR portée par TSLA",
-    "value": 0.09995521921491789,
+    "value": 0.09995521921491783,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5199,7 +5199,7 @@
    {
     "fact_id": "r1.stress.2022_taux",
     "label_fr": "Rendement pendant Hausse des taux 2022 : actions et obligations en baisse",
-    "value": -0.12133695726295224,
+    "value": -0.12133695726295235,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5220,7 +5220,7 @@
    {
     "fact_id": "r1.stress_cad.2022_taux",
     "label_fr": "Perte en dollars pendant Hausse des taux 2022 : actions et obligations en baisse",
-    "value": 18200.543589442837,
+    "value": 18200.543589442852,
     "unit": "CAD",
     "currency": null,
     "as_of": null,
@@ -5233,7 +5233,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": "perte × patrimoine investissable déclaré (150,000 $)"
+      "processing": "perte × patrimoine investissable déclaré (150 000 $)"
      }
     ],
     "trace_id": "dec-amira-v1-fixture:t008:lens.risk:evidence"
@@ -5241,7 +5241,7 @@
    {
     "fact_id": "r1.stress.2020_covid",
     "label_fr": "Rendement pendant Choc COVID-19",
-    "value": -0.09028762523500533,
+    "value": -0.09028762523500544,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5262,7 +5262,7 @@
    {
     "fact_id": "r1.stress_cad.2020_covid",
     "label_fr": "Perte en dollars pendant Choc COVID-19",
-    "value": 13543.143785250799,
+    "value": 13543.143785250817,
     "unit": "CAD",
     "currency": null,
     "as_of": null,
@@ -5275,7 +5275,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": "perte × patrimoine investissable déclaré (150,000 $)"
+      "processing": "perte × patrimoine investissable déclaré (150 000 $)"
      }
     ],
     "trace_id": "dec-amira-v1-fixture:t008:lens.risk:evidence"
@@ -5283,7 +5283,7 @@
    {
     "fact_id": "r1.n_eff_risk",
     "label_fr": "Nombre effectif de sources de risque",
-    "value": 2.3722039291429615,
+    "value": 2.3722039291429606,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -5304,7 +5304,7 @@
    {
     "fact_id": "r1.div_ratio",
     "label_fr": "Ratio de diversification",
-    "value": 1.3495544068424443,
+    "value": 1.3495544068424445,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -5325,7 +5325,7 @@
    {
     "fact_id": "r1.cluster0",
     "label_fr": "Poids d'un groupe très corrélé (SPY, ESGV)",
-    "value": 0.6899999991206479,
+    "value": 0.6899999991206484,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5346,7 +5346,7 @@
    {
     "fact_id": "r1.cluster1",
     "label_fr": "Poids d'un groupe très corrélé (AGG)",
-    "value": 0.1499999987143719,
+    "value": 0.1499999987143723,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5367,7 +5367,7 @@
    {
     "fact_id": "r1.cluster2",
     "label_fr": "Poids d'un groupe très corrélé (GLD)",
-    "value": 0.09999999993584624,
+    "value": 0.09999999993584627,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5387,8 +5387,8 @@
    },
    {
     "fact_id": "r1.lt.tech",
-    "label_fr": "Exposition consolidée « tech » (look-through)",
-    "value": 0.30048964561533764,
+    "label_fr": "Exposition consolidée au secteur de la technologie (look-through)",
+    "value": 0.3004896456153378,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5408,8 +5408,8 @@
    },
    {
     "fact_id": "r1.lt.energy",
-    "label_fr": "Exposition consolidée « energy » (look-through)",
-    "value": 0.05148883298147616,
+    "label_fr": "Exposition consolidée au secteur de l'énergie (look-through)",
+    "value": 0.05148883298147615,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5429,8 +5429,8 @@
    },
    {
     "fact_id": "r1.lt.financials",
-    "label_fr": "Exposition consolidée « financials » (look-through)",
-    "value": 0.07808946621297332,
+    "label_fr": "Exposition consolidée au secteur de la finance (look-through)",
+    "value": 0.07808946621297336,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5492,7 +5492,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:alloc.growth:max",
-    "label_fr": "alloc.growth niveau N4",
+    "label_fr": "part des actifs de croissance, niveau N4",
     "value": 0.75,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5513,7 +5513,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:alloc.growth:min",
-    "label_fr": "alloc.growth niveau N4",
+    "label_fr": "part des actifs de croissance, niveau N4",
     "value": 0.75,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5534,7 +5534,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:alloc.cash_like:max",
-    "label_fr": "alloc.cash_like niveau N4",
+    "label_fr": "part des liquidités, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5555,7 +5555,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:alloc.long_duration:max",
-    "label_fr": "alloc.long_duration niveau N4",
+    "label_fr": "part des obligations à long terme, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5576,7 +5576,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:alloc.gold:max",
-    "label_fr": "alloc.gold niveau N4",
+    "label_fr": "part de l'or, niveau N4",
     "value": 0.1,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5597,7 +5597,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:alloc.crypto:max",
-    "label_fr": "alloc.crypto niveau N4",
+    "label_fr": "part des cryptoactifs, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5618,7 +5618,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:conc.etf_equity_each[XIU.TO]:max",
-    "label_fr": "conc.etf_equity_each niveau N4",
+    "label_fr": "poids de chaque FNB d'actions, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5639,7 +5639,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:conc.etf_equity_each[SPY]:max",
-    "label_fr": "conc.etf_equity_each niveau N4",
+    "label_fr": "poids de chaque FNB d'actions, niveau N4",
     "value": 0.48,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5660,7 +5660,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:conc.etf_equity_each[ESGV]:max",
-    "label_fr": "conc.etf_equity_each niveau N4",
+    "label_fr": "poids de chaque FNB d'actions, niveau N4",
     "value": 0.21,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5681,7 +5681,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:conc.etf_equity_each[QQQ]:max",
-    "label_fr": "conc.etf_equity_each niveau N4",
+    "label_fr": "poids de chaque FNB d'actions, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5702,7 +5702,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:conc.etf_bond_each[XBB.TO]:max",
-    "label_fr": "conc.etf_bond_each niveau N4",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5723,7 +5723,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:conc.etf_bond_each[AGG]:max",
-    "label_fr": "conc.etf_bond_each niveau N4",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N4",
     "value": 0.15,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5744,7 +5744,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:conc.etf_bond_each[TLT]:max",
-    "label_fr": "conc.etf_bond_each niveau N4",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5765,7 +5765,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:conc.single_each[ENB.TO]:max",
-    "label_fr": "conc.single_each niveau N4",
+    "label_fr": "poids de chaque titre individuel, niveau N4",
     "value": 0.03,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5786,7 +5786,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:conc.single_each[TSLA]:max",
-    "label_fr": "conc.single_each niveau N4",
+    "label_fr": "poids de chaque titre individuel, niveau N4",
     "value": 0.03,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5807,7 +5807,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:conc.single_total:max",
-    "label_fr": "conc.single_total niveau N4",
+    "label_fr": "poids total des titres individuels, niveau N4",
     "value": 0.06,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5828,7 +5828,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:exp.tech:max",
-    "label_fr": "exp.tech niveau N4",
+    "label_fr": "exposition au secteur de la technologie (look-through), niveau N4",
     "value": 0.30049,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5912,7 +5912,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:strat.sector_cap.tech:max",
-    "label_fr": "plafond d'exposition tech (look-through)",
+    "label_fr": "plafond d'exposition au secteur de la technologie (look-through)",
     "value": 0.30049,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5933,7 +5933,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:strat.sector_cap.energy:max",
-    "label_fr": "plafond d'exposition energy (look-through)",
+    "label_fr": "plafond d'exposition au secteur de l'énergie (look-through)",
     "value": 0.051489,
     "unit": "part du portefeuille",
     "currency": null,
@@ -5954,7 +5954,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:risk.cvar_m:max",
-    "label_fr": "risk.cvar_m niveau N4",
+    "label_fr": "CVaR mensuelle, niveau N4",
     "value": 0.05035,
     "unit": "perte (fraction)",
     "currency": null,
@@ -5975,7 +5975,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:risk.cvar_12m:max",
-    "label_fr": "risk.cvar_12m niveau N4",
+    "label_fr": "CVaR des rendements sur douze mois glissants, niveau N4",
     "value": 0.14677,
     "unit": "perte (fraction)",
     "currency": null,
@@ -5996,7 +5996,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:risk.mdd:max",
-    "label_fr": "risk.mdd niveau N4",
+    "label_fr": "baisse maximale, niveau N4",
     "value": 0.305027,
     "unit": "perte (fraction)",
     "currency": null,
@@ -6017,7 +6017,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:risk.vol:max",
-    "label_fr": "risk.vol niveau N4",
+    "label_fr": "volatilité annualisée, niveau N4",
     "value": 0.109577,
     "unit": "volatilité annualisée",
     "currency": null,
@@ -6038,7 +6038,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:risk.stress_2022:max",
-    "label_fr": "risk.stress_2022 niveau N4",
+    "label_fr": "perte dans le scénario de crise de 2022, niveau N4",
     "value": 0.121337,
     "unit": "perte (fraction)",
     "currency": null,
@@ -6081,7 +6081,7 @@
    {
     "fact_id": "r2.opt_risk",
     "label_fr": "Risque minimisé (CVAR, mensuel)",
-    "value": 0.05056453729153095,
+    "value": 0.05056453729153094,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6164,7 +6164,7 @@
    },
    {
     "fact_id": "r2.active.alloc.gold:max",
-    "label_fr": "Plafond atteint : alloc.gold niveau N4",
+    "label_fr": "Plafond atteint : part de l'or, niveau N4",
     "value": 0.1,
     "unit": "%",
     "currency": null,
@@ -6228,7 +6228,7 @@
    {
     "fact_id": "r2.cvar_m",
     "label_fr": "CVaR 95 % mensuelle (historique)",
-    "value": 0.050349506259566724,
+    "value": 0.050349506259566745,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6270,7 +6270,7 @@
    {
     "fact_id": "r2.vol",
     "label_fr": "Volatilité annualisée (historique)",
-    "value": 0.10957688672358538,
+    "value": 0.10957688672358545,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6291,7 +6291,7 @@
    {
     "fact_id": "r2.worst12",
     "label_fr": "Pire rendement sur 12 mois (historique)",
-    "value": -0.12133695726295234,
+    "value": -0.12133695726295243,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6333,7 +6333,7 @@
    {
     "fact_id": "r2.rc.ESGV",
     "label_fr": "Part de la CVaR portée par ESGV",
-    "value": 0.2759294721065815,
+    "value": 0.27592947210658164,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6354,7 +6354,7 @@
    {
     "fact_id": "r2.rc.TSLA",
     "label_fr": "Part de la CVaR portée par TSLA",
-    "value": 0.09995521921491789,
+    "value": 0.09995521921491783,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6375,7 +6375,7 @@
    {
     "fact_id": "r2.stress.2022_taux",
     "label_fr": "Rendement pendant Hausse des taux 2022 : actions et obligations en baisse",
-    "value": -0.12133695726295224,
+    "value": -0.12133695726295235,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6396,7 +6396,7 @@
    {
     "fact_id": "r2.stress_cad.2022_taux",
     "label_fr": "Perte en dollars pendant Hausse des taux 2022 : actions et obligations en baisse",
-    "value": 18200.543589442837,
+    "value": 18200.543589442852,
     "unit": "CAD",
     "currency": null,
     "as_of": null,
@@ -6409,7 +6409,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": "perte × patrimoine investissable déclaré (150,000 $)"
+      "processing": "perte × patrimoine investissable déclaré (150 000 $)"
      }
     ],
     "trace_id": "dec-amira-v1-fixture:t015:lens.risk:evidence"
@@ -6417,7 +6417,7 @@
    {
     "fact_id": "r2.stress.2020_covid",
     "label_fr": "Rendement pendant Choc COVID-19",
-    "value": -0.09028762523500533,
+    "value": -0.09028762523500544,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6438,7 +6438,7 @@
    {
     "fact_id": "r2.stress_cad.2020_covid",
     "label_fr": "Perte en dollars pendant Choc COVID-19",
-    "value": 13543.143785250799,
+    "value": 13543.143785250817,
     "unit": "CAD",
     "currency": null,
     "as_of": null,
@@ -6451,7 +6451,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": "perte × patrimoine investissable déclaré (150,000 $)"
+      "processing": "perte × patrimoine investissable déclaré (150 000 $)"
      }
     ],
     "trace_id": "dec-amira-v1-fixture:t015:lens.risk:evidence"
@@ -6459,7 +6459,7 @@
    {
     "fact_id": "r2.n_eff_risk",
     "label_fr": "Nombre effectif de sources de risque",
-    "value": 2.3722039291429615,
+    "value": 2.3722039291429606,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -6480,7 +6480,7 @@
    {
     "fact_id": "r2.div_ratio",
     "label_fr": "Ratio de diversification",
-    "value": 1.3495544068424443,
+    "value": 1.3495544068424445,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -6501,7 +6501,7 @@
    {
     "fact_id": "r2.cluster0",
     "label_fr": "Poids d'un groupe très corrélé (SPY, ESGV)",
-    "value": 0.6899999991206479,
+    "value": 0.6899999991206484,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6522,7 +6522,7 @@
    {
     "fact_id": "r2.cluster1",
     "label_fr": "Poids d'un groupe très corrélé (AGG)",
-    "value": 0.1499999987143719,
+    "value": 0.1499999987143723,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6543,7 +6543,7 @@
    {
     "fact_id": "r2.cluster2",
     "label_fr": "Poids d'un groupe très corrélé (GLD)",
-    "value": 0.09999999993584624,
+    "value": 0.09999999993584627,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6563,8 +6563,8 @@
    },
    {
     "fact_id": "r2.lt.tech",
-    "label_fr": "Exposition consolidée « tech » (look-through)",
-    "value": 0.30048964561533764,
+    "label_fr": "Exposition consolidée au secteur de la technologie (look-through)",
+    "value": 0.3004896456153378,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6584,8 +6584,8 @@
    },
    {
     "fact_id": "r2.lt.energy",
-    "label_fr": "Exposition consolidée « energy » (look-through)",
-    "value": 0.05148883298147616,
+    "label_fr": "Exposition consolidée au secteur de l'énergie (look-through)",
+    "value": 0.05148883298147615,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6605,8 +6605,8 @@
    },
    {
     "fact_id": "r2.lt.financials",
-    "label_fr": "Exposition consolidée « financials » (look-through)",
-    "value": 0.07808946621297332,
+    "label_fr": "Exposition consolidée au secteur de la finance (look-through)",
+    "value": 0.07808946621297336,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6668,7 +6668,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:alloc.growth:max",
-    "label_fr": "alloc.growth niveau N4",
+    "label_fr": "part des actifs de croissance, niveau N4",
     "value": 0.75,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6689,7 +6689,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:alloc.growth:min",
-    "label_fr": "alloc.growth niveau N4",
+    "label_fr": "part des actifs de croissance, niveau N4",
     "value": 0.75,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6710,7 +6710,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:alloc.cash_like:max",
-    "label_fr": "alloc.cash_like niveau N4",
+    "label_fr": "part des liquidités, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6731,7 +6731,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:alloc.long_duration:max",
-    "label_fr": "alloc.long_duration niveau N4",
+    "label_fr": "part des obligations à long terme, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6752,7 +6752,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:alloc.gold:max",
-    "label_fr": "alloc.gold niveau N4",
+    "label_fr": "part de l'or, niveau N4",
     "value": 0.1,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6773,7 +6773,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:alloc.crypto:max",
-    "label_fr": "alloc.crypto niveau N4",
+    "label_fr": "part des cryptoactifs, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6794,7 +6794,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:conc.etf_equity_each[XIU.TO]:max",
-    "label_fr": "conc.etf_equity_each niveau N4",
+    "label_fr": "poids de chaque FNB d'actions, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6815,7 +6815,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:conc.etf_equity_each[SPY]:max",
-    "label_fr": "conc.etf_equity_each niveau N4",
+    "label_fr": "poids de chaque FNB d'actions, niveau N4",
     "value": 0.48,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6836,7 +6836,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:conc.etf_equity_each[ESGV]:max",
-    "label_fr": "conc.etf_equity_each niveau N4",
+    "label_fr": "poids de chaque FNB d'actions, niveau N4",
     "value": 0.21,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6857,7 +6857,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:conc.etf_equity_each[QQQ]:max",
-    "label_fr": "conc.etf_equity_each niveau N4",
+    "label_fr": "poids de chaque FNB d'actions, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6878,7 +6878,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:conc.etf_bond_each[XBB.TO]:max",
-    "label_fr": "conc.etf_bond_each niveau N4",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6899,7 +6899,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:conc.etf_bond_each[AGG]:max",
-    "label_fr": "conc.etf_bond_each niveau N4",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N4",
     "value": 0.15,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6920,7 +6920,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:conc.etf_bond_each[TLT]:max",
-    "label_fr": "conc.etf_bond_each niveau N4",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6941,7 +6941,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:conc.single_each[ENB.TO]:max",
-    "label_fr": "conc.single_each niveau N4",
+    "label_fr": "poids de chaque titre individuel, niveau N4",
     "value": 0.03,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6962,7 +6962,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:conc.single_each[TSLA]:max",
-    "label_fr": "conc.single_each niveau N4",
+    "label_fr": "poids de chaque titre individuel, niveau N4",
     "value": 0.03,
     "unit": "part du portefeuille",
     "currency": null,
@@ -6983,7 +6983,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:conc.single_total:max",
-    "label_fr": "conc.single_total niveau N4",
+    "label_fr": "poids total des titres individuels, niveau N4",
     "value": 0.06,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7004,7 +7004,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:exp.tech:max",
-    "label_fr": "exp.tech niveau N4",
+    "label_fr": "exposition au secteur de la technologie (look-through), niveau N4",
     "value": 0.30049,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7088,7 +7088,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:strat.sector_cap.tech:max",
-    "label_fr": "plafond d'exposition tech (look-through)",
+    "label_fr": "plafond d'exposition au secteur de la technologie (look-through)",
     "value": 0.30049,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7109,7 +7109,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:strat.sector_cap.energy:max",
-    "label_fr": "plafond d'exposition energy (look-through)",
+    "label_fr": "plafond d'exposition au secteur de l'énergie (look-through)",
     "value": 0.051489,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7130,7 +7130,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:risk.cvar_m:max",
-    "label_fr": "risk.cvar_m niveau N4",
+    "label_fr": "CVaR mensuelle, niveau N4",
     "value": 0.05035,
     "unit": "perte (fraction)",
     "currency": null,
@@ -7151,7 +7151,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:risk.cvar_12m:max",
-    "label_fr": "risk.cvar_12m niveau N4",
+    "label_fr": "CVaR des rendements sur douze mois glissants, niveau N4",
     "value": 0.14677,
     "unit": "perte (fraction)",
     "currency": null,
@@ -7172,7 +7172,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:risk.mdd:max",
-    "label_fr": "risk.mdd niveau N4",
+    "label_fr": "baisse maximale, niveau N4",
     "value": 0.305027,
     "unit": "perte (fraction)",
     "currency": null,
@@ -7193,7 +7193,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:risk.vol:max",
-    "label_fr": "risk.vol niveau N4",
+    "label_fr": "volatilité annualisée, niveau N4",
     "value": 0.109577,
     "unit": "volatilité annualisée",
     "currency": null,
@@ -7214,7 +7214,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:risk.stress_2022:max",
-    "label_fr": "risk.stress_2022 niveau N4",
+    "label_fr": "perte dans le scénario de crise de 2022, niveau N4",
     "value": 0.121337,
     "unit": "perte (fraction)",
     "currency": null,
@@ -7298,7 +7298,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:alloc.growth:max",
-    "label_fr": "alloc.growth niveau N4",
+    "label_fr": "part des actifs de croissance, niveau N4",
     "value": 0.75,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7319,7 +7319,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:alloc.growth:min",
-    "label_fr": "alloc.growth niveau N4",
+    "label_fr": "part des actifs de croissance, niveau N4",
     "value": 0.75,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7340,7 +7340,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:alloc.cash_like:max",
-    "label_fr": "alloc.cash_like niveau N4",
+    "label_fr": "part des liquidités, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7361,7 +7361,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:alloc.long_duration:max",
-    "label_fr": "alloc.long_duration niveau N4",
+    "label_fr": "part des obligations à long terme, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7382,7 +7382,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:alloc.gold:max",
-    "label_fr": "alloc.gold niveau N4",
+    "label_fr": "part de l'or, niveau N4",
     "value": 0.1,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7403,7 +7403,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:alloc.crypto:max",
-    "label_fr": "alloc.crypto niveau N4",
+    "label_fr": "part des cryptoactifs, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7424,7 +7424,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.etf_equity_each[XIU.TO]:max",
-    "label_fr": "conc.etf_equity_each niveau N4",
+    "label_fr": "poids de chaque FNB d'actions, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7445,7 +7445,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.etf_equity_each[SPY]:max",
-    "label_fr": "conc.etf_equity_each niveau N4",
+    "label_fr": "poids de chaque FNB d'actions, niveau N4",
     "value": 0.48,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7466,7 +7466,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.etf_equity_each[ESGV]:max",
-    "label_fr": "conc.etf_equity_each niveau N4",
+    "label_fr": "poids de chaque FNB d'actions, niveau N4",
     "value": 0.21,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7487,7 +7487,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.etf_equity_each[QQQ]:max",
-    "label_fr": "conc.etf_equity_each niveau N4",
+    "label_fr": "poids de chaque FNB d'actions, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7508,7 +7508,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.etf_bond_each[XBB.TO]:max",
-    "label_fr": "conc.etf_bond_each niveau N4",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7529,7 +7529,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.etf_bond_each[AGG]:max",
-    "label_fr": "conc.etf_bond_each niveau N4",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N4",
     "value": 0.15,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7550,7 +7550,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.etf_bond_each[TLT]:max",
-    "label_fr": "conc.etf_bond_each niveau N4",
+    "label_fr": "poids de chaque FNB d'obligations, niveau N4",
     "value": 0.0,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7571,7 +7571,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.single_each[ENB.TO]:max",
-    "label_fr": "conc.single_each niveau N4",
+    "label_fr": "poids de chaque titre individuel, niveau N4",
     "value": 0.03,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7592,7 +7592,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.single_each[TSLA]:max",
-    "label_fr": "conc.single_each niveau N4",
+    "label_fr": "poids de chaque titre individuel, niveau N4",
     "value": 0.03,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7613,7 +7613,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.single_total:max",
-    "label_fr": "conc.single_total niveau N4",
+    "label_fr": "poids total des titres individuels, niveau N4",
     "value": 0.06,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7634,7 +7634,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:exp.tech:max",
-    "label_fr": "exp.tech niveau N4",
+    "label_fr": "exposition au secteur de la technologie (look-through), niveau N4",
     "value": 0.30049,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7718,7 +7718,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:strat.sector_cap.tech:max",
-    "label_fr": "plafond d'exposition tech (look-through)",
+    "label_fr": "plafond d'exposition au secteur de la technologie (look-through)",
     "value": 0.30049,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7739,7 +7739,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:strat.sector_cap.energy:max",
-    "label_fr": "plafond d'exposition energy (look-through)",
+    "label_fr": "plafond d'exposition au secteur de l'énergie (look-through)",
     "value": 0.051489,
     "unit": "part du portefeuille",
     "currency": null,
@@ -7760,7 +7760,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:risk.cvar_m:max",
-    "label_fr": "risk.cvar_m niveau N4",
+    "label_fr": "CVaR mensuelle, niveau N4",
     "value": 0.05035,
     "unit": "perte (fraction)",
     "currency": null,
@@ -7781,7 +7781,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:risk.cvar_12m:max",
-    "label_fr": "risk.cvar_12m niveau N4",
+    "label_fr": "CVaR des rendements sur douze mois glissants, niveau N4",
     "value": 0.14677,
     "unit": "perte (fraction)",
     "currency": null,
@@ -7802,7 +7802,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:risk.mdd:max",
-    "label_fr": "risk.mdd niveau N4",
+    "label_fr": "baisse maximale, niveau N4",
     "value": 0.305027,
     "unit": "perte (fraction)",
     "currency": null,
@@ -7823,7 +7823,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:risk.vol:max",
-    "label_fr": "risk.vol niveau N4",
+    "label_fr": "volatilité annualisée, niveau N4",
     "value": 0.109577,
     "unit": "volatilité annualisée",
     "currency": null,
@@ -7844,7 +7844,7 @@
    },
    {
     "fact_id": "dec-amira-v1-fixture:t020:judge:check:final:risk.stress_2022:max",
-    "label_fr": "risk.stress_2022 niveau N4",
+    "label_fr": "perte dans le scénario de crise de 2022, niveau N4",
     "value": 0.121337,
     "unit": "perte (fraction)",
     "currency": null,
@@ -7865,7 +7865,7 @@
    },
    {
     "fact_id": "cf.bound_old",
-    "label_fr": "Borne actuelle « alloc.gold niveau N4 » (max)",
+    "label_fr": "Borne actuelle « part de l'or, niveau N4 » (max)",
     "value": 0.1,
     "unit": "%",
     "currency": null,
@@ -7886,7 +7886,7 @@
    },
    {
     "fact_id": "cf.bound_new",
-    "label_fr": "Borne testée « alloc.gold niveau N4 » (max)",
+    "label_fr": "Borne testée « part de l'or, niveau N4 » (max)",
     "value": 0.15000000000000002,
     "unit": "%",
     "currency": null,
@@ -7908,7 +7908,7 @@
    {
     "fact_id": "cf.relax_risk",
     "label_fr": "Risque minimisé avec la borne testée",
-    "value": 0.050131200438494755,
+    "value": 0.05013120043849593,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -7942,7 +7942,7 @@
       "licence": null,
       "retrieved_utc": null,
       "sha256": null,
-      "processing": null
+      "processing": "dynamique"
      }
     ],
     "trace_id": "dec-amira-v1-fixture:t021:counterfactuals:optimize"
@@ -7950,7 +7950,7 @@
    {
     "fact_id": "cf.style.down.risk",
     "label_fr": "Risque minimisé avec le style dynamique",
-    "value": 0.04225430840387171,
+    "value": 0.04225430840387154,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -8036,7 +8036,7 @@
    },
    {
     "rule_id": "alloc.growth:max",
-    "description_fr": "alloc.growth niveau N4",
+    "description_fr": "part des actifs de croissance, niveau N4",
     "derived_from": "profile->R->level ; dollar_rule.e_cap",
     "limit": 0.8,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:alloc.growth:max",
@@ -8047,7 +8047,7 @@
    },
    {
     "rule_id": "alloc.growth:min",
-    "description_fr": "alloc.growth niveau N4",
+    "description_fr": "part des actifs de croissance, niveau N4",
     "derived_from": "profile->R->level ; dollar_rule.e_cap",
     "limit": 0.6,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:alloc.growth:min",
@@ -8058,7 +8058,7 @@
    },
    {
     "rule_id": "alloc.cash_like:max",
-    "description_fr": "alloc.cash_like niveau N4",
+    "description_fr": "part des liquidités, niveau N4",
     "derived_from": "level",
     "limit": 0.2,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:alloc.cash_like:max",
@@ -8069,7 +8069,7 @@
    },
    {
     "rule_id": "alloc.long_duration:max",
-    "description_fr": "alloc.long_duration niveau N4",
+    "description_fr": "part des obligations à long terme, niveau N4",
     "derived_from": "level",
     "limit": 0.1,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:alloc.long_duration:max",
@@ -8080,7 +8080,7 @@
    },
    {
     "rule_id": "alloc.gold:max",
-    "description_fr": "alloc.gold niveau N4",
+    "description_fr": "part de l'or, niveau N4",
     "derived_from": "level",
     "limit": 0.1,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:alloc.gold:max",
@@ -8091,7 +8091,7 @@
    },
    {
     "rule_id": "alloc.crypto:max",
-    "description_fr": "alloc.crypto niveau N4",
+    "description_fr": "part des cryptoactifs, niveau N4",
     "derived_from": "level ; profile.preferences.crypto ; profile.knowledge",
     "limit": 0.02,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:alloc.crypto:max",
@@ -8102,7 +8102,7 @@
    },
    {
     "rule_id": "conc.etf_equity_each[XIU.TO]:max",
-    "description_fr": "conc.etf_equity_each niveau N4",
+    "description_fr": "poids de chaque FNB d'actions, niveau N4",
     "derived_from": "level",
     "limit": 0.48,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.etf_equity_each[XIU.TO]:max",
@@ -8113,7 +8113,7 @@
    },
    {
     "rule_id": "conc.etf_equity_each[SPY]:max",
-    "description_fr": "conc.etf_equity_each niveau N4",
+    "description_fr": "poids de chaque FNB d'actions, niveau N4",
     "derived_from": "level",
     "limit": 0.48,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.etf_equity_each[SPY]:max",
@@ -8124,7 +8124,7 @@
    },
    {
     "rule_id": "conc.etf_equity_each[ESGV]:max",
-    "description_fr": "conc.etf_equity_each niveau N4",
+    "description_fr": "poids de chaque FNB d'actions, niveau N4",
     "derived_from": "level",
     "limit": 0.48,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.etf_equity_each[ESGV]:max",
@@ -8135,7 +8135,7 @@
    },
    {
     "rule_id": "conc.etf_equity_each[QQQ]:max",
-    "description_fr": "conc.etf_equity_each niveau N4",
+    "description_fr": "poids de chaque FNB d'actions, niveau N4",
     "derived_from": "level",
     "limit": 0.48,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.etf_equity_each[QQQ]:max",
@@ -8146,7 +8146,7 @@
    },
    {
     "rule_id": "conc.etf_bond_each[XBB.TO]:max",
-    "description_fr": "conc.etf_bond_each niveau N4",
+    "description_fr": "poids de chaque FNB d'obligations, niveau N4",
     "derived_from": "level",
     "limit": 0.3,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.etf_bond_each[XBB.TO]:max",
@@ -8157,7 +8157,7 @@
    },
    {
     "rule_id": "conc.etf_bond_each[AGG]:max",
-    "description_fr": "conc.etf_bond_each niveau N4",
+    "description_fr": "poids de chaque FNB d'obligations, niveau N4",
     "derived_from": "level",
     "limit": 0.3,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.etf_bond_each[AGG]:max",
@@ -8168,7 +8168,7 @@
    },
    {
     "rule_id": "conc.etf_bond_each[TLT]:max",
-    "description_fr": "conc.etf_bond_each niveau N4",
+    "description_fr": "poids de chaque FNB d'obligations, niveau N4",
     "derived_from": "level",
     "limit": 0.3,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.etf_bond_each[TLT]:max",
@@ -8179,7 +8179,7 @@
    },
    {
     "rule_id": "conc.single_each[ENB.TO]:max",
-    "description_fr": "conc.single_each niveau N4",
+    "description_fr": "poids de chaque titre individuel, niveau N4",
     "derived_from": "level ; dollar_rule.l_star ; profile.knowledge",
     "limit": 0.05,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.single_each[ENB.TO]:max",
@@ -8190,7 +8190,7 @@
    },
    {
     "rule_id": "conc.single_each[TSLA]:max",
-    "description_fr": "conc.single_each niveau N4",
+    "description_fr": "poids de chaque titre individuel, niveau N4",
     "derived_from": "level ; dollar_rule.l_star ; profile.knowledge",
     "limit": 0.05,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.single_each[TSLA]:max",
@@ -8201,7 +8201,7 @@
    },
    {
     "rule_id": "conc.single_total:max",
-    "description_fr": "conc.single_total niveau N4",
+    "description_fr": "poids total des titres individuels, niveau N4",
     "derived_from": "dollar_rule.l_star",
     "limit": 0.14,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:conc.single_total:max",
@@ -8212,7 +8212,7 @@
    },
    {
     "rule_id": "exp.tech:max",
-    "description_fr": "exp.tech niveau N4",
+    "description_fr": "exposition au secteur de la technologie (look-through), niveau N4",
     "derived_from": "level ; profile.biases[familiarite]",
     "limit": 0.4075,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:exp.tech:max",
@@ -8256,7 +8256,7 @@
    },
    {
     "rule_id": "strat.sector_cap.tech:max",
-    "description_fr": "plafond d'exposition tech (look-through)",
+    "description_fr": "plafond d'exposition au secteur de la technologie (look-through)",
     "derived_from": "étape 0 : capital humain : exposition au poids du marché, sans satellite",
     "limit": 0.35,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:strat.sector_cap.tech:max",
@@ -8267,7 +8267,7 @@
    },
    {
     "rule_id": "strat.sector_cap.energy:max",
-    "description_fr": "plafond d'exposition energy (look-through)",
+    "description_fr": "plafond d'exposition au secteur de l'énergie (look-through)",
     "derived_from": "étape 0 : secteur d'un titre retenu : plafond affiché (Brain D7)",
     "limit": 0.1,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:strat.sector_cap.energy:max",
@@ -8278,7 +8278,7 @@
    },
    {
     "rule_id": "risk.cvar_m:max",
-    "description_fr": "risk.cvar_m niveau N4",
+    "description_fr": "CVaR mensuelle, niveau N4",
     "derived_from": "level",
     "limit": 0.062,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:risk.cvar_m:max",
@@ -8289,7 +8289,7 @@
    },
    {
     "rule_id": "risk.cvar_12m:max",
-    "description_fr": "risk.cvar_12m niveau N4",
+    "description_fr": "CVaR des rendements sur douze mois glissants, niveau N4",
     "derived_from": "level",
     "limit": 0.195,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:risk.cvar_12m:max",
@@ -8300,7 +8300,7 @@
    },
    {
     "rule_id": "risk.mdd:max",
-    "description_fr": "risk.mdd niveau N4",
+    "description_fr": "baisse maximale, niveau N4",
     "derived_from": "level",
     "limit": 0.415,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:risk.mdd:max",
@@ -8311,7 +8311,7 @@
    },
    {
     "rule_id": "risk.vol:max",
-    "description_fr": "risk.vol niveau N4",
+    "description_fr": "volatilité annualisée, niveau N4",
     "derived_from": "level",
     "limit": 0.12,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:risk.vol:max",
@@ -8322,7 +8322,7 @@
    },
    {
     "rule_id": "risk.stress_2022:max",
-    "description_fr": "risk.stress_2022 niveau N4",
+    "description_fr": "perte dans le scénario de crise de 2022, niveau N4",
     "derived_from": "level",
     "limit": 0.175,
     "value_fact_id": "dec-amira-v1-fixture:t020:judge:check:final:risk.stress_2022:max",
@@ -8334,7 +8334,7 @@
   ],
   "counterfactuals": [
    {
-    "change_fr": "Si la borne « alloc.gold niveau N4 » passait de 10,0 % à 15,0 %",
+    "change_fr": "Si la borne « part de l'or, niveau N4 » passait de 10,0 % à 15,0 %",
     "result_fact_ids": [
      "cf.relax_risk"
     ]
@@ -8445,14 +8445,14 @@
      "label": "HYPOTHESE"
     },
     {
-     "text_fr": "Plafond d'exposition tech (look-through) : 35,0 %.",
+     "text_fr": "Plafond d'exposition au secteur de la technologie (look-through) : 35,0 %.",
      "fact_ids": [
       "strat.sector_cap.tech"
      ],
      "label": "HYPOTHESE"
     },
     {
-     "text_fr": "Plafond d'exposition energy (look-through) : 10,0 %.",
+     "text_fr": "Plafond d'exposition au secteur de l'énergie (look-through) : 10,0 %.",
      "fact_ids": [
       "strat.sector_cap.energy"
      ],
@@ -8466,7 +8466,7 @@
      "label": "HYPOTHESE"
     },
     {
-     "text_fr": "Objection maintenue par la lentille « diversity » au second tour.",
+     "text_fr": "Objection maintenue par la lentille « diversité et préférences » au second tour.",
      "fact_ids": [],
      "label": "HYPOTHESE"
     },
@@ -8478,7 +8478,7 @@
    ],
    "what_would_change": [
     {
-     "text_fr": "Si la borne « alloc.gold niveau N4 » passait de 10,0 % à 15,0 %, le risque minimisé passerait de 5,1 % à 5,0 %.",
+     "text_fr": "Si la borne « part de l'or, niveau N4 » passait de 10,0 % à 15,0 %, le risque minimisé passerait de 5,1 % à 5,0 %.",
      "fact_ids": [
       "cf.bound_old",
       "cf.bound_new",
@@ -8524,8 +8524,8 @@
      "emphasis.diversity",
      "emphasis.constraints"
     ],
-    "started_utc": "2026-11-15T17:33:20.753515Z",
-    "ended_utc": "2026-11-15T17:33:20.794582Z",
+    "started_utc": "2026-11-15T21:44:54.869144Z",
+    "ended_utc": "2026-11-15T21:44:54.892064Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8554,8 +8554,8 @@
      "strat.pi",
      "strat.K"
     ],
-    "started_utc": "2026-11-15T17:33:20.896607Z",
-    "ended_utc": "2026-11-15T17:33:20.965690Z",
+    "started_utc": "2026-11-15T21:44:54.907403Z",
+    "ended_utc": "2026-11-15T21:44:54.945391Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8784,8 +8784,8 @@
      "strat.score.JPM",
      "strat.rank.JPM"
     ],
-    "started_utc": "2026-11-15T17:33:20.965730Z",
-    "ended_utc": "2026-11-15T17:33:21.947544Z",
+    "started_utc": "2026-11-15T21:44:54.945412Z",
+    "ended_utc": "2026-11-15T21:44:55.521825Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8806,8 +8806,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T17:33:21.947571Z",
-    "ended_utc": "2026-11-15T17:33:21.947630Z",
+    "started_utc": "2026-11-15T21:44:55.521928Z",
+    "ended_utc": "2026-11-15T21:44:55.521993Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8838,8 +8838,8 @@
      "strat.risk_cost",
      "strat.applied"
     ],
-    "started_utc": "2026-11-15T17:33:21.947641Z",
-    "ended_utc": "2026-11-15T17:33:22.369749Z",
+    "started_utc": "2026-11-15T21:44:55.522008Z",
+    "ended_utc": "2026-11-15T21:44:55.689849Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8865,8 +8865,8 @@
      "r1.active.strat.floor.ENB.TO[ENB.TO]:min",
      "r1.active.alloc.gold:max"
     ],
-    "started_utc": "2026-11-15T17:33:22.371382Z",
-    "ended_utc": "2026-11-15T17:33:22.483648Z",
+    "started_utc": "2026-11-15T21:44:55.691193Z",
+    "ended_utc": "2026-11-15T21:44:55.721837Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8889,8 +8889,8 @@
      "r1.horizon",
      "r1.recovery"
     ],
-    "started_utc": "2026-11-15T17:33:22.483681Z",
-    "ended_utc": "2026-11-15T17:33:22.509225Z",
+    "started_utc": "2026-11-15T21:44:55.721863Z",
+    "ended_utc": "2026-11-15T21:44:55.734097Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -8922,8 +8922,8 @@
      "r1.stress.2020_covid",
      "r1.stress_cad.2020_covid"
     ],
-    "started_utc": "2026-11-15T17:33:22.509255Z",
-    "ended_utc": "2026-11-15T17:33:22.549494Z",
+    "started_utc": "2026-11-15T21:44:55.734115Z",
+    "ended_utc": "2026-11-15T21:44:55.761870Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -8952,8 +8952,8 @@
      "r1.lt.energy",
      "r1.lt.financials"
     ],
-    "started_utc": "2026-11-15T17:33:22.549524Z",
-    "ended_utc": "2026-11-15T17:33:22.559454Z",
+    "started_utc": "2026-11-15T21:44:55.761891Z",
+    "ended_utc": "2026-11-15T21:44:55.764978Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -8975,8 +8975,8 @@
     "fact_ids": [
      "r1.n_blocking"
     ],
-    "started_utc": "2026-11-15T17:33:22.559482Z",
-    "ended_utc": "2026-11-15T17:33:22.584962Z",
+    "started_utc": "2026-11-15T21:44:55.764996Z",
+    "ended_utc": "2026-11-15T21:44:55.781269Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9003,7 +9003,7 @@
       "TSLA": 0.03
      }
     },
-    "output_summary": "approuve ; 0 violation(s) bloquante(s)",
+    "output_summary": "approuvée ; aucune violation bloquante",
     "fact_ids": [
      "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:positivite",
      "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:somme_poids",
@@ -9035,8 +9035,8 @@
      "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:risk.vol:max",
      "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-15T17:33:22.559689Z",
-    "ended_utc": "2026-11-15T17:33:22.583636Z",
+    "started_utc": "2026-11-15T21:44:55.765202Z",
+    "ended_utc": "2026-11-15T21:44:55.779929Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9056,8 +9056,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T17:33:22.584989Z",
-    "ended_utc": "2026-11-15T17:33:22.585018Z",
+    "started_utc": "2026-11-15T21:44:55.781295Z",
+    "ended_utc": "2026-11-15T21:44:55.781315Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9077,8 +9077,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T17:33:22.585978Z",
-    "ended_utc": "2026-11-15T17:33:22.586383Z",
+    "started_utc": "2026-11-15T21:44:55.781783Z",
+    "ended_utc": "2026-11-15T21:44:55.782099Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9105,8 +9105,8 @@
      "r2.active.strat.floor.ENB.TO[ENB.TO]:min",
      "r2.active.alloc.gold:max"
     ],
-    "started_utc": "2026-11-15T17:33:22.586416Z",
-    "ended_utc": "2026-11-15T17:33:22.586493Z",
+    "started_utc": "2026-11-15T21:44:55.782119Z",
+    "ended_utc": "2026-11-15T21:44:55.782177Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9129,8 +9129,8 @@
      "r2.horizon",
      "r2.recovery"
     ],
-    "started_utc": "2026-11-15T17:33:22.586510Z",
-    "ended_utc": "2026-11-15T17:33:22.604515Z",
+    "started_utc": "2026-11-15T21:44:55.782188Z",
+    "ended_utc": "2026-11-15T21:44:55.795431Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9162,8 +9162,8 @@
      "r2.stress.2020_covid",
      "r2.stress_cad.2020_covid"
     ],
-    "started_utc": "2026-11-15T17:33:22.604538Z",
-    "ended_utc": "2026-11-15T17:33:22.641953Z",
+    "started_utc": "2026-11-15T21:44:55.795447Z",
+    "ended_utc": "2026-11-15T21:44:55.818358Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9192,8 +9192,8 @@
      "r2.lt.energy",
      "r2.lt.financials"
     ],
-    "started_utc": "2026-11-15T17:33:22.641981Z",
-    "ended_utc": "2026-11-15T17:33:22.646576Z",
+    "started_utc": "2026-11-15T21:44:55.818376Z",
+    "ended_utc": "2026-11-15T21:44:55.821874Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9215,8 +9215,8 @@
     "fact_ids": [
      "r2.n_blocking"
     ],
-    "started_utc": "2026-11-15T17:33:22.646599Z",
-    "ended_utc": "2026-11-15T17:33:22.672196Z",
+    "started_utc": "2026-11-15T21:44:55.821895Z",
+    "ended_utc": "2026-11-15T21:44:55.838156Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9243,7 +9243,7 @@
       "TSLA": 0.03
      }
     },
-    "output_summary": "approuve ; 0 violation(s) bloquante(s)",
+    "output_summary": "approuvée ; aucune violation bloquante",
     "fact_ids": [
      "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:positivite",
      "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:somme_poids",
@@ -9275,8 +9275,8 @@
      "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:risk.vol:max",
      "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-15T17:33:22.646787Z",
-    "ended_utc": "2026-11-15T17:33:22.671041Z",
+    "started_utc": "2026-11-15T21:44:55.822159Z",
+    "ended_utc": "2026-11-15T21:44:55.837252Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9296,8 +9296,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T17:33:22.672224Z",
-    "ended_utc": "2026-11-15T17:33:22.672252Z",
+    "started_utc": "2026-11-15T21:44:55.838172Z",
+    "ended_utc": "2026-11-15T21:44:55.838186Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9317,8 +9317,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T17:33:22.673065Z",
-    "ended_utc": "2026-11-15T17:33:22.673084Z",
+    "started_utc": "2026-11-15T21:44:55.838576Z",
+    "ended_utc": "2026-11-15T21:44:55.838590Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9338,8 +9338,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T17:33:22.673099Z",
-    "ended_utc": "2026-11-15T17:33:22.699525Z",
+    "started_utc": "2026-11-15T21:44:55.838598Z",
+    "ended_utc": "2026-11-15T21:44:55.854416Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9367,7 +9367,7 @@
       "TSLA": 0.03
      }
     },
-    "output_summary": "approuve ; 0 violation(s) bloquante(s)",
+    "output_summary": "approuvée ; aucune violation bloquante",
     "fact_ids": [
      "dec-amira-v1-fixture:t020:judge:check:final:positivite",
      "dec-amira-v1-fixture:t020:judge:check:final:somme_poids",
@@ -9399,8 +9399,8 @@
      "dec-amira-v1-fixture:t020:judge:check:final:risk.vol:max",
      "dec-amira-v1-fixture:t020:judge:check:final:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-15T17:33:22.673366Z",
-    "ended_utc": "2026-11-15T17:33:22.698539Z",
+    "started_utc": "2026-11-15T21:44:55.838836Z",
+    "ended_utc": "2026-11-15T21:44:55.853600Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9426,8 +9426,8 @@
      "cf.style.down.n_titres",
      "cf.style.down.band_target"
     ],
-    "started_utc": "2026-11-15T17:33:22.699548Z",
-    "ended_utc": "2026-11-15T17:33:23.185154Z",
+    "started_utc": "2026-11-15T21:44:55.854431Z",
+    "ended_utc": "2026-11-15T21:44:56.022158Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",

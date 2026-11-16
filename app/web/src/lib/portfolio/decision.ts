@@ -163,7 +163,7 @@ export function rowFacts(row: RankingRow): DecisionFact[] {
 export interface RequestFacts {
   weight?: DecisionFact;
   method?: DecisionFact;
-  /** Judge checks of the request as asked, with their observable outcome (« refuse ; 4 violation(s)… »). */
+  /** Judge checks of the request as asked, with their observable outcome (« refusée ; 4 violations bloquantes »). */
   checks: DecisionTraceEvent[];
 }
 
@@ -173,6 +173,28 @@ export function requestFacts(decision: Decision, facts: FactIndex): RequestFacts
     method: facts.get("request.framed_method"),
     checks: decision.trace.filter((event) => event.agent === "judge" && event.trace_id.endsWith(":demande")),
   };
+}
+
+/**
+ * A check's provenance as the investor reads it: each part of `derived_from` (« level ; dollar_rule.l_star »,
+ * split on « ; ») named by `labels`, a part the table does not know kept as the engine wrote it.
+ */
+export function derivedFromLabel(raw: string, labels: Readonly<Record<string, string>>): string {
+  return raw
+    .split(";")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .map((part) => (Object.hasOwn(labels, part) ? labels[part] : part))
+    .join(", ");
+}
+
+/**
+ * Whether a check's raw provenance is worth showing under its name: not when the two read the same once the
+ * typographic apostrophe of the dictionary (’) and the engine's straight one (') are taken as one.
+ */
+export function showsRawProvenance(label: string, raw: string): boolean {
+  const plain = (text: string) => text.replaceAll("’", "'");
+  return plain(label) !== plain(raw);
 }
 
 /** The unit of the fact that measures a constraint, to format its limit the same way. */

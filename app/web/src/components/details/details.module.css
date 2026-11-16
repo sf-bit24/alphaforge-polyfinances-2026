@@ -824,20 +824,20 @@
   color: var(--ink-3);
 }
 
-/* version 1 (no portfolio engine yet) */
-.v2 h2 {
+/* text blocks of the `local` and `aws` page: the way to the simulated portfolio, no existing portfolio */
+.prose h2 {
   font-size: 20px;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
-.v2 p {
+.prose p {
   margin-top: 8px;
   font-size: 14px;
   line-height: 1.55;
   color: var(--ink-2);
   max-width: 70ch;
 }
-.v2 ul {
+.prose ul {
   margin-top: 12px;
   padding-left: 1.1em;
   list-style: disc;

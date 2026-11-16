@@ -33,7 +33,7 @@ from ..store import Store
 from ..trace import Trace
 from . import rules
 from .agent_runner import AgentRunner
-from .questionnaire import Questionnaire
+from .questionnaire import Questionnaire, band_brief, fact_band, format_fact
 from .state import ClientSession
 
 SKILLS_DIR = Path(__file__).with_name("skills")
@@ -120,23 +120,26 @@ def pending_skill(session: ClientSession, *, version: str) -> tuple[str | None, 
 
 
 def _fact_entries(questionnaire: Questionnaire, session: ClientSession) -> list[dict[str, Any]]:
-    """Faits confirmés, triés par champ, tels que les notes les citent."""
+    """Faits confirmés, triés par champ, tels que les notes les citent. Un fait répondu par une tranche porte
+    ``band``, et ``shown_as`` cite la tranche plutôt que le chiffre prudent du calcul."""
     locale = session.locale
     entries = []
     for field_id, fact in sorted(session.confirmed_facts().items()):
         spec = questionnaire.fields.get(field_id)
         if spec is None:
             continue
-        entries.append(
-            {
-                "field": field_id,
-                "dimension": spec.dimension,
-                "label": spec.label_text(locale),
-                "value": fact.get("value"),
-                "shown_as": questionnaire.format_value(field_id, fact.get("value"), locale),
-                "provenance": fact.get("provenance"),
-            }
-        )
+        entry = {
+            "field": field_id,
+            "dimension": spec.dimension,
+            "label": spec.label_text(locale),
+            "value": fact.get("value"),
+            "shown_as": format_fact(spec, fact, locale),
+            "provenance": fact.get("provenance"),
+        }
+        band = fact_band(fact)
+        if band is not None:
+            entry["band"] = band_brief(band, locale)
+        entries.append(entry)
     return entries
 
 

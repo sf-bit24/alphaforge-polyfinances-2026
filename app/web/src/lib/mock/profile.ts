@@ -219,6 +219,10 @@ const LEVEL_WORDS: Record<Locale, string[]> = {
 
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
+/** A label inside a sentence: in lower case, except the sigla (IA, AI, CELI), which keep their capitals. */
+const inSentence = (label: string) =>
+  label.replace(/\p{L}+/gu, (word) => (word.length > 1 && word === word.toUpperCase() ? word : word.toLowerCase()));
+
 /** A 1..5 risk level in words, as the first part of a summary. */
 const levelWords = (level: number, locale: Locale) => capitalize(LEVEL_WORDS[locale][level - 1] ?? "");
 
@@ -264,7 +268,7 @@ function horizonParts(values: FieldValues, locale: Locale): string[] {
   const band = optionLabel("horizon.horizon_band", valueOf(values, "horizon.horizon_band"), locale);
   if (band) parts.push(band);
   const pattern = optionLabel("horizon.withdrawal_pattern", valueOf(values, "horizon.withdrawal_pattern"), locale);
-  if (pattern) parts.push(pattern.toLowerCase());
+  if (pattern) parts.push(inSentence(pattern));
   return parts;
 }
 
@@ -278,7 +282,7 @@ function riskToleranceParts(values: FieldValues, locale: Locale): string[] {
 function riskCapacityParts(values: FieldValues, locale: Locale): string[] {
   const capacity = riskCapacity(values);
   if (capacity === null) return [];
-  const limit = fieldLabel(capacity.limitedBy, locale).toLowerCase();
+  const limit = inSentence(fieldLabel(capacity.limitedBy, locale));
   return [levelWords(capacity.level, locale), locale === "fr" ? `limitée par : ${limit}` : `limited by: ${limit}`];
 }
 
@@ -299,7 +303,7 @@ function exclusionsPart(exclusions: unknown[], locale: Locale): string {
   const named = exclusions.filter((item) => item !== "none" && item !== "other");
   const labels = listLabels("preferences.exclusions", named, locale);
   if (!labels) return fr ? "Aucune exclusion" : "No exclusion";
-  return fr ? `Exclut : ${labels.toLowerCase()}` : `Excludes: ${labels.toLowerCase()}`;
+  return fr ? `Exclut : ${inSentence(labels)}` : `Excludes: ${inSentence(labels)}`;
 }
 
 function preferencesParts(values: FieldValues, locale: Locale): string[] {
@@ -311,7 +315,7 @@ function preferencesParts(values: FieldValues, locale: Locale): string[] {
   const themes = valueOf(values, "preferences.themes");
   if (Array.isArray(themes)) {
     const labels = listLabels("preferences.themes", themes.filter((item) => item !== "none"), locale);
-    if (labels) parts.push(locale === "fr" ? `intérêt : ${labels.toLowerCase()}` : `interest: ${labels.toLowerCase()}`);
+    if (labels) parts.push(locale === "fr" ? `intérêt : ${inSentence(labels)}` : `interest: ${inSentence(labels)}`);
   }
   return parts;
 }

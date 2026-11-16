@@ -40,11 +40,17 @@ from .questionnaire import (
     FieldSpec,
     InvalidValueError,
     Questionnaire,
+    band_brief,
+    band_is_range,
     default_max,
     default_min,
+    fact_band,
+    format_fact,
+    format_money,
     localized,
     numeric_choices,
     render_question,
+    tranche_bands,
     validate_value,
 )
 from .state import ClientSession
@@ -115,6 +121,17 @@ explanation; advanced = precise and concise vocabulary.
 the investor gave). Do not compute new figures. To mention the completeness, copy `completeness.shown` and \
 `completeness.threshold_shown` exactly as written (for example 75 % and 70 %), never the raw `score` or \
 `threshold`, which are only for your decisions. Distinguish what the investor said (facts) from your assumptions.
+- Several answers are ranges (tranches): such a fact or answer carries `band` (`option`, `label`, `min`, `max`), \
+and its `shown_as` cites the range. Its `value` is only the figure the code computes with, never what the investor \
+said: usually the cautious bound of the range (`band.min` for an amount or a reserve, `band.max` for a withdrawal), \
+sometimes its midpoint (an amount of "less than $10,000" counts as $5,000) or a default with no bounds ("I don't \
+know" counts as $10,000). Never present that value as an exact answer, in the message, a prompt or a help: cite \
+the range as `shown_as` or `band.label` gives it. Write "at least X" only when X is `band.min`, and "less than Y" \
+only when Y is `band.max`. For an amount of "$10,000 to less than $50,000", write "an amount of at least $10,000" \
+or the range, never "your $10,000" or "these $10,000"; for "less than $10,000", never "at least $5,000"; for \
+withdrawals of "10% to less than 25%", write that range, not "about 25%". An emergency fund of "less than 1 month" \
+is not "no emergency fund": only the option `none` means there is none. When dollar tranches are computed on such \
+a figure, `choices_note` says so.
 - The message is 2 to 5 sentences: acknowledge what was learned, then say why the next questions matter. No \
 greeting formulas, no lists of everything known.
 - You choose the variable to ask about: a field of missing_fields (heaviest first, unless the conversation makes \
@@ -154,9 +171,14 @@ class TurnFrame:
     values: dict[str, Any]
     locale: str
     turn: int
+    # Tranches des faits confirmés (``ClientSession.bands``) : elles changent les libellés, jamais les nombres.
+    bands: dict[str, Any] = field(default_factory=dict)
 
     def tranches(self, field_id: str) -> list[dict[str, Any]]:
-        return numeric_choices(self.questionnaire, field_id, self.values, self.locale)
+        return numeric_choices(self.questionnaire, field_id, self.values, self.locale, bands=self.bands)
+
+    def tranche_bands(self, field_id: str) -> dict[str, dict[str, Any]]:
+        return tranche_bands(self.questionnaire, field_id, self.values, bands=self.bands)
 
     def completeness(self) -> dict[str, Any]:
         return rules.completeness(self.questionnaire, self.values, self.locale)
@@ -220,6 +242,24 @@ def system_prompt(questionnaire: Questionnaire, *, client_knowledge: bool = Fals
     return prompt + CLIENT_KNOWLEDGE_RULE if client_knowledge else prompt
 
 
+def _choices_note(frame: TurnFrame, field_id: str) -> str | None:
+    """Avertissement à A1 quand des tranches en dollars sont des parts d'un montant répondu par tranche : ce
+    montant n'est que le chiffre du calcul (borne prudente, milieu ou valeur par défaut), pas celui de
+    l'investisseur."""
+    spec = frame.questionnaire.fields[field_id]
+    reference = (spec.choices or {}).get("relative_to")
+    band = frame.bands.get(reference) if reference else None
+    amount = frame.values.get(reference) if reference else None
+    if not band_is_range(band) or amount is None or len(frame.tranches(field_id)) < 2:
+        return None
+    base = format_money(amount, frame.locale)
+    shown = format_fact(frame.questionnaire.fields[reference], {"value": amount, "band": band}, frame.locale)
+    return (
+        f"These dollar tranches are shares of {base}, the figure the code keeps for {reference}; the investor "
+        f'chose the range {shown}. {base} is not their exact amount: cite the range, never "your {base}".'
+    )
+
+
 def _field_brief(frame: TurnFrame, field_id: str) -> dict[str, Any]:
     spec = frame.questionnaire.fields[field_id]
     locale = frame.locale
@@ -236,6 +276,9 @@ def _field_brief(frame: TurnFrame, field_id: str) -> dict[str, Any]:
         brief["max"] = spec.max if spec.max is not None else default_max(spec.kind)
     if spec.type in CHOICE_NUMBER_TYPES:
         brief["choices"] = _as_options(frame.tranches(field_id))
+        note = _choices_note(frame, field_id)
+        if note:
+            brief["choices_note"] = note
     if spec.id in frame.questionnaire.open_fields:
         brief["open_field"] = True
     if "a1" not in spec.writable_by:
@@ -260,8 +303,9 @@ class TurnInput:
 
 
 def _fact_briefs(frame: TurnFrame, session: ClientSession) -> dict[str, dict[str, Any]]:
-    """Faits de la session montrés à A1, par champ. Une valeur qui attend sa confirmation porte aussi la valeur
-    confirmée qu'elle remplacerait."""
+    """Faits de la session montrés à A1, par champ. Un fait répondu par une tranche porte ``band`` et ``shown_as``
+    cite la tranche : sa valeur n'est que le chiffre prudent du calcul. Une valeur qui attend sa confirmation
+    porte aussi la valeur confirmée qu'elle remplacerait."""
     questionnaire, locale = frame.questionnaire, frame.locale
     waiting = session.unconfirmed()
     briefs = {}
@@ -269,17 +313,20 @@ def _fact_briefs(frame: TurnFrame, session: ClientSession) -> dict[str, dict[str
         spec = questionnaire.fields.get(field_id)
         if spec is None:
             continue
-        brief = {
+        brief: dict[str, Any] = {
             "field": field_id,
             "label": spec.label_text(locale),
             "value": fact.get("value"),
-            "shown_as": questionnaire.format_value(field_id, fact.get("value"), locale),
+            "shown_as": format_fact(spec, fact, locale),
             "provenance": fact.get("provenance"),
         }
+        band = fact_band(fact)
+        if band is not None:
+            brief["band"] = band_brief(band, locale)
         replaced = fact.get("replaces") if field_id in waiting else None
         if isinstance(replaced, dict):
             # La valeur remplacée reste en vigueur d'ici là.
-            brief["replaces"] = questionnaire.format_value(field_id, replaced.get("value"), locale)
+            brief["replaces"] = format_fact(spec, replaced, locale)
         briefs[field_id] = brief
     return briefs
 
@@ -287,17 +334,22 @@ def _fact_briefs(frame: TurnFrame, session: ClientSession) -> dict[str, dict[str
 def _contradictions(frame: TurnFrame) -> list[dict[str, Any]]:
     """Écarts relevés sur les valeurs confirmées, chacun avec les tranches qui servent à le clarifier."""
     values = frame.values
-    return [
-        {
-            "field": field_id,
-            "value": values[field_id],
-            "reason": warning,
-            "choices": _as_options(frame.tranches(field_id)),
-        }
-        for field_id in CHECKED_FIELDS
-        if values.get(field_id) is not None
-        for warning in consistency_warnings(values, field_id, values[field_id])
-    ]
+    contradictions = []
+    for field_id in CHECKED_FIELDS:
+        if values.get(field_id) is None:
+            continue
+        for warning in consistency_warnings(values, field_id, values[field_id]):
+            item = {
+                "field": field_id,
+                "value": values[field_id],
+                "reason": warning,
+                "choices": _as_options(frame.tranches(field_id)),
+            }
+            note = _choices_note(frame, field_id)
+            if note:
+                item["choices_note"] = note
+            contradictions.append(item)
+    return contradictions
 
 
 def _remaining_questions(questionnaire: Questionnaire, session: ClientSession) -> dict[str, int]:
@@ -312,7 +364,9 @@ def _remaining_questions(questionnaire: Questionnaire, session: ClientSession) -
 
 def _journal_brief(entry: dict[str, Any]) -> dict[str, Any]:
     """Entrée du journal montrée à A1 : un texte ou une valeur trop longs sont coupés."""
-    brief = {key: entry.get(key) for key in ("at", "kind", "field", "question_id", "provenance") if entry.get(key)}
+    brief = {
+        key: entry.get(key) for key in ("at", "kind", "field", "question_id", "option", "provenance") if entry.get(key)
+    }
     if entry.get("kind") == "message":
         text = str(entry.get("text") or "")
         brief["text"] = text if len(text) <= 500 else text[:499] + "…"
@@ -346,7 +400,7 @@ def _portfolio_brief(portfolio: dict[str, Any]) -> dict[str, Any]:
 def build_context(questionnaire: Questionnaire, session: ClientSession, turn_input: TurnInput) -> dict[str, Any]:
     """Contexte JSON que A1 lit au début du tour; l'ordre des clés est celui du prompt."""
     locale, portfolio = turn_input.locale, turn_input.portfolio
-    frame = TurnFrame(questionnaire, session.values(), locale, turn_input.turn)
+    frame = TurnFrame(questionnaire, session.values(), locale, turn_input.turn, bands=session.bands())
     waiting = session.unconfirmed()
     score = frame.completeness()
     briefs = _fact_briefs(frame, session)
@@ -385,6 +439,8 @@ class A1Outcome:
     fallback: bool = False
     # Table identifiant de tranche → valeur numérique, par question à tranches (gardée hors de la question).
     choices: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Table identifiant de tranche → tranche (``band``), par question à tranches : gardée avec le fait choisi.
+    bands: dict[str, dict[str, Any]] = field(default_factory=dict)
     # Raison du choix de chaque question de A1 : gardée dans la trace et dans l'historique asked.
     reasons: dict[str, str] = field(default_factory=dict)
 
@@ -420,12 +476,20 @@ def _numeric_options(
     return _as_options([tranches[i] for i in chosen]), None
 
 
+def _tranche_field(questionnaire: Questionnaire, question: dict[str, Any]) -> FieldSpec | None:
+    """Champ numérique d'une question à tranches, ou ``None`` pour une autre question."""
+    spec = questionnaire.fields.get(question.get("field") or "")
+    if spec is None or spec.type not in CHOICE_NUMBER_TYPES or question.get("kind") != "single_choice":
+        return None
+    return spec
+
+
 def choice_numbers(
     questionnaire: Questionnaire, question: dict[str, Any], values: dict[str, Any], locale: str
 ) -> dict[str, Any] | None:
     """Table identifiant → nombre d'une question à tranches sur un champ numérique (``None`` sinon)."""
-    spec = questionnaire.fields.get(question.get("field") or "")
-    if spec is None or spec.type not in CHOICE_NUMBER_TYPES or question.get("kind") != "single_choice":
+    spec = _tranche_field(questionnaire, question)
+    if spec is None:
         return None
     tranches = numeric_choices(questionnaire, spec.id, values, locale)
     numbers = {tranche["value"]: tranche["number"] for tranche in tranches}
@@ -911,7 +975,7 @@ class A1Turn:
         investor_texts: list[str] | None = None,
     ):
         self.session = session
-        self.frame = TurnFrame(questionnaire, session.values(), locale, turn)
+        self.frame = TurnFrame(questionnaire, session.values(), locale, turn, bands=session.bands())
         # Textes de l'investisseur de ce tour (message et réponses texte) : seule source d'une citation.
         self.investor_texts = [text for text in investor_texts or [] if isinstance(text, str) and text.strip()]
         self.updates: dict[str, dict[str, Any]] = {}
@@ -1158,6 +1222,22 @@ def _choice_tables(frame: TurnFrame, questions: list[dict[str, Any]]) -> dict[st
     return tables
 
 
+def _band_tables(frame: TurnFrame, questions: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Tranches offertes par chaque question à tranches, par identifiant : le service garde celle qui est choisie
+    avec le fait."""
+    tables = {}
+    for question in questions:
+        spec = _tranche_field(frame.questionnaire, question)
+        if spec is None:
+            continue
+        bands = frame.tranche_bands(spec.id)
+        offered = [option["value"] for option in question.get("options") or []]
+        table = {option_id: bands[option_id] for option_id in offered if option_id in bands}
+        if table:
+            tables[question["id"]] = table
+    return tables
+
+
 def _prompt(questionnaire: Questionnaire, session: ClientSession, turn_input: TurnInput) -> list[dict[str, Any]]:
     """Prompt du tour. Le contexte et les consignes viennent du code; seul le message de l'investisseur, dans
     son propre bloc, passe par le garde-fou (guardContent)."""
@@ -1235,6 +1315,7 @@ def _unfinished_outcome(state: A1Turn, runner: AgentRunner) -> A1Outcome:
         updates=state.recorded_updates(),
         fallback=True,
         choices=_choice_tables(state.frame, questions),
+        bands=_band_tables(state.frame, questions),
     )
 
 
@@ -1288,6 +1369,7 @@ def _finished_outcome(state: A1Turn, trace: Trace) -> A1Outcome:
         updates=state.recorded_updates(),
         fallback=fallback,
         choices=_choice_tables(state.frame, questions),
+        bands=_band_tables(state.frame, questions),
         reasons=reasons,
     )
 

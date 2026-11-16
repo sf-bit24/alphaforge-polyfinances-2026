@@ -176,7 +176,7 @@ AUTH_MODE=cognito APP_URL=http://localhost:3000 AUTH_SESSION_SECRET=$(openssl ra
 | `POST /api/collect` | Lance une collecte : `{ "since"?: "AAAA-MM-JJ", "tickers"?: ["RY.TO"] }`. Groupe `admin` exigé en `AUTH_MODE=cognito`. |
 | `GET /api/auth/login?next=/chemin` | Commence une connexion (code, PKCE, `state`, `nonce`, `lang` selon la langue de l'interface), puis la connexion gérée de Cognito. |
 | `GET /api/auth/callback` | Retour de Cognito : échange du code, vérification de l'ID token (signature par le JWKS, `iss`, `aud`, `exp`, `token_use`, `nonce`), cookie de session. |
-| `POST /api/auth/logout` | Efface la session, puis `/logout` de Cognito. |
+| `POST /api/auth/logout` | Efface la session, puis `/logout` de Cognito. Refusé (403) si l'en-tête `Origin` diffère de `APP_URL`. |
 | `GET /api/auth/me` | `{ "mode": "off" \| "cognito", "user": { "email", "client_id", "groups", "admin", "expires_at" } \| null }`; 401 en `cognito` sans session. |
 
 Limites appliquées par le serveur : 5 fichiers de 10 Mo au plus par `portfolio.submit`, base64 vérifié, clés `clients/` servies seulement avec le `client_id` correspondant, aucune clé hors `general/` et `clients/<client_id>/`.

@@ -4,7 +4,10 @@ import { nowSeconds, seal, unseal } from "./seal";
 
 /** Encrypted session of the signed-in account (httpOnly: the browser's JavaScript never reads it). */
 export const SESSION_COOKIE = "af_session";
-/** state, nonce and PKCE verifier of a sign-in in progress, read back by the callback only. */
+/**
+ * state, nonce and PKCE verifier of a sign-in in progress, read back by the callback only. The cookie of
+ * each sign-in is `af_login_<first 16 characters of its state>` (`loginCookieName`).
+ */
 export const LOGIN_COOKIE = "af_login";
 export const LOGIN_COOKIE_PATH = "/api/auth";
 

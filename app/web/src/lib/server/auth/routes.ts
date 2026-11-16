@@ -4,7 +4,7 @@ import type { AuthMeResponse } from "@/lib/contract/auth";
 import { LOCALE_COOKIE, parseLocale } from "@/lib/i18n/locale";
 import type { CognitoConfig } from "../config";
 import { jsonResponse, localeOf, toGatewayError } from "../errors";
-import { authConfigOrThrow, unauthorized } from "./guard";
+import { authConfigOrThrow, forbidden, unauthorized } from "./guard";
 import { authorizeUrl, exchangeCode, logoutUrl, newTransaction, sameText, sessionFromClaims, verifyIdToken, type LoginTransaction } from "./oidc";
 import { nowSeconds, seal, unseal } from "./seal";
 import {
@@ -35,27 +35,43 @@ function errorResponse(error: unknown, request: Request): Response {
   return jsonResponse(gatewayError.status, gatewayError.envelope(localeOf(request)));
 }
 
-/** A path of the interface to come back to. Another site, `//host`, `/login` or an API route give `/`. */
+/**
+ * A path of the interface to come back to. Another site, `//host` (even once normalized: `/.//host`,
+ * `/a/..//host`, `/%2e//host`), a backslash, `/login` or an API route give `/`.
+ */
 export function safeNext(value: string | null | undefined): string {
-  if (!value || value.length > 512 || !value.startsWith("/")) return "/";
+  if (!value || value.length > 512 || !value.startsWith("/") || value.includes("\\")) return "/";
   try {
     const url = new URL(value, SAFE_BASE);
-    if (url.origin !== SAFE_BASE || url.pathname.startsWith("/api/") || url.pathname === "/login") return "/";
-    return `${url.pathname}${url.search}`;
+    const path = url.pathname;
+    if (url.origin !== SAFE_BASE || path.startsWith("//") || path.startsWith("/api/") || path === "/login") return "/";
+    return `${path}${url.search}`;
   } catch {
     return "/";
   }
 }
 
-const Transaction = z.object({ state: z.string().min(1), nonce: z.string().min(1), verifier: z.string().min(43), next: z.string() });
+/** `state` as made by `newTransaction`: 32 random bytes in base64url. */
+const STATE = /^[A-Za-z0-9_-]{43}$/;
 
-function readTransaction(request: Request, config: CognitoConfig): LoginTransaction | null {
-  const parsed = Transaction.safeParse(unseal(cookieValue(request, LOGIN_COOKIE), { secret: config.AUTH_SESSION_SECRET, purpose: "login" }));
-  return parsed.success ? { ...parsed.data, next: safeNext(parsed.data.next) } : null;
+/** One cookie per sign-in in progress, named after its state: two tabs signing in do not overwrite each other. */
+export function loginCookieName(state: string): string {
+  return `${LOGIN_COOKIE}_${state.slice(0, 16)}`;
 }
 
-function loginCookie(config: CognitoConfig, value: string, maxAge: number): string {
-  return cookieHeader(LOGIN_COOKIE, value, { config, maxAge, path: LOGIN_COOKIE_PATH });
+const Transaction = z.object({ state: z.string().min(1), nonce: z.string().min(1), verifier: z.string().min(43), next: z.string() });
+
+/** The sign-in of this `state`, if its cookie is there, intact, unexpired and for the same state. */
+function readTransaction(request: Request, config: CognitoConfig, state: string | null): LoginTransaction | null {
+  if (!state || !STATE.test(state)) return null;
+  const sealed = cookieValue(request, loginCookieName(state));
+  const parsed = Transaction.safeParse(unseal(sealed, { secret: config.AUTH_SESSION_SECRET, purpose: "login" }));
+  if (!parsed.success || !sameText(state, parsed.data.state)) return null;
+  return { ...parsed.data, next: safeNext(parsed.data.next) };
+}
+
+function loginCookie(config: CognitoConfig, state: string, value: string, maxAge: number): string {
+  return cookieHeader(loginCookieName(state), value, { config, maxAge, path: LOGIN_COOKIE_PATH });
 }
 
 /** `GET /api/auth/login?next=/path`: a new state, nonce and PKCE verifier, then the managed login page. */
@@ -67,7 +83,7 @@ export function handleLogin(request: Request): Response {
     const transaction = newTransaction(next);
     const sealed = seal({ ...transaction }, { secret: config.AUTH_SESSION_SECRET, purpose: "login", expiresAt: nowSeconds() + LOGIN_TTL_SECONDS });
     const locale = parseLocale(cookieValue(request, LOCALE_COOKIE));
-    return redirect(authorizeUrl(config, transaction, locale), [loginCookie(config, sealed, LOGIN_TTL_SECONDS)]);
+    return redirect(authorizeUrl(config, transaction, locale), [loginCookie(config, transaction.state, sealed, LOGIN_TTL_SECONDS)]);
   } catch (error) {
     return errorResponse(error, request);
   }
@@ -90,25 +106,33 @@ export async function handleCallback(request: Request): Promise<Response> {
     const config = authConfigOrThrow();
     if (config.AUTH_MODE === "off") return redirect("/");
     const params = new URL(request.url).searchParams;
-    const transaction = readTransaction(request, config);
-    const cleared = loginCookie(config, "", 0);
-    const failure = (reason: string) => redirect(new URL(`/login?error=${reason}`, config.APP_URL), [cleared]);
+    const state = params.get("state");
+    const cleared = state && STATE.test(state) ? [loginCookie(config, state, "", 0)] : [];
+    const failure = (reason: string) => redirect(new URL(`/login?error=${reason}`, config.APP_URL), cleared);
     if (params.has("error")) return failure("denied");
+    const transaction = readTransaction(request, config, state);
     const code = params.get("code");
-    if (!transaction || !code || !sameText(params.get("state"), transaction.state)) return failure("state");
+    if (!transaction || !code) return failure("state");
     const session = await sessionCookieOf(config, code, transaction);
     if (!session) return failure("token");
-    return redirect(new URL(transaction.next, config.APP_URL), [cleared, session]);
+    return redirect(new URL(transaction.next, config.APP_URL), [...cleared, session]);
   } catch (error) {
     return errorResponse(error, request);
   }
 }
 
-/** `POST /api/auth/logout`: forget the session here, then end the managed login session at Cognito. */
+/**
+ * `POST /api/auth/logout`: forget the session here, then end the managed login session at Cognito.
+ * A form posted from another site (an `Origin` other than APP_URL) is refused: nobody signs you out from elsewhere.
+ */
 export function handleLogout(request: Request): Response {
   try {
     const config = authConfigOrThrow();
     if (config.AUTH_MODE === "off") return redirect("/", [], 303);
+    const origin = request.headers.get("origin");
+    if (origin !== null && origin !== config.APP_URL) {
+      throw forbidden({ fr: "Déconnexion refusée : demande venue d’un autre site.", en: "Sign-out refused: request from another site." }, { origin });
+    }
     return redirect(logoutUrl(config), [clearedSessionCookie(config)], 303);
   } catch (error) {
     return errorResponse(error, request);

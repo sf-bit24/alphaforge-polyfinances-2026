@@ -37,7 +37,7 @@ export function unauthorized(): GatewayError {
   );
 }
 
-function forbidden(text: { fr: string; en: string }, details: Record<string, unknown>): GatewayError {
+export function forbidden(text: { fr: string; en: string }, details: Record<string, unknown>): GatewayError {
   return new GatewayError("forbidden", text, 403, details);
 }
 

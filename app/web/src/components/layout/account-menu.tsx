@@ -139,7 +139,9 @@ function DeleteAccountDialog({ open, onClose }: { open: boolean; onClose: () => 
             className={FIELD}
           />
         </label>
-        {deletion.error ? <ErrorNotice error={deletion.error} compact /> : null}
+        {deletion.error ? (
+          <ErrorNotice error={deletion.error} compact text={deletion.error.code === "internal" ? copy.failed : undefined} />
+        ) : null}
         <DialogActions pending={deletion.pending} ready={ready} onCancel={close} />
       </form>
     </Dialog>

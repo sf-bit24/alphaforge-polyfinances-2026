@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import type { ClientState, GatewayHealth, KnowledgeLevel, Locale } from "@/lib/contract/schemas";
 import { KNOWLEDGE_LEVELS } from "@/lib/contract/schemas";
-import { useAccount } from "@/lib/client/account";
+import { useAccount, useOperator } from "@/lib/client/account";
 import type { AccountUser } from "@/lib/contract/auth";
 import { useHealth } from "@/lib/client/health";
 import { useSession } from "@/lib/client/session";
@@ -119,22 +119,17 @@ function KnowledgeCard({ state, saved, busy, onSelect }: { state: ClientState | 
   );
 }
 
-function SessionCard({ clientId, copied, onCopy, onForget }: { clientId: string | null; copied: boolean; onCopy: () => void; onForget: () => void }) {
+/** Without sign-in: the profile kept in this browser, and « Oublier mon profil sur cet appareil ». */
+function SessionCard({ present, onForget }: { present: boolean; onForget: () => void }) {
   const { t } = useI18n();
   return (
     <Card>
-      <CardHeader title={t.settings.session} icon={<UserRound aria-hidden className="size-4" />} />
+      <CardHeader title={t.settings.session} subtitle={present ? t.settings.sessionHelp : undefined} icon={<UserRound aria-hidden className="size-4" />} />
       <div className="px-5 py-4">
-        {clientId ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <code className="rounded-md bg-ink-50 px-2.5 py-1.5 font-mono text-sm text-ink-800 ring-1 ring-ink-150">{clientId}</code>
-            <Button size="sm" variant="secondary" onClick={onCopy} icon={copied ? <Check aria-hidden className="size-4" /> : <Copy aria-hidden className="size-4" />}>
-              {copied ? t.common.copied : t.common.copy}
-            </Button>
-            <Button size="sm" variant="danger" onClick={onForget}>
-              {t.settings.forget}
-            </Button>
-          </div>
+        {present ? (
+          <Button size="sm" variant="danger" onClick={onForget}>
+            {t.settings.forget}
+          </Button>
         ) : (
           <p className="text-sm text-ink-500">{t.settings.sessionNone}</p>
         )}
@@ -143,30 +138,40 @@ function SessionCard({ clientId, copied, onCopy, onForget }: { clientId: string 
   );
 }
 
-/** With sign-in on: the account, its client_id (the same on every device) and « Se déconnecter ». */
-function AccountCard({ user, copied, onCopy }: { user: AccountUser; copied: boolean; onCopy: () => void }) {
+/** With sign-in on: the account's email and « Se déconnecter ». */
+function AccountCard({ user }: { user: AccountUser }) {
   const { t } = useI18n();
   return (
     <Card>
       <CardHeader title={t.auth.accountCard} subtitle={t.auth.accountHelp} icon={<UserRound aria-hidden className="size-4" />} />
-      <div className="space-y-3 px-5 py-4">
+      <div className="flex flex-wrap items-center gap-3 px-5 py-4">
         <p className="text-sm font-medium text-navy">{user.email ?? t.auth.noEmail}</p>
-        <div className="flex flex-wrap items-center gap-3">
-          <code className="rounded-md bg-ink-50 px-2.5 py-1.5 font-mono text-sm text-ink-800 ring-1 ring-ink-150">{user.client_id}</code>
-          <Button size="sm" variant="secondary" onClick={onCopy} icon={copied ? <Check aria-hidden className="size-4" /> : <Copy aria-hidden className="size-4" />}>
-            {copied ? t.common.copied : t.common.copy}
-          </Button>
-          <SignOutForm />
-        </div>
+        <SignOutForm />
       </div>
     </Card>
+  );
+}
+
+/** Team's view: the client_id this browser works with (the account's when signed in), to copy. */
+function ClientIdRow({ clientId, copied, onCopy }: { clientId: string | null; copied: boolean; onCopy: () => void }) {
+  const { t } = useI18n();
+  if (!clientId) return null;
+  return (
+    <Row label={t.mode.clientId}>
+      <span className="inline-flex flex-wrap items-center gap-2">
+        <code className="font-mono text-xs">{clientId}</code>
+        <Button size="sm" variant="secondary" onClick={onCopy} icon={copied ? <Check aria-hidden className="size-4" /> : <Copy aria-hidden className="size-4" />}>
+          {copied ? t.common.copied : t.common.copy}
+        </Button>
+      </span>
+    </Row>
   );
 }
 
 function ModeRow({ health }: { health: GatewayHealth | null }) {
   const { t } = useI18n();
   return (
-    <Row label={t.settings.mode}>
+    <Row label={t.mode.mode}>
       {health ? (
         <span className="inline-flex items-center gap-2">
           <span aria-hidden className={cn("size-2 rounded-full", health.ok ? "bg-good" : "bg-critical")} />
@@ -179,19 +184,21 @@ function ModeRow({ health }: { health: GatewayHealth | null }) {
   );
 }
 
-function EnvironmentCard({ health }: { health: GatewayHealth | null }) {
+/** Team's view only (`useOperator`): mode, runtime, release and the client_id. A client never sees it. */
+function EnvironmentCard({ health, clientIdRow }: { health: GatewayHealth | null; clientIdRow: ReactNode }) {
   const { t } = useI18n();
   return (
     <Card>
-      <CardHeader title={t.settings.environment} icon={<Server aria-hidden className="size-4" />} />
+      <CardHeader title={t.mode.environment} icon={<Server aria-hidden className="size-4" />} />
       <dl className="divide-y divide-ink-150 px-5 py-2">
         <ModeRow health={health} />
+        {clientIdRow}
         {health?.agent ? (
           <>
-            <Row label={t.settings.release}>
+            <Row label={t.mode.runtimeRelease}>
               <code className="font-mono">{health.agent.release}</code>
             </Row>
-            <Row label={t.settings.env}>
+            <Row label={t.mode.env}>
               <code className="font-mono">
                 {health.agent.env} · {health.agent.role}
               </code>
@@ -199,7 +206,7 @@ function EnvironmentCard({ health }: { health: GatewayHealth | null }) {
           </>
         ) : null}
         {health?.runtime ? (
-          <Row label={t.settings.runtime}>
+          <Row label={t.mode.runtime}>
             <code className="font-mono text-xs">{health.runtime.arn ?? health.runtime.name}</code>
             {health.runtime.status ? <span className="ml-2 text-xs text-ink-500">{health.runtime.status}</span> : null}
           </Row>
@@ -218,6 +225,7 @@ export function SettingsView() {
   const { t, locale, setLocale } = useI18n();
   const session = useSession();
   const account = useAccount();
+  const operator = useOperator();
   const { health } = useHealth(locale);
   const [saved, setSaved] = useState<"locale" | "knowledge" | null>(null);
   const [copied, setCopied] = useState(false);
@@ -260,11 +268,11 @@ export function SettingsView() {
       <LanguageCard saved={saved === "locale"} busy={busy} onSelect={changeLocale} />
       <KnowledgeCard state={state} saved={saved === "knowledge"} busy={busy} onSelect={changeLevel} />
       {account.status === "signed_in" ? (
-        <AccountCard user={account.user} copied={copied} onCopy={() => void copyId()} />
+        <AccountCard user={account.user} />
       ) : (
-        <SessionCard clientId={session.clientId} copied={copied} onCopy={() => void copyId()} onForget={forget} />
+        <SessionCard present={Boolean(session.clientId)} onForget={forget} />
       )}
-      <EnvironmentCard health={health} />
+      {operator ? <EnvironmentCard health={health} clientIdRow={<ClientIdRow clientId={session.clientId} copied={copied} onCopy={() => void copyId()} />} /> : null}
     </div>
   );
 }

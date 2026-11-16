@@ -31,7 +31,7 @@ export function authConfigOrThrow(): AuthConfig {
 export function unauthorized(): GatewayError {
   return new GatewayError(
     "unauthorized",
-    { fr: "Connexion requise : votre session est absente ou expirée.", en: "Sign-in required: your session is missing or expired." },
+    { fr: "Votre connexion a expiré : reconnectez-vous pour continuer.", en: "Your sign-in has expired: sign in again to continue." },
     401,
     { login: "/login" },
   );

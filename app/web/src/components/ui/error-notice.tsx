@@ -2,6 +2,7 @@
 
 import { CircleAlert, LogIn, MessageSquareWarning, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { usePathname } from "next/navigation";
+import { useOperator } from "@/lib/client/account";
 import type { ApiError } from "@/lib/client/api";
 import type { Dictionary } from "@/lib/i18n/dictionary";
 import { useI18n } from "@/lib/i18n/provider";
@@ -25,6 +26,19 @@ export function calmNoticeOf(t: Dictionary, error: Pick<ApiError, "code" | "deta
   return (reason && calm?.reasons?.[reason]) || calm;
 }
 
+/**
+ * Codes whose message is written for the investor (what to fix in what they sent, or why the
+ * responsible framework held a message back). Any other message may name a runtime, a service
+ * or a cause: the client gets the dictionary's text instead, the team's view gets the message too.
+ */
+const CLIENT_MESSAGE_CODES = new Set(["invalid_answer", "bad_request", "guardrail_blocked"]);
+
+/** What the investor reads: the message when it is written for them, else the text of its code. */
+function clientText(t: Dictionary, error: Pick<ApiError, "code" | "message">, calm: CalmNotice): string {
+  if (CLIENT_MESSAGE_CODES.has(error.code) && error.message) return error.message;
+  return calm?.hint ?? t.errors.hints[error.code] ?? t.errors.hints.internal ?? "";
+}
+
 function hasDetails(details: unknown): boolean {
   return details !== undefined && details !== null && !(typeof details === "object" && Object.keys(details as object).length === 0);
 }
@@ -37,29 +51,34 @@ function noticeKind(code: string, calm: CalmNotice): keyof typeof NOTICE_ICONS {
   return calm ? "calm" : "failure";
 }
 
-function NoticeTitle({ code, calm }: { code: string; calm: CalmNotice }) {
+/** The title; the team's view adds the error code. */
+function NoticeTitle({ code, calm, operator }: { code: string; calm: CalmNotice; operator: boolean }) {
   const { t } = useI18n();
   return (
     <p className={cn("font-semibold", calm ? "text-warning-ink" : "text-critical-ink")}>
       {calm?.title ?? t.errors.title}
-      <span
-        className={cn(
-          "ml-2 inline-flex items-center rounded bg-white/70 px-1.5 py-0.5 font-mono text-xs font-medium ring-1",
-          calm ? "text-warning-ink ring-warning/40" : "text-critical-ink ring-critical/25",
-        )}
-      >
-        {t.errors.code(code)}
-      </span>
+      {operator ? (
+        <span
+          className={cn(
+            "ml-2 inline-flex items-center rounded bg-white/70 px-1.5 py-0.5 font-mono text-xs font-medium ring-1",
+            calm ? "text-warning-ink ring-warning/40" : "text-critical-ink ring-critical/25",
+          )}
+        >
+          {t.errors.code(code)}
+        </span>
+      ) : null}
     </p>
   );
 }
 
-function NoticeDetails({ details }: { details: unknown }) {
+/** Team's view only, compact or not: the raw message (when the client did not read it) and the details, folded. */
+function NoticeDetails({ message, details }: { message: string | null; details: unknown }) {
   const { t } = useI18n();
   return (
     <details className="mt-2">
       <summary className="text-xs font-medium text-ink-600 underline-offset-2 hover:underline">{t.errors.details}</summary>
-      <JsonView value={details} className="mt-2 bg-white" maxHeight="max-h-48" />
+      {message ? <p className="mt-2 font-mono text-xs break-words text-ink-700">{message}</p> : null}
+      {hasDetails(details) ? <JsonView value={details} className="mt-2 bg-white" maxHeight="max-h-48" /> : null}
     </details>
   );
 }
@@ -113,10 +132,13 @@ function DismissButton({ onDismiss }: { onDismiss: () => void }) {
 }
 
 /**
- * An error from the gateway or a runtime: its code, its message, and the details.
+ * An error from the gateway or a runtime, in the investor's words (LANGAGE.md): a title, what happened
+ * and what to do; never a code, a runtime or a raw message. The team's view (`useOperator`) adds the
+ * code, the raw message and the details, folded.
  * `guardrail_blocked` (guardrail intervened) and `model_error` (content filtered, refusal, model down)
  * get a calm notice of their own: they are expected outcomes, not failures of the application.
  * A refused personal detail (`details.reason` = `personal_data`) gets its own notice, which says nothing of orders or advice.
+ * `text` replaces the code's text when the screen knows better what happened (the deletion stopped, say).
  */
 export function ErrorNotice({
   error,
@@ -124,15 +146,19 @@ export function ErrorNotice({
   onDismiss,
   className,
   compact = false,
+  text,
 }: {
   error: Pick<ApiError, "code" | "message" | "details">;
   onRetry?: () => void;
   onDismiss?: () => void;
   className?: string;
   compact?: boolean;
+  text?: string;
 }) {
   const { t } = useI18n();
+  const operator = useOperator();
   const calm = calmNoticeOf(t, error);
+  const shown = text ?? clientText(t, error, calm);
   const hint = calm?.hint ?? t.errors.hints[error.code];
   const Icon = NOTICE_ICONS[noticeKind(error.code, calm)];
   return (
@@ -147,10 +173,10 @@ export function ErrorNotice({
       <div className="flex items-start gap-3">
         <Icon aria-hidden className={cn("mt-0.5 size-5 shrink-0", calm ? "text-warning-ink" : "text-critical")} />
         <div className="min-w-0 flex-1">
-          <NoticeTitle code={error.code} calm={calm} />
-          <p className="mt-1 text-ink-800">{error.message}</p>
-          {hint && hint !== error.message && !compact ? <p className="mt-1 text-ink-600">{hint}</p> : null}
-          {hasDetails(error.details) && !compact ? <NoticeDetails details={error.details} /> : null}
+          <NoticeTitle code={error.code} calm={calm} operator={operator} />
+          <p className="mt-1 text-ink-800">{shown}</p>
+          {hint && hint !== shown && !compact ? <p className="mt-1 text-ink-600">{hint}</p> : null}
+          {operator ? <NoticeDetails message={shown === error.message ? null : error.message} details={error.details} /> : null}
           <NoticeAction code={error.code} onRetry={onRetry} />
         </div>
         {onDismiss ? <DismissButton onDismiss={onDismiss} /> : null}

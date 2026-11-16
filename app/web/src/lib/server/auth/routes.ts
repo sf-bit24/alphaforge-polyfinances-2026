@@ -4,6 +4,7 @@ import type { AuthMeResponse } from "@/lib/contract/auth";
 import { LOCALE_COOKIE, parseLocale } from "@/lib/i18n/locale";
 import type { CognitoConfig } from "../config";
 import { jsonResponse, localeOf, toGatewayError } from "../errors";
+import { assertAccountLive } from "./account-liveness";
 import { authConfigOrThrow, forbidden, unauthorized } from "./guard";
 import { authorizeUrl, exchangeCode, logoutUrl, newTransaction, sameText, sessionFromClaims, verifyIdToken, type LoginTransaction } from "./oidc";
 import { nowSeconds, seal, unseal } from "./seal";
@@ -151,13 +152,14 @@ export function handleLogout(request: Request): Response {
   }
 }
 
-/** `GET /api/auth/me`: the sign-in mode and the account; 401 in cognito mode without a session. */
-export function handleMe(request: Request): Response {
+/** `GET /api/auth/me`: the sign-in mode and the account; 401 in cognito mode without a session, or for a deleted account. */
+export async function handleMe(request: Request): Promise<Response> {
   try {
     const config = authConfigOrThrow();
     if (config.AUTH_MODE === "off") return jsonResponse(200, { ok: true, mode: "off", user: null } satisfies AuthMeResponse);
     const session = readSession(request, config);
     if (!session) throw unauthorized();
+    await assertAccountLive({ mode: "cognito", config, session });
     const user = {
       email: session.email,
       client_id: session.client_id,

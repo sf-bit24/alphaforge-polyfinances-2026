@@ -14,7 +14,8 @@ import {
   startExecution,
   stateMachineInfo,
 } from "./aws";
-import { bindAgentBody, bindPortfolioBody, identityOf, requireAdmin, type Identity } from "./auth/guard";
+import { liveIdentityOf } from "./auth/account-liveness";
+import { bindAgentBody, bindPortfolioBody, requireAdmin, type Identity } from "./auth/guard";
 import { ConfigError, getConfig, profileRuntimeName, type AgentMode, type GatewayConfig } from "./config";
 import { GatewayError, jsonResponse, localeOf, statusOfEnvelope, toGatewayError } from "./errors";
 import { withHeartbeat } from "./heartbeat";
@@ -136,7 +137,7 @@ async function callRuntime(config: GatewayConfig, request: AgentRequest, stream:
 export async function handleAgent(request: Request): Promise<Response> {
   const locale = localeOf(request);
   try {
-    const identity = identityOf(request);
+    const identity = await liveIdentityOf(request);
     const config = configOrThrow();
     const agentRequest = await readAgentRequest(request, identity);
     const upstream = await callRuntime(config, agentRequest, wantsStream(agentRequest), request.signal);
@@ -220,7 +221,7 @@ async function portfolioAnswer(config: GatewayConfig, build: PortfolioBuildReque
 export async function handlePortfolio(request: Request): Promise<Response> {
   const locale = localeOf(request);
   try {
-    const identity = identityOf(request);
+    const identity = await liveIdentityOf(request);
     const config = configOrThrow();
     const length = Number(request.headers.get("content-length") ?? "0");
     if (length > MAX_PORTFOLIO_BODY_BYTES) {
@@ -326,7 +327,7 @@ async function awsCollection(config: GatewayConfig, executionArn: string | null)
 export async function handleCollectGet(request: Request): Promise<Response> {
   const locale = localeOf(request);
   try {
-    identityOf(request);
+    await liveIdentityOf(request);
     const config = configOrThrow();
     const executionArn = new URL(request.url).searchParams.get("execution_arn");
     if (executionArn !== null && !EXECUTION_ARN.test(executionArn)) {
@@ -371,7 +372,7 @@ async function readCollectRequest(request: Request): Promise<CollectRequest> {
 export async function handleCollectPost(request: Request): Promise<Response> {
   const locale = localeOf(request);
   try {
-    requireAdmin(identityOf(request));
+    requireAdmin(await liveIdentityOf(request));
     const config = configOrThrow();
     const input = await readCollectRequest(request);
     if (config.AGENT_MODE === "local") throw collectUnavailable();

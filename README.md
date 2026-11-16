@@ -1,8 +1,12 @@
 # AlphaForge AI : équipe larpathon
 
-Aide à la décision d'investissement agentique et explicable, construite pour le Datathon PolyFinances 2026 (Banque Nationale et AWS). Chaque investisseur, de tout niveau de connaissances, construit son propre profil : des questions de base déterministes, puis des relances d'un agent qui ne demande que ce qui manque, et, s'il en a un, l'analyse de son portefeuille existant sous n'importe quelle forme. Une base générale, alimentée par des agents de collecte, garde les connaissances communes, datées par leur publication.
+Aide à la décision d'investissement agentique et explicable, construite pour le Datathon PolyFinances 2026 (Banque Nationale et AWS). Chaque investisseur, de tout niveau de connaissances, construit son propre profil : des questions de base déterministes, puis des relances d'un agent qui ne demande que ce qui manque, et, s'il en a un, l'analyse de son portefeuille existant sous n'importe quelle forme. Sur ce profil, le volet finance construit un portefeuille simulé : le code choisit les titres et calcule les poids sous les limites du profil, un avocat et quatre lentilles critiques en débattent, un Judge déterministe contrôle chaque plafond, et l'explication cite la source de chaque chiffre. Une base générale, alimentée par des agents de veille web, garde les connaissances communes, datées par leur publication.
 
 > **Simulation seulement** : aucune transaction réelle, aucun conseil financier personnalisé, aucun compte client réel. Le code calcule, le modèle explique, et chaque chiffre cite sa source.
+
+**Essayer l'application déployée sur AWS :** https://d2gsaqmfxygugx.cloudfront.net (ouverte jusqu'au lundi 16 novembre 2026 à 13 h 59, fermeture du compte AWS du Workshop).
+
+**Architecture AWS :** la plateforme et les trois flux de bout en bout (profil, portefeuille, veille web) sont dans [`docs/architecture/`](docs/architecture/README.md).
 
 La mémoire du produit (besoin, personas, décisions, architecture) est le Brain de l'équipe : [`sf-bit24/brain`](https://github.com/sf-bit24/brain). Le contrat entre les composants est dans [`app/CONTRACTS.md`](app/CONTRACTS.md).
 
@@ -16,40 +20,26 @@ https://github.com/user-attachments/assets/b2629c28-754f-4717-b255-53ac79fe743f
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    U["Investisseur"] --> W["Interface Next.js locale, FR et EN"]
-    W -->|"InvokeAgentRuntime"| P["AgentCore : runtime profile"]
-    P --> Q["Questions de base déterministes, sans modèle"]
-    P --> A1["A1 : relances sur ce qui manque"]
-    P --> A2["A2 : portefeuille existant, tout format"]
-    A1 --> M["Bedrock : Claude Opus 5.5 + Guardrail"]
-    A2 --> M
-    P -->|"base OKF du client"| S3[("S3 + KMS")]
-    A1 -->|"Retrieve"| KB["Knowledge Base : base générale"]
-    SCH["EventBridge Scheduler"] --> SF["Step Functions : collecte"]
-    W -->|"StartExecution"| SF
-    SF --> A4["A4 : presse"]
-    SF --> A5["A5 : données"]
-    A4 --> A6["A6 : superviseur OKF"]
-    A5 --> A6
-    A6 -->|"general/"| S3
-    SF -->|"ingestion"| KB
-```
+![Plateforme AlphaForge AI sur AWS](docs/architecture/alphaforge-plateforme-aws.png)
 
-- **Version 1** (ce dépôt aujourd'hui) : construire le profil (complétude calculée par le code, seuil de 70 %, plafond affiché de 95 %) et alimenter la base générale. Le portefeuille guidé (A3, agents d'analyse, Judge) viendra ensuite sur ces deux bases.
-- **AWS** : AgentCore Runtime (quatre runtimes tirés d'un seul zip de code), Bedrock (Claude Opus 5.5 partout, effort réglé par agent), Knowledge Base sur S3 Vectors, Guardrails, S3 chiffré par KMS, Step Functions, EventBridge Scheduler. Détail et justification : [`infrastructure/README.md`](infrastructure/README.md).
-- **Explicabilité** : chaque requête renvoie sa trace (étape déterministe, agent, outil, modèle, stockage, garde-fou, avec leurs sources), affichée à côté du dialogue.
+Les trois flux de bout en bout ont chacun leur diagramme, avec ses étapes numérotées : [création du profil](docs/architecture/alphaforge-flux-profil.png), [création du portefeuille](docs/architecture/alphaforge-flux-portefeuille.png) et [veille web](docs/architecture/alphaforge-flux-veille-web.png). Les sources modifiables (`.drawio`) sont dans [`docs/architecture/`](docs/architecture/README.md).
+
+- **Profil** (runtime `profile`) : questions de base déterministes, sans modèle ; A2 lit un portefeuille existant sous n'importe quelle forme, le code le valorise ; A1 relance sur ce qui manque. La complétude est calculée par le code (seuil de 70 %, plafond affiché de 95 %).
+- **Portefeuille simulé** (runtime `portfolio`) : profil traduit en mandat, étape 0 (style et sélection), optimiseur, avocat A3 et quatre lentilles sur deux tours, Judge déterministe, explication ancrée sur des faits sourcés. Aucun poids ni chiffre ne vient d'un modèle.
+- **Veille web** (Step Functions) : collecte toutes les 6 h (A4 presse, A5 données), recherche par experts de sujet (A0, E1 à E7 et leurs chercheurs), validation par A6, puis ingestion dans la Knowledge Base.
+- **AWS** : 8 runtimes Bedrock AgentCore tirés d'un seul zip de code, Bedrock (Claude Opus 5.5 partout, effort réglé par agent) avec Guardrails, Knowledge Base sur S3 Vectors, S3 chiffré par KMS, Step Functions et EventBridge Scheduler, SageMaker Processing, Glue et Athena pour les scénarios, DynamoDB pour la chaîne d'audit, interface sur ECS Fargate derrière un ALB et CloudFront. Détail et justification : [`infrastructure/README.md`](infrastructure/README.md).
+- **Explicabilité** : chaque requête renvoie sa trace (étape déterministe, agent, outil, modèle, stockage, garde-fou, avec leurs sources), affichée à côté du dialogue ; chaque décision de portefeuille garde sa trace X-Ray.
 
 ## Dépôt
 
 ```text
 app/
   CONTRACTS.md      contrat entre l'interface, les runtimes et l'infra
-  agents/           agents Python (Strands Agents, Bedrock AgentCore), un zip, quatre rôles
-  web/              interface Next.js locale (modes mock, local, aws)
+  agents/           agents Python (Strands Agents, Bedrock AgentCore), un zip, huit rôles
+  web/              interface Next.js (modes mock, local, aws), déployée sur ECS Fargate
   knowledge/        base générale de départ (OKF), poussée dans S3 par Terraform
 infrastructure/     Terraform (HCP Terraform -> AWS), scripts du pipeline, bootstrap OIDC
+docs/architecture/  diagrammes d'architecture AWS (sources draw.io et aperçus PNG)
 .github/workflows/  pipeline.yml -> app.yml (tests, zip) -> infra.yml (plan, apply)
 ```
 
@@ -64,13 +54,19 @@ cd app/web && cp .env.example .env.local && npm install && npm run dev
 # Runtime profile en local, magasin de fichiers, modèles Bedrock réels
 cd app/agents && uv sync && AGENT_ROLE=profile ALPHAFORGE_STORE=local uv run python main.py   # http://127.0.0.1:8080
 # puis, dans app/web/.env.local : AGENT_MODE=local et LOCAL_AGENT_URL=http://127.0.0.1:8080/invocations
+
+# Runtime portfolio en local (page /portfolio), avec le groupe uv finance (numpy, pandas, cvxpy) ;
+# d'abord, une fois, reconstruire les données longues du moteur (non versionnées, section Données)
+cd app/agents && uv run --group finance --group backtest-data python -I -m alphaforge.finance.backtest.build_data
+cd app/agents && AGENT_ROLE=portfolio PORT=8081 ALPHAFORGE_STORE=local uv run --group finance python main.py
+# puis, dans app/web/.env.local : LOCAL_PORTFOLIO_URL=http://127.0.0.1:8081/invocations
 ```
 
-Pour viser les runtimes déployés : `AGENT_MODE=aws` dans `app/web/.env.local`. Le serveur Next.js trouve le runtime `alphaforge_sandbox_profile` et la machine `alphaforge-sandbox-collecte` par leur nom, avec les identifiants AWS du poste. Les détails sont dans [`app/agents/README.md`](app/agents/README.md) et [`app/web/README.md`](app/web/README.md).
+Pour essayer sans rien installer, l'application déployée suffit : https://d2gsaqmfxygugx.cloudfront.net. Pour viser les runtimes déployés depuis le poste : `AGENT_MODE=aws` dans `app/web/.env.local`. Le serveur Next.js trouve le runtime `alphaforge_sandbox_profile` et la machine `alphaforge-sandbox-collecte` par leur nom, avec les identifiants AWS du poste. Les détails sont dans [`app/agents/README.md`](app/agents/README.md) et [`app/web/README.md`](app/web/README.md).
 
 ## Déployer
 
-Un push sur `master` lance les tests, construit le zip des runtimes et l'image de l'interface (poussée dans ECR), puis HCP Terraform (organisation `larpathon_2026`, workspace `larpathon`) planifie et applique sur le compte AWS. GitHub Actions n'a aucune clé AWS : HCP Terraform assume un rôle par OIDC, et le job de l'image un rôle limité au push ECR. L'interface déployée (ECS Fargate derrière CloudFront) est à l'URL de l'output Terraform `web_url`. La mise en place unique (bootstrap AWS, workspace, secrets GitHub) est décrite dans [`infrastructure/README.md`](infrastructure/README.md).
+Un push sur `master` lance les tests, construit le zip des runtimes et l'image de l'interface (poussée dans ECR), puis HCP Terraform (organisation `larpathon_2026`, workspace `larpathon`) planifie et applique sur le compte AWS. GitHub Actions n'a aucune clé AWS : HCP Terraform assume un rôle par OIDC, et le job de l'image un rôle limité au push ECR. L'interface déployée (ECS Fargate derrière CloudFront) est à l'URL de l'output Terraform `web_url` : https://d2gsaqmfxygugx.cloudfront.net. La mise en place unique (bootstrap AWS, workspace, secrets GitHub) est décrite dans [`infrastructure/README.md`](infrastructure/README.md).
 
 ## Données
 

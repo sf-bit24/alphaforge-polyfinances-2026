@@ -19,7 +19,9 @@
 #
 # Aucun utilisateur n'est cree ici : chacun cree son compte sur la page de
 # connexion. Le groupe admin (lancer une collecte) se remplit a la main, avec la
-# CLI (voir infrastructure/README.md).
+# CLI (voir infrastructure/README.md). L'investisseur supprime son compte
+# lui-meme depuis l'interface (« Supprimer mon compte ») : le serveur Next.js
+# supprime sa base puis son utilisateur (web.tf, web_account_deletion).
 #
 # Compte Workshop ephemere : pas de protection contre la suppression, et le
 # courriel par defaut de Cognito (quota d'envoi faible, suffisant pour la demo).
@@ -50,6 +52,11 @@ locals {
     { name = "COGNITO_DOMAIN", value = local.auth_domain },
     { name = "APP_URL", value = "https://${aws_cloudfront_distribution.web[0].domain_name}" },
     { name = "AUTH_SESSION_SECRET", value = random_password.web_session[0].result },
+    # « Supprimer mon compte » (section 7.1) : ce que le serveur supprime,
+    # nomme ici. Droits du role de la tache : web.tf, web_account_deletion.
+    { name = "ALPHAFORGE_BUCKET", value = aws_s3_bucket.this.bucket },
+    { name = "ALPHAFORGE_CLIENT_KB_PREFIX", value = local.prefix },
+    { name = "ALPHAFORGE_CLIENT_KB_VECTOR_BUCKET", value = aws_s3vectors_vector_bucket.clients.vector_bucket_name },
   ] : [{ name = "AUTH_MODE", value = "off" }]
 }
 

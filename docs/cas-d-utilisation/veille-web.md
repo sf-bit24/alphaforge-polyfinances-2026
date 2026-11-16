@@ -1,4 +1,4 @@
-# Cas d'utilisation 3 : lMettre à jour la base de connaissances par la veille web
+# Cas d'utilisation 3 : mettre à jour la base de connaissances par la veille web
 
 Simulation seulement : aucune transaction réelle, aucun conseil. Les exemples viennent de l'application déployée, relevés le 15 novembre 2026.
 
@@ -27,6 +27,6 @@ Ce qui peut arriver :
 
 Exemple réel (exécution `376cb392…`, 1 min 44 s) : A4 rapporte 12 éléments et A5 en rapporte 59. A6 écrit 5 documents et en rejette 48, par exemple « doublon d'un document existant (même adresse) ». L'ingestion analyse 201 documents, en indexe 5 nouveaux et 2 modifiés, sans aucun échec.
 
-Diagramme : [veille web et base générale](../architecture/img/alphaforge-flux-veille-web.png).
+Diagramme : [veille web et base générale](../architecture/assets/alphaforge-flux-veille-web.png).
 
 [Retour aux cas d'utilisation](README.md)

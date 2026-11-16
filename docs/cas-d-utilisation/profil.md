@@ -1,4 +1,4 @@
-# Cas d'utilisation 1 : lCréer son profil d'investisseur
+# Cas d'utilisation 1 : créer son profil d'investisseur
 
 Simulation seulement : aucune transaction réelle, aucun conseil. Les exemples viennent de l'application déployée, relevés le 15 novembre 2026.
 
@@ -28,6 +28,6 @@ Ce qui peut arriver :
 
 Exemple réel (profil fictif `5edbd889…`) : `session.start` crée la base et choisit la première question en 0,2 s. Quand l'investisseur répond aux trois questions d'A1, le tour d'A1 (Claude Opus 5.5) dure 12,8 s et la complétude atteint 80 % pour un seuil de 70 %. Un message volontairement hors cadre est bloqué par le Guardrail en 0,35 s.
 
-Diagramme : [création du profil](../architecture/img/alphaforge-flux-profil.png).
+Diagramme : [création du profil](../architecture/assets/alphaforge-flux-profil.png).
 
 [Retour aux cas d'utilisation](README.md)

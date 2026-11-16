@@ -308,6 +308,22 @@ export const ErrorEnvelope = z.object({
 });
 export type ErrorEnvelope = z.infer<typeof ErrorEnvelope>;
 
+/** State of the client's own Bedrock knowledge base (search index built from its OKF documents). */
+export const CLIENT_KB_STATUSES = ["disabled", "creating", "active", "failed", "quota"] as const;
+export const ClientKbStatus = z.enum(CLIENT_KB_STATUSES);
+export type ClientKbStatus = z.infer<typeof ClientKbStatus>;
+
+/** `client_kb` (section 3.3): the OKF base stays the source of truth, this index only finds passages. */
+export const ClientKb = z.object({
+  status: ClientKbStatus,
+  knowledge_base_id: z.string().nullable(),
+  /** Documents of the client base indexed so far. */
+  documents: z.number().int().min(0),
+  /** Documents written but not indexed yet (base not active, or call throttled). */
+  pending: z.number().int().min(0),
+});
+export type ClientKb = z.infer<typeof ClientKb>;
+
 const ClientStateObject = z.object({
   ok: z.literal(true),
   release: z.string(),
@@ -320,6 +336,8 @@ const ClientStateObject = z.object({
   completeness: Completeness,
   portfolio: PortfolioView.nullable(),
   trace: z.array(TraceStep),
+  /** Optional: an older runtime does not send it. */
+  client_kb: ClientKb.optional(),
 });
 
 /** Cardinality of `questions` per stage (section 3.2). */

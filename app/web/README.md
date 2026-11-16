@@ -16,7 +16,8 @@ Le contrat avec les runtimes Python et l'infrastructure est `app/CONTRACTS.md` :
 | `/portfolio` | **Portefeuille simulé** : la `Decision` du runtime `portfolio` (CONTRACTS.md, section 12), affichée telle quelle pour un profil de démonstration FICTION (Amira, Mateo, Robert) ou, hors mode `mock`, pour son propre profil. Positions cœur et satellite, style et bande de part actions de l'étape 0, classement des titres individuels (momentum en sensibilité seulement), les quatre questions avec l'étiquette FAIT, HYPOTHÈSE ou FICTION de chaque énoncé et ses faits cliquables (valeur, source, étape de trace), contrefactuels, verdicts des lentilles, contrôles du Judge, trace. Bandeau permanent « Simulation éducative — aucun conseil, aucune transaction ». |
 | `/knowledge` | Base de connaissances générale et collecte (A4, A5, A6). |
 | `/tldoole` | tldoole : vidéos verticales d’environ une minute sur les concepts que l’investisseur ne comprend pas encore (CONTRACTS.md, section 8). |
-| `/settings` | Réglages (langue, niveau de connaissances, session). |
+| `/settings` | Réglages (langue, niveau de connaissances, session ou compte connecté). |
+| `/login` | Connexion (seulement en `AUTH_MODE=cognito`) : « Se connecter ou créer un compte », vers la connexion gérée de Cognito. |
 
 `/profile` redirige vers `/`.
 
@@ -126,6 +127,25 @@ Permissions IAM nécessaires pour l'identité du poste :
 | Bedrock AgentCore | `bedrock-agentcore:ListAgentRuntimes`, `bedrock-agentcore:InvokeAgentRuntime` (runtimes `profile` et, pour `/portfolio`, `portfolio`) |
 | Step Functions | `states:ListStateMachines`, `states:StartExecution`, `states:ListExecutions`, `states:DescribeExecution` |
 
+## Connexion (`AUTH_MODE`)
+
+Par défaut (`AUTH_MODE=off`), il n'y a pas de connexion : le navigateur garde son `client_id` dans le `localStorage`, comme avant, dans les trois modes.
+
+Avec `AUTH_MODE=cognito` (déploiement AWS, `infrastructure/infra/auth.tf`), chaque investisseur se crée un compte sur la connexion gérée d'Amazon Cognito (courriel vérifié par un code). Un compte = un `client_id` = une base `clients/<client_id>/` (CONTRACTS.md, section 7.1) :
+
+- toute page demande une session (sinon `/login`), toute route `/api/*` aussi (sinon 401), sauf `/api/auth/*`, `/api/health` et `/api/ping`;
+- le serveur tire le `client_id` de la session, jamais du corps : un autre `client_id` ou une clé `clients/` d'un autre compte donne 403. Les profils de démonstration FICTION de `/portfolio` restent ouverts à tout compte connecté;
+- seuls les membres du groupe Cognito `admin` lancent une collecte (`POST /api/collect`); tout compte connecté voit les exécutions;
+- la session est un cookie `httpOnly`, `SameSite=Lax`, `Secure` hors `http://localhost`, chiffré et authentifié (AES-256-GCM, `node:crypto`). Aucun jeton n'est lisible par le JavaScript du navigateur. Elle dure ce que dure l'ID token (8 h par défaut, `auth_session_hours`), puis l'investisseur se reconnecte;
+- au chargement, l'interface lit `/api/auth/me` et prend le `client_id` du compte; l'historique local (traces, conversation) reste rangé par `client_id`. Le menu de compte (en haut à droite) donne le courriel et « Se déconnecter », qui efface aussi la session locale de ce client. Les profils anonymes d'avant ne sont pas migrés.
+
+Pour tester la connexion avec `next dev` après un déploiement (le client Cognito accepte déjà `http://localhost:3000`), prendre les outputs `auth_issuer`, `auth_client_id` et `auth_domain` du workspace HCP Terraform :
+
+```bash
+AUTH_MODE=cognito APP_URL=http://localhost:3000 AUTH_SESSION_SECRET=$(openssl rand -hex 32) \
+  COGNITO_ISSUER=... COGNITO_CLIENT_ID=... COGNITO_DOMAIN=... npm run dev
+```
+
 ## Variables d'environnement
 
 À placer dans `app/web/.env.local` (voir `.env.example`). Aucune n'est exposée au navigateur.
@@ -139,6 +159,12 @@ Permissions IAM nécessaires pour l'identité du poste :
 | `ALPHAFORGE_PREFIX` | `alphaforge_sandbox` | Préfixe des runtimes AgentCore. |
 | `ALPHAFORGE_STATE_MACHINE` | `alphaforge-sandbox-collecte` | Nom de la machine Step Functions de collecte. |
 | `AWS_PROFILE` | aucun | Profil AWS facultatif, lu par la chaîne par défaut du SDK. |
+| `AUTH_MODE` | `off` | `off` (sans connexion) ou `cognito` (connexion obligatoire). Les variables suivantes ne servent qu'en `cognito`, où elles sont toutes requises. |
+| `COGNITO_ISSUER` | aucun | `https://cognito-idp.<région>.amazonaws.com/<user pool>` (output `auth_issuer`). |
+| `COGNITO_CLIENT_ID` | aucun | Client d'application public, sans secret (output `auth_client_id`). |
+| `COGNITO_DOMAIN` | aucun | Domaine de la connexion gérée, `https://<préfixe>.auth.<région>.amazoncognito.com` (output `auth_domain`). |
+| `APP_URL` | aucun | Origine publique de l'interface : le domaine CloudFront, ou `http://localhost:3000`. Sert aux URL de retour et au drapeau `Secure` du cookie. |
+| `AUTH_SESSION_SECRET` | aucun | Clé du cookie de session, 32 caractères au moins (Terraform : `random_password`). |
 
 ## Passerelle (route handlers du serveur)
 
@@ -148,7 +174,11 @@ Permissions IAM nécessaires pour l'identité du poste :
 | `POST /api/portfolio` | L'action `build` du runtime `portfolio` : `{ "client_id"? , "persona"?: "amira" \| "mateo" \| "robert", "as_of"?, "strategy"?, "style_preference"?, "request"?, "mode"?, "locale"? }`, `client_id` ou `persona` requis. JSON seulement; la `Decision` est validée par zod dans le navigateur (`src/lib/contract/portfolio.ts`). |
 | `GET /api/health` | Mode courant, santé du runtime et, en mode `aws`, runtime résolu. |
 | `GET /api/collect` | Collectes récentes, avec le statut de chaque collecteur (`collected.press`, `collected.data`). `?execution_arn=` donne le détail d'une exécution de la machine configurée. |
-| `POST /api/collect` | Lance une collecte : `{ "since"?: "AAAA-MM-JJ", "tickers"?: ["RY.TO"] }`. |
+| `POST /api/collect` | Lance une collecte : `{ "since"?: "AAAA-MM-JJ", "tickers"?: ["RY.TO"] }`. Groupe `admin` exigé en `AUTH_MODE=cognito`. |
+| `GET /api/auth/login?next=/chemin` | Commence une connexion (code, PKCE, `state`, `nonce`, `lang` selon la langue de l'interface), puis la connexion gérée de Cognito. |
+| `GET /api/auth/callback` | Retour de Cognito : échange du code, vérification de l'ID token (signature par le JWKS, `iss`, `aud`, `exp`, `token_use`, `nonce`), cookie de session. |
+| `POST /api/auth/logout` | Efface la session, puis `/logout` de Cognito. |
+| `GET /api/auth/me` | `{ "mode": "off" \| "cognito", "user": { "email", "client_id", "groups", "admin", "expires_at" } \| null }`; 401 en `cognito` sans session. |
 
 Limites appliquées par le serveur : 5 fichiers de 10 Mo au plus par `portfolio.submit`, base64 vérifié, clés `clients/` servies seulement avec le `client_id` correspondant, aucune clé hors `general/` et `clients/<client_id>/`.
 
@@ -163,6 +193,8 @@ src/
   components/           aussi : profil (champs de réponse, revue A2, panneau), trace, base de connaissances, réglages, composants communs
   lib/contract/         schémas zod du contrat et des requêtes, lecture des sorties de collecte
   lib/server/           passerelle : configuration, modes local et aws, erreurs, SSE
+  lib/server/auth/      connexion Cognito : OIDC, cookie chiffré, garde (client_id de la session), routes /api/auth
+  proxy.ts              garde de Next.js 16 (ex-middleware) : /login ou 401 sans session en AUTH_MODE=cognito
   lib/mock/             simulateur du contrat (mode mock)
   lib/sample/           portefeuille et réponses d'exemple des maquettes (mode mock seulement)
   lib/fixtures/         réponses de `build` produites par le moteur (mode mock de /portfolio)
@@ -185,3 +217,5 @@ Les styles des trois écrans des maquettes sont des modules CSS (`*.module.css`)
 - Le mode `mock` garde tout en mémoire; un redémarrage efface les sessions et les collectes simulées.
 - En mode `mock`, A2 ne lit que le texte et les fichiers texte (CSV, TXT, JSON); en mode `aws`, A2 lit aussi les PDF et les images avec le modèle.
 - La collecte n'est disponible qu'en modes `mock` et `aws`.
+- En `AUTH_MODE=cognito`, le lien direct de l'ALB (`web_alb_url`, HTTP) ne garde pas de session : le cookie est `Secure` et Cognito n'accepte un retour en HTTP que sur `localhost`. Un build du portefeuille de plus de 60 s (limite de CloudFront) n'a donc plus de voie de secours.
+- La session ne suit pas en direct les changements du compte : un ajout au groupe `admin` vaut à la connexion suivante.

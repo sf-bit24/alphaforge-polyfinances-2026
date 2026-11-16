@@ -1,6 +1,7 @@
 "use client";
 
-import { CircleAlert, MessageSquareWarning, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { CircleAlert, LogIn, MessageSquareWarning, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { usePathname } from "next/navigation";
 import type { ApiError } from "@/lib/client/api";
 import { useI18n } from "@/lib/i18n/provider";
 import { Button } from "./button";
@@ -59,6 +60,29 @@ function RetryButton({ onRetry }: { onRetry: () => void }) {
   );
 }
 
+/** The session expired (`unauthorized`, CONTRACTS.md 7.1): sign in again, then come back to this page. */
+function SignInLink() {
+  const { t } = useI18n();
+  const pathname = usePathname();
+  return (
+    <a
+      href={`/login?next=${encodeURIComponent(pathname || "/")}`}
+      className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-navy px-3 py-1.5 text-sm font-medium text-white no-underline hover:bg-navy/90"
+    >
+      <LogIn aria-hidden className="size-3.5" />
+      {t.auth.signIn}
+    </a>
+  );
+}
+
+/** Retry, or sign in again when the session expired. */
+function NoticeAction({ code, onRetry }: { code: string; onRetry?: () => void }) {
+  if (code === "unauthorized") return <SignInLink />;
+  // Resending a message the guardrail blocked would be blocked again: the investor rephrases instead.
+  if (!onRetry || code === "guardrail_blocked") return null;
+  return <RetryButton onRetry={onRetry} />;
+}
+
 function DismissButton({ onDismiss }: { onDismiss: () => void }) {
   const { t } = useI18n();
   return (
@@ -94,7 +118,6 @@ export function ErrorNotice({
   const { t } = useI18n();
   const calm = t.errors.calm[error.code];
   const hint = calm?.hint ?? t.errors.hints[error.code];
-  const guardrail = error.code === "guardrail_blocked";
   const Icon = NOTICE_ICONS[noticeKind(error.code, calm)];
   return (
     <div
@@ -112,8 +135,7 @@ export function ErrorNotice({
           <p className="mt-1 text-ink-800">{error.message}</p>
           {hint && hint !== error.message && !compact ? <p className="mt-1 text-ink-600">{hint}</p> : null}
           {hasDetails(error.details) && !compact ? <NoticeDetails details={error.details} /> : null}
-          {/* Resending a message the guardrail blocked would be blocked again: the investor rephrases instead. */}
-          {onRetry && !guardrail ? <RetryButton onRetry={onRetry} /> : null}
+          <NoticeAction code={error.code} onRetry={onRetry} />
         </div>
         {onDismiss ? <DismissButton onDismiss={onDismiss} /> : null}
       </div>

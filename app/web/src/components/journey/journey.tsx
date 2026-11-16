@@ -4,11 +4,13 @@ import { Activity, FastForward, LayoutDashboard, UserRound } from "lucide-react"
 import Link from "next/link";
 import { useRef, type CSSProperties, type ReactNode } from "react";
 import type { ClientState, Stage } from "@/lib/contract/schemas";
+import { useAccount } from "@/lib/client/account";
 import { useSession } from "@/lib/client/session";
 import { useViewport } from "@/lib/client/use-viewport";
 import type { SceneLayout } from "@/lib/journey/geometry";
 import { useI18n } from "@/lib/i18n/provider";
 import { itemForStage, type PathLayout, type StopKind } from "@/lib/journey/path";
+import { AccountMenu } from "@/components/layout/account-menu";
 import { Brand } from "@/components/layout/brand";
 import { LanguageToggle } from "@/components/layout/language-toggle";
 import { ProfilePanel } from "@/components/profile/profile-panel";
@@ -78,6 +80,7 @@ function TopBar({ state, onOpen, onSkip, skipDisabled = false }: TopBarProps) {
           </Link>
         ) : null}
         <LanguageToggle />
+        <AccountMenu />
       </div>
     </header>
   );
@@ -226,6 +229,7 @@ function LandingSkip({ onSkip, disabled }: { onSkip: () => void; disabled: boole
 function LandingPanel({ shown, resumed, style, onStart, onResume, onRestart, onSkip, skipDisabled }: LandingProps) {
   const { t } = useI18n();
   const session = useSession();
+  const signedIn = useAccount().status === "signed_in";
   const startError =
     session.error && (session.errorAction === "session.start" || session.errorAction === "session.resume") ? session.error : null;
   return (
@@ -243,7 +247,8 @@ function LandingPanel({ shown, resumed, style, onStart, onResume, onRestart, onS
             <path d="M3 9h11M10 4.5L14.5 9 10 13.5" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        {resumed ? (
+        {/* An account has one profile: there is nothing to start over. */}
+        {resumed && !signedIn ? (
           <button type="button" className={styles.landingAlt} onClick={onRestart} disabled={Boolean(session.pending)}>
             {t.journey.landing.restart}
           </button>

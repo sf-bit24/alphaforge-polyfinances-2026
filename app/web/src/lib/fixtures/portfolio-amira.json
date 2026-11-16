@@ -11,13 +11,13 @@
   "decision_id": "dec-amira-v1-fixture",
   "profile_id": "amira",
   "profile_version": 1,
-  "created_utc": "2026-11-15T21:44:56.023949Z",
+  "created_utc": "2026-11-16T01:48:14.599474Z",
   "kind": "proposition",
   "simulation_only": true,
   "positions": [
    {
     "asset_id": "SPY",
-    "weight": 0.4800000005836849,
+    "weight": 0.4800000005836851,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": [
@@ -26,7 +26,7 @@
    },
    {
     "asset_id": "ESGV",
-    "weight": 0.21000000002079514,
+    "weight": 0.21000000002079508,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": [
@@ -35,21 +35,21 @@
    },
    {
     "asset_id": "AGG",
-    "weight": 0.14999999903694441,
+    "weight": 0.14999999903694414,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": []
    },
    {
     "asset_id": "GLD",
-    "weight": 0.10000000015089433,
+    "weight": 0.1000000001508944,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": []
    },
    {
     "asset_id": "ENB.TO",
-    "weight": 0.03000000013252247,
+    "weight": 0.030000000132522527,
     "goal_id": null,
     "role": "satellite",
     "rationale_fact_ids": [
@@ -60,7 +60,7 @@
    },
    {
     "asset_id": "TSLA",
-    "weight": 0.03000000007515873,
+    "weight": 0.030000000075158767,
     "goal_id": null,
     "role": "satellite",
     "rationale_fact_ids": [
@@ -4905,7 +4905,7 @@
    {
     "fact_id": "r1.opt_risk",
     "label_fr": "Risque minimisé (CVAR, mensuel)",
-    "value": 0.05056453729153094,
+    "value": 0.05056453729153095,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5052,7 +5052,7 @@
    {
     "fact_id": "r1.cvar_m",
     "label_fr": "CVaR 95 % mensuelle (historique)",
-    "value": 0.050349506259566745,
+    "value": 0.050349506259566724,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5094,7 +5094,7 @@
    {
     "fact_id": "r1.vol",
     "label_fr": "Volatilité annualisée (historique)",
-    "value": 0.10957688672358545,
+    "value": 0.10957688672358538,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5115,7 +5115,7 @@
    {
     "fact_id": "r1.worst12",
     "label_fr": "Pire rendement sur 12 mois (historique)",
-    "value": -0.12133695726295243,
+    "value": -0.12133695726295234,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5157,7 +5157,7 @@
    {
     "fact_id": "r1.rc.ESGV",
     "label_fr": "Part de la CVaR portée par ESGV",
-    "value": 0.27592947210658164,
+    "value": 0.2759294721065815,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5178,7 +5178,7 @@
    {
     "fact_id": "r1.rc.TSLA",
     "label_fr": "Part de la CVaR portée par TSLA",
-    "value": 0.09995521921491783,
+    "value": 0.09995521921491789,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5199,7 +5199,7 @@
    {
     "fact_id": "r1.stress.2022_taux",
     "label_fr": "Rendement pendant Hausse des taux 2022 : actions et obligations en baisse",
-    "value": -0.12133695726295235,
+    "value": -0.12133695726295224,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5220,7 +5220,7 @@
    {
     "fact_id": "r1.stress_cad.2022_taux",
     "label_fr": "Perte en dollars pendant Hausse des taux 2022 : actions et obligations en baisse",
-    "value": 18200.543589442852,
+    "value": 18200.543589442837,
     "unit": "CAD",
     "currency": null,
     "as_of": null,
@@ -5241,7 +5241,7 @@
    {
     "fact_id": "r1.stress.2020_covid",
     "label_fr": "Rendement pendant Choc COVID-19",
-    "value": -0.09028762523500544,
+    "value": -0.09028762523500533,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5262,7 +5262,7 @@
    {
     "fact_id": "r1.stress_cad.2020_covid",
     "label_fr": "Perte en dollars pendant Choc COVID-19",
-    "value": 13543.143785250817,
+    "value": 13543.143785250799,
     "unit": "CAD",
     "currency": null,
     "as_of": null,
@@ -5283,7 +5283,7 @@
    {
     "fact_id": "r1.n_eff_risk",
     "label_fr": "Nombre effectif de sources de risque",
-    "value": 2.3722039291429606,
+    "value": 2.3722039291429615,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -5304,7 +5304,7 @@
    {
     "fact_id": "r1.div_ratio",
     "label_fr": "Ratio de diversification",
-    "value": 1.3495544068424445,
+    "value": 1.3495544068424443,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -5325,7 +5325,7 @@
    {
     "fact_id": "r1.cluster0",
     "label_fr": "Poids d'un groupe très corrélé (SPY, ESGV)",
-    "value": 0.6899999991206484,
+    "value": 0.6899999991206479,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5346,7 +5346,7 @@
    {
     "fact_id": "r1.cluster1",
     "label_fr": "Poids d'un groupe très corrélé (AGG)",
-    "value": 0.1499999987143723,
+    "value": 0.1499999987143719,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5367,7 +5367,7 @@
    {
     "fact_id": "r1.cluster2",
     "label_fr": "Poids d'un groupe très corrélé (GLD)",
-    "value": 0.09999999993584627,
+    "value": 0.09999999993584624,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5388,7 +5388,7 @@
    {
     "fact_id": "r1.lt.tech",
     "label_fr": "Exposition consolidée au secteur de la technologie (look-through)",
-    "value": 0.3004896456153378,
+    "value": 0.30048964561533764,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5409,7 +5409,7 @@
    {
     "fact_id": "r1.lt.energy",
     "label_fr": "Exposition consolidée au secteur de l'énergie (look-through)",
-    "value": 0.05148883298147615,
+    "value": 0.05148883298147616,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5430,7 +5430,7 @@
    {
     "fact_id": "r1.lt.financials",
     "label_fr": "Exposition consolidée au secteur de la finance (look-through)",
-    "value": 0.07808946621297336,
+    "value": 0.07808946621297332,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6081,7 +6081,7 @@
    {
     "fact_id": "r2.opt_risk",
     "label_fr": "Risque minimisé (CVAR, mensuel)",
-    "value": 0.05056453729153094,
+    "value": 0.05056453729153095,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6228,7 +6228,7 @@
    {
     "fact_id": "r2.cvar_m",
     "label_fr": "CVaR 95 % mensuelle (historique)",
-    "value": 0.050349506259566745,
+    "value": 0.050349506259566724,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6270,7 +6270,7 @@
    {
     "fact_id": "r2.vol",
     "label_fr": "Volatilité annualisée (historique)",
-    "value": 0.10957688672358545,
+    "value": 0.10957688672358538,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6291,7 +6291,7 @@
    {
     "fact_id": "r2.worst12",
     "label_fr": "Pire rendement sur 12 mois (historique)",
-    "value": -0.12133695726295243,
+    "value": -0.12133695726295234,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6333,7 +6333,7 @@
    {
     "fact_id": "r2.rc.ESGV",
     "label_fr": "Part de la CVaR portée par ESGV",
-    "value": 0.27592947210658164,
+    "value": 0.2759294721065815,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6354,7 +6354,7 @@
    {
     "fact_id": "r2.rc.TSLA",
     "label_fr": "Part de la CVaR portée par TSLA",
-    "value": 0.09995521921491783,
+    "value": 0.09995521921491789,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6375,7 +6375,7 @@
    {
     "fact_id": "r2.stress.2022_taux",
     "label_fr": "Rendement pendant Hausse des taux 2022 : actions et obligations en baisse",
-    "value": -0.12133695726295235,
+    "value": -0.12133695726295224,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6396,7 +6396,7 @@
    {
     "fact_id": "r2.stress_cad.2022_taux",
     "label_fr": "Perte en dollars pendant Hausse des taux 2022 : actions et obligations en baisse",
-    "value": 18200.543589442852,
+    "value": 18200.543589442837,
     "unit": "CAD",
     "currency": null,
     "as_of": null,
@@ -6417,7 +6417,7 @@
    {
     "fact_id": "r2.stress.2020_covid",
     "label_fr": "Rendement pendant Choc COVID-19",
-    "value": -0.09028762523500544,
+    "value": -0.09028762523500533,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6438,7 +6438,7 @@
    {
     "fact_id": "r2.stress_cad.2020_covid",
     "label_fr": "Perte en dollars pendant Choc COVID-19",
-    "value": 13543.143785250817,
+    "value": 13543.143785250799,
     "unit": "CAD",
     "currency": null,
     "as_of": null,
@@ -6459,7 +6459,7 @@
    {
     "fact_id": "r2.n_eff_risk",
     "label_fr": "Nombre effectif de sources de risque",
-    "value": 2.3722039291429606,
+    "value": 2.3722039291429615,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -6480,7 +6480,7 @@
    {
     "fact_id": "r2.div_ratio",
     "label_fr": "Ratio de diversification",
-    "value": 1.3495544068424445,
+    "value": 1.3495544068424443,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -6501,7 +6501,7 @@
    {
     "fact_id": "r2.cluster0",
     "label_fr": "Poids d'un groupe très corrélé (SPY, ESGV)",
-    "value": 0.6899999991206484,
+    "value": 0.6899999991206479,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6522,7 +6522,7 @@
    {
     "fact_id": "r2.cluster1",
     "label_fr": "Poids d'un groupe très corrélé (AGG)",
-    "value": 0.1499999987143723,
+    "value": 0.1499999987143719,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6543,7 +6543,7 @@
    {
     "fact_id": "r2.cluster2",
     "label_fr": "Poids d'un groupe très corrélé (GLD)",
-    "value": 0.09999999993584627,
+    "value": 0.09999999993584624,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6564,7 +6564,7 @@
    {
     "fact_id": "r2.lt.tech",
     "label_fr": "Exposition consolidée au secteur de la technologie (look-through)",
-    "value": 0.3004896456153378,
+    "value": 0.30048964561533764,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6585,7 +6585,7 @@
    {
     "fact_id": "r2.lt.energy",
     "label_fr": "Exposition consolidée au secteur de l'énergie (look-through)",
-    "value": 0.05148883298147615,
+    "value": 0.05148883298147616,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6606,7 +6606,7 @@
    {
     "fact_id": "r2.lt.financials",
     "label_fr": "Exposition consolidée au secteur de la finance (look-through)",
-    "value": 0.07808946621297336,
+    "value": 0.07808946621297332,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -7908,7 +7908,7 @@
    {
     "fact_id": "cf.relax_risk",
     "label_fr": "Risque minimisé avec la borne testée",
-    "value": 0.05013120043849593,
+    "value": 0.050131200438494755,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -7950,7 +7950,7 @@
    {
     "fact_id": "cf.style.down.risk",
     "label_fr": "Risque minimisé avec le style dynamique",
-    "value": 0.04225430840387154,
+    "value": 0.04225430840387171,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -8009,6 +8009,840 @@
      }
     ],
     "trace_id": "dec-amira-v1-fixture:t021:counterfactuals:optimize"
+   },
+   {
+    "fact_id": "mix.amount_total",
+    "label_fr": "Montant de base de la répartition",
+    "value": 150000.0,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "patrimoine investissable déclaré, en CAD"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.amount.SPY",
+    "label_fr": "Montant placé dans SPY",
+    "value": 72000.0,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids 48,0 % × montant de base"
+     },
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "montant de base"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.amount.ESGV",
+    "label_fr": "Montant placé dans ESGV",
+    "value": 31500.0,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids 21,0 % × montant de base"
+     },
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "montant de base"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.amount.AGG",
+    "label_fr": "Montant placé dans AGG",
+    "value": 22500.0,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids 15,0 % × montant de base"
+     },
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "montant de base"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.amount.GLD",
+    "label_fr": "Montant placé dans GLD",
+    "value": 15000.0,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids 10,0 % × montant de base"
+     },
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "montant de base"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.amount.ENB.TO",
+    "label_fr": "Montant placé dans ENB.TO",
+    "value": 4500.0,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids 3,0 % × montant de base"
+     },
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "montant de base"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.amount.TSLA",
+    "label_fr": "Montant placé dans TSLA",
+    "value": 4500.0,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids 3,0 % × montant de base"
+     },
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "montant de base"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.class.fnb_actions",
+    "label_fr": "Part des FNB d'actions",
+    "value": 0.6900000006,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "somme des poids de SPY, ESGV (asset_class)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.class.obligations",
+    "label_fr": "Part des obligations et quasi-liquidités",
+    "value": 0.149999999,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "somme des poids de AGG (asset_class)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.class.or_matieres",
+    "label_fr": "Part de l'or et des matières premières",
+    "value": 0.1000000002,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "somme des poids de GLD (asset_class)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.class.actions_individuelles",
+    "label_fr": "Part des actions individuelles",
+    "value": 0.0600000002,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "somme des poids de ENB.TO, TSLA (asset_class)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.currency.USD",
+    "label_fr": "Part cotée en dollars américains",
+    "value": 0.9699999999,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "devise de cotation de SPY, ESGV, AGG, GLD, TSLA ; somme de leurs poids (exposition de change avant conversion en CAD)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.currency.CAD",
+    "label_fr": "Part cotée en dollars canadiens",
+    "value": 0.0300000001,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "devise de cotation de ENB.TO ; somme de leurs poids (exposition de change avant conversion en CAD)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.tech",
+    "label_fr": "Part du secteur de la technologie",
+    "value": 0.3004896463,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY, ESGV ; part directe 0,0 % + transparence des FNB 30,0 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.obligations",
+    "label_fr": "Part des obligations et quasi-liquidités (hors secteurs)",
+    "value": 0.149999999,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : AGG"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.consumer_discretionary",
+    "label_fr": "Part du secteur de la consommation discrétionnaire",
+    "value": 0.1134588708,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY, ESGV, TSLA ; part directe 3,0 % + transparence des FNB 8,3 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.or_matieres",
+    "label_fr": "Part de l'or et des matières premières (hors secteurs)",
+    "value": 0.1000000002,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : GLD"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.financials",
+    "label_fr": "Part du secteur de la finance",
+    "value": 0.0780894664,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY, ESGV ; part directe 0,0 % + transparence des FNB 7,8 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.other",
+    "label_fr": "Part des autres industries (classement Kenneth R. French)",
+    "value": 0.0566226718,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY, ESGV ; part directe 0,0 % + transparence des FNB 5,7 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.healthcare",
+    "label_fr": "Part du secteur de la santé",
+    "value": 0.0551230449,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY, ESGV ; part directe 0,0 % + transparence des FNB 5,5 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.energy",
+    "label_fr": "Part du secteur de l'énergie",
+    "value": 0.0514888331,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY, ESGV, ENB.TO ; part directe 3,0 % + transparence des FNB 2,1 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.industrials",
+    "label_fr": "Part du secteur de l'industrie",
+    "value": 0.0417825232,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY, ESGV ; part directe 0,0 % + transparence des FNB 4,2 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.utilities",
+    "label_fr": "Part du secteur des services publics",
+    "value": 0.016577788,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY, ESGV ; part directe 0,0 % + transparence des FNB 1,7 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.consumer_staples",
+    "label_fr": "Part du secteur de la consommation de base",
+    "value": 0.0164631813,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY, ESGV ; part directe 0,0 % + transparence des FNB 1,6 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.communication",
+    "label_fr": "Part du secteur des communications",
+    "value": 0.0103581825,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY, ESGV ; part directe 0,0 % + transparence des FNB 1,0 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.materials",
+    "label_fr": "Part du secteur des matériaux",
+    "value": 0.0095457927,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY, ESGV ; part directe 0,0 % + transparence des FNB 1,0 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
    }
   ],
   "constraints": [
@@ -8362,6 +9196,16 @@
      "label": "FAIT"
     },
     {
+     "text_fr": "Répartition de l'argent : FNB d'actions 69,0 %, obligations et quasi-liquidités 15,0 %, or et matières premières 10,0 %, actions individuelles 6,0 %.",
+     "fact_ids": [
+      "mix.class.fnb_actions",
+      "mix.class.obligations",
+      "mix.class.or_matieres",
+      "mix.class.actions_individuelles"
+     ],
+     "label": "FAIT"
+    },
+    {
      "text_fr": "Mesures historiques du portefeuille proposé : CVaR mensuelle 5,0 %, baisse maximale 15,9 % (rendements mensuels en CAD, prix ajustés).",
      "fact_ids": [
       "r2.cvar_m",
@@ -8524,8 +9368,8 @@
      "emphasis.diversity",
      "emphasis.constraints"
     ],
-    "started_utc": "2026-11-15T21:44:54.869144Z",
-    "ended_utc": "2026-11-15T21:44:54.892064Z",
+    "started_utc": "2026-11-16T01:48:09.797217Z",
+    "ended_utc": "2026-11-16T01:48:10.005506Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8554,8 +9398,8 @@
      "strat.pi",
      "strat.K"
     ],
-    "started_utc": "2026-11-15T21:44:54.907403Z",
-    "ended_utc": "2026-11-15T21:44:54.945391Z",
+    "started_utc": "2026-11-16T01:48:10.044086Z",
+    "ended_utc": "2026-11-16T01:48:10.090723Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8784,8 +9628,8 @@
      "strat.score.JPM",
      "strat.rank.JPM"
     ],
-    "started_utc": "2026-11-15T21:44:54.945412Z",
-    "ended_utc": "2026-11-15T21:44:55.521825Z",
+    "started_utc": "2026-11-16T01:48:10.090781Z",
+    "ended_utc": "2026-11-16T01:48:12.165356Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8806,8 +9650,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T21:44:55.521928Z",
-    "ended_utc": "2026-11-15T21:44:55.521993Z",
+    "started_utc": "2026-11-16T01:48:12.165449Z",
+    "ended_utc": "2026-11-16T01:48:12.165712Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8838,8 +9682,8 @@
      "strat.risk_cost",
      "strat.applied"
     ],
-    "started_utc": "2026-11-15T21:44:55.522008Z",
-    "ended_utc": "2026-11-15T21:44:55.689849Z",
+    "started_utc": "2026-11-16T01:48:12.165747Z",
+    "ended_utc": "2026-11-16T01:48:13.031026Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8865,8 +9709,8 @@
      "r1.active.strat.floor.ENB.TO[ENB.TO]:min",
      "r1.active.alloc.gold:max"
     ],
-    "started_utc": "2026-11-15T21:44:55.691193Z",
-    "ended_utc": "2026-11-15T21:44:55.721837Z",
+    "started_utc": "2026-11-16T01:48:13.036069Z",
+    "ended_utc": "2026-11-16T01:48:13.141452Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8889,8 +9733,8 @@
      "r1.horizon",
      "r1.recovery"
     ],
-    "started_utc": "2026-11-15T21:44:55.721863Z",
-    "ended_utc": "2026-11-15T21:44:55.734097Z",
+    "started_utc": "2026-11-16T01:48:13.141536Z",
+    "ended_utc": "2026-11-16T01:48:13.214917Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -8922,8 +9766,8 @@
      "r1.stress.2020_covid",
      "r1.stress_cad.2020_covid"
     ],
-    "started_utc": "2026-11-15T21:44:55.734115Z",
-    "ended_utc": "2026-11-15T21:44:55.761870Z",
+    "started_utc": "2026-11-16T01:48:13.214970Z",
+    "ended_utc": "2026-11-16T01:48:13.342068Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -8952,8 +9796,8 @@
      "r1.lt.energy",
      "r1.lt.financials"
     ],
-    "started_utc": "2026-11-15T21:44:55.761891Z",
-    "ended_utc": "2026-11-15T21:44:55.764978Z",
+    "started_utc": "2026-11-16T01:48:13.342115Z",
+    "ended_utc": "2026-11-16T01:48:13.363929Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -8975,8 +9819,8 @@
     "fact_ids": [
      "r1.n_blocking"
     ],
-    "started_utc": "2026-11-15T21:44:55.764996Z",
-    "ended_utc": "2026-11-15T21:44:55.781269Z",
+    "started_utc": "2026-11-16T01:48:13.363981Z",
+    "ended_utc": "2026-11-16T01:48:13.458916Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9035,8 +9879,8 @@
      "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:risk.vol:max",
      "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-15T21:44:55.765202Z",
-    "ended_utc": "2026-11-15T21:44:55.779929Z",
+    "started_utc": "2026-11-16T01:48:13.364585Z",
+    "ended_utc": "2026-11-16T01:48:13.456190Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9056,8 +9900,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T21:44:55.781295Z",
-    "ended_utc": "2026-11-15T21:44:55.781315Z",
+    "started_utc": "2026-11-16T01:48:13.458969Z",
+    "ended_utc": "2026-11-16T01:48:13.459017Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9077,8 +9921,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T21:44:55.781783Z",
-    "ended_utc": "2026-11-15T21:44:55.782099Z",
+    "started_utc": "2026-11-16T01:48:13.461661Z",
+    "ended_utc": "2026-11-16T01:48:13.463601Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9105,8 +9949,8 @@
      "r2.active.strat.floor.ENB.TO[ENB.TO]:min",
      "r2.active.alloc.gold:max"
     ],
-    "started_utc": "2026-11-15T21:44:55.782119Z",
-    "ended_utc": "2026-11-15T21:44:55.782177Z",
+    "started_utc": "2026-11-16T01:48:13.464192Z",
+    "ended_utc": "2026-11-16T01:48:13.464498Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9129,8 +9973,8 @@
      "r2.horizon",
      "r2.recovery"
     ],
-    "started_utc": "2026-11-15T21:44:55.782188Z",
-    "ended_utc": "2026-11-15T21:44:55.795431Z",
+    "started_utc": "2026-11-16T01:48:13.464542Z",
+    "ended_utc": "2026-11-16T01:48:13.515338Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9162,8 +10006,8 @@
      "r2.stress.2020_covid",
      "r2.stress_cad.2020_covid"
     ],
-    "started_utc": "2026-11-15T21:44:55.795447Z",
-    "ended_utc": "2026-11-15T21:44:55.818358Z",
+    "started_utc": "2026-11-16T01:48:13.515385Z",
+    "ended_utc": "2026-11-16T01:48:13.634950Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9192,8 +10036,8 @@
      "r2.lt.energy",
      "r2.lt.financials"
     ],
-    "started_utc": "2026-11-15T21:44:55.818376Z",
-    "ended_utc": "2026-11-15T21:44:55.821874Z",
+    "started_utc": "2026-11-16T01:48:13.635043Z",
+    "ended_utc": "2026-11-16T01:48:13.650067Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9215,8 +10059,8 @@
     "fact_ids": [
      "r2.n_blocking"
     ],
-    "started_utc": "2026-11-15T21:44:55.821895Z",
-    "ended_utc": "2026-11-15T21:44:55.838156Z",
+    "started_utc": "2026-11-16T01:48:13.650113Z",
+    "ended_utc": "2026-11-16T01:48:13.724097Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9275,8 +10119,8 @@
      "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:risk.vol:max",
      "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-15T21:44:55.822159Z",
-    "ended_utc": "2026-11-15T21:44:55.837252Z",
+    "started_utc": "2026-11-16T01:48:13.650717Z",
+    "ended_utc": "2026-11-16T01:48:13.721969Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9296,8 +10140,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T21:44:55.838172Z",
-    "ended_utc": "2026-11-15T21:44:55.838186Z",
+    "started_utc": "2026-11-16T01:48:13.724143Z",
+    "ended_utc": "2026-11-16T01:48:13.724187Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9317,8 +10161,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T21:44:55.838576Z",
-    "ended_utc": "2026-11-15T21:44:55.838590Z",
+    "started_utc": "2026-11-16T01:48:13.726417Z",
+    "ended_utc": "2026-11-16T01:48:13.726472Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9338,8 +10182,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T21:44:55.838598Z",
-    "ended_utc": "2026-11-15T21:44:55.854416Z",
+    "started_utc": "2026-11-16T01:48:13.726504Z",
+    "ended_utc": "2026-11-16T01:48:13.802215Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9399,8 +10243,8 @@
      "dec-amira-v1-fixture:t020:judge:check:final:risk.vol:max",
      "dec-amira-v1-fixture:t020:judge:check:final:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-15T21:44:55.838836Z",
-    "ended_utc": "2026-11-15T21:44:55.853600Z",
+    "started_utc": "2026-11-16T01:48:13.727308Z",
+    "ended_utc": "2026-11-16T01:48:13.799922Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9426,8 +10270,64 @@
      "cf.style.down.n_titres",
      "cf.style.down.band_target"
     ],
-    "started_utc": "2026-11-15T21:44:55.854431Z",
-    "ended_utc": "2026-11-15T21:44:56.022158Z",
+    "started_utc": "2026-11-16T01:48:13.802260Z",
+    "ended_utc": "2026-11-16T01:48:14.590752Z",
+    "status": "ok",
+    "message": null,
+    "data_version": "008f122d5da4f8f7",
+    "code_version": null,
+    "seed": null,
+    "model_id": null,
+    "otel_trace_id": null,
+    "otel_span_id": null
+   },
+   {
+    "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown",
+    "parent_id": null,
+    "agent": "allocation",
+    "tool": "allocation_breakdown",
+    "inputs": {
+     "assets": [
+      "SPY",
+      "ESGV",
+      "AGG",
+      "GLD",
+      "ENB.TO",
+      "TSLA"
+     ],
+     "amount_cad": 150000.0
+    },
+    "output_summary": "4 classes, 2 devises, 13 secteurs ; couverture sectorielle 100,0 %",
+    "fact_ids": [
+     "mix.amount_total",
+     "mix.amount.SPY",
+     "mix.amount.ESGV",
+     "mix.amount.AGG",
+     "mix.amount.GLD",
+     "mix.amount.ENB.TO",
+     "mix.amount.TSLA",
+     "mix.class.fnb_actions",
+     "mix.class.obligations",
+     "mix.class.or_matieres",
+     "mix.class.actions_individuelles",
+     "mix.currency.USD",
+     "mix.currency.CAD",
+     "mix.sector.tech",
+     "mix.sector.obligations",
+     "mix.sector.consumer_discretionary",
+     "mix.sector.or_matieres",
+     "mix.sector.financials",
+     "mix.sector.other",
+     "mix.sector.healthcare",
+     "mix.sector.energy",
+     "mix.sector.industrials",
+     "mix.sector.utilities",
+     "mix.sector.consumer_staples",
+     "mix.sector.communication",
+     "mix.sector.materials"
+    ],
+    "started_utc": "2026-11-16T01:48:14.591006Z",
+    "ended_utc": "2026-11-16T01:48:14.593712Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9478,5 +10378,236 @@
   },
   "fallback": [],
   "version": "0.1.0"
+ },
+ "allocation": {
+  "amount_cad": 150000.0,
+  "currency": "CAD",
+  "positions": [
+   {
+    "asset_id": "SPY",
+    "name": "SPDR S&P 500 ETF Trust",
+    "asset_class": "etf_equity",
+    "class_key": "fnb_actions",
+    "currency": "USD",
+    "sector": "Broad market (U.S.)",
+    "role": "coeur",
+    "weight": 0.4800000006,
+    "amount_cad": 72000.0,
+    "fact_id": "mix.amount.SPY"
+   },
+   {
+    "asset_id": "ESGV",
+    "name": "Vanguard ESG U.S. Stock ETF",
+    "asset_class": "etf_equity",
+    "class_key": "fnb_actions",
+    "currency": "USD",
+    "sector": "Broad market (U.S., ESG-screened)",
+    "role": "coeur",
+    "weight": 0.21,
+    "amount_cad": 31500.0,
+    "fact_id": "mix.amount.ESGV"
+   },
+   {
+    "asset_id": "AGG",
+    "name": "iShares Core U.S. Aggregate Bond ETF",
+    "asset_class": "etf_bond",
+    "class_key": "obligations",
+    "currency": "USD",
+    "sector": "Bonds (U.S. aggregate)",
+    "role": "coeur",
+    "weight": 0.149999999,
+    "amount_cad": 22500.0,
+    "fact_id": "mix.amount.AGG"
+   },
+   {
+    "asset_id": "GLD",
+    "name": "SPDR Gold Shares",
+    "asset_class": "etf_commodity",
+    "class_key": "or_matieres",
+    "currency": "USD",
+    "sector": "Gold",
+    "role": "coeur",
+    "weight": 0.1000000002,
+    "amount_cad": 15000.0,
+    "fact_id": "mix.amount.GLD"
+   },
+   {
+    "asset_id": "ENB.TO",
+    "name": "Enbridge",
+    "asset_class": "equity",
+    "class_key": "actions_individuelles",
+    "currency": "CAD",
+    "sector": "Energy",
+    "role": "satellite",
+    "weight": 0.0300000001,
+    "amount_cad": 4500.0,
+    "fact_id": "mix.amount.ENB.TO"
+   },
+   {
+    "asset_id": "TSLA",
+    "name": "Tesla",
+    "asset_class": "equity",
+    "class_key": "actions_individuelles",
+    "currency": "USD",
+    "sector": "Consumer Discretionary",
+    "role": "satellite",
+    "weight": 0.0300000001,
+    "amount_cad": 4500.0,
+    "fact_id": "mix.amount.TSLA"
+   }
+  ],
+  "by_class": [
+   {
+    "key": "fnb_actions",
+    "label_fr": "FNB d'actions",
+    "weight": 0.6900000006,
+    "amount_cad": 103500.0,
+    "fact_id": "mix.class.fnb_actions"
+   },
+   {
+    "key": "obligations",
+    "label_fr": "Obligations et quasi-liquidités",
+    "weight": 0.149999999,
+    "amount_cad": 22500.0,
+    "fact_id": "mix.class.obligations"
+   },
+   {
+    "key": "or_matieres",
+    "label_fr": "Or et matières premières",
+    "weight": 0.1000000002,
+    "amount_cad": 15000.0,
+    "fact_id": "mix.class.or_matieres"
+   },
+   {
+    "key": "actions_individuelles",
+    "label_fr": "Actions individuelles",
+    "weight": 0.0600000002,
+    "amount_cad": 9000.0,
+    "fact_id": "mix.class.actions_individuelles"
+   }
+  ],
+  "by_currency": [
+   {
+    "key": "USD",
+    "label_fr": "Dollar américain (USD)",
+    "weight": 0.9699999999,
+    "amount_cad": 145500.0,
+    "fact_id": "mix.currency.USD"
+   },
+   {
+    "key": "CAD",
+    "label_fr": "Dollar canadien (CAD)",
+    "weight": 0.0300000001,
+    "amount_cad": 4500.0,
+    "fact_id": "mix.currency.CAD"
+   }
+  ],
+  "by_sector": [
+   {
+    "key": "tech",
+    "label_fr": "Technologie",
+    "weight": 0.3004896463,
+    "amount_cad": 45073.45,
+    "fact_id": "mix.sector.tech",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "obligations",
+    "label_fr": "Obligations et quasi-liquidités",
+    "weight": 0.149999999,
+    "amount_cad": 22500.0,
+    "fact_id": "mix.sector.obligations",
+    "basis": "direct"
+   },
+   {
+    "key": "consumer_discretionary",
+    "label_fr": "Consommation discrétionnaire",
+    "weight": 0.1134588708,
+    "amount_cad": 17018.83,
+    "fact_id": "mix.sector.consumer_discretionary",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "or_matieres",
+    "label_fr": "Or et matières premières",
+    "weight": 0.1000000002,
+    "amount_cad": 15000.0,
+    "fact_id": "mix.sector.or_matieres",
+    "basis": "direct"
+   },
+   {
+    "key": "financials",
+    "label_fr": "Finance",
+    "weight": 0.0780894664,
+    "amount_cad": 11713.42,
+    "fact_id": "mix.sector.financials",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "other",
+    "label_fr": "Autres industries",
+    "weight": 0.0566226718,
+    "amount_cad": 8493.4,
+    "fact_id": "mix.sector.other",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "healthcare",
+    "label_fr": "Santé",
+    "weight": 0.0551230449,
+    "amount_cad": 8268.46,
+    "fact_id": "mix.sector.healthcare",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "energy",
+    "label_fr": "Énergie",
+    "weight": 0.0514888331,
+    "amount_cad": 7723.32,
+    "fact_id": "mix.sector.energy",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "industrials",
+    "label_fr": "Industrie",
+    "weight": 0.0417825232,
+    "amount_cad": 6267.38,
+    "fact_id": "mix.sector.industrials",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "utilities",
+    "label_fr": "Services publics",
+    "weight": 0.016577788,
+    "amount_cad": 2486.67,
+    "fact_id": "mix.sector.utilities",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "consumer_staples",
+    "label_fr": "Consommation de base",
+    "weight": 0.0164631813,
+    "amount_cad": 2469.48,
+    "fact_id": "mix.sector.consumer_staples",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "communication",
+    "label_fr": "Communications",
+    "weight": 0.0103581825,
+    "amount_cad": 1553.73,
+    "fact_id": "mix.sector.communication",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "materials",
+    "label_fr": "Matériaux",
+    "weight": 0.0095457927,
+    "amount_cad": 1431.87,
+    "fact_id": "mix.sector.materials",
+    "basis": "lookthrough"
+   }
+  ],
+  "sector_coverage": 1.0
  }
 }

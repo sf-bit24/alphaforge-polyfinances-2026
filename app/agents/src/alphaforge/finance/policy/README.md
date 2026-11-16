@@ -45,8 +45,8 @@ plafonds qui la visent (bac à sable, titre individuel, crypto, exclusions). `re
    `confidence < status.completeness_min`. Si un champ `must_have` manque (`investable_wealth`, horizon), le
    résultat est `incomplet` : le mandat est émis avec des valeurs prudentes par défaut (`missing_defaults`).
    Sinon, c'est une `position_attente`. Dans les deux cas : niveau au plus N2, sans titres individuels, crypto
-   ni bac à sable. Un statut `PROTECTION` (demandé par le profil, ou règle des dollars sans aucune part
-   d'actions admissible) donne N0, `protection` et un mandat sans titres individuels ni crypto, le plus prudent ;
+   ni bac à sable. Un statut `PROTECTION` (demandé par le profil, ou règle des dollars quand l* est sous la
+   perte de planification des quasi-liquidités elles-mêmes) donne N0, `protection` et un mandat sans titres individuels ni crypto, le plus prudent ;
    `status.PROTECTION.human_referral` est inscrit dans la trace. **Chaque profil reçoit un mandat, donc un
    portefeuille** : le pipeline optimise toujours, et l'explication donne la raison chiffrée du statut.
 2. **Horizon du seau risque.** C'est le T minimal des objectifs qui ne relèvent pas d'une règle
@@ -62,7 +62,18 @@ plafonds qui la visent (bac à sable, titre individuel, crypto, exclusions). `re
    `horizon_cap(T)`, du plafond des seaux et du plafond du statut.
 6. **Règle des dollars.** `l* = min(L_plan(e_max), l_declared, l_cap)`. `e_cap` est le e maximal de la
    grille de 5 % tel que `ENV_mdd(e) + daily_buffer ≤ l*`. Le niveau final est celui dont la bande
-   contient `e_cap`.
+   contient `e_cap`. **Point quasi-liquidités** (`dollar_rule.cash_like_point`, HYPOTHESE) : si aucun e ne
+   tient (l* < L_plan(10) = 0,1299) mais que l* ≥ L_plan_cash = 0,015, la décision reste une décision N0
+   normale avec `e_cap = 0`. L_plan_cash = MDD de ZST.TO raccordé à CA_TBILL (0,0069, arrondi à 0,010 ; les
+   T-bills des 3 familles n'ont aucun mois négatif) + marge quotidienne de ZST.TO (0,0002 pt, arrondie à
+   0,005). Le mandat place le portefeuille sur la droite entre ce point (100 % quasi-liquidités) et le point
+   HC e = 0 de l'enveloppe (50 % T-bills, L_plan 0,1444) : part quasi-liquidités **fixée** (min = max)
+   `c(l*) = arrondi_sup_5%(1 − 0,5·(l* − 0,015)/(0,1444 − 0,015))`, le reste (1 − c) en obligations (XBB.TO,
+   AGG, réparties par l'optimiseur), `risk.mdd` sur la même droite, or à 0.
+   La droite est prudente : si les liquidités ne perdent jamais, MDD(a·R + (1−a)·cash) ≤ a·MDD(R) ; vérifié
+   sur les familles HC. Exemples : 250 $ sur 10 000 $ → c = 100 % (ZST.TO seul), `risk.mdd` 1 % ; l* = 10 %
+   → 70 % ZST.TO et 30 % d'obligations, `risk.mdd` 7 %. Sous 0,015 (dont une perte déclarée de 0, issue #91) : PROTECTION, avec le même mandat à
+   c = 100 %.
 7. **Budgets.** On prend les valeurs du niveau si `e_cap = e_max`, sinon `arrondi_sup(ENV(e_cap))`
    (`budgets_when_capped`).
 8. **Satellites, composition, limites.** Une limite par entrée de `limits_template`. `risk.cdar_m` est
@@ -95,7 +106,7 @@ de chaque niveau du YAML.
 |---|---|
 | `test_personas.py` | Amira N4 (C 98,7, T 71,5, crypto 2 %). Mateo N2 (e_cap 35 %, budgets ENV(35) = persona_v02). Robert N0 (l* 0,133, e_cap 10 %, bac à sable 0, demande hors mandat). `example_N3` du YAML reproduit. Effet de la marge quotidienne (sans elle : Mateo seul N3, Robert N1). Validation, sources, déterminisme |
 | `test_monotonicity.py` | Dégrader une entrée ne relève jamais le niveau ni un plafond de risque : horizon, perte déclarée, coussin, dette, connaissances, capacité évaluée, composure, drapeaux, membres du ménage. Les 4 biais ne font que resserrer. Règle du min du ménage. La capacité évaluée ne fait que baisser |
-| `test_status_emphasis.py` | Cas INCOMPLETE, incomplet et PROTECTION (statut, ou règle des dollars quand l* < 0,1299). Seaux, emphase normalisée, exclusions, enveloppe |
+| `test_status_emphasis.py` | Cas INCOMPLETE, incomplet et PROTECTION (statut, ou règle des dollars quand l* < L_plan_cash = 0,015). Point quasi-liquidités : l* = 10 % et 250 $ sur 10 000 $ donnent un N0 normal à e_cap 0. Perte déclarée de 0 (#91). Seaux, emphase normalisée, exclusions, enveloppe |
 | `test_adapter.py` | Questionnaire : agrégation par min par défaut, un seul chemin par fait, poche liquide, pas de double réserve, monotonie |
 | `test_integration_optimizer.py` | `portfolio.optimizer.optimize(policy, as_of=2026-09-30)` rend `optimal` pour Amira et Robert, environ 1 s chacun. Le test n'est donc pas marqué `slow` |
 
@@ -164,10 +175,11 @@ F1 choisit donc le niveau par la règle des dollars sur ENV_mdd, l'enveloppe lon
 
 ## Écarts au YAML (et pourquoi)
 
-1. **Seuil de PROTECTION.** Le texte `dollar_rule.protection` dit « L_plan(0) = 0,144 > l* ». F1 suit le
-   code de la revue (`persona_v02.run`) : PROTECTION s'il n'existe aucun e tel que L_plan(e) ≤ l*,
-   c'est-à-dire si l* < L_plan(10) = 0,1299, le minimum de la courbe. Avec le texte du YAML, Robert
-   (l* = 0,133) serait en PROTECTION, alors que la revue conclut à N0.
+1. **Seuil de PROTECTION.** Le texte initial de `dollar_rule.protection` disait « L_plan(0) = 0,144 > l* ».
+   F1 suivait ensuite le code de la revue (`persona_v02.run`) : PROTECTION s'il n'existe aucun e tel que
+   L_plan(e) ≤ l*, soit l* < L_plan(10) = 0,1299. Toute perte déclarée sous 13 % donnait alors PROTECTION
+   (en production : 250 $ sur 10 000 $). Depuis le 2026-11-15, le seuil est L_plan_cash = 0,015
+   (`dollar_rule.cash_like_point`, voir l'étape 6) et le texte du YAML le dit.
 2. **Garde de monotonie sur `budgets_when_capped`.** `min(arrondi_sup(ENV(e_cap)), budget du niveau)`.
    ENV n'est pas monotone sous 10 % d'actions : les obligations seules ont une perte plus forte que le
    mélange demi-cash (CVaR12m 3,8 % à e = 0 contre 2,5 % à e = 10). Sans cette garde, le cas
@@ -202,6 +214,13 @@ F1 choisit donc le niveau par la règle des dollars sur ENV_mdd, l'enveloppe lon
     `per_ticker` excluent.
 
 ## Questions ouvertes
+
+0. **Point quasi-liquidités (à valider par l'équipe).** (a) La marge quotidienne des quasi-liquidités
+   vaut 0,005, et non le 0,04 du cœur. Avec 0,04, L_plan_cash vaudrait 0,05 et 250 $ sur 10 000 $
+   resterait en PROTECTION. (b) ZST.TO n'existe que depuis 2011. Avant, le proxy CA_TBILL ne perd jamais,
+   donc une crise du crédit court (type 2008) n'est pas couverte. (c) L'or est mis à 0 sur la droite
+   liquidités-obligations. (d) La version du YAML reste 0.2.0 : les chaînes « @0.2.0 » sont codées en dur
+   dans `debate/pipeline.py`.
 
 1. La marge quotidienne de 4 points (`dollar_rule.daily_buffer`) fait passer Mateo de N3 à N2 et Robert
    de N1 à N0. C'est la décision humaine n°1 de la revue.

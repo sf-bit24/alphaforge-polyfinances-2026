@@ -94,6 +94,57 @@ def kept_template_fr(section: str, index: int, problems: list[str]) -> str:
     return f"{where} : reformulation écartée ({' ; '.join(problems)}), gabarit conservé."
 
 
+# Fenêtre des rendements mensuels que le moteur écrit avec ses mesures historiques (tools.risk_evidence) :
+# « rendements mensuels CAD AAAA-MM-JJ..AAAA-MM-JJ (n mois) ».
+_WINDOW = re.compile(r"(\d{4})-\d{2}-\d{2}\.\.(\d{4})-\d{2}-\d{2}")
+
+
+def _past_limit(book: FactBook, cand: str) -> Statement:
+    """Première limite : les chiffres décrivent le passé, sur la période réellement mesurée, jamais écrite à la main."""
+    ids = _window_years(book, cand)
+    period = "-".join(fmt(book.facts[i].value, book.facts[i].unit) for i in ids)
+    covered = f"{period} pour les titres réels" if ids else "titres réels"
+    return Statement(
+        text_fr=f"Les chiffres décrivent le passé ({covered}, proxys longs étiquetés HYPOTHESE) : ils ne prédisent "
+        "pas les rendements futurs.",
+        fact_ids=ids,
+        label="HYPOTHESE",
+    )
+
+
+def _window_years(book: FactBook, cand: str) -> list[str]:
+    """fact_ids de la première et de la dernière année des rendements mensuels qui mesurent ``cand``.
+
+    Les bornes sont celles de la fenêtre que le moteur a enregistrée avec ces mesures (source de ``<cand>.cvar_m``,
+    ``.mdd`` ou ``.vol``) : deux Facts, rattachés à l'étape qui a fait la mesure, ajoutés une seule fois. Sans
+    fenêtre enregistrée, aucun Fact, donc aucune année écrite."""
+    ids = [f"{cand}.window.first_year", f"{cand}.window.last_year"]
+    if all(i in book.facts for i in ids):
+        return ids
+    for fid in (f"{cand}.cvar_m", f"{cand}.mdd", f"{cand}.vol"):
+        fact = book.facts.get(fid)
+        source = fact.sources[0] if fact is not None else None
+        found = _WINDOW.search(source.processing or "") if source is not None else None
+        if found:
+            window = found.group(0)
+            return [
+                book.add(
+                    key,
+                    label,
+                    int(found.group(n)),
+                    "année",
+                    dataset=source.dataset,
+                    processing=f"{edge} de la fenêtre {window} des mesures historiques ({fid})",
+                    trace_id=fact.trace_id,
+                )
+                for n, key, label, edge in (
+                    (1, ids[0], "Première année des rendements mensuels mesurés (titres réels)", "début"),
+                    (2, ids[1], "Dernière année des rendements mensuels mesurés (titres réels)", "fin"),
+                )
+            ]
+    return []
+
+
 def _s(book: FactBook, text: str, ids: list[str], label="FAIT") -> Statement:
     ids = [i for i in ids if i in book.facts]
     vals = {i: fmt(book.facts[i].value, book.facts[i].unit) for i in ids}
@@ -125,12 +176,7 @@ def skeleton(  # noqa: PLR0913 - signature gardée : pipeline.py passe ces entr�
     data_used = _data_used_statements(book.facts, level_fid, cand)
     why = _why_statements(book.facts, active_fids, applied, kind, request_fids)
     limits = [
-        Statement(
-            text_fr="Les chiffres décrivent le passé (2018-2026 pour les titres réels, proxys longs "
-            "étiquetés HYPOTHESE) : ils ne prédisent pas les rendements futurs.",
-            fact_ids=[],
-            label="HYPOTHESE",
-        )
+        _past_limit(book, cand),
     ]
     limits += [Statement(text_fr=t, fact_ids=[], label="HYPOTHESE") for t in limits_extra or []]
     if strategy is not None:

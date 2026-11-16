@@ -74,3 +74,21 @@ def test_style_inputs_read_only_fields_declared_by_the_questionnaire():
     assert len(read) >= 20, sorted(read)  # l'extraction elle-même ne doit pas se vider
     missing = sorted(read - set(Questionnaire.load().fields))
     assert missing == [], missing
+
+
+def test_zero_declared_loss_is_kept_and_compiles_to_protection():
+    """Issue #91 : la tranche la plus prudente écrit max_loss_cad = 0 ; « je ne peux rien perdre » reste une limite."""
+    p = _p(amount=10_000, max_loss=0)
+    assert p.max_acceptable_loss_cad == 0
+    res = compile_profile(p, AS_OF)
+    assert any(t["rule"] == "dollar_rule.l_declared" and t["output"] == 0 for t in res.trace)
+    # l* = 0 sous la perte de planification des quasi-liquidités : protection, mandat le plus liquide, sans actions
+    assert res.l_star == 0 and res.decision_kind == "protection" and res.level == "N0" and res.e_cap == 0
+    assert {lim.rule_id: lim for lim in res.limits}["alloc.cash_like"].min == 1.0
+
+
+def test_absent_declared_loss_stays_absent():
+    v = _view()
+    v["facts"] = [x for x in v["facts"] if x["field"] != "risk_capacity.max_loss_cad"]
+    p = investor_profile_from_view(v, "8f0c1c2e-0000-4000-8000-000000000003")
+    assert p.max_acceptable_loss_cad is None

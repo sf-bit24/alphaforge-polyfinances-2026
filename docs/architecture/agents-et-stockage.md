@@ -2,6 +2,26 @@
 
 Relevé sur le compte AWS du Datathon (us-east-1) le 15 novembre 2026, release `1f026dbf`. Simulation seulement.
 
+## Les agents, en clair
+
+Les diagrammes et les étapes nomment les agents par leur code. « Modèle » veut dire Claude Opus 5.5 sur Bedrock ; « code » veut dire du Python déterministe, sans modèle.
+
+| Code | Qui c'est | Ce qu'il fait | Moteur | Runtime |
+| --- | --- | --- | --- | --- |
+| Questionnaire | Les questions de base | Pose les questions fixes du profil et valide chaque réponse. | code | `profile` |
+| A1 | L'agent du profil | Ne demande que ce qui manque pour compléter le profil, au plus trois questions par tour, puis l'écrit. | modèle | `profile` |
+| A2 | L'agent du portefeuille existant | Lit un relevé (PDF, tableur, image, texte) et en extrait les positions ; le code les valorise. | modèle | `profile` |
+| Étape 0 et optimiseur | Le calcul du portefeuille | Traduit le profil en limites, choisit le style et les titres, puis calcule les poids (cvxpy). | code | `portfolio` |
+| A3 | L'avocat | Défend le portefeuille construit, puis répond aux critiques au second tour. | modèle | `portfolio` |
+| Lentilles | Les quatre critiques | Horizon, risque, diversification, contraintes : contestent le portefeuille, et ne peuvent que resserrer une limite. | modèle | `portfolio` |
+| Judge | Le juge | Contrôle chaque limite du profil, sans dérogation ; refuse une demande qui dépasse une limite bloquante et propose une version encadrée. | code | `portfolio` |
+| A4 | L'agent de la presse | Collecte les communiqués et les actualités, datés et sourcés. | modèle | `press` |
+| A5 | L'agent des données | Collecte les séries économiques et les cours ; les fondamentaux SEC EDGAR viennent du code. | modèle | `data` |
+| A6 | Le superviseur | Relit tout ce qui est collecté, rejette ce qui n'a ni source ni date ou fait double emploi, et écrit la base générale. | modèle | `supervisor` |
+| A0 | Le routeur | Choisit les sujets d'une question de recherche, puis rédige la synthèse. | modèle | `router` |
+| E1 à E7 | Les experts de sujet | Un expert par sujet : consulte la base générale et lance ses chercheurs. | modèle | `expert` |
+| Chercheurs | Les chercheurs | Une mission chacun : lisent les sites publics de leur liste, en respectant `robots.txt`. | modèle | `researcher` |
+
 ## Les 8 runtimes AgentCore
 
 | Runtime | Agents | Ce qu'il fait | Appelé par |
@@ -45,4 +65,4 @@ Points communs :
 | DynamoDB `alphaforge-decisions`, `alphaforge-llm-replay` | Anciennes tables créées par un script boto3 avant Terraform, plus utilisées (4 éléments et 0). |
 | ECR `alphaforge-web` | L'image de l'interface Next.js, déployée sur ECS Fargate. |
 
-Voir aussi : le [diagramme de la plateforme](assets/alphaforge-plateforme-aws.png), [`app/agents/README.md`](../../app/agents/README.md) et [`infrastructure/README.md`](../../infrastructure/README.md).
+Voir aussi : le [diagramme de la plateforme](diagrams/alphaforge-plateforme-aws.png), [`app/agents/README.md`](../../app/agents/README.md) et [`infrastructure/README.md`](../../infrastructure/README.md).

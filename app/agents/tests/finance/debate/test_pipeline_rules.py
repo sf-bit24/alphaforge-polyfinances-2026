@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, date, datetime
 
 from alphaforge.finance.contracts.profile import Goal, InvestorProfile, Score
@@ -51,3 +52,16 @@ def test_insisting_does_not_change_the_decision():
         d = build_portfolio(_profile(), AS_OF, request=Request("TSLA", amount_cad=50_000)).decision
         ws.append((d.kind, tuple(sorted((p.asset_id, round(p.weight, 6)) for p in d.positions))))
     assert ws[0] == ws[1] == ws[2]
+
+
+def test_first_limit_gives_the_measured_window():
+    """La période de la première limite est la fenêtre des mesures du portefeuille proposé, citée par ses Facts."""
+    d = build_portfolio(_profile(), AS_OF).decision
+    facts = {f.fact_id: f for f in d.facts}
+    limit = d.explanation.limits[0]
+    assert limit.fact_ids == ["r2.window.first_year", "r2.window.last_year"]
+    window = re.search(r"(\d{4})-\d{2}-\d{2}\.\.(\d{4})-\d{2}-\d{2}", facts["r2.cvar_m"].sources[0].processing)
+    first, last = (facts[i].value for i in limit.fact_ids)
+    assert (str(first), str(last)) == window.groups()
+    assert f"({first}-{last} pour les titres réels" in limit.text_fr
+    assert not verify(type("B", (), {"facts": facts})(), limit)

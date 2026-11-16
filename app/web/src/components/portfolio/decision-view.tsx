@@ -8,6 +8,7 @@ import { requestFacts } from "@/lib/portfolio/decision";
 import { groundingLine } from "@/lib/portfolio/grounding";
 import { engineText, stepTitle } from "@/lib/portfolio/wording";
 import { cn } from "@/components/ui/cn";
+import { AllocationBreakdown } from "./allocation-breakdown";
 import { Positions, StylePanel } from "./allocation-panels";
 import d from "./base.module.css";
 import { FactChip, FactChips, LabelBadge, useDecisionLookup } from "./facts";
@@ -243,7 +244,8 @@ export function DecisionView({ response, fixture }: { response: PortfolioBuildRe
   return (
     <div className={d.grid}>
       <Summary response={response} fixture={fixture} />
-      <Positions positions={response.decision.positions} />
+      <AllocationBreakdown allocation={response.allocation} />
+      <Positions positions={response.decision.positions} allocation={response.allocation} />
       <StylePanel response={response} />
       <ExplanationPanel response={response} />
       <Counterfactuals response={response} />

@@ -402,6 +402,7 @@ class PortfolioService:
             "grounding": result.grounding,
             "client_kb": client_kb,
             "strategy": result.strategy.summary() if result.strategy is not None else None,
+            "allocation": result.allocation,
         }
 
     @staticmethod

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 import yaml
 
-from alphaforge.finance.contracts.profile import Goal
+from alphaforge.finance.contracts.profile import Goal, InvestorProfile, Score
 from alphaforge.finance.policy import SpecificRequest, compile_profile
 from alphaforge.finance.policy import envelope as ENV
 from alphaforge.finance.policy.compiler import DEFAULT_YAML, ceil_step
@@ -61,12 +62,66 @@ def test_protection_status():
     assert any(t["rule"] == "status.PROTECTION.human_referral" and t["output"] is True for t in r.trace)
 
 
-def test_protection_from_dollar_rule():
-    # l* = 0.10 < min_e L_plan(e) = 0.1299 (e = 10 %) -> aucun e admissible
+def test_dollar_rule_below_envelope_gives_a_cash_like_n0():
+    # l* = 0.10 < min_e L_plan(e) = 0.1299 (e = 10 %) mais >= L_plan_cash = 0.015 (dollar_rule.cash_like_point) :
+    # decision N0 normale, sans actions, part quasi-liquidites relevee pour que la perte de planification tienne dans l*
     r = compile_profile(robert(max_acceptable_loss_cad=90_000), AS_OF)
+    assert r.decision_kind is None and r.status == "COMPLETE" and r.level == "N0" and r.e_cap == 0
+    assert not any(t["rule"] == "dollar_rule.protection" for t in r.trace)
+    point = Y["dollar_rule"]["cash_like_point"]
+    l_cash = point["mdd"] + point["daily_buffer"]
+    assert l_cash <= r.l_star < min(ENV.env(e, "mdd") + Y["dollar_rule"]["daily_buffer"] for e in ENV.grid())
+    b = by(r)
+    c = b["alloc.cash_like"].min
+    assert c == 0.70  # arrondi_sup_5%(1 - 0.5 * (0.10 - 0.015) / (0.1444 - 0.015)) = arrondi_sup(0.672)
+    assert b["alloc.cash_like"].max == c  # part FIXEE sur la droite : le reste (30 %) va aux obligations
+    assert b["alloc.growth"].max == 0 and b["alloc.gold"].max == 0 and b["alloc.long_duration"].max == 0
+    # perte de planification sur la droite liquidites (c = 1, L_plan_cash) - reference HC e = 0 (c = 0.5) : <= l*
+    l_ref = ENV.env(0, "mdd") + Y["dollar_rule"]["daily_buffer"]
+    assert l_cash + (l_ref - l_cash) * (1 - c) / 0.5 <= r.l_star
+    assert b["risk.mdd"].max == 0.07 and "dollar_rule.cash_like_point" in b["risk.mdd"].source
+
+
+def _prudent(max_loss_cad: float) -> InvestorProfile:
+    """Profil complet sans retrait ni dette, 10 000 $ : seule la perte declaree pese sur l* (cas de production)."""
+    return InvestorProfile(
+        profile_id="prudent",
+        created_utc=datetime(2026, 11, 15, tzinfo=UTC),
+        status="COMPLETE",
+        goals=[Goal(goal_id="g1", label="projet", priority="besoin", horizon_years=5.0)],
+        tolerance_declared=Score(value=40),
+        investable_wealth=10_000,
+        max_acceptable_loss_cad=max_loss_cad,
+        knowledge_level="intermediaire",
+    )
+
+
+def test_production_case_250_on_10000_is_not_protection():
+    # « Moins de 1 000 $ » vu en production : 250 $ sur 10 000 $ (l* = 2.5 %) -> N0 quasi-liquidites, pas PROTECTION
+    r = compile_profile(_prudent(250), AS_OF)
+    assert r.decision_kind is None and r.level == "N0" and r.e_cap == 0
+    assert abs(r.l_star - 0.025) < 1e-12
+    b = by(r)
+    assert b["alloc.cash_like"].min == b["alloc.cash_like"].max == 1.0 and b["risk.mdd"].max == 0.01
+
+
+def test_protection_from_dollar_rule():
+    # l* = 0.01 < L_plan_cash = 0.015 : meme le melange le plus liquide ne tient pas -> PROTECTION, renvoi humain
+    r = compile_profile(_prudent(100), AS_OF)
     assert r.decision_kind == "protection" and r.level == "N0" and r.policy is not None
-    assert any(t["rule"] == "dollar_rule.protection" for t in r.trace)
+    prot = next(t for t in r.trace if t["rule"] == "dollar_rule.protection")
+    point = Y["dollar_rule"]["cash_like_point"]
+    assert prot["inputs"]["min_L_plan"] == point["mdd"] + point["daily_buffer"] > r.l_star
     assert r.e_cap == 0  # aucune part d'actions ne tient dans l* : le mandat n'en admet aucune
+    b = by(r)
+    assert b["alloc.cash_like"].min == 1.0 and b["alloc.gold"].max == 0  # le mandat le plus liquide
+
+
+def test_declared_zero_loss_is_protection():
+    # issue #91 : « je ne peux rien perdre » (max_loss_cad = 0) entre dans l_declared = 0 < L_plan_cash
+    r = compile_profile(_prudent(0), AS_OF)
+    assert r.l_star == 0 and r.decision_kind == "protection" and r.e_cap == 0
+    assert any(t["rule"] == "dollar_rule.l_declared" and t["output"] == 0 for t in r.trace)
 
 
 def test_buckets_cap_whole_policy_when_all_goals_are_short_besoin():

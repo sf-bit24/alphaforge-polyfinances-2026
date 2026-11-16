@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, FileJson } from "lucide-react";
+import { ChevronRight, ExternalLink, FileJson } from "lucide-react";
 import type { ReactNode } from "react";
 import { useOperator } from "@/lib/client/account";
 import { callMessages, getKbDocument } from "@/lib/client/api";
@@ -141,16 +141,37 @@ function SourceList({ sources }: { sources: Array<Record<string, unknown>> }) {
   );
 }
 
+/** The folded metadata line: the type, the status and the number of sources, enough to judge the document at a glance. */
+function MetadataSummary({ front, sources }: { front: Record<string, unknown>; sources: number }) {
+  const { t, locale } = useI18n();
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-ink-500">
+      {front.type ? <Badge tone="brand">{okfTypeLabel(String(front.type), locale)}</Badge> : null}
+      {sources ? <span>{t.documentView.sourceCount(sources)}</span> : null}
+    </span>
+  );
+}
+
+/** The description, then the metadata folded into one line: the body of the document comes first. */
 function Frontmatter({ front }: { front: Record<string, unknown> }) {
   const { t } = useI18n();
   const sources = Array.isArray(front.sources)
     ? (front.sources as unknown[]).map(asRecord).filter((source): source is Record<string, unknown> => Boolean(source && asText(source.title)))
     : [];
   return (
-    <section aria-label={t.documentView.metadata} className="rounded-xl bg-ink-50 p-4 ring-1 ring-ink-150">
-      <MetadataFields front={front} />
-      {front.description ? <p className="mt-3 text-sm text-ink-600">{String(front.description)}</p> : null}
-      {sources.length ? <SourceList sources={sources} /> : null}
+    <section aria-label={t.documentView.metadata} className="space-y-3">
+      {front.description ? <p className="text-sm text-ink-600">{String(front.description)}</p> : null}
+      <details className="group rounded-xl bg-ink-50 ring-1 ring-ink-150">
+        <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl px-4 py-2.5 text-sm hover:bg-ink-100 focus-visible:outline-2 focus-visible:outline-focus [&::-webkit-details-marker]:hidden">
+          <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-500 transition-transform group-open:rotate-90" />
+          <span className="font-medium text-ink-900">{t.documentView.metadata}</span>
+          <MetadataSummary front={front} sources={sources.length} />
+        </summary>
+        <div className="px-4 pt-1 pb-4">
+          <MetadataFields front={front} />
+          {sources.length ? <SourceList sources={sources} /> : null}
+        </div>
+      </details>
     </section>
   );
 }

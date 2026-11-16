@@ -1,45 +1,25 @@
 "use client";
 
-import { BookOpen, FileText, LibraryBig, Radar, Search, Waypoints } from "lucide-react";
-import { Activity, useCallback, useId, useMemo, useState } from "react";
+import { BookOpen, LibraryBig, Radar, Waypoints } from "lucide-react";
+import { Activity, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KbItem } from "@/lib/contract/schemas";
 import { useOperator } from "@/lib/client/account";
 import { callMessages, listKb, type ApiError } from "@/lib/client/api";
 import { useAsync } from "@/lib/client/use-async";
 import { useHashTab } from "@/lib/client/use-hash-tab";
-import { formatDate } from "@/lib/i18n/locale";
-import { okfTypeLabel } from "@/lib/i18n/okf-types";
 import { useI18n } from "@/lib/i18n/provider";
-import { GENERAL_FOLDERS, generalGroup } from "@/lib/okf";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
-import { cn } from "@/components/ui/cn";
-import { ErrorNotice } from "@/components/ui/error-notice";
-import { Spinner } from "@/components/ui/spinner";
 import { TabList, tabPanelProps, type TabItem } from "@/components/ui/tabs";
 import { CollectPanel } from "./collect-panel";
+import { DocumentList, INDEX_KEY } from "./document-list";
 import { DocumentLoader, type DocumentLinks } from "./document-view";
 import { KnowledgeGraphPanel } from "./knowledge-graph";
-import { matchingItems } from "./match";
-
-const GROUP_ORDER = ["index", ...GENERAL_FOLDERS, "other"];
-
-const INDEX_KEY = "general/index.md";
 
 /** Sub-tabs of the page, named in the URL fragment: `/knowledge#graph`, `/knowledge#collect`. */
 const TABS = ["documents", "graph", "collect"] as const;
 type KnowledgeTab = (typeof TABS)[number];
 /** A client never sees the collection tab: `/knowledge#collect` opens the documents. */
 const CLIENT_TABS: readonly KnowledgeTab[] = ["documents", "graph"];
-
-function groupedItems(items: KbItem[]): Array<{ group: string; items: KbItem[] }> {
-  const map = new Map<string, KbItem[]>();
-  for (const item of items) {
-    const group = generalGroup(item.key);
-    map.set(group, [...(map.get(group) ?? []), item]);
-  }
-  return GROUP_ORDER.filter((group) => map.has(group)).map((group) => ({ group, items: map.get(group) ?? [] }));
-}
 
 /**
  * The document to read. general/index.md is written by A6 and is absent before the first collection: fall back
@@ -65,95 +45,6 @@ function KnowledgeHeading() {
   );
 }
 
-function SearchField({ id, query, onChange }: { id: string; query: string; onChange: (query: string) => void }) {
-  const { t } = useI18n();
-  return (
-    <div className="px-4 pt-3">
-      <label htmlFor={id} className="sr-only">
-        {t.kb.search}
-      </label>
-      <div className="relative">
-        <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink-400" />
-        <input
-          id={id}
-          type="search"
-          value={query}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={t.kb.search}
-          className="block w-full rounded-lg border-0 bg-white py-2 pr-3 pl-9 text-sm ring-1 ring-ink-300 ring-inset placeholder:text-ink-400 focus:ring-2 focus:ring-navy focus:outline-none"
-        />
-      </div>
-    </div>
-  );
-}
-
-interface ListStatusProps {
-  error: ApiError | null;
-  loaded: boolean;
-  itemCount: number;
-  matchCount: number;
-}
-
-/** Loading, error and empty states of the document list. */
-function ListStatus({ error, loaded, itemCount, matchCount }: ListStatusProps) {
-  const { t } = useI18n();
-  return (
-    <>
-      {error ? <ErrorNotice className="mx-2" error={error} compact /> : null}
-      {!loaded && !error ? <Spinner className="mx-2" label={t.common.loading} /> : null}
-      {loaded && itemCount === 0 ? <p className="px-2 text-sm text-ink-500">{t.kb.emptyGeneral}</p> : null}
-      {itemCount > 0 && matchCount === 0 ? <p className="px-2 text-sm text-ink-500">{t.kb.noMatch}</p> : null}
-    </>
-  );
-}
-
-function DocumentButton({ item, active, onSelect }: { item: KbItem; active: boolean; onSelect: (key: string) => void }) {
-  const { t, locale } = useI18n();
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(item.key)}
-      aria-current={active ? "true" : undefined}
-      className={cn(
-        "flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors focus-visible:outline-2 focus-visible:outline-focus",
-        active ? "bg-soft ring-1 ring-line" : "hover:bg-ink-50",
-      )}
-    >
-      <FileText aria-hidden className={cn("mt-0.5 size-4 shrink-0", active ? "text-navy" : "text-ink-400")} />
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm leading-snug font-medium text-ink-900">{item.title ?? item.key}</span>
-        {item.description ? <span className="mt-0.5 line-clamp-2 block text-xs leading-snug text-ink-500">{item.description}</span> : null}
-        <span className="mt-1 flex flex-wrap items-center gap-1.5">
-          {item.type ? <Badge tone="outline">{okfTypeLabel(item.type, locale)}</Badge> : null}
-          {item.updated_at ? (
-            <span className="text-[0.7rem] text-ink-400">
-              {t.kb.updated} {formatDate(item.updated_at, locale)}
-            </span>
-          ) : null}
-        </span>
-      </span>
-    </button>
-  );
-}
-
-function DocumentGroup({ group, items, current, onSelect }: { group: string; items: KbItem[]; current: string | null; onSelect: (key: string) => void }) {
-  const { t } = useI18n();
-  return (
-    <section className="mb-3" aria-labelledby={`group-${group}`}>
-      <h2 id={`group-${group}`} className="px-2 pb-1 text-[0.7rem] font-semibold tracking-wide text-ink-500 uppercase">
-        {t.kb.groups[group] ?? group}
-      </h2>
-      <ul className="space-y-0.5">
-        {items.map((item) => (
-          <li key={item.key}>
-            <DocumentButton item={item} active={item.key === current} onSelect={onSelect} />
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 interface CurrentDocumentProps {
   current: string | null;
   item: KbItem | undefined;
@@ -168,7 +59,7 @@ function CurrentDocument({ current, item, version, empty, links }: CurrentDocume
   if (current) {
     return (
       <>
-        <CardHeader title={item?.title ?? t.kb.documents} />
+        <CardHeader className="rounded-t-xl bg-surface lg:sticky lg:top-0 lg:z-10" title={item?.title ?? t.kb.documents} />
         <div className="px-6 py-5">
           <DocumentLoader key={`${current}|${version}`} documentKey={current} clientId={null} links={links} />
         </div>
@@ -196,27 +87,25 @@ interface DocumentsTabProps {
   onOpen: (key: string) => void;
 }
 
-/** The documents tab: the filterable list of `general/`, and the document being read. */
+/** Wide screens show the list and the reader side by side; a narrow one stacks them, and opening a document scrolls down to it. */
+const NARROW = "(max-width: 63.99rem)";
+
+/** The documents tab: the list of `general/` and the reader, each in a pane that scrolls on its own on a wide screen. */
 function DocumentsTab({ items, error, loaded, version, current, onSelect, onOpen }: DocumentsTabProps) {
-  const { t, locale } = useI18n();
-  const searchId = useId();
-  const [query, setQuery] = useState("");
-  const filtered = useMemo(() => matchingItems(items, query, locale), [items, query, locale]);
-  const groups = useMemo(() => groupedItems(filtered), [filtered]);
   const links = useMemo(() => ({ known: new Set(items.map((item) => item.key)), open: onOpen }), [items, onOpen]);
+  const reader = useRef<HTMLElement>(null);
+  // Every document starts at its top, however it was opened: from the list, a link, the graph or a collection.
+  useEffect(() => {
+    reader.current?.scrollTo({ top: 0 });
+  }, [current]);
+  const select = (key: string) => {
+    onSelect(key);
+    if (window.matchMedia(NARROW).matches) reader.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   return (
     <div className="grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-      <Card className="self-start lg:sticky lg:top-[4.5rem] lg:max-h-[calc(100dvh-5.5rem)] lg:overflow-y-auto">
-        <CardHeader title={t.kb.documents} subtitle={t.kb.count(items.length)} icon={<BookOpen aria-hidden className="size-4" />} />
-        <SearchField id={searchId} query={query} onChange={setQuery} />
-        <div className="px-2 py-3">
-          <ListStatus error={error} loaded={loaded} itemCount={items.length} matchCount={filtered.length} />
-          {groups.map(({ group, items: groupItems }) => (
-            <DocumentGroup key={group} group={group} items={groupItems} current={current} onSelect={onSelect} />
-          ))}
-        </div>
-      </Card>
-      <Card className="min-w-0 self-start">
+      <DocumentList items={items} error={error} loaded={loaded} current={current} onSelect={select} />
+      <Card ref={reader} className="min-w-0 scroll-mt-28 self-start lg:sticky lg:top-[4.5rem] lg:max-h-[calc(100dvh-5.5rem)] lg:overflow-y-auto">
         <CurrentDocument current={current} item={items.find((item) => item.key === current)} version={version} empty={loaded && items.length === 0} links={links} />
       </Card>
     </div>

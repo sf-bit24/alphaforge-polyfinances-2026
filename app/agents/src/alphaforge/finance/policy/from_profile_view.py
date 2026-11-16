@@ -156,7 +156,7 @@ def investor_profile_from_view(  # noqa: PLR0913 - signature publique, options p
         goals=goals,
         tolerance_declared=_score(tolerance),
         capacity_assessed=_score(capacity),
-        max_acceptable_loss_cad=_amount_or_none(facts.get("risk_capacity.max_loss_cad")),
+        max_acceptable_loss_cad=_float_or_none(facts.get("risk_capacity.max_loss_cad")),  # 0 = rien a perdre (#91)
         investable_wealth=_amount_or_none(facts.get("context.amount_cad")),
         emergency_fund_months=_float_or_none(facts.get("risk_capacity.emergency_fund")),
         income=_income(facts.get("risk_capacity.income_stability")),

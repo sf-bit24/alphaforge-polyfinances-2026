@@ -120,7 +120,37 @@ dollar_rule:
   l_star: "min(L_plan(e_max(niveau)), l_declared, l_cap)"
   e_cap: "max{e dans {0,5,...,e_max(niveau)} : L_plan(e) <= l_star}"     # inversion de la courbe empirique
   level_after: "niveau dont la bande contient e_cap (e_min < e_cap <= e_max ; e_cap = 0 -> N0)"
-  protection: "si L_plan(0) = 0.144 > l_star : statut PROTECTION, renvoi humain"
+  protection: "si l_star < L_plan_cash (cash_like_point.mdd + cash_like_point.daily_buffer) : statut PROTECTION, renvoi humain"
+  # v0.2 initiale : « L_plan(0) = 0.144 > l_star », puis (F1) « aucun e de la grille avec L_plan(e) <= l_star », soit
+  # l_star < L_plan(10) = 0.1299 : toute perte declaree < 13 % donnait PROTECTION (production : 250 $ sur 10 000 $ ->
+  # 98.8 % ZST.TO etiquete protection). Le point quasi-liquidites ci-dessous reserve PROTECTION aux budgets que meme
+  # le melange le plus liquide ne tient pas ; entre L_plan_cash et 0.1299 : decision N0 normale, e_cap = 0.
+  cash_like_point:   # AJOUT 2026-11-15 (revision de v0.2.0, version inchangee : chaines « @0.2.0 » codees ailleurs)
+    status: HYPOTHESE
+    equity_pct: 0
+    instruments: "quasi-liquidites (tags cash_like/cash : ZST.TO, raccorde a CA_TBILL avant 2011-03 comme le Judge)"
+    mdd: 0.010   # arrondi_sup 0.005 de max(ENV T-bills = 0.0 [CA_TBILL 1977-01 et 1971-02, UST_TBILL 1946-01 -> 2026-09 :
+                 # aucun mois negatif, accrual du taux], ZST.TO raccorde a CA_TBILL = 0.006875 [mensuel CAD, creux 2015-02])
+                 # Donnees longues data_sha256 008f122d5da4f8f7 (backtest.data.load_returns, meme serie que le Judge risk.mdd)
+    daily_buffer: 0.005  # meme convention que dollar_rule.daily_buffer (MDD quotidienne - MDD fin de mois, calcul TD de
+                 # scripts/calibration/tails.py) appliquee a ZST.TO, absent de TD : starter 2021-11-12 -> 2026-11-12,
+                 # 0.004283 - 0.004079 = 0.0002 pt, arrondi_sup 0.005. Le 0.04 du coeur vient des actions et obligations
+                 # (TD 0.6 a 5.3 pts) ; l'appliquer ici donnerait L_plan_cash = 0.05 (question ouverte)
+    # L_plan_cash = mdd + daily_buffer = 0.015 ; plus petite perte de planification de la grille (trace min_L_plan)
+    reference: {equity_pct: 0, cash_like_share: 0.50}   # point HC e = 0 de l'enveloppe (reference_portfolios.N0 :
+                 # (1-e) = 50 % CA_GOV_10Y + 50 % CA_TBILL), L_plan(0) = ENV(0, mdd) + daily_buffer = 0.1444
+    cash_like_min: "arrondi_sup_{cash_like_step}( 1 - (1 - c_R) * clip((l_star - L_plan_cash) / (L_plan(e_R) - L_plan_cash), 0, 1) )"
+    cash_like_step: 0.05
+    cash_like_max: "= cash_like_min"   # part FIXEE sur la droite (min = max) : le reste (1 - c) va aux obligations
+                 # (XBB.TO, AGG), reparti par l'optimiseur ; sinon min_risk mettait tout en ZST.TO. Meme logique que
+                 # la part d'actions (la tolerance place, la capacite plafonne). l* = 0.10 -> 70 % ZST.TO / 30 % obligations
+    mdd_max: "min(budget mdd, arrondi_sup(measurement.rounding.mdd)( mdd + (ENV(e_R, mdd) - mdd) * (1 - cash_like_min) / (1 - c_R) ))"
+    gold_max: 0.0   # l'or (GOLD CAD 1971+ MDD 0.513) est hors de la droite liquidites-obligations de l'enveloppe
+    # Droite prudente : si r_cash >= 0 chaque mois, MDD(a*R + (1-a)*cash) <= a*MDD(R) (concavite du log, Bernoulli).
+    # Verifie sur les familles HC (c = part quasi-liquidites, reste CA_GOV_10Y ou UST_5Y ; marge interpolee 0.005 -> 0.04) :
+    #   c = 0.9 : ENV mdd 0.018 + marge 0.012 = 0.030 <= droite 0.041 ; c = 0.7 : 0.062 + 0.026 = 0.088 <= 0.093 ;
+    #   c = 0.6 : 0.083 + 0.033 = 0.116 <= 0.119. Serie du Judge (ZST.TO/XBB.TO raccordes, 1956+) : 0.017 / 0.048 / 0.063.
+    # S'applique aussi en PROTECTION par la regle des dollars (c = 1) : un budget plus bas ne releve jamais le risque.
   months_display: true     # afficher l_star * W / M (mois de depenses) et la perte 1929-32 informative
 
 # ---------------------------------------------------------------------------------------------

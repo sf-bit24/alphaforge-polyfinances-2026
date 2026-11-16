@@ -400,8 +400,23 @@ describe("OIDC flow with Cognito", () => {
     const refused = from("https://evil.example");
     expect(refused.status).toBe(403);
     expect(refused.headers.getSetCookie()).toEqual([]);
-    expect(from("null").status).toBe(403);
     expect(from("https://d123.cloudfront.net").status).toBe(303);
+  });
+
+  it("decides on Sec-Fetch-Site when the browser sends it, even with Origin: null (Referrer-Policy: no-referrer)", () => {
+    const from = (headers: Record<string, string>) =>
+      handleLogout(new Request("http://localhost/api/auth/logout", { method: "POST", headers: { ...headers, cookie: sessionFor() } }));
+    // What Chrome sends for the interface's own form under Referrer-Policy: no-referrer.
+    expect(from({ origin: "null", "sec-fetch-site": "same-origin" }).status).toBe(303);
+    expect(from({ "sec-fetch-site": "none" }).status).toBe(303);
+    for (const site of ["cross-site", "same-site"]) {
+      const refused = from({ origin: "null", "sec-fetch-site": site });
+      expect(refused.status).toBe(403);
+      expect(refused.headers.getSetCookie()).toEqual([]);
+    }
+    expect(from({ origin: "https://d123.cloudfront.net", "sec-fetch-site": "cross-site" }).status).toBe(403);
+    // Without Sec-Fetch-Site (older browsers), Origin: null proves nothing either way.
+    expect(from({ origin: "null" }).status).toBe(303);
   });
 
   it("signs out: clears the session, then Cognito's /logout back to the interface", () => {

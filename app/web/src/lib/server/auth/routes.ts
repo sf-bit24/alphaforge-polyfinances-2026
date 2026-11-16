@@ -122,16 +122,28 @@ export async function handleCallback(request: Request): Promise<Response> {
 }
 
 /**
+ * Whether a form post comes from another site. `Sec-Fetch-Site` is set by the browser and cannot be forged by a page;
+ * it decides when present. `Origin` is only a fallback for browsers without it: with `Referrer-Policy: no-referrer`
+ * (next.config.ts), Chrome sends `Origin: null` even for the interface's own form, so `null` says nothing.
+ */
+export function isCrossSitePost(request: Request, appUrl: string): boolean {
+  const site = request.headers.get("sec-fetch-site");
+  if (site !== null) return site !== "same-origin" && site !== "none";
+  const origin = request.headers.get("origin");
+  return origin !== null && origin !== "null" && origin !== appUrl;
+}
+
+/**
  * `POST /api/auth/logout`: forget the session here, then end the managed login session at Cognito.
- * A form posted from another site (an `Origin` other than APP_URL) is refused: nobody signs you out from elsewhere.
+ * A form posted from another site is refused (`isCrossSitePost`): nobody signs you out from elsewhere.
  */
 export function handleLogout(request: Request): Response {
   try {
     const config = authConfigOrThrow();
     if (config.AUTH_MODE === "off") return redirect("/", [], 303);
-    const origin = request.headers.get("origin");
-    if (origin !== null && origin !== config.APP_URL) {
-      throw forbidden({ fr: "Déconnexion refusée : demande venue d’un autre site.", en: "Sign-out refused: request from another site." }, { origin });
+    if (isCrossSitePost(request, config.APP_URL)) {
+      const details = { origin: request.headers.get("origin"), sec_fetch_site: request.headers.get("sec-fetch-site") };
+      throw forbidden({ fr: "Déconnexion refusée : demande venue d’un autre site.", en: "Sign-out refused: request from another site." }, details);
     }
     return redirect(logoutUrl(config), [clearedSessionCookie(config)], 303);
   } catch (error) {

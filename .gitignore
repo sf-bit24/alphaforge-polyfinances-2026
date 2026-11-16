@@ -8,11 +8,18 @@
 /export/
 
 # Documents du Datathon, copies dans le Brain : non versionnes ici.
-# Exceptions : l'architecture (docs/architecture/) et les cas d'utilisation
-# (docs/use-cases/). Les documents remis sont dans remise/, à la racine.
+# Exceptions : l'architecture (docs/architecture/), les cas d'utilisation
+# (docs/use-cases/) et, dans docs/remise/, les seuls documents remis au jury
+# (leurs sources de travail restent locales).
 /docs/*
 !/docs/architecture/
 !/docs/use-cases/
+!/docs/remise/
+/docs/remise/*
+!/docs/remise/README.md
+!/docs/remise/alphaforge-one-pager.pdf
+!/docs/remise/alphaforge-architecture-aws.pdf
+!/docs/remise/alphaforge-documentation-technique.pdf
 
 # Traces du moteur de backtest (défaut ./backtest-results, où qu'on le lance)
 backtest-results/

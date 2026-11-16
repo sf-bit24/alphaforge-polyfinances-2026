@@ -156,8 +156,13 @@ def build_portfolio(
             processing=f"R = {comp.R:.1f}",
         )
         _emph_ids = [
-            book.add(f"emphasis.{k}", f"Poids de la lentille {LENS_FR.get(k, k)}", v, "%",
-                     dataset="policy_compiler/emphasis.yaml")
+            book.add(
+                f"emphasis.{k}",
+                f"Poids de la lentille {LENS_FR.get(k, k)}",
+                v,
+                "%",
+                dataset="policy_compiler/emphasis.yaml",
+            )
             for k, v in comp.emphasis.items()
         ]
         holding_fids = _holding_facts(book, profile)
@@ -239,8 +244,14 @@ def build_portfolio(
             with book.step("s0b.strategy", tool="strategy.select", inputs={"error": type(exc).__name__}) as ev:
                 ev.status = "erreur"
                 ev.message = f"{type(exc).__name__}: {exc}"[:300]
-                book.add("strat.error", "étape 0 abandonnée : mandat de base conservé", type(exc).__name__, "texte",
-                         dataset="finance/strategy", status="HYPOTHESE")
+                book.add(
+                    "strat.error",
+                    "étape 0 abandonnée : mandat de base conservé",
+                    type(exc).__name__,
+                    "texte",
+                    dataset="finance/strategy",
+                    status="HYPOTHESE",
+                )
 
     versions = {"policy": "risk_levels@0.2.0", "profile": f"{profile.profile_id}@{profile.version}"}
     versions["strategy"] = f"strategy.yaml@{strat.version}" if strat else "off"
@@ -497,9 +508,7 @@ def build_portfolio(
             if (request and a == request.ticker) or a in singles or (strat is not None and a in base.loss_bounds)
             else "coeur",
             rationale_fact_ids=[
-                f
-                for f in (f"r2.rc.{a}", f"strat.rank.{a}", f"strat.score.{a}", f"strat.floor.{a}")
-                if f in book.facts
+                f for f in (f"r2.rc.{a}", f"strat.rank.{a}", f"strat.score.{a}", f"strat.floor.{a}") if f in book.facts
             ],
         )
         for a, w in sorted(final_w.items(), key=lambda kv: -kv[1])
@@ -784,15 +793,20 @@ def _style_counterfactuals(book, comp, profile, as_of, strat, style_inputs, cfs,
             continue
         alt_inputs = StyleInputs(**{**base_in.__dict__, "explicit_preference": STYLES[j]})
         scratch = FactBook(f"{book.decision_id}-cf-style-{label}")
-        alt = apply_strategy(comp, profile, as_of, scratch, inputs=alt_inputs, candidates=strat.candidates,
-                             protect=list(protect))
+        alt = apply_strategy(
+            comp, profile, as_of, scratch, inputs=alt_inputs, candidates=strat.candidates, protect=list(protect)
+        )
         if alt.decision.style == cur:  # montée refusée par la gouvernance : pas de contrefactuel
             continue
         rr = optimize(alt.policy, as_of)
         if rr.status != "optimal" or rr.risk_value is None:
             continue
         f_style = book.add(
-            f"cf.style.{label}.style", "Style testé", STYLE_FR[alt.decision.style], "texte", dataset="contrefactuel",
+            f"cf.style.{label}.style",
+            "Style testé",
+            STYLE_FR[alt.decision.style],
+            "texte",
+            dataset="contrefactuel",
             processing=alt.decision.style,
         )
         f_risk = book.add(
@@ -816,8 +830,13 @@ def _style_counterfactuals(book, comp, profile, as_of, strat, style_inputs, cfs,
             f"avec {len(alt.shortlist)} titres retenus"
         )
         if alt.plan.growth_floor is not None:
-            f_g = book.add(f"cf.style.{label}.band_target", "Part actions visée avec le style testé",
-                           alt.plan.growth_floor, "%", dataset="contrefactuel")
+            f_g = book.add(
+                f"cf.style.{label}.band_target",
+                "Part actions visée avec le style testé",
+                alt.plan.growth_floor,
+                "%",
+                dataset="contrefactuel",
+            )
             ids.append(f_g)
             text += f" et une part actions visée de {fmt(alt.plan.growth_floor, '%')}"
         change = f"Si le style était {STYLE_FR[alt.decision.style]}"
@@ -837,22 +856,42 @@ def _final_strategy_facts(book: FactBook, strat, final_policy: PolicySpec) -> di
             if strat.plan.growth_floor is not None and abs(g.min - strat.plan.growth_floor) < 1e-9:
                 out["band_target"] = "strat.band_target"
             else:
-                out["band_target"] = book.add("strat.final.band_target", "part actions visée après le débat", g.min,
-                                              "%", dataset="mandat final", status="HYPOTHESE",
-                                              processing="plancher strat.growth_floor abaissé par la prudence")
+                out["band_target"] = book.add(
+                    "strat.final.band_target",
+                    "part actions visée après le débat",
+                    g.min,
+                    "%",
+                    dataset="mandat final",
+                    status="HYPOTHESE",
+                    processing="plancher strat.growth_floor abaissé par la prudence",
+                )
                 out["clamped"].append(out["band_target"])
         for t, f0 in strat.plan.floors.items():
             lim = lims.get(f"strat.floor.{t}")
             if lim is None or lim.min is None:
-                out["clamped"].append(book.add(f"strat.final.removed.{t}", f"plancher de {t} retiré au débat", t,
-                                               "texte", dataset="mandat final", status="HYPOTHESE"))
+                out["clamped"].append(
+                    book.add(
+                        f"strat.final.removed.{t}",
+                        f"plancher de {t} retiré au débat",
+                        t,
+                        "texte",
+                        dataset="mandat final",
+                        status="HYPOTHESE",
+                    )
+                )
                 continue
             if abs(lim.min - f0) < 1e-9:
                 out["floors"][t] = f"strat.floor.{t}"
             else:
-                fid = book.add(f"strat.final.floor.{t}", f"plancher du satellite {t} après le débat", lim.min, "%",
-                               dataset="mandat final", status="HYPOTHESE",
-                               processing="plancher abaissé par la prudence (clamp)")
+                fid = book.add(
+                    f"strat.final.floor.{t}",
+                    f"plancher du satellite {t} après le débat",
+                    lim.min,
+                    "%",
+                    dataset="mandat final",
+                    status="HYPOTHESE",
+                    processing="plancher abaissé par la prudence (clamp)",
+                )
                 out["floors"][t] = fid
                 out["clamped"].append(fid)
     return out

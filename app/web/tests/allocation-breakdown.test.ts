@@ -64,7 +64,10 @@ describe("allocation contract", () => {
   });
 
   it("still parses an older response without allocation, or with a null one", () => {
-    expect(PortfolioBuildResponse.parse(PORTFOLIO_FIXTURES.amira).allocation).toBeUndefined();
+    // Les fixtures réexportées par le moteur portent désormais une allocation : on la retire pour simuler l'ancienne réponse.
+    const older = structuredClone(PORTFOLIO_FIXTURES.amira) as Record<string, unknown>;
+    delete older.allocation;
+    expect(PortfolioBuildResponse.parse(older).allocation).toBeUndefined();
     expect(withAllocation(null).allocation).toBeNull();
   });
 

@@ -20,6 +20,7 @@ import { MockCollector } from "./collect";
 import { generalIndex, generalSeed, type StoredDoc } from "./documents";
 import { errorEnvelope, MOCK_RELEASE, MockError, type Envelope } from "./envelope";
 import { replyToFollowups } from "./followup-actions";
+import { kbItemsWithRelations } from "./kb-relations";
 import { confirmPortfolio, skipPortfolio, submitPortfolio } from "./portfolio-actions";
 import { openSession, reopenSession, resumeSession, updateSettings } from "./session-actions";
 import { Trace, type ScriptItem } from "./trace";
@@ -68,9 +69,7 @@ function actOnClient(record: ClientRecord, request: ClientRequest, trace: Trace)
 }
 
 function kbItems(docs: Iterable<StoredDoc>): KbItem[] {
-  return [...docs]
-    .sort((left, right) => left.key.localeCompare(right.key))
-    .map((doc) => ({ key: doc.key, title: doc.title, type: doc.type, description: doc.description, updated_at: doc.updated_at }));
+  return kbItemsWithRelations([...docs]);
 }
 
 function documentNotFound(key: string): MockError {

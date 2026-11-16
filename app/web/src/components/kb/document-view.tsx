@@ -7,13 +7,13 @@ import { useAsync } from "@/lib/client/use-async";
 import { formatDateTime } from "@/lib/i18n/locale";
 import { okfTypeLabel } from "@/lib/i18n/okf-types";
 import { useI18n } from "@/lib/i18n/provider";
-import { parseOkf } from "@/lib/okf";
+import { parseOkf, resolveOkfLink } from "@/lib/okf";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { ErrorNotice } from "@/components/ui/error-notice";
 import { JsonView } from "@/components/ui/json-view";
-import { Markdown } from "@/components/ui/markdown";
+import { Markdown, type LinkRenderer } from "@/components/ui/markdown";
 import { Spinner } from "@/components/ui/spinner";
 
 function asList(value: unknown): string[] {
@@ -142,10 +142,41 @@ function Frontmatter({ front }: { front: Record<string, unknown> }) {
   );
 }
 
+/** The documents a reader can open from links: the keys of its base, and how to open one. */
+export interface DocumentLinks {
+  known: ReadonlySet<string>;
+  open: (key: string) => void;
+}
+
+const RELATIVE_LINK = /^(?![a-z][a-z0-9+.-]*:|[#/])/i;
+
+/** Links to another document of the base open it in place; a link to a missing document stays plain text. */
+function useLinkRenderer(documentKey: string, links: DocumentLinks | undefined): LinkRenderer | undefined {
+  const { t } = useI18n();
+  if (!links) return undefined;
+  return function renderOkfLink(href, label) {
+    if (!href || !RELATIVE_LINK.test(href)) return undefined;
+    const key = resolveOkfLink(documentKey, href, links.known);
+    if (!key) {
+      return (
+        <span className="text-ink-500" title={t.kb.linkMissing}>
+          {label}
+        </span>
+      );
+    }
+    return (
+      <button type="button" title={key} onClick={() => links.open(key)} className="text-navy underline underline-offset-2 hover:text-ink-950 focus-visible:outline-2 focus-visible:outline-focus">
+        {label}
+      </button>
+    );
+  };
+}
+
 /** An OKF document: frontmatter as metadata, then the Markdown body; JSON traces as JSON. */
-export function DocumentContent({ content, documentKey }: { content: string; documentKey: string }) {
+export function DocumentContent({ content, documentKey, links }: { content: string; documentKey: string; links?: DocumentLinks }) {
   const { t } = useI18n();
   const [raw, setRaw] = useState(false);
+  const renderLink = useLinkRenderer(documentKey, links);
 
   if (documentKey.endsWith(".json")) return <JsonDocument content={content} />;
 
@@ -169,7 +200,7 @@ export function DocumentContent({ content, documentKey }: { content: string; doc
         <>
           {doc.error ? <p className="text-sm text-warning-ink">{t.documentView.invalidFrontmatter}</p> : null}
           {doc.frontmatter ? <Frontmatter front={doc.frontmatter} /> : null}
-          <Markdown>{doc.body}</Markdown>
+          <Markdown renderLink={renderLink}>{doc.body}</Markdown>
         </>
       )}
     </div>
@@ -177,7 +208,7 @@ export function DocumentContent({ content, documentKey }: { content: string; doc
 }
 
 /** Load a document with `kb.get` (with the client_id for a clients/ key) and show it. */
-export function DocumentLoader({ documentKey, clientId }: { documentKey: string; clientId: string | null }) {
+export function DocumentLoader({ documentKey, clientId, links }: { documentKey: string; clientId: string | null; links?: DocumentLinks }) {
   const { t, locale } = useI18n();
   const { data, error, loading } = useAsync(`${documentKey}|${locale}`, (signal) =>
     getKbDocument(documentKey, clientId, { locale, signal, messages: callMessages(t) }),
@@ -185,7 +216,7 @@ export function DocumentLoader({ documentKey, clientId }: { documentKey: string;
   if (loading) return <Spinner label={t.documentView.loading} />;
   if (error) return <ErrorNotice error={error} />;
   if (!data) return null;
-  return <DocumentContent content={data.content} documentKey={data.key} />;
+  return <DocumentContent content={data.content} documentKey={data.key} links={links} />;
 }
 
 export function DocumentDialog({

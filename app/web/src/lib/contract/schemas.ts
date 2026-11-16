@@ -371,6 +371,10 @@ export const KbItem = z.object({
   type: z.string().nullish(),
   description: z.string().nullish(),
   updated_at: timestamp.nullish(),
+  /** Documents of the same base the body links to (CONTRACTS.md, section 3.2); absent from older runtime releases. */
+  links: z.array(z.string()).optional(),
+  /** Canonical symbols the document is about; absent from older runtime releases. */
+  tickers: z.array(z.string()).optional(),
 });
 export type KbItem = z.infer<typeof KbItem>;
 

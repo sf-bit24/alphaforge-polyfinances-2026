@@ -356,7 +356,7 @@ def test_kb_list_and_get(service, store):
     client_id = start(service)["client_id"]
     general = service.handle({"action": "kb.list", "prefix": "general/"})
     assert general["ok"] and general["items"][0]["key"] == "general/methodologie/test.md"
-    assert set(general["items"][0]) == {"key", "title", "type", "description", "updated_at"}
+    assert set(general["items"][0]) == {"key", "title", "type", "description", "updated_at", "links", "tickers"}
     mine = service.handle({"action": "kb.list", "prefix": f"clients/{client_id}/"})
     assert {item["type"] for item in mine["items"]} == {"Investor Profile", "Profile Journal", "Index"}
     assert service.handle({"action": "kb.list", "prefix": "staging/"})["error"]["code"] == "bad_request"

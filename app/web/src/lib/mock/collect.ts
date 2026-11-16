@@ -107,6 +107,8 @@ function watchNote(runId: string, at: string): StoredDoc {
 - Le dollar américain valait **1,4255 $ CA** le 2026-11-12 (Banque du Canada, FXUSDCAD).
 - Le rendement des obligations du Canada à 10 ans était de **3,78 %** le 2026-11-12.
 
+Séries citées : [taux USD/CAD](donnees/usdcad/usdcad-2026-11.md), [taux directeur et rendements obligataires](donnees/taux-directeur/banque-du-canada-2026-11.md).
+
 Collecte \`${runId}\`.`,
   );
 }

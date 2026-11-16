@@ -771,7 +771,11 @@ class ClientKnowledgeBases:
         modèle), chacun cité par sa clé OKF. Une base pas encore active le dit."""
         if not self.enabled:
             return {"results": [], "status": "disabled", "note": "client knowledge base not available"}
-        state, _ = self._read(client_id)
+        try:
+            state, _ = self._read(client_id)
+        except Exception as exc:  # magasin indisponible : l'outil le dit, le tour d'A1 continue
+            note = f"client knowledge base state unreadable ({error_code(exc)})"
+            return {"results": [], "status": "failed", "note": note}
         status = (state or {}).get("status") or "creating"
         if status != "active" or not query.strip():
             return {"results": [], "status": status, "note": "client knowledge base not active yet; use the context"}

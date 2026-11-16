@@ -27,6 +27,7 @@ from alphaforge.finance.portfolio.judge import check, framed_alternative
 from alphaforge.finance.portfolio.optimizer import optimize
 
 from . import roles
+from .allocation import allocation_breakdown, allocation_statement
 from .esg import esg_exclusions, esg_preference
 from .explain import grounding_check, grounding_context, keep_grounded, merge_grounding, rephrase, skeleton
 from .facts import FactBook, fmt, sha256_json
@@ -67,6 +68,7 @@ class BuildResult:
     explanation_report: list[str] = field(default_factory=list)
     grounding: dict | None = None
     strategy: object | None = None  # finance.strategy.select.StrategyResult quand l'étape 0 est active
+    allocation: dict | None = None  # répartition de l'argent (allocation.py), None sans position
 
 
 def _opt_facts(book: FactBook, label: str, res, policy: PolicySpec) -> tuple[list[str], list[str]]:
@@ -170,8 +172,10 @@ def build_portfolio(  # noqa: PLR0913 - signature publique : les appelants passe
     debated = _second_round(debate, _first_round(debate))
     outcome = _final_portfolio(debate, debated)
     cfs, cf_stmts = _counterfactuals(debate, debated)
-    expl, report, grounding = _explanation(debate, debated, outcome, cf_stmts)
     positions = _positions(debate, outcome.weights)
+    # Répartition de l'argent (classes, devises, secteurs) : faits cités par l'explication, voir allocation.py
+    allocation = allocation_breakdown(build.book, positions, profile.investable_wealth, as_of)
+    expl, report, grounding = _explanation(debate, debated, outcome, cf_stmts, allocation)
     decision = Decision(
         decision_id=did,
         profile_id=profile.profile_id,
@@ -193,6 +197,7 @@ def build_portfolio(  # noqa: PLR0913 - signature publique : les appelants passe
         explanation_report=report,
         grounding=grounding,
         strategy=debate.strat,
+        allocation=allocation,
     )
 
 
@@ -717,11 +722,15 @@ def _strategy_counterfactuals(debate: _Debate) -> list[tuple[Counterfactual, Sta
 
 # ------------------------------------------------------------------------- Explication
 def _explanation(
-    debate: _Debate, debated: _DebateResult, outcome: _Outcome, cf_stmts: list[Statement]
+    debate: _Debate,
+    debated: _DebateResult,
+    outcome: _Outcome,
+    cf_stmts: list[Statement],
+    allocation: dict | None = None,
 ) -> tuple[Explanation, list[str], dict | None]:
     """Gabarit vérifié, reformulation éventuelle, puis ancrage Guardrails : (explication, rapport, ancrage)."""
     build = debate.build
-    template = _template(debate, debated, outcome, cf_stmts)
+    template = _template(debate, debated, outcome, cf_stmts, allocation)
     expl, report = _rephrased(build, template)
     if not build.options.guardrail_id:
         return expl, report, None
@@ -729,8 +738,14 @@ def _explanation(
     return expl, report, grounding
 
 
-def _template(debate: _Debate, debated: _DebateResult, outcome: _Outcome, cf_stmts: list[Statement]) -> Explanation:
-    """Gabarit de l'explication : squelette, portefeuille existant, scénarios, puis raison du statut."""
+def _template(
+    debate: _Debate,
+    debated: _DebateResult,
+    outcome: _Outcome,
+    cf_stmts: list[Statement],
+    allocation: dict | None = None,
+) -> Explanation:
+    """Gabarit de l'explication : squelette, portefeuille existant, répartition, scénarios, puis raison du statut."""
     build, mandate = debate.build, debate.mandate
     book = build.book
     expl = skeleton(
@@ -751,6 +766,8 @@ def _template(debate: _Debate, debated: _DebateResult, outcome: _Outcome, cf_stm
     )
     if mandate.holding_fids:
         expl.data_used.insert(1, _holding_statement(book, mandate.holding_fids))
+    if allocation is not None:
+        expl.data_used.insert(1, allocation_statement(book, allocation))
     # Scénarios probabilistes (outil scenario_risk) : par défaut seulement avec une limite PROB_LOSS, voir scenarios.py
     from .scenarios import ScenarioContext, attach_scenarios
 

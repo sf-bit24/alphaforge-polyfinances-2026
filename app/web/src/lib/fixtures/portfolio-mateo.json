@@ -11,20 +11,20 @@
   "decision_id": "dec-mateo-v1-fixture",
   "profile_id": "mateo",
   "profile_version": 1,
-  "created_utc": "2026-11-15T21:44:56.683449Z",
+  "created_utc": "2026-11-16T01:48:17.681138Z",
   "kind": "proposition",
   "simulation_only": true,
   "positions": [
    {
     "asset_id": "ZST.TO",
-    "weight": 0.37500000983024123,
+    "weight": 0.37500000983057447,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": []
    },
    {
     "asset_id": "AGG",
-    "weight": 0.2974340499224288,
+    "weight": 0.2974340499226276,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": [
@@ -33,7 +33,7 @@
    },
    {
     "asset_id": "XIU.TO",
-    "weight": 0.15820215710161753,
+    "weight": 0.15820215710176216,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": [
@@ -42,7 +42,7 @@
    },
    {
     "asset_id": "GLD",
-    "weight": 0.07756595965750221,
+    "weight": 0.07756595965762621,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": [
@@ -51,7 +51,7 @@
    },
    {
     "asset_id": "FTS.TO",
-    "weight": 0.030000000717182743,
+    "weight": 0.030000000717205228,
     "goal_id": null,
     "role": "satellite",
     "rationale_fact_ids": [
@@ -62,7 +62,7 @@
    },
    {
     "asset_id": "JNJ",
-    "weight": 0.03000000071519783,
+    "weight": 0.030000000715220246,
     "goal_id": null,
     "role": "satellite",
     "rationale_fact_ids": [
@@ -73,14 +73,14 @@
    },
    {
     "asset_id": "QQQ",
-    "weight": 0.01916057770451279,
+    "weight": 0.019160577704370893,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": []
    },
    {
     "asset_id": "SPY",
-    "weight": 0.012637244351316922,
+    "weight": 0.012637244350613221,
     "goal_id": null,
     "role": "coeur",
     "rationale_fact_ids": []
@@ -4857,7 +4857,7 @@
    {
     "fact_id": "r1.opt_risk",
     "label_fr": "Risque minimisé (CVAR, mensuel)",
-    "value": 0.014574534443341988,
+    "value": 0.014574534443345449,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -4941,7 +4941,7 @@
    {
     "fact_id": "r1.horizon_worst",
     "label_fr": "Pire rendement composé sur 9 ans, historique",
-    "value": 0.43675309516850314,
+    "value": 0.43675309516695954,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5004,7 +5004,7 @@
    {
     "fact_id": "r1.cvar_m",
     "label_fr": "CVaR 95 % mensuelle (historique)",
-    "value": 0.014450819293423822,
+    "value": 0.014450819293389238,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5025,7 +5025,7 @@
    {
     "fact_id": "r1.mdd",
     "label_fr": "Baisse maximale historique (fenêtre)",
-    "value": 0.049540929035400416,
+    "value": 0.04954092903522278,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5046,7 +5046,7 @@
    {
     "fact_id": "r1.vol",
     "label_fr": "Volatilité annualisée (historique)",
-    "value": 0.03924776096802689,
+    "value": 0.03924776096795433,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5067,7 +5067,7 @@
    {
     "fact_id": "r1.worst12",
     "label_fr": "Pire rendement sur 12 mois (historique)",
-    "value": -0.03143488596071615,
+    "value": -0.03143488596063343,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5088,7 +5088,7 @@
    {
     "fact_id": "r1.rc.XIU.TO",
     "label_fr": "Part de la CVaR portée par XIU.TO",
-    "value": 0.5533103599508644,
+    "value": 0.5533103599521895,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5109,7 +5109,7 @@
    {
     "fact_id": "r1.rc.AGG",
     "label_fr": "Part de la CVaR portée par AGG",
-    "value": 0.22023533194950548,
+    "value": 0.22023533194997877,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5130,7 +5130,7 @@
    {
     "fact_id": "r1.rc.GLD",
     "label_fr": "Part de la CVaR portée par GLD",
-    "value": 0.06349697680040294,
+    "value": 0.06349697680059845,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5151,7 +5151,7 @@
    {
     "fact_id": "r1.stress.2022_taux",
     "label_fr": "Rendement pendant Hausse des taux 2022 : actions et obligations en baisse",
-    "value": -0.0260062022879457,
+    "value": -0.026006202287804148,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5172,7 +5172,7 @@
    {
     "fact_id": "r1.stress_cad.2022_taux",
     "label_fr": "Perte en dollars pendant Hausse des taux 2022 : actions et obligations en baisse",
-    "value": 10402.480915178281,
+    "value": 10402.48091512166,
     "unit": "CAD",
     "currency": null,
     "as_of": null,
@@ -5193,7 +5193,7 @@
    {
     "fact_id": "r1.stress.2020_covid",
     "label_fr": "Rendement pendant Choc COVID-19",
-    "value": -0.012273009636362353,
+    "value": -0.012273009636250776,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5214,7 +5214,7 @@
    {
     "fact_id": "r1.stress_cad.2020_covid",
     "label_fr": "Perte en dollars pendant Choc COVID-19",
-    "value": 4909.203854544941,
+    "value": 4909.203854500311,
     "unit": "CAD",
     "currency": null,
     "as_of": null,
@@ -5235,7 +5235,7 @@
    {
     "fact_id": "r1.n_eff_risk",
     "label_fr": "Nombre effectif de sources de risque",
-    "value": 4.126117402355537,
+    "value": 4.126117402343848,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -5256,7 +5256,7 @@
    {
     "fact_id": "r1.div_ratio",
     "label_fr": "Ratio de diversification",
-    "value": 1.8055835517137646,
+    "value": 1.8055835517139134,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -5277,7 +5277,7 @@
    {
     "fact_id": "r1.cluster0",
     "label_fr": "Poids d'un groupe très corrélé (ZST.TO)",
-    "value": 0.3749999997638385,
+    "value": 0.37499999976382953,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5298,7 +5298,7 @@
    {
     "fact_id": "r1.cluster1",
     "label_fr": "Poids d'un groupe très corrélé (AGG)",
-    "value": 0.2974340419381865,
+    "value": 0.2974340419381139,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5319,7 +5319,7 @@
    {
     "fact_id": "r1.cluster2",
     "label_fr": "Poids d'un groupe très corrélé (XIU.TO)",
-    "value": 0.15820215285487998,
+    "value": 0.15820215285488023,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5340,7 +5340,7 @@
    {
     "fact_id": "r1.lt.tech",
     "label_fr": "Exposition consolidée au secteur de la technologie (look-through)",
-    "value": 0.032819983309135256,
+    "value": 0.03281998330872817,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5361,7 +5361,7 @@
    {
     "fact_id": "r1.lt.energy",
     "label_fr": "Exposition consolidée au secteur de l'énergie (look-through)",
-    "value": 0.00039356467450510655,
+    "value": 0.00039356467448283184,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -5382,7 +5382,7 @@
    {
     "fact_id": "r1.lt.financials",
     "label_fr": "Exposition consolidée au secteur de la finance (look-through)",
-    "value": 0.0014301965805283148,
+    "value": 0.0014301965804473693,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6054,7 +6054,7 @@
    {
     "fact_id": "r2.opt_risk",
     "label_fr": "Risque minimisé (CVAR, mensuel)",
-    "value": 0.014574534443341988,
+    "value": 0.014574534443345449,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6138,7 +6138,7 @@
    {
     "fact_id": "r2.horizon_worst",
     "label_fr": "Pire rendement composé sur 9 ans, historique",
-    "value": 0.43675309516850314,
+    "value": 0.43675309516695954,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6201,7 +6201,7 @@
    {
     "fact_id": "r2.cvar_m",
     "label_fr": "CVaR 95 % mensuelle (historique)",
-    "value": 0.014450819293423822,
+    "value": 0.014450819293389238,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6222,7 +6222,7 @@
    {
     "fact_id": "r2.mdd",
     "label_fr": "Baisse maximale historique (fenêtre)",
-    "value": 0.049540929035400416,
+    "value": 0.04954092903522278,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6243,7 +6243,7 @@
    {
     "fact_id": "r2.vol",
     "label_fr": "Volatilité annualisée (historique)",
-    "value": 0.03924776096802689,
+    "value": 0.03924776096795433,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6264,7 +6264,7 @@
    {
     "fact_id": "r2.worst12",
     "label_fr": "Pire rendement sur 12 mois (historique)",
-    "value": -0.03143488596071615,
+    "value": -0.03143488596063343,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6285,7 +6285,7 @@
    {
     "fact_id": "r2.rc.XIU.TO",
     "label_fr": "Part de la CVaR portée par XIU.TO",
-    "value": 0.5533103599508644,
+    "value": 0.5533103599521895,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6306,7 +6306,7 @@
    {
     "fact_id": "r2.rc.AGG",
     "label_fr": "Part de la CVaR portée par AGG",
-    "value": 0.22023533194950548,
+    "value": 0.22023533194997877,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6327,7 +6327,7 @@
    {
     "fact_id": "r2.rc.GLD",
     "label_fr": "Part de la CVaR portée par GLD",
-    "value": 0.06349697680040294,
+    "value": 0.06349697680059845,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6348,7 +6348,7 @@
    {
     "fact_id": "r2.stress.2022_taux",
     "label_fr": "Rendement pendant Hausse des taux 2022 : actions et obligations en baisse",
-    "value": -0.0260062022879457,
+    "value": -0.026006202287804148,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6369,7 +6369,7 @@
    {
     "fact_id": "r2.stress_cad.2022_taux",
     "label_fr": "Perte en dollars pendant Hausse des taux 2022 : actions et obligations en baisse",
-    "value": 10402.480915178281,
+    "value": 10402.48091512166,
     "unit": "CAD",
     "currency": null,
     "as_of": null,
@@ -6390,7 +6390,7 @@
    {
     "fact_id": "r2.stress.2020_covid",
     "label_fr": "Rendement pendant Choc COVID-19",
-    "value": -0.012273009636362353,
+    "value": -0.012273009636250776,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6411,7 +6411,7 @@
    {
     "fact_id": "r2.stress_cad.2020_covid",
     "label_fr": "Perte en dollars pendant Choc COVID-19",
-    "value": 4909.203854544941,
+    "value": 4909.203854500311,
     "unit": "CAD",
     "currency": null,
     "as_of": null,
@@ -6432,7 +6432,7 @@
    {
     "fact_id": "r2.n_eff_risk",
     "label_fr": "Nombre effectif de sources de risque",
-    "value": 4.126117402355537,
+    "value": 4.126117402343848,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -6453,7 +6453,7 @@
    {
     "fact_id": "r2.div_ratio",
     "label_fr": "Ratio de diversification",
-    "value": 1.8055835517137646,
+    "value": 1.8055835517139134,
     "unit": "ratio",
     "currency": null,
     "as_of": null,
@@ -6474,7 +6474,7 @@
    {
     "fact_id": "r2.cluster0",
     "label_fr": "Poids d'un groupe très corrélé (ZST.TO)",
-    "value": 0.3749999997638385,
+    "value": 0.37499999976382953,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6495,7 +6495,7 @@
    {
     "fact_id": "r2.cluster1",
     "label_fr": "Poids d'un groupe très corrélé (AGG)",
-    "value": 0.2974340419381865,
+    "value": 0.2974340419381139,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6516,7 +6516,7 @@
    {
     "fact_id": "r2.cluster2",
     "label_fr": "Poids d'un groupe très corrélé (XIU.TO)",
-    "value": 0.15820215285487998,
+    "value": 0.15820215285488023,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6537,7 +6537,7 @@
    {
     "fact_id": "r2.lt.tech",
     "label_fr": "Exposition consolidée au secteur de la technologie (look-through)",
-    "value": 0.032819983309135256,
+    "value": 0.03281998330872817,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6558,7 +6558,7 @@
    {
     "fact_id": "r2.lt.energy",
     "label_fr": "Exposition consolidée au secteur de l'énergie (look-through)",
-    "value": 0.00039356467450510655,
+    "value": 0.00039356467448283184,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -6579,7 +6579,7 @@
    {
     "fact_id": "r2.lt.financials",
     "label_fr": "Exposition consolidée au secteur de la finance (look-through)",
-    "value": 0.0014301965805283148,
+    "value": 0.0014301965804473693,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -7965,7 +7965,7 @@
    {
     "fact_id": "cf.style.up.risk",
     "label_fr": "Risque minimisé avec le style dynamique",
-    "value": 0.014872755322882205,
+    "value": 0.014872755322882014,
     "unit": "%",
     "currency": null,
     "as_of": null,
@@ -8003,6 +8003,927 @@
      }
     ],
     "trace_id": "dec-mateo-v1-fixture:t021:counterfactuals:optimize"
+   },
+   {
+    "fact_id": "mix.amount_total",
+    "label_fr": "Montant de base de la répartition",
+    "value": 400000.0,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "patrimoine investissable déclaré, en CAD"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.amount.ZST.TO",
+    "label_fr": "Montant placé dans ZST.TO",
+    "value": 150000.0,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids 37,5 % × montant de base"
+     },
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "montant de base"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.amount.AGG",
+    "label_fr": "Montant placé dans AGG",
+    "value": 118973.62,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids 29,7 % × montant de base"
+     },
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "montant de base"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.amount.XIU.TO",
+    "label_fr": "Montant placé dans XIU.TO",
+    "value": 63280.86,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids 15,8 % × montant de base"
+     },
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "montant de base"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.amount.GLD",
+    "label_fr": "Montant placé dans GLD",
+    "value": 31026.38,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids 7,8 % × montant de base"
+     },
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "montant de base"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.amount.FTS.TO",
+    "label_fr": "Montant placé dans FTS.TO",
+    "value": 12000.0,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids 3,0 % × montant de base"
+     },
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "montant de base"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.amount.JNJ",
+    "label_fr": "Montant placé dans JNJ",
+    "value": 12000.0,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids 3,0 % × montant de base"
+     },
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "montant de base"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.amount.QQQ",
+    "label_fr": "Montant placé dans QQQ",
+    "value": 7664.23,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids 1,9 % × montant de base"
+     },
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "montant de base"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.amount.SPY",
+    "label_fr": "Montant placé dans SPY",
+    "value": 5054.9,
+    "unit": "CAD",
+    "currency": "CAD",
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids 1,3 % × montant de base"
+     },
+     {
+      "dataset": "profil client : investable_wealth (CAD)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "montant de base"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.class.obligations",
+    "label_fr": "Part des obligations et quasi-liquidités",
+    "value": 0.6724340598,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "somme des poids de ZST.TO, AGG (asset_class)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.class.fnb_actions",
+    "label_fr": "Part des FNB d'actions",
+    "value": 0.1899999792,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "somme des poids de XIU.TO, QQQ, SPY (asset_class)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.class.or_matieres",
+    "label_fr": "Part de l'or et des matières premières",
+    "value": 0.0775659597,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "somme des poids de GLD (asset_class)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.class.actions_individuelles",
+    "label_fr": "Part des actions individuelles",
+    "value": 0.0600000014,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "somme des poids de FTS.TO, JNJ (asset_class)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.currency.CAD",
+    "label_fr": "Part cotée en dollars canadiens",
+    "value": 0.5632021676,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "devise de cotation de ZST.TO, XIU.TO, FTS.TO ; somme de leurs poids (exposition de change avant conversion en CAD)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.currency.USD",
+    "label_fr": "Part cotée en dollars américains",
+    "value": 0.4367978324,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "devise de cotation de AGG, GLD, JNJ, QQQ, SPY ; somme de leurs poids (exposition de change avant conversion en CAD)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.obligations",
+    "label_fr": "Part des obligations et quasi-liquidités (hors secteurs)",
+    "value": 0.6724340598,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : ZST.TO, AGG"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.or_matieres",
+    "label_fr": "Part de l'or et des matières premières (hors secteurs)",
+    "value": 0.0775659597,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : GLD"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.healthcare",
+    "label_fr": "Part du secteur de la santé",
+    "value": 0.0310095708,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : JNJ, SPY ; part directe 3,0 % + transparence des FNB 0,1 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.utilities",
+    "label_fr": "Part du secteur des services publics",
+    "value": 0.0303036204,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : FTS.TO, SPY ; part directe 3,0 % + transparence des FNB 0,0 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.tech",
+    "label_fr": "Part du secteur de la technologie",
+    "value": 0.0055034219,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY ; part directe 0,0 % + transparence des FNB 0,6 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.consumer_discretionary",
+    "label_fr": "Part du secteur de la consommation discrétionnaire",
+    "value": 0.0015285364,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY ; part directe 0,0 % + transparence des FNB 0,2 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.financials",
+    "label_fr": "Part du secteur de la finance",
+    "value": 0.0014301966,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY ; part directe 0,0 % + transparence des FNB 0,1 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.other",
+    "label_fr": "Part des autres industries (classement Kenneth R. French)",
+    "value": 0.0010370356,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY ; part directe 0,0 % + transparence des FNB 0,1 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.industrials",
+    "label_fr": "Part du secteur de l'industrie",
+    "value": 0.0007652405,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY ; part directe 0,0 % + transparence des FNB 0,1 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.energy",
+    "label_fr": "Part du secteur de l'énergie",
+    "value": 0.0003935647,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY ; part directe 0,0 % + transparence des FNB 0,0 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.consumer_staples",
+    "label_fr": "Part du secteur de la consommation de base",
+    "value": 0.0003015206,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY ; part directe 0,0 % + transparence des FNB 0,0 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.communication",
+    "label_fr": "Part du secteur des communications",
+    "value": 0.0001897085,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY ; part directe 0,0 % + transparence des FNB 0,0 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.materials",
+    "label_fr": "Part du secteur des matériaux",
+    "value": 0.0001748297,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "HYPOTHESE",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : SPY ; part directe 0,0 % + transparence des FNB 0,0 % (industries French au 2026-09-30, FNB suivant le marché américain US_MKT : approximation)"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     },
+     {
+      "dataset": "alphaforge.finance.backtest:lookthrough_us_mkt.parquet (Kenneth R. French Data Library, 12 industries, part de la capitalisation américaine)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "parts par industrie au 2026-09-30, correspondance KF_SECTOR"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "mix.sector.non_ventile",
+    "label_fr": "Part non ventilée par secteur",
+    "value": 0.1773627348,
+    "unit": "%",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "starter:assets_universe.csv",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "positions : XIU.TO, QQQ ; aucune répartition sectorielle disponible, aucune n'est supposée"
+     },
+     {
+      "dataset": "decision:positions",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "poids finaux normalisés des positions de la décision (somme 1)"
+     }
+    ],
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown"
    }
   ],
   "constraints": [
@@ -8367,6 +9288,16 @@
      "label": "FAIT"
     },
     {
+     "text_fr": "Répartition de l'argent : obligations et quasi-liquidités 67,2 %, FNB d'actions 19,0 %, or et matières premières 7,8 %, actions individuelles 6,0 %.",
+     "fact_ids": [
+      "mix.class.obligations",
+      "mix.class.fnb_actions",
+      "mix.class.or_matieres",
+      "mix.class.actions_individuelles"
+     ],
+     "label": "FAIT"
+    },
+    {
      "text_fr": "Mesures historiques du portefeuille proposé : CVaR mensuelle 1,4 %, baisse maximale 5,0 % (rendements mensuels en CAD, prix ajustés).",
      "fact_ids": [
       "r2.cvar_m",
@@ -8521,8 +9452,8 @@
      "emphasis.diversity",
      "emphasis.constraints"
     ],
-    "started_utc": "2026-11-15T21:44:56.026423Z",
-    "ended_utc": "2026-11-15T21:44:56.029531Z",
+    "started_utc": "2026-11-16T01:48:14.616710Z",
+    "ended_utc": "2026-11-16T01:48:14.624104Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8551,8 +9482,8 @@
      "strat.pi",
      "strat.K"
     ],
-    "started_utc": "2026-11-15T21:44:56.030570Z",
-    "ended_utc": "2026-11-15T21:44:56.030647Z",
+    "started_utc": "2026-11-16T01:48:14.626619Z",
+    "ended_utc": "2026-11-16T01:48:14.626966Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8777,8 +9708,8 @@
      "strat.rank.SHOP.TO",
      "strat.ineligible.SHOP.TO"
     ],
-    "started_utc": "2026-11-15T21:44:56.030655Z",
-    "ended_utc": "2026-11-15T21:44:56.281865Z",
+    "started_utc": "2026-11-16T01:48:14.627001Z",
+    "ended_utc": "2026-11-16T01:48:15.639044Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8799,8 +9730,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T21:44:56.281886Z",
-    "ended_utc": "2026-11-15T21:44:56.281920Z",
+    "started_utc": "2026-11-16T01:48:15.639111Z",
+    "ended_utc": "2026-11-16T01:48:15.639349Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8832,8 +9763,8 @@
      "strat.risk_cost",
      "strat.applied"
     ],
-    "started_utc": "2026-11-15T21:44:56.281927Z",
-    "ended_utc": "2026-11-15T21:44:56.384131Z",
+    "started_utc": "2026-11-16T01:48:15.639389Z",
+    "ended_utc": "2026-11-16T01:48:16.367971Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8857,8 +9788,8 @@
      "r1.active.alloc.growth:min",
      "r1.active.alloc.cash_like:max"
     ],
-    "started_utc": "2026-11-15T21:44:56.385456Z",
-    "ended_utc": "2026-11-15T21:44:56.411620Z",
+    "started_utc": "2026-11-16T01:48:16.373606Z",
+    "ended_utc": "2026-11-16T01:48:16.467855Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -8883,8 +9814,8 @@
      "r1.horizon_share_neg",
      "r1.recovery"
     ],
-    "started_utc": "2026-11-15T21:44:56.411639Z",
-    "ended_utc": "2026-11-15T21:44:56.422505Z",
+    "started_utc": "2026-11-16T01:48:16.467941Z",
+    "ended_utc": "2026-11-16T01:48:16.510949Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -8916,8 +9847,8 @@
      "r1.stress.2020_covid",
      "r1.stress_cad.2020_covid"
     ],
-    "started_utc": "2026-11-15T21:44:56.422523Z",
-    "ended_utc": "2026-11-15T21:44:56.445983Z",
+    "started_utc": "2026-11-16T01:48:16.510993Z",
+    "ended_utc": "2026-11-16T01:48:16.628522Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -8946,8 +9877,8 @@
      "r1.lt.energy",
      "r1.lt.financials"
     ],
-    "started_utc": "2026-11-15T21:44:56.446002Z",
-    "ended_utc": "2026-11-15T21:44:56.448765Z",
+    "started_utc": "2026-11-16T01:48:16.628594Z",
+    "ended_utc": "2026-11-16T01:48:16.641513Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -8969,8 +9900,8 @@
     "fact_ids": [
      "r1.n_blocking"
     ],
-    "started_utc": "2026-11-15T21:44:56.448776Z",
-    "ended_utc": "2026-11-15T21:44:56.465501Z",
+    "started_utc": "2026-11-16T01:48:16.641561Z",
+    "ended_utc": "2026-11-16T01:48:16.717104Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9032,8 +9963,8 @@
      "dec-mateo-v1-fixture:t010:lens.constraints:evidence:judge:risk.vol:max",
      "dec-mateo-v1-fixture:t010:lens.constraints:evidence:judge:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-15T21:44:56.448968Z",
-    "ended_utc": "2026-11-15T21:44:56.464569Z",
+    "started_utc": "2026-11-16T01:48:16.642194Z",
+    "ended_utc": "2026-11-16T01:48:16.714516Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9053,8 +9984,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T21:44:56.465519Z",
-    "ended_utc": "2026-11-15T21:44:56.465534Z",
+    "started_utc": "2026-11-16T01:48:16.717155Z",
+    "ended_utc": "2026-11-16T01:48:16.717200Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9074,8 +10005,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T21:44:56.465805Z",
-    "ended_utc": "2026-11-15T21:44:56.466102Z",
+    "started_utc": "2026-11-16T01:48:16.719533Z",
+    "ended_utc": "2026-11-16T01:48:16.720517Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9100,8 +10031,8 @@
      "r2.active.alloc.growth:min",
      "r2.active.alloc.cash_like:max"
     ],
-    "started_utc": "2026-11-15T21:44:56.466116Z",
-    "ended_utc": "2026-11-15T21:44:56.466155Z",
+    "started_utc": "2026-11-16T01:48:16.720614Z",
+    "ended_utc": "2026-11-16T01:48:16.721003Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9126,8 +10057,8 @@
      "r2.horizon_share_neg",
      "r2.recovery"
     ],
-    "started_utc": "2026-11-15T21:44:56.466162Z",
-    "ended_utc": "2026-11-15T21:44:56.476767Z",
+    "started_utc": "2026-11-16T01:48:16.721067Z",
+    "ended_utc": "2026-11-16T01:48:16.773772Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9159,8 +10090,8 @@
      "r2.stress.2020_covid",
      "r2.stress_cad.2020_covid"
     ],
-    "started_utc": "2026-11-15T21:44:56.476788Z",
-    "ended_utc": "2026-11-15T21:44:56.499255Z",
+    "started_utc": "2026-11-16T01:48:16.773820Z",
+    "ended_utc": "2026-11-16T01:48:16.905517Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9189,8 +10120,8 @@
      "r2.lt.energy",
      "r2.lt.financials"
     ],
-    "started_utc": "2026-11-15T21:44:56.499276Z",
-    "ended_utc": "2026-11-15T21:44:56.501947Z",
+    "started_utc": "2026-11-16T01:48:16.905605Z",
+    "ended_utc": "2026-11-16T01:48:16.915055Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9212,8 +10143,8 @@
     "fact_ids": [
      "r2.n_blocking"
     ],
-    "started_utc": "2026-11-15T21:44:56.501958Z",
-    "ended_utc": "2026-11-15T21:44:56.519147Z",
+    "started_utc": "2026-11-16T01:48:16.915101Z",
+    "ended_utc": "2026-11-16T01:48:16.991803Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9275,8 +10206,8 @@
      "dec-mateo-v1-fixture:t017:lens.constraints:evidence:judge:risk.vol:max",
      "dec-mateo-v1-fixture:t017:lens.constraints:evidence:judge:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-15T21:44:56.502138Z",
-    "ended_utc": "2026-11-15T21:44:56.518143Z",
+    "started_utc": "2026-11-16T01:48:16.915727Z",
+    "ended_utc": "2026-11-16T01:48:16.986919Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9296,8 +10227,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T21:44:56.519166Z",
-    "ended_utc": "2026-11-15T21:44:56.519181Z",
+    "started_utc": "2026-11-16T01:48:16.991864Z",
+    "ended_utc": "2026-11-16T01:48:16.991920Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9317,8 +10248,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T21:44:56.519521Z",
-    "ended_utc": "2026-11-15T21:44:56.519530Z",
+    "started_utc": "2026-11-16T01:48:16.994817Z",
+    "ended_utc": "2026-11-16T01:48:16.994861Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9338,8 +10269,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-15T21:44:56.519537Z",
-    "ended_utc": "2026-11-15T21:44:56.536397Z",
+    "started_utc": "2026-11-16T01:48:16.994890Z",
+    "ended_utc": "2026-11-16T01:48:17.070441Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9402,8 +10333,8 @@
      "dec-mateo-v1-fixture:t020:judge:check:final:risk.vol:max",
      "dec-mateo-v1-fixture:t020:judge:check:final:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-15T21:44:56.519787Z",
-    "ended_utc": "2026-11-15T21:44:56.535578Z",
+    "started_utc": "2026-11-16T01:48:16.995613Z",
+    "ended_utc": "2026-11-16T01:48:17.068103Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9428,8 +10359,69 @@
      "cf.style.up.risk",
      "cf.style.up.n_titres"
     ],
-    "started_utc": "2026-11-15T21:44:56.536411Z",
-    "ended_utc": "2026-11-15T21:44:56.683307Z",
+    "started_utc": "2026-11-16T01:48:17.070487Z",
+    "ended_utc": "2026-11-16T01:48:17.678172Z",
+    "status": "ok",
+    "message": null,
+    "data_version": "008f122d5da4f8f7",
+    "code_version": null,
+    "seed": null,
+    "model_id": null,
+    "otel_trace_id": null,
+    "otel_span_id": null
+   },
+   {
+    "trace_id": "dec-mateo-v1-fixture:t022:allocation:allocation_breakdown",
+    "parent_id": null,
+    "agent": "allocation",
+    "tool": "allocation_breakdown",
+    "inputs": {
+     "assets": [
+      "ZST.TO",
+      "AGG",
+      "XIU.TO",
+      "GLD",
+      "FTS.TO",
+      "JNJ",
+      "QQQ",
+      "SPY"
+     ],
+     "amount_cad": 400000.0
+    },
+    "output_summary": "4 classes, 2 devises, 14 secteurs ; couverture sectorielle 82,3 %",
+    "fact_ids": [
+     "mix.amount_total",
+     "mix.amount.ZST.TO",
+     "mix.amount.AGG",
+     "mix.amount.XIU.TO",
+     "mix.amount.GLD",
+     "mix.amount.FTS.TO",
+     "mix.amount.JNJ",
+     "mix.amount.QQQ",
+     "mix.amount.SPY",
+     "mix.class.obligations",
+     "mix.class.fnb_actions",
+     "mix.class.or_matieres",
+     "mix.class.actions_individuelles",
+     "mix.currency.CAD",
+     "mix.currency.USD",
+     "mix.sector.obligations",
+     "mix.sector.or_matieres",
+     "mix.sector.healthcare",
+     "mix.sector.utilities",
+     "mix.sector.tech",
+     "mix.sector.consumer_discretionary",
+     "mix.sector.financials",
+     "mix.sector.other",
+     "mix.sector.industrials",
+     "mix.sector.energy",
+     "mix.sector.consumer_staples",
+     "mix.sector.communication",
+     "mix.sector.materials",
+     "mix.sector.non_ventile"
+    ],
+    "started_utc": "2026-11-16T01:48:17.678403Z",
+    "ended_utc": "2026-11-16T01:48:17.680686Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9482,5 +10474,268 @@
   },
   "fallback": [],
   "version": "0.1.0"
+ },
+ "allocation": {
+  "amount_cad": 400000.0,
+  "currency": "CAD",
+  "positions": [
+   {
+    "asset_id": "ZST.TO",
+    "name": "BMO Ultra Short-Term Bond ETF",
+    "asset_class": "etf_bond",
+    "class_key": "obligations",
+    "currency": "CAD",
+    "sector": "Bonds (Canada ultra short-term)",
+    "role": "coeur",
+    "weight": 0.3750000098,
+    "amount_cad": 150000.0,
+    "fact_id": "mix.amount.ZST.TO"
+   },
+   {
+    "asset_id": "AGG",
+    "name": "iShares Core U.S. Aggregate Bond ETF",
+    "asset_class": "etf_bond",
+    "class_key": "obligations",
+    "currency": "USD",
+    "sector": "Bonds (U.S. aggregate)",
+    "role": "coeur",
+    "weight": 0.2974340499,
+    "amount_cad": 118973.62,
+    "fact_id": "mix.amount.AGG"
+   },
+   {
+    "asset_id": "XIU.TO",
+    "name": "iShares S&P/TSX 60 Index ETF",
+    "asset_class": "etf_equity",
+    "class_key": "fnb_actions",
+    "currency": "CAD",
+    "sector": "Broad market (Canada)",
+    "role": "coeur",
+    "weight": 0.1582021571,
+    "amount_cad": 63280.86,
+    "fact_id": "mix.amount.XIU.TO"
+   },
+   {
+    "asset_id": "GLD",
+    "name": "SPDR Gold Shares",
+    "asset_class": "etf_commodity",
+    "class_key": "or_matieres",
+    "currency": "USD",
+    "sector": "Gold",
+    "role": "coeur",
+    "weight": 0.0775659597,
+    "amount_cad": 31026.38,
+    "fact_id": "mix.amount.GLD"
+   },
+   {
+    "asset_id": "FTS.TO",
+    "name": "Fortis",
+    "asset_class": "equity",
+    "class_key": "actions_individuelles",
+    "currency": "CAD",
+    "sector": "Utilities",
+    "role": "satellite",
+    "weight": 0.0300000007,
+    "amount_cad": 12000.0,
+    "fact_id": "mix.amount.FTS.TO"
+   },
+   {
+    "asset_id": "JNJ",
+    "name": "Johnson & Johnson",
+    "asset_class": "equity",
+    "class_key": "actions_individuelles",
+    "currency": "USD",
+    "sector": "Health Care",
+    "role": "satellite",
+    "weight": 0.0300000007,
+    "amount_cad": 12000.0,
+    "fact_id": "mix.amount.JNJ"
+   },
+   {
+    "asset_id": "QQQ",
+    "name": "Invesco QQQ Trust (Nasdaq-100)",
+    "asset_class": "etf_equity",
+    "class_key": "fnb_actions",
+    "currency": "USD",
+    "sector": "Broad market (U.S. growth/tech-heavy)",
+    "role": "coeur",
+    "weight": 0.0191605777,
+    "amount_cad": 7664.23,
+    "fact_id": "mix.amount.QQQ"
+   },
+   {
+    "asset_id": "SPY",
+    "name": "SPDR S&P 500 ETF Trust",
+    "asset_class": "etf_equity",
+    "class_key": "fnb_actions",
+    "currency": "USD",
+    "sector": "Broad market (U.S.)",
+    "role": "coeur",
+    "weight": 0.0126372444,
+    "amount_cad": 5054.9,
+    "fact_id": "mix.amount.SPY"
+   }
+  ],
+  "by_class": [
+   {
+    "key": "obligations",
+    "label_fr": "Obligations et quasi-liquidités",
+    "weight": 0.6724340598,
+    "amount_cad": 268973.62,
+    "fact_id": "mix.class.obligations"
+   },
+   {
+    "key": "fnb_actions",
+    "label_fr": "FNB d'actions",
+    "weight": 0.1899999792,
+    "amount_cad": 75999.99,
+    "fact_id": "mix.class.fnb_actions"
+   },
+   {
+    "key": "or_matieres",
+    "label_fr": "Or et matières premières",
+    "weight": 0.0775659597,
+    "amount_cad": 31026.38,
+    "fact_id": "mix.class.or_matieres"
+   },
+   {
+    "key": "actions_individuelles",
+    "label_fr": "Actions individuelles",
+    "weight": 0.0600000014,
+    "amount_cad": 24000.0,
+    "fact_id": "mix.class.actions_individuelles"
+   }
+  ],
+  "by_currency": [
+   {
+    "key": "CAD",
+    "label_fr": "Dollar canadien (CAD)",
+    "weight": 0.5632021676,
+    "amount_cad": 225280.87,
+    "fact_id": "mix.currency.CAD"
+   },
+   {
+    "key": "USD",
+    "label_fr": "Dollar américain (USD)",
+    "weight": 0.4367978324,
+    "amount_cad": 174719.13,
+    "fact_id": "mix.currency.USD"
+   }
+  ],
+  "by_sector": [
+   {
+    "key": "obligations",
+    "label_fr": "Obligations et quasi-liquidités",
+    "weight": 0.6724340598,
+    "amount_cad": 268973.62,
+    "fact_id": "mix.sector.obligations",
+    "basis": "direct"
+   },
+   {
+    "key": "or_matieres",
+    "label_fr": "Or et matières premières",
+    "weight": 0.0775659597,
+    "amount_cad": 31026.38,
+    "fact_id": "mix.sector.or_matieres",
+    "basis": "direct"
+   },
+   {
+    "key": "healthcare",
+    "label_fr": "Santé",
+    "weight": 0.0310095708,
+    "amount_cad": 12403.83,
+    "fact_id": "mix.sector.healthcare",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "utilities",
+    "label_fr": "Services publics",
+    "weight": 0.0303036204,
+    "amount_cad": 12121.45,
+    "fact_id": "mix.sector.utilities",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "tech",
+    "label_fr": "Technologie",
+    "weight": 0.0055034219,
+    "amount_cad": 2201.37,
+    "fact_id": "mix.sector.tech",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "consumer_discretionary",
+    "label_fr": "Consommation discrétionnaire",
+    "weight": 0.0015285364,
+    "amount_cad": 611.41,
+    "fact_id": "mix.sector.consumer_discretionary",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "financials",
+    "label_fr": "Finance",
+    "weight": 0.0014301966,
+    "amount_cad": 572.08,
+    "fact_id": "mix.sector.financials",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "other",
+    "label_fr": "Autres industries",
+    "weight": 0.0010370356,
+    "amount_cad": 414.81,
+    "fact_id": "mix.sector.other",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "industrials",
+    "label_fr": "Industrie",
+    "weight": 0.0007652405,
+    "amount_cad": 306.1,
+    "fact_id": "mix.sector.industrials",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "energy",
+    "label_fr": "Énergie",
+    "weight": 0.0003935647,
+    "amount_cad": 157.43,
+    "fact_id": "mix.sector.energy",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "consumer_staples",
+    "label_fr": "Consommation de base",
+    "weight": 0.0003015206,
+    "amount_cad": 120.61,
+    "fact_id": "mix.sector.consumer_staples",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "communication",
+    "label_fr": "Communications",
+    "weight": 0.0001897085,
+    "amount_cad": 75.88,
+    "fact_id": "mix.sector.communication",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "materials",
+    "label_fr": "Matériaux",
+    "weight": 0.0001748297,
+    "amount_cad": 69.93,
+    "fact_id": "mix.sector.materials",
+    "basis": "lookthrough"
+   },
+   {
+    "key": "non_ventile",
+    "label_fr": "Non ventilé",
+    "weight": 0.1773627348,
+    "amount_cad": 70945.09,
+    "fact_id": "mix.sector.non_ventile",
+    "basis": "non_ventile"
+   }
+  ],
+  "sector_coverage": 0.8226372652
  }
 }

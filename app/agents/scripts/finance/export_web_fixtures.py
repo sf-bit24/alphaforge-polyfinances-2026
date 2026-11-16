@@ -7,7 +7,8 @@ Pour chaque profil de démonstration (Amira, Mateo, Robert, ``tests/finance/poli
 script appelle ``finance.debate.pipeline.build_portfolio`` en mode ``rules`` (déterministe, sans modèle) et écrit
 la réponse de l'action ``build`` du runtime ``portfolio`` (CONTRACTS.md, section 12), même forme que
 ``portfolio_service.PortfolioService.build`` : ``decision`` (``Decision.model_dump(mode="json")``), ``rounds``,
-``explanation_report``, ``grounding`` et ``strategy`` (``StrategyResult.summary()``).
+``explanation_report``, ``grounding``, ``strategy`` (``StrategyResult.summary()``) et ``allocation``
+(répartition de l'argent, ``finance/debate/allocation.py``).
 
 Aucun nombre n'est écrit à la main : tout vient du moteur. Le dossier par défaut est
 ``app/web/src/lib/fixtures/`` (``portfolio-<persona>.json``). Simulation éducative seulement.
@@ -89,6 +90,7 @@ def response_for(persona: str) -> dict:
         "explanation_report": result.explanation_report,
         "grounding": result.grounding,
         "strategy": result.strategy.summary() if result.strategy is not None else None,
+        "allocation": result.allocation,
     }
 
 

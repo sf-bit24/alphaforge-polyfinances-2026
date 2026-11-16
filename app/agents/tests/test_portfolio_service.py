@@ -138,6 +138,7 @@ class FakeEngine:
                 explanation_report=["ok"],
                 grounding={"verified": True},
                 strategy=FakeStrategy() if strategy else None,
+                allocation={"amount_cad": None, "by_class": []},
             )
 
         class ClientStore:
@@ -214,6 +215,7 @@ def test_build_runs_the_engine_and_returns_the_decision(portfolio_settings, stor
     assert response["decision"] == {"decision_id": "dec-1", "profile_id": CLIENT_ID, "kind": "allocation"}
     assert response["rounds"] == [{"round": 1, "verdicts": {"risk": "support"}, "amendments": [{"kind": "flag_only"}]}]
     assert response["strategy"] == {"style": "dynamique", "applied": True}
+    assert response["allocation"] == {"amount_cad": None, "by_class": []}
     [call] = engine.calls
     assert call["as_of"] == date(2026, 11, 12) and call["request"] == FakeRequest("TSLA", 50000)
     assert call["guardrail_id"] == "gr1" and call["guardrail_version"] == "3"

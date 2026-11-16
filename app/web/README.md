@@ -52,11 +52,13 @@ Le rouge est réservé aux actions principales, à la marque et à la progressio
 
 ## Installation et commandes
 
+Le plus simple, depuis la racine du dépôt : `./scripts/init.sh` puis `./scripts/run.sh [mock|local|aws]`, qui exporte le `.env` de la racine. En direct :
+
 ```bash
 cd app/web
 npm ci
-cp .env.example .env.local   # puis adapter AGENT_MODE et les autres variables
-npm run dev                  # http://localhost:3000
+cp ../../.env.example .env.local   # Next.js ne lit que les fichiers .env de app/web
+npm run dev                        # http://localhost:3000
 ```
 
 | Commande | Rôle |
@@ -147,7 +149,7 @@ AUTH_MODE=cognito APP_URL=http://localhost:3000 AUTH_SESSION_SECRET=$(openssl ra
 
 ## Variables d'environnement
 
-À placer dans `app/web/.env.local` (voir `.env.example`). Aucune n'est exposée au navigateur.
+Dans le `.env` de la racine (exporté par `scripts/run.sh`) ou dans `app/web/.env.local` (voir `.env.example` à la racine). Aucune n'est exposée au navigateur.
 
 | Variable | Défaut | Rôle |
 | --- | --- | --- |

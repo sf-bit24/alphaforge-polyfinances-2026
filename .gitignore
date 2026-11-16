@@ -3,6 +3,10 @@
 .env.*
 !.env.example
 
+# État local de Claude Code (worktrees, réglages du poste) et export des bases OKF (scripts/export-okf.sh)
+.claude/
+/export/
+
 # Documents du Datathon, copies dans le Brain : non versionnes ici.
 # Exceptions : l'architecture (docs/architecture/), les cas d'utilisation
 # (docs/use-cases/) et le one-pager (docs/one-pager/).

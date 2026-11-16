@@ -14,17 +14,19 @@ sur l'ETag : deux requêtes simultanées ne s'écrasent pas, la seconde relit l'
   document = clé OKF, une réingestion remplace le document); une note retirée sort par
   ``DeleteKnowledgeBaseDocuments``;
 - ``quota`` (``ServiceQuotaExceededException`` : 100 Knowledge Bases par compte, non ajustable) et ``failed`` :
-  nouvel essai après ``retry_at``;
-- ``disabled`` : magasin local ou variables absentes; rien n'est créé ni écrit, le runtime fait ce qu'il faisait.
+  nouvel essai après le délai de ``RETRY_AFTER``, compté depuis l'erreur (``error.at``);
+- désactivée (magasin local ou variables absentes) : rien n'est créé ni écrit, ``sync`` rend ``None`` et la réponse
+  n'a pas de ``client_kb``; le runtime fait ce qu'il faisait.
 
 Pas de ``StartIngestionJob`` : 0,1 requête par seconde pour le compte, déjà prise par la collecte.
 
 Un seul point d'accroche voit passer les écritures : ``IndexingStore`` enveloppe le magasin et note chaque document
 ``.md`` d'une base client (jamais ``traces/``, jamais un ``.json``). À la fin de l'action, ``sync`` fait avancer la
 création (une lecture ``GetKnowledgeBase`` tant que la base n'est pas active, rien ensuite), puis envoie les documents
-notés et ceux en attente par lots de ``BATCH_SIZE``. Base pas encore active, appel limité : les clés restent en attente
-pour le rapprochement suivant. Aucune erreur de Knowledge Base ne fait échouer l'action de l'investisseur : elle va
-dans la trace et dans ``kb.json``.
+notés et ceux en attente par lots de ``BATCH_SIZE``, au plus ``MAX_SENT_PER_ACTION`` par action (le reste attend
+l'action suivante). Base pas encore active, appel limité : les clés restent en attente pour le rapprochement suivant.
+Un lot refusé tel quel (``ValidationException``) est renvoyé document par document : seul le fautif va en erreur.
+Aucune erreur de Knowledge Base ne fait échouer l'action de l'investisseur : elle va dans la trace et dans ``kb.json``.
 """
 
 from __future__ import annotations
@@ -55,12 +57,17 @@ STATUSES = ("disabled", "creating", "active", "failed", "quota")
 # Documents par appel IngestKnowledgeBaseDocuments ou DeleteKnowledgeBaseDocuments : le quota du service en permet
 # 25, mais le modèle du client botocore (1.44) en refuse plus de 10 avant l'envoi.
 BATCH_SIZE = 10
+# Documents envoyés ou retirés au plus par action : à l'activation d'une base déjà fournie, le reste attend les
+# actions suivantes au lieu de retenir l'investisseur (et de consommer les 5 requêtes par seconde du compte).
+MAX_SENT_PER_ACTION = 30
 MAX_PENDING = 200
 MAX_ERRORS = 20
 MAX_TEXT_CHARS = 1_000_000
 EXCERPT_CHARS = 700
 SAVE_ATTEMPTS = 3
-RETRY_AFTER = {"failed": timedelta(minutes=30), "quota": timedelta(hours=1)}
+# Délai avant un nouvel essai, compté depuis l'erreur. failed est court : juste après un apply, la propagation IAM
+# peut faire échouer un premier appel. quota attend qu'une base soit libérée.
+RETRY_AFTER = {"failed": timedelta(minutes=3), "quota": timedelta(hours=1)}
 SCOPE_TAG = "alphaforge:scope"
 CLIENT_TAG = "alphaforge:client_id"
 PREFIX_TAG = "alphaforge:prefix"
@@ -124,10 +131,8 @@ def error_code(exc: Exception) -> str:
     return type(exc).__name__
 
 
-def status_view(state: dict[str, Any] | None, *, enabled: bool = True) -> dict[str, Any]:
+def status_view(state: dict[str, Any] | None) -> dict[str, Any]:
     """``client_kb`` des réponses (CONTRACTS.md 3.3) : statut, identifiant, documents indexés, clés en attente."""
-    if not enabled:
-        return {"status": "disabled", "knowledge_base_id": None, "documents": 0, "pending": 0}
     if state is None:
         return {"status": "failed", "knowledge_base_id": None, "documents": 0, "pending": 0}
     return {
@@ -152,9 +157,35 @@ def _later(delay: timedelta) -> str:
     return clock.iso(clock.utcnow() + delay)
 
 
-def _due(retry_at: Any) -> bool:
-    moment = clock.parse_datetime(retry_at) if isinstance(retry_at, str) else None
-    return moment is None or moment <= clock.utcnow()
+def _retry_due(state: dict[str, Any]) -> bool:
+    """Vrai quand un état ``failed`` ou ``quota`` peut réessayer : délai de ``RETRY_AFTER`` compté depuis l'erreur,
+    ou ``retry_at`` s'il vient avant. Un ``kb.json`` écrit avec un délai plus long réessaie donc au délai actuel."""
+    retry_at, failed_at = state.get("retry_at"), (state.get("error") or {}).get("at")
+    moments = [clock.parse_datetime(retry_at) if isinstance(retry_at, str) else None]
+    failed = clock.parse_datetime(failed_at) if isinstance(failed_at, str) else None
+    if failed is not None:
+        moments.append(failed + RETRY_AFTER[state["status"]])
+    known = [moment for moment in moments if moment is not None]
+    return not known or min(known) <= clock.utcnow()
+
+
+def _document_key(document: dict[str, Any]) -> str:
+    return document["content"]["custom"]["customDocumentIdentifier"]["id"]
+
+
+def capped_pending(keys: list[str]) -> list[str]:
+    """Clés en attente, des plus anciennes aux plus récentes, au plus ``MAX_PENDING``. Au-delà, les versions
+    ``portefeuilles/`` les plus anciennes partent d'abord (chaque version suivante les résume), puis les autres clés
+    les plus anciennes : le profil, le journal et les notes, réécrits souvent, restent."""
+    excess = len(keys) - MAX_PENDING
+    if excess <= 0:
+        return keys
+    history = [key for key in keys if "/portefeuilles/" in key]
+    dropped = set(history[:excess])
+    others = [key for key in keys if key not in dropped]
+    dropped.update(others[: excess - len(dropped)])
+    logger.warning("client knowledge base: %d pending keys dropped (limit %d)", len(dropped), MAX_PENDING)
+    return [key for key in keys if key not in dropped]
 
 
 # ---------------------------------------------------------------------- réglages et clients AWS
@@ -272,9 +303,11 @@ class SendOutcome:
     errors: dict[str, str] = field(default_factory=dict)
 
     def apply(self, state: dict[str, Any]) -> None:
-        pending = (set(state.get("pending") or []) | self.waiting) - self.done
+        # pending va des plus anciennes aux plus récentes : une clé qui attend de nouveau passe à la fin.
+        kept = [key for key in state.get("pending") or [] if key not in self.done and key not in self.waiting]
+        pending = kept + sorted(self.waiting - self.done)
         indexed = (set(state.get("indexed") or []) | self.sent) - self.removed
-        state["pending"] = sorted(pending)[:MAX_PENDING]
+        state["pending"] = capped_pending(pending)
         state["indexed"] = sorted(indexed)
         if self.errors:
             errors = {**(state.get("document_errors") or {}), **self.errors}
@@ -390,10 +423,11 @@ class ClientKnowledgeBases:
     # ------------------------------------------------------------------ rapprochement
     def sync(self, client_id: str, trace: Trace | None, *, create: bool = False) -> dict[str, Any] | None:
         """Rapprochement de fin d'action : fait avancer la création (``create`` et runtime ``profile``), envoie les
-        documents notés et en attente. Rend ``client_kb`` (``status_view``), ou ``None`` sans base ni création."""
+        documents notés et en attente. Rend ``client_kb`` (``status_view``), ou ``None`` : fonction désactivée (la
+        réponse n'a alors pas de ``client_kb``), ou ni base ni création."""
         written = self._take(client_id)
         if not self.enabled:
-            return status_view(None, enabled=False)
+            return None
         try:
             state = self._sync(client_id, written, trace, create=create and self.can_create)
         except Exception as exc:  # jamais d'erreur pour l'investisseur : la trace et le journal la gardent
@@ -498,7 +532,7 @@ class ClientKnowledgeBases:
     # ------------------------------------------------------------------ création
     def _advance(self, client_id: str, state: dict[str, Any], trace: Trace | None) -> None:
         """Fait avancer la création d'un pas au plus par étape manquante; une erreur est rangée dans l'état."""
-        if state.get("status") in RETRY_AFTER and _due(state.get("retry_at")):
+        if state.get("status") in RETRY_AFTER and _retry_due(state):
             state.update(status="creating", retry_at=None)
         if state.get("status") != "creating":
             return
@@ -668,8 +702,10 @@ class ClientKnowledgeBases:
                     {"pending": len(keys), "keys": sorted(written)},
                 )
             return SendOutcome(waiting=set(written))
-        prepared = self._prepare(client_id, state, written, keys)
-        outcome = SendOutcome(done=set(prepared.dropped))
+        now, later = _this_round(written, state)
+        prepared = self._prepare(client_id, state, written, now)
+        # Au-delà du plafond, les documents notés de cette action rejoignent l'attente (les autres y sont déjà).
+        outcome = SendOutcome(done=set(prepared.dropped), waiting=later & set(written))
         state["error"] = None  # un lot refusé l'écrit de nouveau
         self._ingest(state, prepared.documents, outcome)
         self._delete(state, prepared.removals, outcome)
@@ -681,16 +717,17 @@ class ClientKnowledgeBases:
                 "ingested": sorted(outcome.sent),
                 "deleted": sorted(outcome.removed),
                 "pending": sorted(outcome.waiting),
+                "deferred": len(later),
                 "errors": outcome.errors,
             },
         )
         return outcome
 
-    def _prepare(self, client_id: str, state: dict[str, Any], written: dict[str, bytes], keys: set[str]) -> Prepared:
+    def _prepare(self, client_id: str, state: dict[str, Any], written: dict[str, bytes], keys: list[str]) -> Prepared:
         """Lit chaque document (corps noté, sinon le magasin) : à ingérer, à retirer (note retirée) ou à oublier."""
         indexed = set(state.get("indexed") or [])
         prepared = Prepared()
-        for key in sorted(keys):
+        for key in keys:
             body = written.get(key)
             if body is None:
                 stored = self.store.get(key)
@@ -707,52 +744,68 @@ class ClientKnowledgeBases:
         return prepared
 
     def _ingest(self, state: dict[str, Any], documents: list[dict[str, Any]], outcome: SendOutcome) -> None:
-        stopped = False
-        for batch in _chunks(documents, BATCH_SIZE):
-            keys = [item["content"]["custom"]["customDocumentIdentifier"]["id"] for item in batch]
-            if stopped:
-                outcome.waiting.update(keys)
-                continue
-            try:
-                response = self.aws.agent.ingest_knowledge_base_documents(
-                    knowledgeBaseId=state["knowledge_base_id"], dataSourceId=state["data_source_id"], documents=batch
-                )
-            except Exception as exc:
-                stopped = self._batch_error(state, keys, exc, outcome)
-                continue
+        agent = self.aws.agent
+
+        def send(batch: list[tuple[str, Any]]) -> None:
+            response = agent.ingest_knowledge_base_documents(
+                knowledgeBaseId=state["knowledge_base_id"],
+                dataSourceId=state["data_source_id"],
+                documents=[document for _, document in batch],
+            )
             failed = {
                 (detail.get("identifier") or {}).get("custom", {}).get("id"): detail.get("statusReason") or "FAILED"
                 for detail in response.get("documentDetails") or []
                 if detail.get("status") == "FAILED"
             }
             outcome.errors.update({key: str(reason)[:200] for key, reason in failed.items() if key})
-            outcome.sent.update(key for key in keys if key not in failed)
-            outcome.done.update(keys)
+            outcome.sent.update(key for key, _ in batch if key not in failed)
+
+        self._send_all(state, [(_document_key(document), document) for document in documents], send, outcome)
 
     def _delete(self, state: dict[str, Any], keys: list[str], outcome: SendOutcome) -> None:
-        stopped = False
-        for batch in _chunks(keys, BATCH_SIZE):
-            if stopped:
-                outcome.waiting.update(batch)
-                continue
+        agent = self.aws.agent
+
+        def send(batch: list[tuple[str, Any]]) -> None:
+            agent.delete_knowledge_base_documents(
+                knowledgeBaseId=state["knowledge_base_id"],
+                dataSourceId=state["data_source_id"],
+                documentIdentifiers=[_identifier(key) for key, _ in batch],
+            )
+            outcome.removed.update(key for key, _ in batch)
+
+        self._send_all(state, [(key, key) for key in keys], send, outcome)
+
+    def _send_all(
+        self,
+        state: dict[str, Any],
+        items: list[tuple[str, Any]],
+        send: Callable[[list[tuple[str, Any]]], None],
+        outcome: SendOutcome,
+    ) -> None:
+        """Envoie ``items`` (clé, contenu) par lots. Un lot refusé tel quel (``ValidationException``) est renvoyé
+        document par document, pour que seul le fautif aille en erreur; une autre erreur arrête l'envoi et les clés
+        restantes attendent le rapprochement suivant."""
+        queue = list(_chunks(items, BATCH_SIZE))
+        while queue:
+            batch = queue.pop(0)
             try:
-                self.aws.agent.delete_knowledge_base_documents(
-                    knowledgeBaseId=state["knowledge_base_id"],
-                    dataSourceId=state["data_source_id"],
-                    documentIdentifiers=[_identifier(key) for key in batch],
-                )
+                send(batch)
             except Exception as exc:
-                stopped = self._batch_error(state, batch, exc, outcome)
+                if error_code(exc) == "ValidationException" and len(batch) > 1:
+                    queue[:0] = [[item] for item in batch]
+                    continue
+                if self._batch_error(state, [key for key, _ in batch], exc, outcome):
+                    outcome.waiting.update(key for rest in queue for key, _ in rest)
+                    return
                 continue
-            outcome.removed.update(batch)
-            outcome.done.update(batch)
+            outcome.done.update(key for key, _ in batch)
 
     def _batch_error(self, state: dict[str, Any], keys: list[str], exc: Exception, outcome: SendOutcome) -> bool:
         """Lot refusé : vrai s'il faut arrêter les lots suivants (les clés restent en attente)."""
         code = error_code(exc)
         state["error"] = {"code": code, "at": clock.iso()}
         if code == "ValidationException":
-            # Document refusé tel quel : le renvoyer à chaque action n'y changerait rien.
+            # Un seul document, refusé tel quel : le renvoyer à chaque action n'y changerait rien.
             outcome.errors.update(dict.fromkeys(keys, code))
             outcome.done.update(keys)
             return False
@@ -804,6 +857,14 @@ def _passage(item: dict[str, Any], client_id: str) -> dict[str, Any] | None:
         "score": round(float(item.get("score") or 0), 3),
         "excerpt": text[:EXCERPT_CHARS] + ("…" if len(text) > EXCERPT_CHARS else ""),
     }
+
+
+def _this_round(written: dict[str, bytes], state: dict[str, Any]) -> tuple[list[str], set[str]]:
+    """Clés traitées par cette action (au plus ``MAX_SENT_PER_ACTION`` : les documents notés d'abord, puis les plus
+    anciennes en attente) et clés laissées aux actions suivantes."""
+    pending = [key for key in state.get("pending") or [] if key not in written]
+    ordered = sorted(written) + pending
+    return ordered[:MAX_SENT_PER_ACTION], set(ordered[MAX_SENT_PER_ACTION:])
 
 
 def _unchanged(state: dict[str, Any], outcome: SendOutcome) -> bool:

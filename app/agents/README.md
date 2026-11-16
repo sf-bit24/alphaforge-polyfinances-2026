@@ -133,8 +133,10 @@ Chaque investisseur a sa propre Knowledge Base Bedrock, un index de recherche co
 - A1 reçoit l'outil `search_client_knowledge`, lié à la base du client de la session (l'identifiant vient de
   `kb.json`, jamais du modèle); chaque passage cite sa clé OKF.
 - Le runtime `portfolio` ingère ses décisions `.md` et les versions `portefeuilles/*.md`, sans jamais créer de base.
-- En local (`ALPHAFORGE_STORE=local`) ou sans les variables `ALPHAFORGE_CLIENT_KB_*` : désactivée, `client_kb`
-  vaut `{"status": "disabled", …}` et rien d'autre ne change (ni outil, ni `kb.json`, ni appel AWS).
+- En local (`ALPHAFORGE_STORE=local`) ou sans les variables `ALPHAFORGE_CLIENT_KB_*` : désactivée, les réponses
+  n'ont pas de `client_kb` et rien d'autre ne change (ni outil, ni `kb.json`, ni appel AWS).
+- Au plus 30 documents envoyés par action; un lot refusé est renvoyé document par document pour isoler le fautif;
+  après un échec (`failed`), nouvel essai 3 minutes après l'erreur.
 - Tests sans AWS : `tests/test_client_kb.py` (faux clients `bedrock-agent`, `bedrock-agent-runtime` et `s3vectors`).
 
 ## Tests et qualité

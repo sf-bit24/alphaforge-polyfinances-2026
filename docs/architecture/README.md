@@ -9,7 +9,7 @@ Chaque diagramme existe en deux fichiers :
 
 Les pastilles bleues numérotent les étapes, décrites dans la légende à droite de chaque diagramme.
 
-Deux pages complètent les diagrammes : [les trois cas d'utilisation](cas-d-utilisation.md), du point de vue de l'investisseur, et [les agents déployés et le stockage](agents-et-stockage.md).
+Deux pages complètent les diagrammes : [les trois cas d'utilisation](../cas-d-utilisation/README.md), du point de vue de l'investisseur, et [les agents déployés et le stockage](agents-et-stockage.md).
 
 ## Plateforme complète
 

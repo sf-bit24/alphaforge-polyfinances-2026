@@ -4,9 +4,11 @@
 !.env.example
 
 # Documents du Datathon, copies dans le Brain : non versionnes ici.
-# Seule exception : les diagrammes d'architecture de docs/architecture/.
+# Exceptions : l'architecture (docs/architecture/) et les cas d'utilisation
+# (docs/cas-d-utilisation/).
 /docs/*
 !/docs/architecture/
+!/docs/cas-d-utilisation/
 
 # Traces du moteur de backtest (défaut ./backtest-results, où qu'on le lance)
 backtest-results/

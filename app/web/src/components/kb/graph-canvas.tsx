@@ -191,12 +191,19 @@ function ZoomControls({ viewport }: { viewport: GraphViewport }) {
   );
 }
 
+/** A node to bring into view, found by the search; `nonce` tells two requests for the same node apart. */
+export interface FocusRequest {
+  id: string;
+  nonce: number;
+}
+
 interface GraphCanvasProps {
   graph: KnowledgeGraph;
   visible: VisibleGraph;
   layout: GraphLayout;
   selected: string | null;
   onSelect: (id: string | null) => void;
+  focus: FocusRequest | null;
 }
 
 /** Pointer, focus and keyboard state of the canvas: which node is hovered or focused, and the roving tab stop. */
@@ -238,11 +245,17 @@ function useCanvasState({ visible, selected, onSelect }: Pick<GraphCanvasProps, 
 }
 
 /** The graph itself: edges, nodes, then labels; hover or focus a node to light its links, click it to select it. */
-export function GraphCanvas({ graph, visible, layout, selected, onSelect }: GraphCanvasProps) {
+export function GraphCanvas({ graph, visible, layout, selected, onSelect, focus }: GraphCanvasProps) {
   const { t } = useI18n();
   const hintId = useId();
   const bounds = useMemo(() => boundsOf(visible.nodes.flatMap((node) => layout.positions.get(node.id) ?? [])), [visible, layout]);
   const [containerRef, viewport] = useGraphViewport(bounds);
+  const [centered, setCentered] = useState(focus);
+  if (focus !== centered) {
+    setCentered(focus);
+    const point = focus ? layout.positions.get(focus.id) : undefined;
+    if (point) viewport.centerOn(point);
+  }
   const state = useCanvasState({ visible, selected, onSelect }, viewport.dragging);
   const active = state.hovered ?? state.focused ?? selected;
   const highlight = useMemo(() => highlightOf(graph, active), [graph, active]);

@@ -101,6 +101,11 @@ export function useGraphViewport(bounds: Bounds) {
     zoomIn: () => zoom(ZOOM_STEP),
     zoomOut: () => zoom(1 / ZOOM_STEP),
     reset: () => setCustom(null),
+    /** Centres the view on a layout point, zoomed in enough to tell its neighbours apart. */
+    centerOn: (point: Point) => {
+      const k = Math.min(Math.max(view.k, fit.k * 2), fit.k * 10);
+      setCustom({ k, x: size.width / 2 - k * point.x, y: size.height / 2 - k * point.y });
+    },
     custom: custom !== null,
   };
   return [ref, controls] as const;

@@ -1,6 +1,6 @@
 "use client";
 
-import type { DocumentNode, VisibleGraph } from "@/lib/kb/graph";
+import type { DocumentNode, GraphNode } from "@/lib/kb/graph";
 import { okfTypeLabel } from "@/lib/i18n/okf-types";
 import { useI18n } from "@/lib/i18n/provider";
 import { NodeSwatch } from "./graph-details";
@@ -31,11 +31,11 @@ function TableRow({ node, onOpenDoc }: { node: DocumentNode; onOpenDoc: (key: st
   );
 }
 
-/** The table twin of the graph: every document the filters keep, the most linked first. */
-export function GraphTable({ visible, onOpenDoc }: { visible: VisibleGraph; onOpenDoc: (key: string) => void }) {
+/** The table twin of the graph: every document the filters and the search keep, the most linked first. */
+export function GraphTable({ nodes, onOpenDoc }: { nodes: GraphNode[]; onOpenDoc: (key: string) => void }) {
   const { t, locale } = useI18n();
   const g = t.kb.graph.table;
-  const rows = visible.nodes
+  const rows = nodes
     .filter((node): node is DocumentNode => node.kind === "document")
     .sort((a, b) => b.degree - a.degree || a.label.localeCompare(b.label, locale));
   return (

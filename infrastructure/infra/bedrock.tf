@@ -2,9 +2,13 @@
 # Service : Amazon Bedrock, Knowledge Base et Guardrail.
 #
 # Knowledge Base : indexe la base generale OKF (general/ du bucket, et rien
-# d'autre : les bases des clients n'y entrent jamais) dans S3 Vectors, avec
+# d'autre : elle reste sans aucune donnee client) dans S3 Vectors, avec
 # Titan Text Embeddings V2. A1 l'interroge (Retrieve) pour expliquer un terme ;
 # Step Functions relance l'ingestion apres chaque collecte.
+#
+# Chaque client a sa propre Knowledge Base, creee par le runtime profile et
+# hors de l'etat Terraform, dans un bucket de vecteurs a part chiffre par une
+# cle du projet (client_kb.tf) : memes reglages d'embedding et de decoupage.
 #
 # Guardrail : le cadre responsable de l'enonce (simulation seulement, aucune
 # transaction reelle, aucun renseignement bancaire confidentiel), applique

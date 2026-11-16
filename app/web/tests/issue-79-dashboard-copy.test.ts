@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import { ClientState, type Locale } from "@/lib/contract/schemas";
 import { composeHints, introCopy, offersFollowups, startsFollowups } from "@/components/dashboard/assistant-offer";
 import { ProfileBento } from "@/components/dashboard/bento";
-import { RealDetails } from "@/components/details/details-view";
 import { dictionaries } from "@/lib/i18n/dictionary";
 import { I18nProvider } from "@/lib/i18n/provider";
 import { screensEn, screensFr } from "@/lib/i18n/screens";
@@ -106,14 +105,12 @@ describe("the simulated portfolio, outside the simulator (#79)", () => {
   const followups = ClientState.parse({ ...clientState, stage: "followups", questions: [] });
   const withExisting = ClientState.parse({ ...clientState, stage: "followups", questions: [], portfolio: { ...portfolioView, status: "confirmed" } });
 
-  it("is no longer announced for a version 2 on the dashboard or on the details page", () => {
+  it("is no longer announced for a version 2 on the dashboard", () => {
     for (const screens of [screensFr, screensEn]) {
       expect(JSON.stringify(screens.dash)).not.toMatch(/version [12]|guidé|guided/i);
-      expect(JSON.stringify(screens.details)).not.toMatch(/version [12]|guidé|guided/i);
     }
     for (const locale of ["fr", "en"] as const) {
       expect(render(createElement(ProfileBento, { state: followups }), locale)).not.toMatch(/version [12]/i);
-      expect(render(createElement(RealDetails, { state: followups }), locale)).not.toMatch(/version [12]/i);
     }
   });
 
@@ -128,20 +125,9 @@ describe("the simulated portfolio, outside the simulator (#79)", () => {
     }
   });
 
-  it("is reached from the details page, next to the existing portfolio", () => {
-    for (const locale of ["fr", "en"] as const) {
-      const t = dictionaries[locale];
-      const html = render(createElement(RealDetails, { state: followups }), locale);
-      expect(html).toContain('href="/portfolio"');
-      expect(html).toContain(t.details.simulated.cta);
-      expect(html).toContain(t.appNav.portfolio);
-      expect(html).toContain(t.details.existing.none);
-    }
-  });
-
   it("leaves the tile to the confirmed existing portfolio when there is one", () => {
     const html = render(createElement(ProfileBento, { state: withExisting }), "fr");
-    expect(html).toContain(dictionaries.fr.dash.real.portfolioMore);
+    expect(html).toContain(dictionaries.fr.dash.real.portfolio);
     expect(html).not.toContain('href="/portfolio"');
   });
 });

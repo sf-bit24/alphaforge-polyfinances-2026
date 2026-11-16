@@ -43,6 +43,7 @@ app/agents/
       a1.py                      A1 : questions de suivi (3 au plus par tour), mises à jour validées du profil
       a2.py, portfolio.py        A2 : extraction des positions; le code résout tickers, prix, change, expositions
       kb.py                      kb.list / kb.get, recherche dans la Knowledge Base générale
+      client_kb.py               Knowledge Base de chaque client : création, ingestion directe, recherche d'A1
       service.py                 toutes les actions de CONTRACTS.md §3
     collect/
       http.py, fetchers.py       sources publiques sans clé, hôtes en liste blanche, User-Agent déclaré
@@ -118,6 +119,26 @@ Les paquets de sources, le registre des hôtes et les sujets sont dans `src/alph
 nouveau n'entre dans un paquet qu'après la lecture humaine de sa licence (les hôtes proposés par les chercheurs
 restent en quarantaine, `staging/<run_id>/supervisor/quarantine.json`).
 
+## Knowledge Base de chaque client
+
+Chaque investisseur a sa propre Knowledge Base Bedrock, un index de recherche construit à partir de sa base OKF
+(`profile/client_kb.py`, CONTRACTS.md §5.3). L'OKF reste la source de vérité : le code y lit les valeurs exactes.
+
+- Le magasin du service est enveloppé (`IndexingStore`) : chaque `.md` écrit sous `clients/<id>/` est noté, jamais
+  `traces/` ni un `.json`. À la fin de l'action, `ClientKnowledgeBases.sync` fait avancer la création (index
+  `client-<id>`, puis la base, puis sa source `CUSTOM`) et envoie les documents par `IngestKnowledgeBaseDocuments`,
+  par lots de 10. Une note retirée sort par `DeleteKnowledgeBaseDocuments`.
+- État dans `clients/<id>/kb.json` (statut, identifiants, dates, `pending`, `indexed`), écrit avec une précondition
+  sur l'ETag. Aucune erreur de Knowledge Base ne fait échouer l'action : elle va dans la trace.
+- A1 reçoit l'outil `search_client_knowledge`, lié à la base du client de la session (l'identifiant vient de
+  `kb.json`, jamais du modèle); chaque passage cite sa clé OKF.
+- Le runtime `portfolio` ingère ses décisions `.md` et les versions `portefeuilles/*.md`, sans jamais créer de base.
+- En local (`ALPHAFORGE_STORE=local`) ou sans les variables `ALPHAFORGE_CLIENT_KB_*` : désactivée, les réponses
+  n'ont pas de `client_kb` et rien d'autre ne change (ni outil, ni `kb.json`, ni appel AWS).
+- Au plus 30 documents envoyés par action; un lot refusé est renvoyé document par document pour isoler le fautif;
+  après un échec (`failed`), nouvel essai 3 minutes après l'erreur.
+- Tests sans AWS : `tests/test_client_kb.py` (faux clients `bedrock-agent`, `bedrock-agent-runtime` et `s3vectors`).
+
 ## Tests et qualité
 
 ```sh
@@ -169,6 +190,7 @@ tests), rien n'est chargé. Les spans de Strands contiennent les messages échan
 | `ALPHAFORGE_MODEL_ID` | `us.anthropic.claude-opus-5-5` | Profil d'inférence Bedrock de tous les agents. |
 | `ALPHAFORGE_KB_ID` | — | Knowledge Base générale pour la recherche d'A1 (sans elle, la recherche ne renvoie rien). |
 | `ALPHAFORGE_GUARDRAIL_ID` / `ALPHAFORGE_GUARDRAIL_VERSION` | — | Guardrail Bedrock appliqué à A1 et A2. |
+| `ALPHAFORGE_CLIENT_KB_VECTOR_BUCKET`, `_ROLE_ARN`, `_PREFIX`, `_EMBEDDING_MODEL_ARN`, `_EMBEDDING_DIMENSIONS` | — | Knowledge Base de chaque client (`profile/client_kb.py`, CONTRACTS.md §5.3), sur `profile` et `portfolio`. Toutes posées et `ALPHAFORGE_STORE=s3` : sinon désactivée, rien ne change. |
 | `PORT` | `8080` | Port HTTP. |
 | `ALPHAFORGE_HOST` | `127.0.0.1` en local, `0.0.0.0` avec `s3` | Adresse d'écoute. |
 | `ALPHAFORGE_LOG_LEVEL` | `INFO` | Niveau des journaux. |

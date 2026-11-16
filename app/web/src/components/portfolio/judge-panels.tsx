@@ -6,8 +6,8 @@ import { curly } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
 import { constraintUnit, derivedFromLabel, showsRawProvenance, type FactIndex } from "@/lib/portfolio/decision";
 import { formatLimit } from "@/lib/portfolio/format";
-import d from "@/components/details/details.module.css";
 import { cn } from "@/components/ui/cn";
+import d from "./base.module.css";
 import { FactChip, FactChips, useDecisionLookup } from "./facts";
 import p from "./portfolio.module.css";
 

@@ -22,6 +22,8 @@ Chaque rôle n'a `s3:ListBucket` que sous ses propres préfixes. Pour un objet a
 
 Ajout facultatif (section 12), seulement si `portfolio_enabled = true` : runtime `alphaforge_sandbox_portfolio` (`AGENT_ROLE=portfolio`), appelé par le serveur Next.js; mêmes droits S3 que `profile` (lit `general/`, lit et écrit `clients/`, dont `clients/<id>/decisions/`), Knowledge Base et Guardrail, plus le journal des décisions et le rejeu LLM (`finance_trace_runtimes`). Son zip est `runtime/agents-portfolio-<release>.zip` (groupe uv `finance` en plus).
 
+Knowledge Base de chaque client (section 5.3), si `client_kb_enabled = true` (vrai par défaut) : `profile` crée l'index S3 Vectors `client-<client_id>`, la Knowledge Base étiquetée `alphaforge:scope=client` et sa source `CUSTOM` (`iam:PassRole` sur le seul rôle des Knowledge Bases des clients); `profile` et `portfolio` y ingèrent, y retirent des documents et y cherchent (`IngestKnowledgeBaseDocuments`, `DeleteKnowledgeBaseDocuments`, `Retrieve`), sur les seules bases étiquetées client. Aucun runtime ne peut supprimer une Knowledge Base.
+
 Ajout facultatif (section 10), seulement si `scenarios_enabled = true` : les rôles de `profile` et de `portfolio` (si `portfolio_enabled`) lisent aussi `scenarios/latest.json` et `scenarios/output/` (lecture et liste seulement), pour l'outil `scenario_risk` (état cible : l'outil n'est encore branché dans aucun runtime; le débat finance de `portfolio` en est l'appelant probable).
 
 Variables d'environnement posées par Terraform sur chaque runtime :
@@ -38,6 +40,10 @@ Variables d'environnement posées par Terraform sur chaque runtime :
 | `ALPHAFORGE_MODEL_ID` | `us.anthropic.claude-opus-5-5` | Profil d'inférence Bedrock de tous les agents. |
 | `ALPHAFORGE_KB_ID` | `ABCDEFGHIJ` | Knowledge Base de la base générale (vide en local). |
 | `ALPHAFORGE_GUARDRAIL_ID` / `ALPHAFORGE_GUARDRAIL_VERSION` | `abc123` / `1` | Guardrail du cadre responsable, appliqué aux agents du runtime `profile` (vide en local). |
+| `ALPHAFORGE_CLIENT_KB_VECTOR_BUCKET` | `alphaforge-sandbox-client-vectors` | `profile` et `portfolio` : bucket S3 Vectors des index des clients (section 5.3). Avec les quatre suivantes; une seule absente, ou `ALPHAFORGE_STORE=local`, et la Knowledge Base des clients est désactivée. |
+| `ALPHAFORGE_CLIENT_KB_ROLE_ARN` | `arn:aws:iam::…:role/alphaforge-sandbox-client-knowledge-base` | Rôle de service des Knowledge Bases des clients. |
+| `ALPHAFORGE_CLIENT_KB_PREFIX` | `alphaforge-sandbox` | Préfixe des noms (`<préfixe>-client-<client_id>`) et des `clientToken`. |
+| `ALPHAFORGE_CLIENT_KB_EMBEDDING_MODEL_ARN` / `ALPHAFORGE_CLIENT_KB_EMBEDDING_DIMENSIONS` | `arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0` / `1024` | Mêmes réglages d'embedding que la base générale. |
 | `ALPHAFORGE_RESEARCHER_NAME` | `alphaforge_sandbox_researcher` | Runtime `expert` : nom du runtime des chercheurs, dont l'ARN est trouvé par `ListAgentRuntimes`. `ALPHAFORGE_RESEARCHER_ARN` le remplace s'il est posé; sans l'un ni l'autre (local), les chercheurs tournent dans des fils. |
 | `ALPHAFORGE_RESEARCHER_MODEL_ID` | (vide) | Facultatif : modèle des chercheurs; par défaut `ALPHAFORGE_MODEL_ID`. Le rôle IAM n'autorise que `ALPHAFORGE_MODEL_ID`. |
 | `ALPHAFORGE_CONTACT_EMAIL` | (vide) | Facultatif : courriel ajouté au User-Agent pour la SEC seulement (accès équitable d'EDGAR); sans lui, la SEC répond 403 et ses hôtes sont déclarés bloqués, et A5 ne lit pas les fondamentaux EDGAR (avertissement dans son marqueur). Posé par Terraform (`sec_contact_email`) sur `press`, `data` et `researcher` seulement. |
@@ -57,7 +63,7 @@ Toute requête est un objet JSON avec `action` (chaîne). Toute réponse non str
 { "ok": false, "release": "1a2b3c4d", "error": { "code": "invalid_answer", "message": "texte lisible", "details": {} } }
 ```
 
-Codes d'erreur : `bad_request`, `unknown_action`, `not_found`, `invalid_answer`, `conflict`, `model_error`, `guardrail_blocked`, `internal`.
+Codes d'erreur : `bad_request`, `unknown_action`, `not_found`, `invalid_answer`, `conflict`, `model_error`, `guardrail_blocked`, `internal`. Le serveur Next.js ajoute `unauthorized` et `forbidden` quand la connexion est active (section 7.1).
 
 Toutes les actions de tous les rôles acceptent `{"action": "health"}` et répondent `{"ok": true, "role": "profile", "release": "…", "env": "sandbox"}`.
 
@@ -87,15 +93,15 @@ stateDiagram-v2
 
 | Action | Entrée (en plus de `action`) | Effet |
 | --- | --- | --- |
-| `session.start` | `locale` (`fr`, `en`), `client_id` facultatif | Crée la base du client si elle n'existe pas; renvoie la première question en attente. |
-| `session.resume` | `client_id`, `locale` facultatif | Renvoie l'état courant, sans rien modifier. |
+| `session.start` | `locale` (`fr`, `en`), `client_id` facultatif | Crée la base du client si elle n'existe pas, puis lance la création de sa Knowledge Base (section 5.3); renvoie la première question en attente. |
+| `session.resume` | `client_id`, `locale` facultatif | Renvoie l'état courant, sans rien modifier du profil. Le rapprochement de la Knowledge Base du client peut écrire `kb.json` (section 5.3). |
 | `base.answer` | `client_id`, `question_id`, `value` | Valide la réponse, l'écrit dans la base du client, renvoie la question suivante ou l'étape suivante. |
 | `portfolio.submit` | `client_id`, `text` facultatif, `files` facultatif : `[{ "name", "media_type", "data_base64" }]` | A2 extrait des positions; étape `portfolio_review`. Au moins `text` ou un fichier. 10 Mo au plus par fichier, 5 fichiers. |
 | `portfolio.confirm` | `client_id`, `positions` (liste de `Position`, corrigée par l'investisseur) | Calcule les expositions par le code, écrit `portefeuille-existant.md`; étape `followups`. |
 | `portfolio.skip` | `client_id` | Passe aux relances sans portefeuille. |
 | `followup.reply` | `client_id`, `answers` facultatif : `[{ "question_id", "value" }]`, `message` facultatif, `stop` facultatif (booléen) | A1 enregistre, met le profil à jour, renvoie ses relances ou passe à `complete`. `stop: true` n'est accepté qu'à partir de 70 %. Sans `answers` ni `message` à l'arrivée en `followups`, A1 pose ses premières relances. Au passage à `complete` (y compris par `stop: true`), A1 écrit la base du client avec son skill (section 5) ; un échec est inscrit à la trace et n'empêche pas l'étape. |
 | `settings.update` | `client_id`, `locale` facultatif, `knowledge_level` facultatif | Change la langue ou le niveau de connaissances (réglages). |
-| `profile.get` | `client_id` | Comme `session.resume`, avec en plus `documents`. |
+| `profile.get` | `client_id` | Comme `session.resume`, avec en plus `documents`. Comme lui, renvoie `client_kb` quand la fonction est active. |
 | `kb.list` | `prefix` (`general/` ou `clients/<client_id>/`) | `{ "items": [{ "key", "title", "type", "description", "updated_at", "links", "tickers" }] }`. `links` : les documents de la même base vers lesquels pointe le corps, par ses liens Markdown, relatifs au dossier du document (`../methodologie/x.md`) ou à la racine de la base (`faits/<source>/<date>-<hash>.md`), sans doublon ni lien vers lui-même. `tickers` : ses symboles canoniques (section 5.1), ceux de `data.ticker`, `data.symbol` et `data.tickers`, puis ses tags (frontmatter et `data.tags`) qui nomment un symbole qu'un autre document de la base déclare par ces champs. |
 | `kb.get` | `key` | `{ "key", "content" }` : le document OKF complet (frontmatter et corps). Une clé `clients/` n'est servie qu'avec le `client_id` correspondant. |
 
@@ -113,7 +119,8 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
   "profile": "ProfileView",
   "completeness": "Completeness",
   "portfolio": null,
-  "trace": [ "TraceStep" ]
+  "trace": [ "TraceStep" ],
+  "client_kb": "ClientKb"
 }
 ```
 
@@ -121,6 +128,7 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
 - `message` : texte Markdown de l'agent (A1 ou A2) dans la langue de `locale`, adapté au niveau de connaissances. Il vaut `null` après une transition déterministe.
 - `portfolio` : `PortfolioView` dès que A2 a proposé des positions, sinon `null`.
 - `trace` : les étapes de cette requête seulement. L'historique complet est dans la base du client.
+- `client_kb` (facultatif) : état de la Knowledge Base du client (`ClientKb`, section 3.3). Chaque action qui porte sur un client le renvoie, dont `session.resume` et `profile.get`, quand la Knowledge Base des clients est active. Fonction désactivée (magasin local ou variables absentes), ou runtime plus ancien : le champ est absent et la réponse est celle d'avant.
 
 ### 3.3 Types
 
@@ -219,6 +227,16 @@ Toutes les actions qui portent sur un client renvoient `ClientState` :
 - `status` : `draft` après `portfolio.submit`, `confirmed` après `portfolio.confirm`. `portefeuille-existant.md` est écrit dès `portfolio.submit`, avec le statut OKF `draft`, puis `stable` après `portfolio.confirm`.
 - Un titre absent du jeu de départ est cherché sur Yahoo Finance (au plus 10 appels) : symbole américain, puis `.TO` si la devise est inconnue. L'URL est citée dans `sources`.
 
+`ClientKb` (section 5.3) :
+
+```json
+{ "status": "active", "knowledge_base_id": "ABCDEFGHIJ", "documents": 6, "pending": 0 }
+```
+
+- `status` : `creating` (index et base en création, ou base pas encore `ACTIVE`), `active`, `failed` ou `quota` (nouvel essai plus tard, le questionnaire n'en dépend jamais). Fonction désactivée : pas de `client_kb` du tout (la première version du runtime envoyait `disabled`, que l'interface lit encore sans afficher de carte).
+- `documents` : documents de la base du client indexés. `pending` : documents écrits mais pas encore indexés (base pas encore active, ou appel limité).
+- La trace de l'action montre la création et les ingestions (`kind: storage`, `actor: store`); une recherche d'A1 est une étape `kind: tool`.
+
 `TraceStep` :
 
 ```json
@@ -284,6 +302,7 @@ clients/<client_id>/portefeuille-existant.md   écrit par profile (A2); lu par l
 clients/<client_id>/journal.md              chaque réponse, avec sa provenance et sa date
 clients/<client_id>/<note>.md               notes écrites par A1 avec son skill (Profile Note), par exemple dimensions/horizon.md et synthese.md
 clients/<client_id>/traces/<horodatage>-<action>.json
+clients/<client_id>/kb.json                 état de la Knowledge Base du client (section 5.3), écrit par le code seul
 clients/<client_id>/decisions/<decision_id>.md         Portfolio Decision : résumé OKF d'une décision simulée (runtime portfolio)
 clients/<client_id>/decisions/<decision_id>.json       Decision complète (Facts, contrôles, trace)
 clients/<client_id>/decisions/<decision_id>.policy.json   mandat (PolicySpec) appliqué
@@ -323,13 +342,13 @@ data: {}                          # données structurées lues par le code (prof
 - Dans `profil.md`, un fait tiré d'un texte libre porte `confirmed: false` (`data.facts.<champ>`) jusqu'à la réponse à sa question `cf_`. Il n'entre ni dans `ProfileView`, ni dans la complétude, ni dans les scores. S'il remplace une valeur confirmée, il la garde dans `replaces` (`value`, `provenance`, `at`, et `band` si elle en avait une; facultatif) : elle reste en vigueur jusqu'à la réponse, et « non » la rétablit. Un fait sans la clé `confirmed` est confirmé.
 - Un fait répondu par une tranche (question à choix sur un champ `number`, `money` ou `percent`) porte `band` (`data.facts.<champ>.band`, facultatif) : `{option, min, max, label: {fr, en}}`, la tranche choisie, avec ses bornes (`null` quand elle n'en a pas, par exemple « Je ne sais pas ») et son libellé dans les deux langues. `value` reste le nombre que le code calcule et que lit le volet finance : le plus souvent une borne prudente de la tranche, parfois son milieu (`q_amount` `lt10k` : 5 000) ou une valeur par défaut (`unknown` : 10 000). Le résumé, le corps de `profil.md`, les notes du client et le contexte d'A1 citent la tranche, jamais `value` seule. Un fait réécrit sans tranche (texte libre, réglages) la perd.
 - Les questions de relance en attente (`data.pending_questions`) gardent hors des questions, par identifiant de question, `data.pending_choices` (tranche → nombre écrit dans le champ), `data.pending_bands` (tranche → `band`, facultatif) et `data.pending_confirmations` (question `cf_` → champ visé). Une question répondue quitte les trois tables; une session écrite sans `pending_bands` écrit le fait sans `band`.
-- Notes du client (`Profile Note`) : à la fin du questionnaire, le runtime `profile` invoque A1 avec le skill `app/agents/src/alphaforge/profile/skills/client-brain-init/SKILL.md`, qui fixe la structure des notes ; ensuite, `client-brain-update` les met à jour quand les faits confirmés ou les skills changent. Changer la structure dans le skill suffit : la mise à jour suivante réorganise chaque base. A1 écrit le chemin, le titre et le texte ; le code construit le frontmatter (`sources` tirées des champs cités, `data.skill`, `data.skills_version`, `data.cites`), vérifie l'OKF, refuse les chemins hors du dossier du client et les documents écrits par le code (`index.md`, `profil.md`, `journal.md`, `portefeuille-existant.md`, `traces/`), et n'y admet aucune valeur à confirmer. Le runtime n'a pas `s3:DeleteObject` : une note retirée est réécrite avec `data.retired: true`, et `kb.list` comme `index.md` l'omettent. L'état est dans `profil.md`, `data.brain` (`skills_version`, `values`, `documents`).
+- Notes du client (`Profile Note`) : à la fin du questionnaire, le runtime `profile` invoque A1 avec le skill `app/agents/src/alphaforge/profile/skills/client-brain-init/SKILL.md`, qui fixe la structure des notes ; ensuite, `client-brain-update` les met à jour quand les faits confirmés ou les skills changent. Changer la structure dans le skill suffit : la mise à jour suivante réorganise chaque base. A1 écrit le chemin, le titre et le texte ; le code construit le frontmatter (`sources` tirées des champs cités, `data.skill`, `data.skills_version`, `data.cites`), vérifie l'OKF, refuse les chemins hors du dossier du client et les documents écrits par le code (`index.md`, `profil.md`, `journal.md`, `portefeuille-existant.md`, `kb.json`, `traces/`), et n'y admet aucune valeur à confirmer. Le runtime n'a pas `s3:DeleteObject` : une note retirée est réécrite avec `data.retired: true`, et `kb.list` comme `index.md` l'omettent. L'état est dans `profil.md`, `data.brain` (`skills_version`, `values`, `documents`).
 - `journal.md` porte ses entrées dans `data.entries[]`, en ajout seulement, une entrée par événement : `{at, kind, provenance, ...}`.
   - `kind` vaut `answer` (`field`, `value`, `question_id`?, `option`?, `previous`?), `message` ou `stage` (`value`, `previous`, `note`).
   - `option` (facultatif) : identifiant de la tranche choisie quand une question à choix renseigne un champ numérique (`number`, `money`, `percent`). `value` est alors le nombre que le code a écrit dans le champ, tiré de `questionnaire.yaml` (option `number`) ou calculé par le code pour une relance.
   - Une entrée `message` garde le texte libre de l'investisseur (`followup.reply.message`) avec sa provenance `a1:<tour>`, `text` et `locale`. Elle n'est écrite qu'après un tour d'A1 réussi, donc jamais quand le garde-fou bloque.
   - Une requête écrit le journal au plus une fois.
-- La base générale ne contient rien d'un client; une base de client ne recopie pas la base générale.
+- La base générale ne contient rien d'un client; une base de client ne recopie pas la base générale. La Knowledge Base générale n'indexe que `general/`; chaque client a la sienne (section 5.3).
 - **Arborescence fermée de `general/`.** Un document n'y est écrit que sous l'un de ces neuf dossiers : `methodologie/`, `notions/`, `societes/` (seeds), `actualites/`, `donnees/`, `faits/`, `signaux/`, `depots/` et `recherches/` (A6), plus `index.md`. Le code calcule la clé à partir du type de l'élément et de champs fixés par le code (`research.checks.target`). Ni A6 ni un autre agent ne choisit un dossier ou n'en crée un : le modèle d'A6 décide du résumé, des tags, des liens et du rejet, jamais de l'adresse.
   - Un dossier correspond à un type de document. Un sous-dossier ne sert qu'à l'identité (série, ticker, source) ou au temps (`AAAA/MM`). Un thème (ESG, logement, taux) est un tag, jamais un dossier.
   - `<source>` d'un fait ou d'un signal est l'hôte lu, sans `www.`, passé par `staging.slugify` (`www.bankofcanada.ca` donne `bankofcanada-ca`), et `<hash>` vient de l'identifiant de l'élément, lui-même tiré de l'adresse, des localisateurs et de la date d'observation. Les tickers d'un fait ou d'un signal vont dans ses tags. Deux sources qui publient la même valeur donnent deux documents, chacun dans le dossier de sa source.
@@ -391,6 +410,27 @@ Les prix, le change et les opérations sur titres ne sont pas de l'OKF : ce sont
 - **Repli** : sans ces parquets (CI, développement local, runtimes qui ne téléchargent pas les données longues) ou avec `ALPHAFORGE_MARKET_SOURCE=starter`, `alphaforge.market` lit le jeu de départ, et ses sources restent `starter:…`. Avec les parquets, elles deviennent `market:daily_prices.parquet`, `market:fx_daily.parquet` ou `market:universe.yaml`.
 - Le runtime `portfolio` télécharge les parquets quotidiens avec les parquets longs quand le manifeste les déclare tous les trois, et vérifie leur sha256.
 
+### 5.3 Knowledge Base de chaque client
+
+Chaque investisseur a sa propre Knowledge Base Bedrock, construite à partir de sa base OKF `clients/<client_id>/` (`app/agents/src/alphaforge/profile/client_kb.py`). L'OKF reste la source de vérité : le code lit toujours les valeurs exactes dans les documents, la Knowledge Base ne sert qu'à retrouver un passage. Isolation par silo : une Knowledge Base et un index par client, aucun filtre de métadonnées.
+
+- **Création** (runtime `profile` seulement, à `session.start` d'une base nouvelle, ou à la première action d'une base plus ancienne) : index `client-<client_id>` dans le bucket S3 Vectors des clients (`float32`, dimension de l'embedding, `cosine`, `AMAZON_BEDROCK_TEXT` et `AMAZON_BEDROCK_METADATA` non filtrables), puis Knowledge Base `<préfixe>-client-<client_id>` (Titan Text Embeddings V2, 1024, comme la base générale; étiquettes `alphaforge:scope=client`, `alphaforge:client_id`, `alphaforge:prefix`; `clientToken` `<préfixe>-kb-<client_id>`), puis, quand `GetKnowledgeBase` la dit `ACTIVE`, sa source `CUSTOM` `client-okf` (passages de 400 jetons, 15 % de recouvrement, `dataDeletionPolicy: RETAIN`). Deux requêtes simultanées obtiennent la même base (`clientToken`, index en `ConflictException` repris par `GetIndex`).
+- **Rapprochement**, à la fin de chaque action qui porte sur un client (après les écritures OKF, avant la trace) : une lecture de `kb.json`; tant que la base n'est pas active, une lecture `GetKnowledgeBase`; ensuite, aucun appel si rien n'attend. Aucune erreur de Knowledge Base ne fait échouer l'action : elle va dans la trace et dans `kb.json`.
+- **Ingestion directe** (`IngestKnowledgeBaseDocuments`, jamais `StartIngestionJob`) : chaque document `.md` écrit dans la base du client (profil, journal, index, portefeuille existant, notes d'A1, décisions `.md` du runtime `portfolio`, versions `portefeuilles/*.md`) est envoyé en ligne, identifiant = clé OKF (une réingestion remplace le document), métadonnées `type`, `updated_at` et `client_id`. Jamais `traces/`, jamais un `.json`. Une note retirée (`data.retired: true`) sort par `DeleteKnowledgeBaseDocuments`. Lots de 10 documents (borne du client botocore; le service en accepte 25), et au plus 30 documents envoyés ou retirés par action : à l'activation d'une base déjà fournie, le reste attend les actions suivantes (les documents notés de l'action d'abord, puis les plus anciens en attente). Un lot refusé tel quel (`ValidationException`) est renvoyé document par document : seul le fautif va dans `document_errors`, comme un document rendu `FAILED` par Bedrock. Base pas encore active, appel limité (`ThrottlingException`) : les clés restent dans `pending` et partent au rapprochement suivant. `pending` va des clés les plus anciennes aux plus récentes, 200 au plus : au-delà, les versions `portefeuilles/` les plus anciennes partent d'abord, puis les autres clés les plus anciennes. Le runtime `portfolio` ingère ou met en attente, sans jamais créer de base ni lire son état Bedrock.
+- **Recherche** : A1 a l'outil `search_client_knowledge` quand la fonction est active. La base interrogée est celle du client de la session, lue dans `kb.json`, jamais donnée par le modèle; chaque passage cite sa clé OKF (`customDocumentLocation.id`), et un passage hors du dossier du client est écarté. Les chiffres cités viennent toujours du contexte, pas des extraits. Base pas encore active : l'outil le dit (`status`).
+- **État** `clients/<client_id>/kb.json`, écrit par le code seul (A1 n'écrit que des notes `.md`; `kb.get` ne le sert pas), avec une précondition sur l'ETag : une écriture concurrente relit l'état et y reporte ses changements.
+
+  ```json
+  { "schema": "alphaforge.client_kb/1", "client_id": "8f0c…", "status": "active",
+    "vector_bucket": "alphaforge-sandbox-client-vectors", "index_name": "client-8f0c…", "index_arn": "arn:aws:s3vectors:…",
+    "knowledge_base_name": "alphaforge-sandbox-client-8f0c…", "knowledge_base_id": "ABCDEFGHIJ", "knowledge_base_arn": "arn:aws:bedrock:…",
+    "data_source_id": "KLMNOPQRST", "created_at": "…", "updated_at": "…", "active_at": "…", "ingested_at": "…",
+    "retry_at": null, "error": null, "pending": [], "indexed": ["clients/8f0c…/profil.md", "…"], "document_errors": {} }
+  ```
+
+- **Statuts** : `creating`, `active`, `failed` (nouvel essai 3 minutes après l'erreur, `error.at` : un premier appel juste après l'apply peut échouer le temps que les droits IAM se propagent), `quota` (`ServiceQuotaExceededException` : 100 Knowledge Bases par compte, non ajustable, dont la base générale; nouvel essai une heure après). Le délai se compte depuis l'erreur : un `kb.json` qui porte un `retry_at` plus lointain réessaie au délai actuel. Fonction désactivée : aucun `kb.json`.
+- **Hors de l'état Terraform** : `infrastructure/scripts/clean-client-kbs.sh` liste les bases et index des clients (`--dry-run`, par défaut) ou les supprime (`--apply`).
+
 ## 6. Step Functions de collecte
 
 Machine `alphaforge-sandbox-collecte`, déclenchée par EventBridge Scheduler et par l'interface. Entrée : `{"run_id"?: string, "since"?: "AAAA-MM-JJ", "tickers"?: [string]}`; `run_id` vaut par défaut le nom de l'exécution. `run_id` suit `^[A-Za-z0-9_-]{1,64}$`, car il entre dans les clés S3 et les identifiants de session. Un collecteur refuse tout autre `run_id` par `bad_request`, et l'interface laisse Step Functions nommer l'exécution, par un UUID.
@@ -421,6 +461,43 @@ Le serveur Next.js appelle AWS avec les identifiants AWS du poste (chaîne par d
 | `AWS_REGION` | `us-east-1` | Région. |
 | `ALPHAFORGE_PREFIX` | `alphaforge_sandbox` | Préfixe des runtimes; l'ARN de `<préfixe>_profile` est trouvé par son nom (`ListAgentRuntimes`). |
 | `ALPHAFORGE_STATE_MACHINE` | `alphaforge-sandbox-collecte` | Machine de collecte, trouvée par son nom (`ListStateMachines`). |
+| `AUTH_MODE` | `off`, `cognito` | Connexion des investisseurs (section 7.1); `off` par défaut. |
+
+### 7.1 Identité et connexion
+
+Avec `AUTH_MODE=off` (par défaut), rien ne change : le serveur Next.js nomme un nouveau client au premier `session.start` et le navigateur garde son `client_id` dans le `localStorage`.
+
+Avec `AUTH_MODE=cognito` (`infrastructure/infra/auth.tf`, `auth_enabled = true`), l'identité vient d'un compte Amazon Cognito. Un compte = un `client_id` = une base `clients/<client_id>/`; la base générale `general/` reste commune.
+
+- Inscription libre sur la connexion gérée de Cognito : le courriel est l'identifiant, vérifié par un code. Terraform ne crée aucun utilisateur.
+- `client_id` du compte : le `sub` Cognito s'il est un UUID v4 (le cas des comptes du User Pool), sinon un UUID dérivé de SHA-256(`alphaforge:` + `sub`), aux bits de version 4 et de variante RFC 4122 (`app/web/src/lib/server/auth/client-id.ts`). Le même compte retrouve donc sa base sur n'importe quel appareil.
+- Le serveur tire le `client_id` de la session, jamais du corps de la requête. Dans `POST /api/agent` : un `client_id` différent de celui du compte donne 403 (`forbidden`); `session.start` sans `client_id` ouvre la base du compte, créée au premier usage; `kb.list` sur `clients/<autre>/` et `kb.get` d'une clé `clients/<autre>/...` donnent 403. Dans `POST /api/portfolio`, même règle; un profil de démonstration FICTION (`persona` sans `client_id`) reste permis à tout compte connecté.
+- `POST /api/collect` (lancer une collecte) exige le groupe Cognito `admin` (revendication `cognito:groups`), sinon 403; `GET /api/collect` reste permis à tout compte connecté.
+- Toute page et toute route `/api/*` exigent une session, sauf `/api/auth/*`, `/api/health` et `/api/ping`. Sans session, une page redirige vers `/login` et une route répond 401 (`unauthorized`) avec l'enveloppe de la section 2. Ces deux codes, `unauthorized` (401) et `forbidden` (403), ne viennent que du serveur Next.js (`details.source = "gateway"`), jamais d'un runtime.
+
+Flux (client d'application public, sans secret) :
+
+| Route | Rôle |
+| --- | --- |
+| `GET /api/auth/login?next=/chemin` | Crée `state`, `nonce` et le vérificateur PKCE (S256), les garde 10 min dans un cookie chiffré propre à cette connexion, `af_login_<16 premiers caractères du state>` (chemin `/api/auth` ; deux onglets ne s'écrasent pas), puis redirige vers `/oauth2/authorize` de la connexion gérée, avec `lang` (`fr`, `en`) selon la langue de l'interface. |
+| `GET /api/auth/callback?code&state` | Vérifie `state`, échange le code (`/oauth2/token`), vérifie l'ID token (signature par le JWKS du User Pool, RS256, `iss`, `aud`, `exp`, `token_use = id`, `nonce`), puis pose la session et revient à `next` (un chemin de l'interface seulement : tout chemin qui, normalisé, commence par `//`, contient un antislash, ou vise `/login` ou `/api/` devient `/`). Un échec renvoie à `/login?error=denied\|state\|token`. |
+| `POST /api/auth/logout` | Efface la session, puis `/logout` de Cognito (`logout_uri` = l'interface). Un formulaire venu d'un autre site donne 403 (`forbidden`) : `Sec-Fetch-Site` autre que `same-origin` ou `none`, ou, sans cet en-tête, un `Origin` autre que `APP_URL` et que `null` (avec `Referrer-Policy: no-referrer`, Chrome envoie `Origin: null` même pour le formulaire de l'interface). |
+| `GET /api/auth/me` | `{ "ok": true, "mode": "off", "user": null }`, ou `{ "ok": true, "mode": "cognito", "user": { "email", "client_id", "groups", "admin", "expires_at" } }`; 401 en `cognito` sans session. |
+
+Session : cookie `af_session`, `httpOnly`, `SameSite=Lax`, `Secure` sauf sur `http://localhost`, chiffré et authentifié (AES-256-GCM, clé dérivée de `AUTH_SESSION_SECRET` par HKDF). Il ne contient que `sub`, `email`, `groups`, `client_id` et `exp`, jamais un jeton Cognito. Il expire avec l'ID token (`auth_session_hours`, 8 h par défaut); l'investisseur se reconnecte alors. Un changement de groupe vaut à la connexion suivante.
+
+Variables posées par Terraform sur la tâche ECS de l'interface (`web.tf`) :
+
+| Variable | Exemple | Rôle |
+| --- | --- | --- |
+| `AUTH_MODE` | `cognito` | `off` si `auth_enabled = false`. |
+| `COGNITO_ISSUER` | `https://cognito-idp.us-east-1.amazonaws.com/us-east-1_AbCdEfGhI` | Émetteur des ID tokens. |
+| `COGNITO_CLIENT_ID` | `1a2b3c4d5e6f7g8h9i0j1k2l3m` | Client d'application public. |
+| `COGNITO_DOMAIN` | `https://alphaforge-sandbox-024848478575.auth.us-east-1.amazoncognito.com` | Domaine de la connexion gérée. |
+| `APP_URL` | `https://d2gsaqmfxygugx.cloudfront.net` | Origine publique : URL de retour et de déconnexion. |
+| `AUTH_SESSION_SECRET` | (64 caractères, `random_password`) | Clé du cookie de session. |
+
+Limite : l'ALB n'écoute qu'en HTTP (pas de certificat sans nom de domaine), d'où la connexion dans Next.js plutôt que l'action `authenticate-cognito` de l'ALB. Le lien direct de l'ALB (`web_alb_url`) ne garde pas de session : le cookie est `Secure` et Cognito n'accepte un retour en HTTP que sur `localhost`.
 
 ## 9. Volet finance (proposition, hors version 1)
 
@@ -676,9 +753,10 @@ Construction du portefeuille simulé d'un client par le volet finance (section 9
 | Action | Entrée (en plus de `action`) | Réponse |
 | --- | --- | --- |
 | `health` | — | `{"ok": true, "role": "portfolio", "release", "env"}`, sans charger le moteur |
-| `build` | `client_id` (UUID v4) **ou** `persona` (`amira`, `mateo`, `robert` : profils FICTION de démonstration, `finance/personas/`), `as_of` facultatif (`AAAA-MM-JJ`, par défaut `DEFAULT_AS_OF` du moteur), `strategy` facultatif (booléen, `true` par défaut : étape 0 active), `style_preference` facultatif (`defensive`, `dynamique` ou `offensive`, `finance.strategy.STYLES`), `request` facultatif (`{ticker, amount_cad?, weight?}`, demande précise de l'investisseur), `mode` facultatif (`llm` par défaut, `rules` pour le repli déterministe), `locale` facultatif (`fr`, `en`) | `{"client_id", "persona", "persona_label", "fiction", "audit", "xray_trace_id", "as_of", "mode", "simulation_only": true, "decision_key": "clients/<id>/decisions/<decision_id>.md", "decision": Decision, "rounds": [{"round", "verdicts", "amendments"}], "explanation_report", "grounding", "strategy": StrategyResult.summary() \| null}` |
+| `build` | `client_id` (UUID v4) **ou** `persona` (`amira`, `mateo`, `robert` : profils FICTION de démonstration, `finance/personas/`), `as_of` facultatif (`AAAA-MM-JJ`, par défaut `DEFAULT_AS_OF` du moteur), `strategy` facultatif (booléen, `true` par défaut : étape 0 active), `style_preference` facultatif (`defensive`, `dynamique` ou `offensive`, `finance.strategy.STYLES`), `request` facultatif (`{ticker, amount_cad?, weight?}`, demande précise de l'investisseur), `mode` facultatif (`llm` par défaut, `rules` pour le repli déterministe), `locale` facultatif (`fr`, `en`) | `{"client_id", "persona", "persona_label", "fiction", "audit", "xray_trace_id", "as_of", "mode", "simulation_only": true, "decision_key": "clients/<id>/decisions/<decision_id>.md", "decision": Decision, "rounds": [{"round", "verdicts", "amendments"}], "explanation_report", "grounding", "strategy": StrategyResult.summary() \| null, "client_kb": ClientKb \| null}` |
 
 - Étape 0 (`strategy: true`) : les variables de style viennent du profil court (`style_inputs_from_view` sur `OkfClientStore.view`), comme `finance/debate/app.py`; `style_preference` est prioritaire sur l'objectif du profil. `strategy` vaut `null` dans la réponse quand l'étape 0 est désactivée.
+- `client_kb` : après l'écriture de `decisions/<decision_id>.md`, le document est ingéré dans la Knowledge Base du client si elle est active, sinon mis en attente (section 5.3). `null` pour une persona, pour un client sans Knowledge Base (ce runtime n'en crée jamais) ou quand la fonction est désactivée.
 - Erreurs : `bad_request` (requête mal formée ou style inconnu, refusée avant tout calcul), `not_found` (pas de `profil.md`), `model_error` (Bedrock ou Strands), `conflict`, `internal`.
 - Réponse JSON seulement (pas de streaming en version 1); une construction en mode `llm` prend plusieurs appels de modèle.
 - `persona` (démo, FICTION) : profil de test du moteur (`demo-<persona>`), variables de style et demande précise de `finance/personas/demo.yaml` (Robert : TSLA). La décision est écrite sous `clients/demo-<persona>/decisions/`; aucun vrai profil n'est lu.

@@ -11,15 +11,18 @@ Compte AWS Workshop Studio du Datathon, `us-east-1`, environnement `sandbox`, pr
 | AgentCore Runtime | `infra/agentcore.tf` | Quatre runtimes tirés d'un seul zip Python : `profile` (questions de base, A1, A2), `press` (A4), `data` (A5), `supervisor` (A6). Un rôle IAM par runtime, limité à ses préfixes S3. Facultatif (`portfolio_enabled`) : `portfolio`, le portefeuille simulé du volet finance, avec son propre zip. |
 | S3 + KMS | `infra/s3.tf` | Bases OKF : `general/`, `clients/<id>/`, `staging/`, `runtime/`. Clé KMS du projet, versionnement, TLS obligatoire, accès public bloqué. |
 | Knowledge Base + Guardrail | `infra/bedrock.tf` | Knowledge Base sur S3 Vectors (Titan Text Embeddings V2) qui n'indexe que `general/`; Guardrail du cadre responsable (pas de transaction réelle, renseignements personnels bloqués ou masqués). |
+| Knowledge Base de chaque client | `infra/client_kb.tf` | Socle des Knowledge Bases des clients, créées par le runtime `profile` (une par investisseur, hors de l'état Terraform) : bucket S3 Vectors `<préfixe>-client-vectors` chiffré par sa clé KMS (les vecteurs portent le texte des passages), rôle de service des bases, droits de `profile` (création) et de `portfolio` (ingestion, recherche) par étiquette `alphaforge:scope=client`. `client_kb_enabled` (vrai par défaut) pose les variables des runtimes. |
 | Step Functions | `infra/stepfunctions.tf` | Collecte : A4 et A5 en parallèle, A6, puis ingestion de la Knowledge Base. |
 | EventBridge Scheduler | `infra/scheduler.tf` | Veille : lance la collecte toutes les 6 heures. |
 | SageMaker Processing + Step Functions | `infra/scenarios.tf` | Scénarios probabilistes (facultatif, `scenarios_enabled`) : un job sur l'image scikit-learn d'AWS calcule la table des scénarios hors du poste, de façon reproductible (image et code figés, entrées et sorties dans S3). Step Functions le lance (`.sync`), écrit `_done.json` puis `scenarios/latest.json`. |
 | ECS Fargate + ALB + CloudFront | `infra/web.tf` | Interface Next.js (`app/web/Dockerfile`), `AGENT_MODE=aws`, image ECR `alphaforge-web:<release_id>`. CloudFront donne le HTTPS sur `*.cloudfront.net` (output `web_url`) ; l'ALB direct (`web_alb_url`, HTTP) garde la connexion 900 s pour un build du portefeuille de plus de 60 s, limite de CloudFront. Tâche en sous-réseau public avec IP publique (pas de NAT), joignable seulement depuis l'ALB. Facultatif (`web_enabled`). |
+| Cognito | `infra/auth.tf` | Connexion des investisseurs (facultatif, `auth_enabled`, activé en sandbox) : User Pool (courriel comme identifiant, inscription libre, courriel vérifié par Cognito, plan Essentials), domaine de connexion gérée (version 2, output `auth_domain`), client d'application public (code + PKCE, sans secret), groupe `admin`. La tâche ECS passe en `AUTH_MODE=cognito` avec un secret de session `random_password`. Un compte = un `client_id` (`app/CONTRACTS.md`, section 7.1). |
 | Glue + Athena | `infra/scenarios.tf` | Table `scenarios` (parquet, projection de partition sur `run_id`) interrogeable en SQL pour la validation et la démo, sans base à gérer; résultats chiffrés par la clé du bucket. |
 
 ```mermaid
 flowchart LR
     UI["Interface Next.js locale"] -->|"InvokeAgentRuntime (IAM)"| P["Runtime profile : questions, A1, A2"]
+    UI -->|"OIDC code + PKCE"| COG["Cognito : connexion gérée"]
     UI -->|"StartExecution"| SF["Step Functions : collecte"]
     SCH["EventBridge Scheduler"] -->|"toutes les 6 h"| SF
     SF --> A4["Runtime press : A4"]
@@ -32,6 +35,8 @@ flowchart LR
     KB -->|"indexe general/"| S3
     P -->|"clients/"| S3
     P -->|"Retrieve"| KB
+    P -->|"crée, IngestKnowledgeBaseDocuments, Retrieve"| CKB["Knowledge Base de chaque client (S3 Vectors + KMS)"]
+    PF["Runtime portfolio"] -->|"décisions .md : ingestion"| CKB
     P -->|"Converse + Guardrail"| M["Bedrock : Claude Opus 5.5"]
     A4 --> M
     A5 --> M
@@ -78,7 +83,8 @@ infrastructure/
   deploy/
     envs/sandbox.tfvars   valeurs de l'environnement
     release.auto.tfvars   artefact du run : release_id (jamais commité)
-  scripts/            ci-context, init, upload-config, plan, apply, destroy, validate, write-release-tfvars
+  scripts/            ci-context, init, upload-config, plan, apply, destroy, validate, write-release-tfvars,
+                      clean-client-kbs (Knowledge Bases des clients, à la main)
 ```
 
 ## Mise en place (déjà faite le 2026-11-14, sauf le bootstrap AWS)
@@ -93,6 +99,23 @@ infrastructure/
    Il crée le fournisseur OIDC `app.terraform.io` et le rôle `alphaforge-tfc-run`, assumable seulement par les runs du workspace `larpathon` de l'organisation `larpathon_2026`. Son ARN est déjà dans `deploy/envs/sandbox.tfvars`. `github.tf` (appliqué le 2026-11-15, même état) ajoute le fournisseur OIDC de GitHub Actions, le dépôt ECR `alphaforge-web`, le rôle `alphaforge-github-ecr-push` (branche `master` seulement) et les rôles liés aux services ECS et ELB ; leurs valeurs sont dans l'env du job `context` de `pipeline.yml`.
 2. **Workspace HCP Terraform** `larpathon` : sans VCS, répertoire de travail `infra`, auto-apply, Terraform 1.17.2, variables d'environnement `TFC_AWS_PROVIDER_AUTH=true` et `TFC_AWS_RUN_ROLE_ARN`.
 3. **GitHub** : secret `TF_API_TOKEN`, variables `EPHEMERAL_ENVS_ENABLED=false` et `TFC_PROJECT_ID`.
+
+## Comptes des investisseurs (Cognito)
+
+Chacun crée son compte lui-même : ouvrir `web_url`, « Se connecter ou créer un compte », puis « Créer un compte » sur la page de Cognito (courriel et mot de passe de 12 caractères au moins, avec minuscule, majuscule et chiffre). Cognito envoie un code au courriel; une fois le code saisi, l'investisseur arrive sur l'interface avec un profil vide, retrouvé ensuite sur tout appareil. Terraform ne crée aucun utilisateur et aucun mot de passe n'est dans le code.
+
+Ajouter quelqu'un au groupe `admin` (lancer une collecte depuis la page Base de connaissances), avec le rôle du Workshop :
+
+```sh
+POOL=$(aws cognito-idp list-user-pools --max-results 20 --region us-east-1 \
+  --query "UserPools[?Name=='alphaforge-sandbox-investors'].Id" --output text)   # ou l'output auth_user_pool_id
+aws cognito-idp admin-add-user-to-group --region us-east-1 \
+  --user-pool-id "$POOL" --username personne@example.com --group-name admin
+aws cognito-idp admin-list-groups-for-user --region us-east-1 \
+  --user-pool-id "$POOL" --username personne@example.com   # vérifier
+```
+
+Le courriel sert de nom d'utilisateur. Le groupe entre dans l'ID token : la personne se déconnecte puis se reconnecte pour en profiter. `admin-remove-user-from-group` le retire.
 
 ## Vérifier en local
 
@@ -118,4 +141,19 @@ GITHUB_EVENT_NAME=push GITHUB_REF_NAME=master DEFAULT_BRANCH=master sh scripts/c
 - **Scénarios : image AWS figée** : `scenarios_image_uri` refuse les étiquettes mobiles (`1.4-2-py312`); changer d'image demande de vérifier la version de Python et de reconstruire le bundle.
 - **Scénarios : journal SageMaker** : Terraform crée `/aws/sagemaker/ProcessingJobs` (clé des journaux, 14 jours). Si le groupe existe déjà dans le compte (job lancé à la main), l'apply échoue : l'importer ou le supprimer d'abord.
 - **Scénarios : démontage** : le bucket a `force_destroy`, donc les objets écrits par le job et la machine (toutes versions) partent avec lui; le groupe Athena a `force_destroy`; la base et la table Glue sont gérées par Terraform. Restent hors Terraform, sans coût : l'historique des jobs SageMaker (métadonnées) et la règle EventBridge gérée `StepFunctionsGetEventsForSageMakerProcessingJobsRule` créée par Step Functions. `scripts/destroy.sh` refuse `sandbox` : démontage par l'interface HCP Terraform, comme le reste de la pile.
+- **Connexion : lien direct de l'ALB** : avec `auth_enabled = true`, `web_alb_url` (HTTP) n'a plus de session. Le cookie est `Secure` et Cognito n'accepte un retour en HTTP que sur `localhost` : l'ALB n'a pas de certificat sans nom de domaine, d'où la connexion dans Next.js plutôt que l'action `authenticate-cognito` de l'ALB. Un build du portefeuille de plus de 60 s n'a donc plus de voie de secours tant que la connexion est active. Repli : `auth_enabled = false` dans `sandbox.tfvars`, la tâche repasse en `AUTH_MODE=off`.
+- **Connexion : courriel de Cognito** : le courriel par défaut de Cognito (`COGNITO_DEFAULT`) a un petit quota d'envoi quotidien, suffisant pour la démo. Au-delà, passer par SES (`email_configuration`).
+- **Connexion : secret dans la définition de tâche** : `AUTH_SESSION_SECRET` passe comme les autres variables (`environment` de la tâche ECS) : qui lit les définitions de tâche du compte le lit. Il est marqué sensible, donc le plan affiche `container_definitions` en `(sensitive value)`. Il reste stable d'un apply à l'autre (un déploiement ne déconnecte personne).
+- **Connexion : connexion gérée version 2** : elle exige le plan `ESSENTIALS` du User Pool et un style de marque par client d'application (`aws_cognito_managed_login_branding`); sans style, la page de connexion ne s'affiche pas.
+- **Knowledge Bases des clients, hors de l'état Terraform** : le runtime `profile` les crée (une par investisseur, `app/agents/src/alphaforge/profile/client_kb.py`), donc un destroy ne les supprime pas (le bucket de vecteurs, en `force_destroy`, emporte seulement les index). Les lister ou les supprimer, avec les identifiants de l'équipe :
+
+  ```sh
+  cd infrastructure
+  sh scripts/clean-client-kbs.sh            # --dry-run par défaut : liste les bases (étiquette alphaforge:scope=client) et les index client-*
+  sh scripts/clean-client-kbs.sh --apply    # supprime ; PREFIX et AWS_REGION pour un autre environnement
+  ```
+
+  Les sources des clients sont en `dataDeletionPolicy: RETAIN` : supprimer une base ne dépend pas de son index ni de son rôle, l'ordre par rapport au destroy n'importe pas. Les `clients/<id>/kb.json` restent dans le bucket des bases OKF.
+- **Knowledge Bases des clients : quotas du compte** (relevés le 2026-11-15) : 100 Knowledge Bases par compte, non ajustable, dont la base générale ; au-delà, le runtime range l'état `quota` et réessaie après une heure, le questionnaire continue. `StartIngestionJob` est limité à 0,1 requête par seconde pour le compte et sert à la collecte : les clients passent par l'ingestion directe (`IngestKnowledgeBaseDocuments`, 5 requêtes par seconde). `CreateKnowledgeBase` et `CreateDataSource` : 2 requêtes par seconde.
+- **Knowledge Bases des clients : clé KMS** : comme celle du bucket, la clé `alias/<préfixe>-client-vectors` ne délègue pas à IAM. Elle nomme le rôle des bases des clients et le runtime `profile` (par S3 Vectors seulement) et le principal `indexing.s3vectors.amazonaws.com`. Les runtimes attendent la politique de ce rôle (`depends_on`), et un refus explicite (`ProtectGeneralKbTags`) leur interdit d'étiqueter la base générale, que `alphaforge:scope=client` ouvrirait sinon à l'ingestion. Le chiffrement d'un bucket de vecteurs ne change pas après sa création : le changer remplace le bucket et ses index.
 - **Compte supprimé le 2026-11-16** : exporter les bases des clients avant (voir le README racine).

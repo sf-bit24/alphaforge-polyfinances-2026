@@ -6,7 +6,8 @@
 # ne different que par AGENT_ROLE et par leur role IAM (moindre privilege) :
 #
 #   profile     questions de base deterministes, relances A1, portefeuille
-#               existant A2 ; appele par l'interface locale
+#               existant A2 ; appele par l'interface locale ; cree la
+#               Knowledge Base de chaque client (client_kb.tf)
 #   press       A4, specialiste de la presse ; appele par Step Functions
 #   data        A5, specialiste des donnees ; appele par Step Functions
 #   supervisor  A6, superviseur de la base generale ; appele par Step Functions
@@ -149,11 +150,14 @@ locals {
     AGENT_OBSERVABILITY_ENABLED = "true"
   }
 
-  agentcore_profile_env = {
+  # Knowledge Base de chaque client (client_kb.tf) : profile et portfolio
+  # (qui reprend ces variables) recoivent le bucket de vecteurs, le role et le
+  # modele d'embedding ; vides si client_kb_enabled = false.
+  agentcore_profile_env = merge({
     ALPHAFORGE_KB_ID             = aws_bedrockagent_knowledge_base.general.id
     ALPHAFORGE_GUARDRAIL_ID      = aws_bedrock_guardrail.cadre.guardrail_id
     ALPHAFORGE_GUARDRAIL_VERSION = aws_bedrock_guardrail_version.cadre.version
-  }
+  }, local.client_kb_env)
 
   # portfolio : celles de profile, puis la tracabilite du volet finance
   # (traceability.tf) et le modele des roles du debat. finance/debate/roles.py
@@ -403,6 +407,127 @@ data "aws_iam_policy_document" "agentcore" {
       resources = [aws_bedrock_guardrail.cadre.guardrail_arn]
     }
   }
+
+  # ---------------------------------------------------------------------------
+  # Knowledge Base de chaque client (client_kb.tf). profile cree l'index
+  # client-<id>, la Knowledge Base etiquetee alphaforge:scope=client et sa
+  # source CUSTOM ; profile et portfolio y ingerent et y cherchent. Aucun droit
+  # de suppression : seul scripts/clean-client-kbs.sh supprime, avec les
+  # identifiants de l'equipe.
+  # ---------------------------------------------------------------------------
+  dynamic "statement" {
+    for_each = contains(local.client_kb_creator_roles, each.key) ? [1] : []
+    content {
+      sid       = "ClientKbIndex"
+      actions   = ["s3vectors:CreateIndex", "s3vectors:GetIndex"]
+      resources = [local.client_kb_index_arn_pattern]
+    }
+  }
+
+  # CreateKnowledgeBase n'a pas de type de ressource : condition sur
+  # l'etiquette demandee. TagResource suit, pour les etiquettes posees a la
+  # creation.
+  dynamic "statement" {
+    for_each = contains(local.client_kb_creator_roles, each.key) ? [1] : []
+    content {
+      sid       = "ClientKbCreate"
+      actions   = ["bedrock:CreateKnowledgeBase"]
+      resources = ["*"]
+      condition {
+        test     = "StringEquals"
+        variable = "aws:RequestTag/alphaforge:scope"
+        values   = ["client"]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = contains(local.client_kb_creator_roles, each.key) ? [1] : []
+    content {
+      sid       = "ClientKbTag"
+      actions   = ["bedrock:TagResource"]
+      resources = [local.client_kb_arn_pattern]
+      condition {
+        test     = "StringEquals"
+        variable = "aws:RequestTag/alphaforge:scope"
+        values   = ["client"]
+      }
+    }
+  }
+
+  # TagResource porte sur knowledge-base/* : sans ce refus, profile pourrait
+  # etiqueter la base generale alphaforge:scope=client, puis y ingerer.
+  dynamic "statement" {
+    for_each = contains(local.client_kb_user_roles, each.key) ? [1] : []
+    content {
+      sid       = "ProtectGeneralKbTags"
+      effect    = "Deny"
+      actions   = ["bedrock:TagResource", "bedrock:UntagResource"]
+      resources = [aws_bedrockagent_knowledge_base.general.arn]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = contains(local.client_kb_creator_roles, each.key) ? [1] : []
+    content {
+      sid = "ClientKbManage"
+      actions = [
+        "bedrock:CreateDataSource",
+        "bedrock:GetDataSource",
+        "bedrock:GetKnowledgeBase",
+        "bedrock:ListDataSources",
+      ]
+      resources = [local.client_kb_arn_pattern]
+      condition {
+        test     = "StringEquals"
+        variable = "aws:ResourceTag/alphaforge:scope"
+        values   = ["client"]
+      }
+    }
+  }
+
+  # Reprise d'une creation dont l'identifiant s'est perdu : la base est
+  # retrouvee par son nom (ListKnowledgeBases n'a pas de type de ressource).
+  dynamic "statement" {
+    for_each = contains(local.client_kb_creator_roles, each.key) ? [1] : []
+    content {
+      sid       = "ClientKbList"
+      actions   = ["bedrock:ListKnowledgeBases"]
+      resources = ["*"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = contains(local.client_kb_creator_roles, each.key) ? [1] : []
+    content {
+      sid       = "PassClientKbRole"
+      actions   = ["iam:PassRole"]
+      resources = [aws_iam_role.client_knowledge_base.arn]
+      condition {
+        test     = "StringEquals"
+        variable = "iam:PassedToService"
+        values   = ["bedrock.amazonaws.com"]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = contains(local.client_kb_user_roles, each.key) ? [1] : []
+    content {
+      sid = "ClientKbDocuments"
+      actions = [
+        "bedrock:DeleteKnowledgeBaseDocuments",
+        "bedrock:IngestKnowledgeBaseDocuments",
+        "bedrock:Retrieve",
+      ]
+      resources = [local.client_kb_arn_pattern]
+      condition {
+        test     = "StringEquals"
+        variable = "aws:ResourceTag/alphaforge:scope"
+        values   = ["client"]
+      }
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "agentcore" {
@@ -456,6 +581,9 @@ resource "aws_bedrockagentcore_agent_runtime" "this" {
 
   tags = local.common_tags
 
-  # AgentCore verifie le role a la creation : ses permissions d'abord.
-  depends_on = [aws_iam_role_policy.agentcore]
+  # AgentCore verifie le role a la creation : ses permissions d'abord. Le role
+  # des Knowledge Bases des clients aussi : sans sa politique, la premiere
+  # creation d'une base apres l'apply echouerait (etat failed, nouvel essai
+  # 3 minutes plus tard).
+  depends_on = [aws_iam_role_policy.agentcore, aws_iam_role_policy.client_knowledge_base]
 }

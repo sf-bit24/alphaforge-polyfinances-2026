@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useI18n } from "@/lib/i18n/provider";
 import { cn } from "@/components/ui/cn";
+import { AccountMenu } from "./account-menu";
 import { Brand } from "./brand";
 import { LanguageToggle } from "./language-toggle";
 import { ModeChip } from "./mode-chip";
@@ -29,7 +30,6 @@ function NavTabs({ pathname }: { pathname: string }) {
   const { t } = useI18n();
   const tabs = [
     { href: "/dashboard", label: t.appNav.dashboard },
-    { href: "/details", label: t.appNav.details },
     { href: "/portfolio", label: t.appNav.portfolio },
     { href: "/", label: t.appNav.profile },
     { href: "/knowledge", label: t.appNav.knowledge },
@@ -64,7 +64,7 @@ function SettingsLink({ active }: { active: boolean }) {
   );
 }
 
-/** Top navigation of the drafts: brand, tabs with a red underline, the responsible framework and the language. */
+/** Top navigation of the drafts: brand, tabs with a red underline, the responsible framework, the language and the account. */
 export function AppNav() {
   const { t } = useI18n();
   const pathname = usePathname();
@@ -87,6 +87,7 @@ export function AppNav() {
           <ModeChip className="hidden xl:inline-flex" />
           <LanguageToggle />
           <SettingsLink active={pathname.startsWith("/settings")} />
+          <AccountMenu />
         </div>
       </div>
     </header>

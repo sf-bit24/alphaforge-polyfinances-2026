@@ -132,8 +132,9 @@ def client_state(  # noqa: PLR0913 - signature gardée : le service l'appelle pa
     message: str | None = None,
     portfolio: dict[str, Any] | None = None,
     documents: list[dict[str, Any]] | None = None,
+    client_kb: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    state = {
         "client_id": session.client_id,
         "locale": locale,
         "stage": session.stage,
@@ -144,3 +145,7 @@ def client_state(  # noqa: PLR0913 - signature gardée : le service l'appelle pa
         "portfolio": portfolio,
         "trace": trace.steps,
     }
+    if client_kb is not None:
+        # Knowledge Base du client (CONTRACTS.md 3.3) : statut, identifiant, documents indexés, clés en attente.
+        state["client_kb"] = client_kb
+    return state

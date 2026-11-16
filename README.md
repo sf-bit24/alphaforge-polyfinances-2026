@@ -24,11 +24,25 @@ https://github.com/user-attachments/assets/b2629c28-754f-4717-b255-53ac79fe743f
 
 Les trois flux de bout en bout ont chacun leur diagramme, avec ses étapes numérotées : [création du profil](docs/architecture/alphaforge-flux-profil.png), [création du portefeuille](docs/architecture/alphaforge-flux-portefeuille.png) et [veille web](docs/architecture/alphaforge-flux-veille-web.png). Les sources modifiables (`.drawio`) sont dans [`docs/architecture/`](docs/architecture/README.md).
 
-- **Profil** (runtime `profile`) : questions de base déterministes, sans modèle ; A2 lit un portefeuille existant sous n'importe quelle forme, le code le valorise ; A1 relance sur ce qui manque. La complétude est calculée par le code (seuil de 70 %, plafond affiché de 95 %).
+- **Profil** (runtime `profile`) : questions de base déterministes, sans modèle ; A2 lit un portefeuille existant sous n'importe quelle forme, le code le valorise ; A1 relance sur ce qui manque. La complétude est calculée par le code (seuil de 70 %, plafond affiché de 95 %). Chaque investisseur a aussi sa propre Knowledge Base, un index de recherche construit à partir de sa base OKF, où A1 retrouve un passage (une décision passée, une note) ; les chiffres viennent toujours des documents OKF.
 - **Portefeuille simulé** (runtime `portfolio`) : profil traduit en mandat, étape 0 (style et sélection), optimiseur, avocat A3 et quatre lentilles sur deux tours, Judge déterministe, explication ancrée sur des faits sourcés. Aucun poids ni chiffre ne vient d'un modèle.
 - **Veille web** (Step Functions) : collecte toutes les 6 h (A4 presse, A5 données), recherche par experts de sujet (A0, E1 à E7 et leurs chercheurs), validation par A6, puis ingestion dans la Knowledge Base.
-- **AWS** : 8 runtimes Bedrock AgentCore tirés d'un seul zip de code, Bedrock (Claude Opus 5.5 partout, effort réglé par agent) avec Guardrails, Knowledge Base sur S3 Vectors, S3 chiffré par KMS, Step Functions et EventBridge Scheduler, SageMaker Processing, Glue et Athena pour les scénarios, DynamoDB pour la chaîne d'audit, interface sur ECS Fargate derrière un ALB et CloudFront. Détail et justification : [`infrastructure/README.md`](infrastructure/README.md).
+- **AWS** : 8 runtimes Bedrock AgentCore tirés d'un seul zip de code, Bedrock (Claude Opus 5.5 partout, effort réglé par agent) avec Guardrails, Knowledge Bases sur S3 Vectors (la base générale, et une par client), S3 chiffré par KMS, Step Functions et EventBridge Scheduler, SageMaker Processing, Glue et Athena pour les scénarios, DynamoDB pour la chaîne d'audit, interface sur ECS Fargate derrière un ALB et CloudFront, Cognito pour la connexion des investisseurs (un compte par profil). Détail et justification : [`infrastructure/README.md`](infrastructure/README.md).
 - **Explicabilité** : chaque requête renvoie sa trace (étape déterministe, agent, outil, modèle, stockage, garde-fou, avec leurs sources), affichée à côté du dialogue ; chaque décision de portefeuille garde sa trace X-Ray.
+
+Bases OKF et Knowledge Bases : la base générale n'indexe que `general/` ; chaque client a sa Knowledge Base, créée par le runtime `profile` à sa première action et alimentée document par document (détail : [`app/CONTRACTS.md`](app/CONTRACTS.md), section 5.3).
+
+```mermaid
+flowchart LR
+    P["Runtime profile : questionnaire, A1, A2"] -->|"clients/ : source de vérité"| S3[("S3 + KMS : bases OKF")]
+    PF["Runtime portfolio"] -->|"decisions/"| S3
+    P -->|"crée l'index et la base, IngestKnowledgeBaseDocuments"| CKB["Knowledge Base du client (une par investisseur, S3 Vectors + KMS)"]
+    PF -->|"IngestKnowledgeBaseDocuments"| CKB
+    A1["A1"] -->|"Retrieve : base du client de la session"| CKB
+    A1 -->|"Retrieve"| KB["Knowledge Base générale"]
+    SF["Step Functions : collecte"] -->|"StartIngestionJob"| KB
+    KB -->|"indexe general/"| S3
+```
 
 ## Dépôt
 

@@ -103,6 +103,20 @@ describe("mock runtime: health and sessions", () => {
     expect((await state(runtime, { action: "session.resume", client_id: id })).locale).toBe("en");
   });
 
+  it("creates the client knowledge base, then indexes every Markdown document of the base", async () => {
+    const runtime = newRuntime();
+    const start = await state(runtime, { action: "session.start", locale: "fr" });
+    expect(start.client_kb).toMatchObject({ status: "creating", documents: 0, pending: 3 });
+    expect(start.client_kb?.knowledge_base_id).toMatch(/^MOCK/);
+    expect(start.trace.map((step) => step.title)).toContain("Knowledge Base du client créée");
+    const resumed = await state(runtime, { action: "session.resume", client_id: start.client_id });
+    expect(resumed.client_kb).toMatchObject({ status: "active", documents: 3, pending: 0 });
+    expect(resumed.trace.map((step) => step.title)).toContain("Documents indexés dans la Knowledge Base du client");
+    const profile = await state(runtime, { action: "profile.get", client_id: start.client_id });
+    expect(profile.client_kb).toMatchObject({ status: "active", documents: 3, pending: 0 });
+    expect(profile.trace.map((step) => step.title)).not.toContain("Documents indexés dans la Knowledge Base du client");
+  });
+
   it("returns not_found for an unknown client", async () => {
     const runtime = newRuntime();
     const error = await failure(runtime, { action: "session.resume", client_id: "9b2e7c1a-0d3f-4a5b-8c6d-7e8f9a0b1c2d" });

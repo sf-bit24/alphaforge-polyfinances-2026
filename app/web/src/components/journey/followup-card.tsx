@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { AnswerValue, ClientState, Question } from "@/lib/contract/schemas";
 import { displayAnswer } from "@/lib/client/answers";
+import { useAccount } from "@/lib/client/account";
 import type { ReplyInput } from "@/lib/client/session-store";
 import { useSession } from "@/lib/client/session";
 import { useI18n } from "@/lib/i18n/provider";
@@ -280,6 +281,7 @@ function NoMoreQuestions({ state }: { state: ClientState }) {
 function ProfileReady({ onRestart }: { onRestart: () => void }) {
   const { t } = useI18n();
   const session = useSession();
+  const signedIn = useAccount().status === "signed_in";
   return (
     <>
       <div className={styles.ready}>
@@ -299,9 +301,12 @@ function ProfileReady({ onRestart }: { onRestart: () => void }) {
         <Link href="/dashboard" className={`${styles.cta} ${styles.ctaSmall}`}>
           {t.journey.end.toDashboard}
         </Link>
-        <button type="button" className={styles.ghost} onClick={onRestart} disabled={Boolean(session.pending)}>
-          {t.journey.end.restart}
-        </button>
+        {/* An account has one profile: there is nothing to start over. */}
+        {signedIn ? null : (
+          <button type="button" className={styles.ghost} onClick={onRestart} disabled={Boolean(session.pending)}>
+            {t.journey.end.restart}
+          </button>
+        )}
       </div>
     </>
   );

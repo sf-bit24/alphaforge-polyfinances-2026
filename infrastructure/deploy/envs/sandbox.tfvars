@@ -31,6 +31,11 @@ sec_contact_email = "sacha.burelle.1@ens.etsmtl.ca"
 collecte_schedule_expression = "rate(6 hours)"
 collecte_schedule_enabled    = true
 
+# Knowledge Base de chaque client (client_kb.tf) : creee par le runtime profile
+# a la premiere action d'un client, alimentee par profile et portfolio. false
+# pour s'en passer sans toucher au code (les runtimes font comme avant).
+client_kb_enabled = true
+
 # Runtime portfolio (A3, lentilles, Judge du volet finance) : zip
 # agents-portfolio.zip construit par defaut par package.sh, donnees longues lues
 # sous runtime/data/long/ (scripts/finance/upload_long_data.py).
@@ -48,6 +53,11 @@ evolution_enabled = true
 web_enabled    = true
 web_vpc_id     = "vpc-069adf85dbd931d7f"
 web_subnet_ids = ["subnet-0281babfcae54063f", "subnet-0315eb8575f90e70d", "subnet-05548ee397dc9ba6b"]
+
+# Connexion des investisseurs (auth.tf) : User Pool Cognito, connexion geree,
+# un compte = un client_id. La tache ECS passe en AUTH_MODE=cognito ; le lien
+# direct de l'ALB (HTTP) ne garde alors pas de session.
+auth_enabled = true
 
 additional_tags = {
   Owner = "larpathon"

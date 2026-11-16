@@ -14,8 +14,10 @@ import {
   startExecution,
   stateMachineInfo,
 } from "./aws";
+import { bindAgentBody, bindPortfolioBody, identityOf, requireAdmin, type Identity } from "./auth/guard";
 import { ConfigError, getConfig, profileRuntimeName, type AgentMode, type GatewayConfig } from "./config";
 import { GatewayError, jsonResponse, localeOf, statusOfEnvelope, toGatewayError } from "./errors";
+import { withHeartbeat } from "./heartbeat";
 import { invokeLocal } from "./local";
 import { sseResponse, sseStreamOf, type Upstream } from "./upstream";
 
@@ -46,8 +48,11 @@ function errorResponse(error: unknown, locale: Locale): Response {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** Read and validate a contract request; throws a GatewayError on any violation. */
-export async function readAgentRequest(request: Request): Promise<AgentRequest> {
+/**
+ * Read and validate a contract request; throws a GatewayError on any violation. In cognito mode the
+ * client_id comes from the caller's session, never from the body (CONTRACTS.md 7.1).
+ */
+export async function readAgentRequest(request: Request, identity: Identity = { mode: "off" }): Promise<AgentRequest> {
   const length = Number(request.headers.get("content-length") ?? "0");
   if (length > MAX_BODY_BYTES) {
     throw new GatewayError(
@@ -66,7 +71,7 @@ export async function readAgentRequest(request: Request): Promise<AgentRequest> 
   } catch {
     throw new GatewayError("bad_request", { fr: "Corps JSON invalide.", en: "Invalid JSON body." }, 400);
   }
-  return validateAgentRequest(raw);
+  return validateAgentRequest(bindAgentBody(raw, identity));
 }
 
 export function validateAgentRequest(raw: unknown): AgentRequest {
@@ -131,8 +136,9 @@ async function callRuntime(config: GatewayConfig, request: AgentRequest, stream:
 export async function handleAgent(request: Request): Promise<Response> {
   const locale = localeOf(request);
   try {
+    const identity = identityOf(request);
     const config = configOrThrow();
-    const agentRequest = await readAgentRequest(request);
+    const agentRequest = await readAgentRequest(request, identity);
     const upstream = await callRuntime(config, agentRequest, wantsStream(agentRequest), request.signal);
     if (upstream.kind === "stream") return sseResponse(upstream.body);
     if (!isRecord(upstream.body) || typeof upstream.body.ok !== "boolean") {
@@ -191,13 +197,30 @@ async function callPortfolio(config: GatewayConfig, request: PortfolioBuildReque
   }
 }
 
+/** The runtime's envelope as the gateway's JSON answer, or a 502 if there is none. */
+async function portfolioAnswer(config: GatewayConfig, build: PortfolioBuildRequest, locale: Locale, signal: AbortSignal): Promise<Response> {
+  const upstream = await callPortfolio(config, build, locale, signal);
+  if (upstream.kind === "stream" || !isRecord(upstream.body) || typeof upstream.body.ok !== "boolean") {
+    throw new GatewayError(
+      "internal",
+      { fr: "Réponse du runtime portfolio hors contrat (enveloppe absente).", en: "Portfolio runtime response outside the contract (no envelope)." },
+      502,
+      upstream.kind === "json" ? { upstream_status: upstream.status, body: JSON.stringify(upstream.body).slice(0, 500) } : { kind: "stream" },
+    );
+  }
+  return jsonResponse(statusOfEnvelope(upstream.body, upstream.status), upstream.body);
+}
+
 /**
  * `POST /api/portfolio`: validate a `build` request, call the `portfolio` runtime of the configured mode
  * (fixtures of the engine in `mock`), pass the JSON envelope through. The browser validates the Decision.
+ * A build longer than `HEARTBEAT_AFTER_MS` (the `llm` mode, about 2 min) is answered by `withHeartbeat`:
+ * CloudFront cuts an origin silent for 60 s (`infrastructure/infra/web.tf`).
  */
 export async function handlePortfolio(request: Request): Promise<Response> {
   const locale = localeOf(request);
   try {
+    const identity = identityOf(request);
     const config = configOrThrow();
     const length = Number(request.headers.get("content-length") ?? "0");
     if (length > MAX_PORTFOLIO_BODY_BYTES) {
@@ -212,17 +235,11 @@ export async function handlePortfolio(request: Request): Promise<Response> {
     } catch {
       throw new GatewayError("bad_request", { fr: "Corps JSON invalide.", en: "Invalid JSON body." }, 400);
     }
-    const build = validatePortfolioRequest(raw);
-    const upstream = await callPortfolio(config, build, locale, request.signal);
-    if (upstream.kind === "stream" || !isRecord(upstream.body) || typeof upstream.body.ok !== "boolean") {
-      throw new GatewayError(
-        "internal",
-        { fr: "Réponse du runtime portfolio hors contrat (enveloppe absente).", en: "Portfolio runtime response outside the contract (no envelope)." },
-        502,
-        upstream.kind === "json" ? { upstream_status: upstream.status, body: JSON.stringify(upstream.body).slice(0, 500) } : { kind: "stream" },
-      );
-    }
-    return jsonResponse(statusOfEnvelope(upstream.body, upstream.status), upstream.body);
+    const build = validatePortfolioRequest(bindPortfolioBody(raw, identity));
+    return await withHeartbeat(portfolioAnswer(config, build, locale, request.signal), {
+      fallback: (error) => errorResponse(error, locale),
+      signal: request.signal,
+    });
   } catch (error) {
     return errorResponse(error, locale);
   }
@@ -305,10 +322,11 @@ async function awsCollection(config: GatewayConfig, executionArn: string | null)
   return jsonResponse(200, { ok: true, state_machine: stateMachine, executions });
 }
 
-/** `GET /api/collect`: recent executions, or one execution with `?execution_arn=`. */
+/** `GET /api/collect`: recent executions, or one execution with `?execution_arn=` (any signed-in account). */
 export async function handleCollectGet(request: Request): Promise<Response> {
   const locale = localeOf(request);
   try {
+    identityOf(request);
     const config = configOrThrow();
     const executionArn = new URL(request.url).searchParams.get("execution_arn");
     if (executionArn !== null && !EXECUTION_ARN.test(executionArn)) {
@@ -346,10 +364,14 @@ async function readCollectRequest(request: Request): Promise<CollectRequest> {
   return input;
 }
 
-/** `POST /api/collect`: start a collection run (no name, no run_id: Step Functions uses a UUID). */
+/**
+ * `POST /api/collect`: start a collection run (no name, no run_id: Step Functions uses a UUID).
+ * In cognito mode, members of the `admin` group only.
+ */
 export async function handleCollectPost(request: Request): Promise<Response> {
   const locale = localeOf(request);
   try {
+    requireAdmin(identityOf(request));
     const config = configOrThrow();
     const input = await readCollectRequest(request);
     if (config.AGENT_MODE === "local") throw collectUnavailable();

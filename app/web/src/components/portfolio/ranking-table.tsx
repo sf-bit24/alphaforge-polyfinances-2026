@@ -5,8 +5,8 @@ import type { DecisionFact, PortfolioBuildResponse } from "@/lib/contract/portfo
 import { useI18n } from "@/lib/i18n/provider";
 import { RANKING_FEATURES, rankingRows, rowFacts, type RankingRow } from "@/lib/portfolio/decision";
 import { formatFact } from "@/lib/portfolio/format";
-import d from "@/components/details/details.module.css";
 import { cn } from "@/components/ui/cn";
+import d from "./base.module.css";
 import { FactChip, useDecisionLookup } from "./facts";
 import p from "./portfolio.module.css";
 

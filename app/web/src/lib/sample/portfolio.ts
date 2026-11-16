@@ -1,8 +1,7 @@
 /**
- * The example portfolio of the approved drafts (dashboard and details), shown in
- * `mock` mode only and always labelled as an example. Nothing here is computed from
- * the investor’s profile: the guided portfolio (A3, analysis agents, Judge) is not
- * in version 1. The series are synthetic, seeded and calibrated like the draft:
+ * The example portfolio of the approved dashboard draft, shown in `mock` mode only
+ * and always labelled as an example. Nothing here is computed from the investor’s
+ * profile. The series are synthetic, seeded and calibrated like the draft:
  * a 6.1 % five-year volatility, a −9.8 % worst drop in 2022, a 400 000 $ capital.
  */
 import type { Locale } from "@/lib/contract/schemas";
@@ -83,27 +82,6 @@ export function annualizedVol(returns: number[], window = returns.length): numbe
   return Math.sqrt(slice.reduce((sum, value) => sum + (value - mean) ** 2, 0) / slice.length) * Math.sqrt(252);
 }
 
-export interface MonthlyReturn {
-  /** Last trading day of the month. */
-  at: number;
-  /** Return of the month, as a share. */
-  value: number;
-}
-
-/** Month-by-month returns of a value series. */
-export function monthlyReturns(dates: number[], values: number[]): MonthlyReturn[] {
-  const months: MonthlyReturn[] = [];
-  let start = 0;
-  for (let index = 1; index <= dates.length; index += 1) {
-    const ends = index === dates.length || new Date(dates[index] ?? 0).getUTCMonth() !== new Date(dates[index - 1] ?? 0).getUTCMonth();
-    if (!ends) continue;
-    const base = values[Math.max(0, start - 1)] ?? 1;
-    months.push({ at: dates[index - 1] ?? 0, value: (values[index - 1] ?? base) / base - 1 });
-    start = index;
-  }
-  return months;
-}
-
 export type GroupKey = "bonds" | "ca_equity" | "us_equity" | "gold" | "cash";
 
 export interface Holding {
@@ -179,120 +157,9 @@ export const GROUPS: Group[] = [
 
 export const groupWeight = (group: Group): number => group.holdings.reduce((sum, holding) => sum + holding.weight, 0);
 
-export interface GovernanceCheck {
-  label: L;
-  value: L;
-  limit: L;
-}
-
-/** The seven limits of the example profile, all respected. */
-export const GOVERNANCE: GovernanceCheck[] = [
-  { label: { fr: "Poids d’un seul titre", en: "Weight of a single security" }, value: { fr: "5,0 %", en: "5.0%" }, limit: { fr: "≤ 5 %", en: "≤ 5%" } },
-  { label: { fr: "Actions au total", en: "Equities in total" }, value: { fr: "44 %", en: "44%" }, limit: { fr: "≤ 45 %", en: "≤ 45%" } },
-  { label: { fr: "Obligations et or", en: "Bonds and gold" }, value: { fr: "48 %", en: "48%" }, limit: { fr: "≥ 40 %", en: "≥ 40%" } },
-  { label: { fr: "Cryptoactifs", en: "Crypto-assets" }, value: { fr: "0 %", en: "0%" }, limit: { fr: "= 0 %", en: "= 0%" } },
-  { label: { fr: "Volatilité", en: "Volatility" }, value: { fr: "6,1 %", en: "6.1%" }, limit: { fr: "≤ 7 %", en: "≤ 7%" } },
-  { label: { fr: "Encaisse de sécurité", en: "Safety cash" }, value: { fr: "8 mois", en: "8 months" }, limit: { fr: "≥ 6 mois", en: "≥ 6 months" } },
-  {
-    label: { fr: "Durée obligataire", en: "Bond duration" },
-    value: { fr: "courte à moyenne", en: "short to medium" },
-    limit: { fr: "pas de long terme", en: "no long term" },
-  },
-];
-
-export type LogIcon = "stop" | "box" | "user" | "swap" | "data";
-export type LogStatus = "stop" | "wait" | "ok" | "navy";
-
-export interface LogEntry {
-  icon: LogIcon;
-  title: L;
-  by: L;
-  status: LogStatus;
-  statusLabel: L;
-  when: L;
-}
-
-export const DECISION_LOG: LogEntry[] = [
-  {
-    icon: "stop",
-    title: { fr: "Refus provisoire · NVDA pour 50 000 $", en: "Provisional refusal · NVDA for $50,000" },
-    by: { fr: "Judge · 3 plafonds dépassés", en: "Judge · 3 caps exceeded" },
-    status: "stop",
-    statusLabel: { fr: "Refusé", en: "Refused" },
-    when: { fr: "aujourd’hui", en: "today" },
-  },
-  {
-    icon: "box",
-    title: { fr: "Bac à sable de 4 % proposé", en: "4% sandbox proposed" },
-    by: { fr: "Agent du portefeuille · conforme", en: "Portfolio agent · compliant" },
-    status: "wait",
-    statusLabel: { fr: "À décider", en: "To decide" },
-    when: { fr: "aujourd’hui", en: "today" },
-  },
-  {
-    icon: "user",
-    title: { fr: "Profil mis à jour · capacité de perte", en: "Profile updated · loss capacity" },
-    by: { fr: "Agent du profil · votre réponse", en: "Profile agent · your answer" },
-    status: "ok",
-    statusLabel: { fr: "Confirmé", en: "Confirmed" },
-    when: { fr: "hier", en: "yesterday" },
-  },
-  {
-    icon: "swap",
-    title: { fr: "Rééquilibrage simulé · or ramené à 6 %", en: "Simulated rebalancing · gold back to 6%" },
-    by: { fr: "Agent du portefeuille · aucun ordre passé", en: "Portfolio agent · no order placed" },
-    status: "navy",
-    statusLabel: { fr: "Simulé", en: "Simulated" },
-    when: { fr: "il y a 3 j", en: "3 days ago" },
-  },
-  {
-    icon: "data",
-    title: { fr: "Prix mis à jour au 12 nov. 2026", en: "Prices updated to Nov 12, 2026" },
-    by: { fr: "Agent de données · Yahoo Finance", en: "Data agent · Yahoo Finance" },
-    status: "ok",
-    statusLabel: { fr: "Confirmé", en: "Confirmed" },
-    when: { fr: "il y a 3 j", en: "3 days ago" },
-  },
-];
-
-/** The four questions of the BNCD workshop, answered for the example portfolio. */
-export const WHY: Array<{ title: L; text: L }> = [
-  {
-    title: { fr: "Quelles données", en: "Which data" },
-    text: {
-      fr: "Prix quotidiens de nov. 2021 à nov. 2026 (Yahoo Finance via le jeu de départ), taux de la Banque du Canada, votre profil.",
-      en: "Daily prices from Nov 2021 to Nov 2026 (Yahoo Finance through the starter dataset), Bank of Canada rates, your profile.",
-    },
-  },
-  {
-    title: { fr: "Pourquoi ce choix", en: "Why this choice" },
-    text: {
-      fr: "Votre capacité à encaisser une perte est faible : vous aurez besoin de cet argent dès 2030. Près de la moitié est en obligations et en or pour amortir les baisses.",
-      en: "Your capacity to absorb a loss is low: you will need this money from 2030. Almost half is in bonds and gold to cushion falls.",
-    },
-  },
-  {
-    title: { fr: "Quelles limites", en: "Which limits" },
-    text: {
-      fr: "Cinq ans d’historique seulement, et des titres choisis en 2026 : le passé paraît plus favorable qu’il ne l’était.",
-      en: "Only five years of history, and securities picked in 2026: the past looks better than it was.",
-    },
-  },
-  {
-    title: { fr: "Ce qui changerait la réponse", en: "What would change the answer" },
-    text: {
-      fr: "Un départ à la retraite repoussé, ou un autre revenu stable, permettrait plus d’actions.",
-      en: "A later retirement, or another stable income, would allow more equities.",
-    },
-  },
-];
-
 export const SAMPLE_FACTS = {
   capital: 400_000,
   volCap: 0.07,
-  stressLimit: -0.12,
-  stressScale: -0.2,
-  retirement: { date: utc(2030, 6, 1), equityToday: 0.44, equityTarget: 0.32, glidePath: 0.28 },
   limits: { respected: 7, total: 7 },
 } as const;
 
@@ -302,13 +169,10 @@ export interface SamplePortfolio {
   value: number[];
   /** Daily returns of the portfolio. */
   returns: number[];
-  /** XIU.TO alone, growth of 1 (rebased on the chart’s window). */
-  benchmark: number[];
   /** 2022 worst drop of the portfolio, as a share (negative). */
   drop2022: number;
   /** Five-year annualized volatility, as a share. */
   vol5y: number;
-  months: MonthlyReturn[];
 }
 
 let cached: SamplePortfolio | null = null;
@@ -317,14 +181,13 @@ let cached: SamplePortfolio | null = null;
 export function samplePortfolio(): SamplePortfolio {
   if (cached) return cached;
   const dates = tradingDays();
-  const shocksA = noise(7, dates.length);
-  const shocksB = noise(11, dates.length);
+  const shocks = noise(7, dates.length);
   let low = -0.004;
   let high = 0;
-  let portfolio = series(dates, shocksA, 0.061, (low + high) / 2);
+  let portfolio = series(dates, shocks, 0.061, (low + high) / 2);
   for (let step = 0; step < 30; step += 1) {
     const mid = (low + high) / 2;
-    portfolio = series(dates, shocksA, 0.061, mid);
+    portfolio = series(dates, shocks, 0.061, mid);
     if (drawdown2022(dates, portfolio.values) < -0.098) low = mid;
     else high = mid;
   }
@@ -334,46 +197,8 @@ export function samplePortfolio(): SamplePortfolio {
     dates,
     value,
     returns: portfolio.returns,
-    benchmark: series(dates, shocksB, 0.131, -0.0011).values,
     drop2022: drawdown2022(dates, value),
     vol5y: annualizedVol(portfolio.returns),
-    months: monthlyReturns(dates, value).slice(-60),
   };
   return cached;
-}
-
-export type ChartRange = "1m" | "1y" | "5y";
-export const CHART_RANGES: Record<ChartRange, { take: number | "all"; step: number }> = {
-  "1m": { take: 22, step: 1 },
-  "1y": { take: 252, step: 5 },
-  "5y": { take: "all", step: 21 },
-};
-
-export interface ChartPoint {
-  at: number;
-  portfolio: number;
-  /** XIU.TO alone, invested with the portfolio’s value at the window start. */
-  benchmark: number;
-}
-
-/** Points of the comparison chart for a window, sampled every `step` trading days (last day always kept). */
-export function chartPoints(sample: SamplePortfolio, range: ChartRange): ChartPoint[] {
-  const { take, step } = CHART_RANGES[range];
-  const count = sample.dates.length;
-  const start = take === "all" ? 0 : count - take;
-  const base = (sample.value[start] ?? 0) / (sample.benchmark[start] ?? 1);
-  const points: ChartPoint[] = [];
-  for (let index = start; index < count; index += 1) {
-    if ((index - start) % step !== 0 && index !== count - 1) continue;
-    points.push({ at: sample.dates[index] ?? 0, portfolio: sample.value[index] ?? 0, benchmark: (sample.benchmark[index] ?? 0) * base });
-  }
-  return points;
-}
-
-export type VolWindow = "1y" | "3y" | "5y";
-export const VOL_WINDOWS: Record<VolWindow, number | "all"> = { "1y": 252, "3y": 756, "5y": "all" };
-
-export function windowVol(sample: SamplePortfolio, window: VolWindow): number {
-  const size = VOL_WINDOWS[window];
-  return annualizedVol(sample.returns, size === "all" ? sample.returns.length : size);
 }

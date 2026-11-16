@@ -43,6 +43,56 @@ export function getConfig(): GatewayConfig {
   return parsed.data;
 }
 
+/* ------------------------------------------------------------------ */
+/* Sign-in (CONTRACTS.md 7.1)                                          */
+/* ------------------------------------------------------------------ */
+
+const required = <T extends z.ZodType>(schema: T) => z.preprocess(blankAsUndefined, schema);
+const httpsUrl = z.url({ protocol: /^https$/ });
+
+/**
+ * `AUTH_MODE=off` (default): no sign-in, the browser keeps its client_id (modes mock, local and aws as before).
+ * `AUTH_MODE=cognito`: every page and `/api/*` route needs a session; the client_id comes from the account.
+ */
+const AuthConfigSchema = z.discriminatedUnion("AUTH_MODE", [
+  z.object({ AUTH_MODE: z.literal("off") }),
+  z.object({
+    AUTH_MODE: z.literal("cognito"),
+    /** `https://cognito-idp.<region>.amazonaws.com/<user pool id>` (output `auth_issuer`). */
+    COGNITO_ISSUER: required(z.string().regex(/^https:\/\/cognito-idp\.[a-z0-9-]+\.amazonaws\.com\/[a-z0-9-]+_[A-Za-z0-9]+$/)),
+    /** Public app client, no secret (output `auth_client_id`). */
+    COGNITO_CLIENT_ID: required(z.string().regex(/^[A-Za-z0-9]{1,128}$/)),
+    /** Managed login domain, `https://<prefix>.auth.<region>.amazoncognito.com` (output `auth_domain`). */
+    COGNITO_DOMAIN: required(httpsUrl.transform((url) => new URL(url).origin)),
+    /** Public origin of the interface: CloudFront, or `http://localhost:3000` with next dev. */
+    APP_URL: required(z.url({ protocol: /^https?$/ }).transform((url) => new URL(url).origin)),
+    /** Key of the session cookie (AES-256-GCM): at least 32 characters, never sent to the browser. */
+    AUTH_SESSION_SECRET: required(z.string().min(32)),
+  }),
+]);
+
+export type AuthConfig = z.infer<typeof AuthConfigSchema>;
+export type CognitoConfig = Extract<AuthConfig, { AUTH_MODE: "cognito" }>;
+
+/** The sign-in settings, read at request time; a missing or invalid variable in `cognito` mode is a ConfigError. */
+export function getAuthConfig(): AuthConfig {
+  const mode = blankAsUndefined(process.env.AUTH_MODE) ?? "off";
+  const parsed = AuthConfigSchema.safeParse({
+    AUTH_MODE: mode,
+    COGNITO_ISSUER: process.env.COGNITO_ISSUER,
+    COGNITO_CLIENT_ID: process.env.COGNITO_CLIENT_ID,
+    COGNITO_DOMAIN: process.env.COGNITO_DOMAIN,
+    APP_URL: process.env.APP_URL,
+    AUTH_SESSION_SECRET: process.env.AUTH_SESSION_SECRET,
+  });
+  if (!parsed.success) {
+    throw new ConfigError(
+      parsed.error.issues.map((issue) => ({ variable: String(issue.path[0] ?? "AUTH_MODE"), message: issue.message })),
+    );
+  }
+  return parsed.data;
+}
+
 /** Name of the `profile` runtime, found by `ListAgentRuntimes`. */
 export function profileRuntimeName(config: GatewayConfig): string {
   return `${config.ALPHAFORGE_PREFIX}_profile`;

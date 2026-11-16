@@ -5,6 +5,8 @@ import type { ErrorEnvelope, Locale } from "@/lib/contract/schemas";
 export const STATUS_BY_CODE: Record<string, number> = {
   bad_request: 400,
   unknown_action: 400,
+  unauthorized: 401,
+  forbidden: 403,
   invalid_answer: 422,
   not_found: 404,
   conflict: 409,
@@ -13,10 +15,13 @@ export const STATUS_BY_CODE: Record<string, number> = {
   internal: 500,
 };
 
-/** An error raised by the gateway itself (not by a runtime). Codes stay within the contract's list. */
+/**
+ * An error raised by the gateway itself (not by a runtime). Codes stay within the contract's list;
+ * `unauthorized` and `forbidden` come from the sign-in only (CONTRACTS.md 7.1).
+ */
 export class GatewayError extends Error {
   constructor(
-    readonly code: "bad_request" | "unknown_action" | "not_found" | "internal",
+    readonly code: "bad_request" | "unknown_action" | "unauthorized" | "forbidden" | "not_found" | "internal",
     readonly text: { fr: string; en: string },
     readonly status: number,
     readonly details: Record<string, unknown> = {},

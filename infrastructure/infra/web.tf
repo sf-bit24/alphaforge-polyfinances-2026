@@ -223,9 +223,13 @@ data "aws_iam_policy_document" "web_account_deletion" {
   }
 
   # 4. L'utilisateur, en dernier (nom d'utilisateur = sub du compte).
+  # AdminGetUser : en mode aws, les routes verifient que le compte d'une
+  # session existe encore (cache de 5 min par compte) : un cookie garde sur
+  # un autre appareil ne rouvre pas la base apres une suppression, meme sur
+  # une autre tache ou apres un redemarrage (account-liveness.ts).
   statement {
     sid       = "DeleteInvestorUser"
-    actions   = ["cognito-idp:AdminDeleteUser"]
+    actions   = ["cognito-idp:AdminDeleteUser", "cognito-idp:AdminGetUser"]
     resources = [aws_cognito_user_pool.investors[0].arn]
   }
 }

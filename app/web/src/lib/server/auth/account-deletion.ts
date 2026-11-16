@@ -160,7 +160,7 @@ async function deleteVectorIndex(clients: DeletionClients, target: DeletionTarge
 
 /** `DeleteObjects` takes at most 1000 keys per call. */
 export const DELETE_BATCH = 1000;
-/** Full passes at most: a write still in flight during the first one is caught by the next. */
+/** Full passes at most: a write still in flight during one pass is caught by the next. */
 const MAX_PASSES = 3;
 
 async function deleteBatch(s3: DeletionClients["s3"], bucket: string, batch: ObjectIdentifier[]): Promise<void> {
@@ -208,13 +208,21 @@ async function deletePass(s3: DeletionClients["s3"], bucket: string, prefix: str
   return count + pending.length;
 }
 
+/**
+ * Passes until one finds nothing, MAX_PASSES at most. If the last one still deleted something, a write keeps coming:
+ * one more listing decides, and a base that is still not empty fails the step (the Cognito user stays).
+ */
 async function deleteObjects(clients: DeletionClients, target: DeletionTarget): Promise<number> {
   const prefix = clientPrefix(target.clientId);
   let total = 0;
   for (let pass = 0; pass < MAX_PASSES; pass += 1) {
     const removed = await deletePass(clients.s3, target.bucket, prefix);
     total += removed;
-    if (removed === 0) break;
+    if (removed === 0) return total;
+  }
+  const left = await versionsPage(clients.s3, target.bucket, prefix, {});
+  if (left.entries.length > 0) {
+    throw new Error(`${prefix} still has versions after ${MAX_PASSES} passes: something keeps writing there`);
   }
   return total;
 }

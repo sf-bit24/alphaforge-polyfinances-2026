@@ -127,5 +127,10 @@ export function getDeletionConfig(auth: CognitoConfig): DeletionConfig {
   if (!parsed.success) {
     throw new ConfigError(parsed.error.issues.map((issue) => ({ variable: String(issue.path[0] ?? "?"), message: issue.message })));
   }
-  return { ...parsed.data, USER_POOL_ID: new URL(auth.COGNITO_ISSUER).pathname.slice(1) };
+  return { ...parsed.data, USER_POOL_ID: userPoolIdOf(auth) };
+}
+
+/** The user pool of the investors: the last segment of COGNITO_ISSUER (`.../<region>_<id>`). */
+export function userPoolIdOf(auth: CognitoConfig): string {
+  return new URL(auth.COGNITO_ISSUER).pathname.slice(1);
 }

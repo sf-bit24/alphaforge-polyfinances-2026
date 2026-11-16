@@ -11,7 +11,7 @@ Les pastilles bleues numérotent les étapes, décrites dans la légende à droi
 
 ## Plateforme complète
 
-Interface web, agents AgentCore et Bedrock, veille et base de connaissances, scénarios probabilistes, traçabilité et déploiement.
+Interface web, agents AgentCore et Bedrock, veille et base de connaissances, scénarios probabilistes, traçabilité et déploiement. L'investisseur se connecte par la connexion gérée d'Amazon Cognito (code + PKCE, vérifié par Next.js) : un compte = un `client_id` = une base `clients/<client_id>/`, et le serveur refuse tout autre `client_id` (403).
 
 ![Plateforme AlphaForge AI sur AWS : web, agents AgentCore, veille, base de connaissances et scénarios](alphaforge-plateforme-aws.png)
 

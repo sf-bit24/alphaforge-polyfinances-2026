@@ -17,7 +17,7 @@ import type {
   RiskLevel,
 } from "@/lib/contract/schemas";
 import { KNOWLEDGE_LEVELS, PROFILE_DIMENSIONS, RISK_LEVELS } from "@/lib/contract/schemas";
-import { optionLabel, tr, type L } from "./questions";
+import { optionLabel, questionByField, tr, type L } from "./questions";
 
 export const THRESHOLD = 0.7;
 export const CAP = 0.95;
@@ -245,6 +245,59 @@ function listLabels(field: string, value: unknown, locale: Locale): string | nul
   if (!Array.isArray(value)) return null;
   const labels = value.map((item) => optionLabel(field, item, locale) ?? String(item));
   return labels.length > 0 ? labels.join(", ") : null;
+}
+
+const KNOWLEDGE_LABELS: Record<KnowledgeLevel, L> = {
+  beginner: { fr: "Débutant", en: "Beginner" },
+  intermediate: { fr: "Intermédiaire", en: "Intermediate" },
+  advanced: { fr: "Avancé", en: "Advanced" },
+};
+
+/** A confirmed portfolio as the profile keeps it: a count and a total (`context.existing_portfolio`). */
+function isPositionsSummary(value: unknown): value is { positions: number; total_value_cad: number } {
+  return typeof value === "object" && value !== null && "positions" in value && "total_value_cad" in value;
+}
+
+function numberLabel(field: string, value: number, locale: Locale): string {
+  const fr = locale === "fr";
+  const question = questionByField(field);
+  if (question?.kind === "money") return formatMoney(value, locale);
+  const number = value.toLocaleString(fr ? "fr-CA" : "en-CA");
+  if (question?.kind === "percent") return fr ? `${number} %` : `${number}%`;
+  if (question?.kind === "scale" && typeof question.max === "number") return fr ? `${number} sur ${question.max}` : `${number} out of ${question.max}`;
+  return question?.unit ? `${number} ${tr(question.unit, locale)}` : number;
+}
+
+const FACT_WORDS = {
+  yes: { fr: "Oui", en: "Yes" },
+  no: { fr: "Non", en: "No" },
+  none: { fr: "Aucun", en: "None" },
+  noPortfolio: { fr: "Aucun portefeuille existant", en: "No existing portfolio" },
+} satisfies Record<string, L>;
+
+function stringLabel(field: string, value: string, locale: Locale): string {
+  if (field === "knowledge.level" && value in KNOWLEDGE_LABELS) return tr(KNOWLEDGE_LABELS[value as KnowledgeLevel], locale);
+  if (field === "context.existing_portfolio" && value === "none") return tr(FACT_WORDS.noPortfolio, locale);
+  return optionLabel(field, value, locale) ?? value;
+}
+
+function positionsSummaryLabel({ positions, total_value_cad }: { positions: number; total_value_cad: number }, locale: Locale): string {
+  return locale === "fr"
+    ? `${positions} ${positions > 1 ? "positions" : "position"}, ${formatMoney(total_value_cad, locale)}`
+    : `${positions} ${positions === 1 ? "position" : "positions"}, ${formatMoney(total_value_cad, locale)}`;
+}
+
+/**
+ * The value of a fact as the investor reads it, in the language of the view (`Fact.label`, like `fact_label` of the
+ * real runtime): the option or options chosen, « Oui » or « Non », a number with its unit, never a code or JSON.
+ */
+export function factLabel(field: string, value: unknown, locale: Locale): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (Array.isArray(value)) return listLabels(field, value, locale) ?? tr(FACT_WORDS.none, locale);
+  if (typeof value === "boolean") return tr(value ? FACT_WORDS.yes : FACT_WORDS.no, locale);
+  if (typeof value === "number") return numberLabel(field, value, locale);
+  if (typeof value === "string") return stringLabel(field, value, locale);
+  return isPositionsSummary(value) ? positionsSummaryLabel(value, locale) : "—";
 }
 
 const MAX_PURPOSE_CHARS = 60;

@@ -28,8 +28,8 @@ export interface DemoReply {
   trace: Array<{ tone: "neutral" | "stop" | "ok"; title: L; detail: L }>;
 }
 
-const JUDGE: L = { fr: "Judge · contrôle par le code", en: "Judge · checked by code" };
-const PRICES: L = { fr: "prices_daily.csv · Yahoo Finance · au 2026-11-12", en: "prices_daily.csv · Yahoo Finance · as of 2026-11-12" };
+const JUDGE: L = { fr: "Vérification finale · règles fixes", en: "Final check · fixed rules" };
+const PRICES: L = { fr: "Cours de clôture quotidiens · Yahoo Finance · au 12 novembre 2026", en: "Daily closing prices · Yahoo Finance · as of November 12, 2026" };
 
 export const DEMO: Record<DemoKey, DemoReply> = {
   trap: {
@@ -45,7 +45,7 @@ export const DEMO: Record<DemoKey, DemoReply> = {
     ],
     verdict: {
       ok: false,
-      title: { fr: "Refus provisoire de la gouvernance", en: "Provisional refusal by governance" },
+      title: { fr: "Refus provisoire : limites de votre profil dépassées", en: "Provisional refusal: your profile’s limits are exceeded" },
       by: JUDGE,
       checks: [
         { label: { fr: "Poids d’un seul titre", en: "Weight of a single security" }, value: { fr: "12,5 %", en: "12.5%" }, cap: { fr: "plafond 5 %", en: "cap 5%" }, ok: false },
@@ -83,20 +83,20 @@ export const DEMO: Record<DemoKey, DemoReply> = {
         },
       },
     ],
-    sources: [PRICES, { fr: "adj_close · volatilité 252 j", en: "adj_close · 252-day volatility" }, { fr: "Votre profil · mis à jour le 2026-11-14", en: "Your profile · updated 2026-11-14" }],
+    sources: [PRICES, { fr: "Volatilité sur 252 jours de bourse", en: "Volatility over 252 trading days" }, { fr: "Votre profil · mis à jour le 14 novembre 2026", en: "Your profile · updated November 14, 2026" }],
     actions: [
       { key: "sandbox", label: { fr: "Voir le compromis", en: "See the compromise" }, primary: true },
       { key: "keep", label: { fr: "Garder mon portefeuille actuel", en: "Keep my current portfolio" } },
     ],
     trace: [
-      { tone: "neutral", title: { fr: "A3 · agent du portefeuille", en: "A3 · portfolio agent" }, detail: { fr: "Simule l’ajout de 50 000 $ de NVDA.", en: "Simulates adding $50,000 of NVDA." } },
-      { tone: "neutral", title: { fr: "Analyse du risque", en: "Risk analysis" }, detail: { fr: "Volatilité et baisse 2022 calculées sur adj_close.", en: "Volatility and 2022 fall computed on adj_close." } },
+      { tone: "neutral", title: { fr: "Le simulateur", en: "The simulator" }, detail: { fr: "Simule l’ajout de 50 000 $ de NVDA.", en: "Simulates adding $50,000 of NVDA." } },
+      { tone: "neutral", title: { fr: "Analyse du risque", en: "Risk analysis" }, detail: { fr: "Volatilité et baisse de 2022 calculées sur les cours ajustés.", en: "Volatility and 2022 fall computed on adjusted prices." } },
       {
         tone: "neutral",
         title: { fr: "Analyse de la diversification", en: "Diversification analysis" },
         detail: { fr: "Exposition technologique consolidée, FNB compris.", en: "Consolidated technology exposure, ETFs included." },
       },
-      { tone: "stop", title: { fr: "Judge · gouvernance", en: "Judge · governance" }, detail: { fr: "3 plafonds dépassés : refus provisoire et compromis.", en: "3 caps exceeded: provisional refusal and a compromise." } },
+      { tone: "stop", title: { fr: "La vérification finale", en: "The final check" }, detail: { fr: "3 plafonds dépassés : refus provisoire et compromis.", en: "3 caps exceeded: provisional refusal and a compromise." } },
     ],
   },
   sandbox: {
@@ -127,13 +127,13 @@ export const DEMO: Record<DemoKey, DemoReply> = {
       { key: "noop", label: { fr: "Ajuster le montant", en: "Adjust the amount" } },
     ],
     trace: [
-      { tone: "neutral", title: { fr: "A3 · agent du portefeuille", en: "A3 · portfolio agent" }, detail: { fr: "Construit la poche bac à sable à 4 %.", en: "Builds the 4% sandbox pocket." } },
+      { tone: "neutral", title: { fr: "Le simulateur", en: "The simulator" }, detail: { fr: "Construit la poche bac à sable à 4 %.", en: "Builds the 4% sandbox pocket." } },
       {
         tone: "neutral",
         title: { fr: "Analyse du risque", en: "Risk analysis" },
         detail: { fr: "Volatilité recalculée avec les corrélations : 6,7 %.", en: "Volatility recomputed with correlations: 6.7%." },
       },
-      { tone: "ok", title: { fr: "Judge · gouvernance", en: "Judge · governance" }, detail: { fr: "Tous les plafonds respectés : proposition encadrée.", en: "All caps respected: framed proposal." } },
+      { tone: "ok", title: { fr: "La vérification finale", en: "The final check" }, detail: { fr: "Tous les plafonds respectés : proposition encadrée.", en: "All caps respected: framed proposal." } },
     ],
   },
   keep: {
@@ -160,27 +160,27 @@ export const DEMO: Record<DemoKey, DemoReply> = {
         en: "It fits your profile. I advise against it without forbidding it: it is your decision.",
       },
     ],
-    sources: [{ fr: "prices_daily.csv · GLD, XBB.TO", en: "prices_daily.csv · GLD, XBB.TO" }, { fr: "Stress test 2022", en: "2022 stress test" }],
+    sources: [{ fr: "Cours de clôture quotidiens · GLD, XBB.TO", en: "Daily closing prices · GLD, XBB.TO" }, { fr: "Scénario de crise de 2022", en: "2022 crisis scenario" }],
     actions: [{ key: "noop", label: { fr: "Voir la simulation sans or", en: "See the simulation without gold" } }],
     trace: [
-      { tone: "neutral", title: { fr: "A3 · agent du portefeuille", en: "A3 · portfolio agent" }, detail: { fr: "Remplace GLD par XBB.TO.", en: "Replaces GLD with XBB.TO." } },
-      { tone: "neutral", title: { fr: "Analyse du risque", en: "Risk analysis" }, detail: { fr: "Recalcule la volatilité et le stress test 2022.", en: "Recomputes volatility and the 2022 stress test." } },
-      { tone: "ok", title: { fr: "Judge · gouvernance", en: "Judge · governance" }, detail: { fr: "Plafonds respectés.", en: "Caps respected." } },
+      { tone: "neutral", title: { fr: "Le simulateur", en: "The simulator" }, detail: { fr: "Remplace GLD par XBB.TO.", en: "Replaces GLD with XBB.TO." } },
+      { tone: "neutral", title: { fr: "Analyse du risque", en: "Risk analysis" }, detail: { fr: "Recalcule la volatilité et le scénario de crise de 2022.", en: "Recomputes volatility and the 2022 crisis scenario." } },
+      { tone: "ok", title: { fr: "La vérification finale", en: "The final check" }, detail: { fr: "Plafonds respectés.", en: "Caps respected." } },
     ],
   },
   nvda: {
     user: { fr: "Comment a évolué NVDA sur 14 jours ?", en: "How did NVDA do over 14 days?" },
     paragraphs: [
       {
-        fr: "Sur les 14 derniers jours du jeu de données (au 12 novembre 2026), NVDA a varié de −6,2 %, avec des écarts quotidiens jusqu’à 4 %. C’est une observation, pas une prévision.",
-        en: "Over the last 14 days of the dataset (as of November 12, 2026), NVDA moved −6.2%, with daily swings of up to 4%. This is an observation, not a forecast.",
+        fr: "Sur les 14 derniers jours (au 12 novembre 2026), NVDA a varié de −6,2 %, avec des écarts quotidiens jusqu’à 4 %. C’est une observation, pas une prévision.",
+        en: "Over the last 14 days (as of November 12, 2026), NVDA moved −6.2%, with daily swings of up to 4%. This is an observation, not a forecast.",
       },
     ],
-    sources: [{ fr: "prices_daily.csv · NVDA · 2026-10-29 au 2026-11-12", en: "prices_daily.csv · NVDA · 2026-10-29 to 2026-11-12" }, { fr: "adj_close · USD", en: "adj_close · USD" }],
+    sources: [{ fr: "Cours de clôture quotidiens · NVDA · du 29 octobre au 12 novembre 2026", en: "Daily closing prices · NVDA · October 29 to November 12, 2026" }, { fr: "Cours ajustés, en dollars américains", en: "Adjusted prices, in U.S. dollars" }],
     actions: [],
     trace: [
-      { tone: "neutral", title: { fr: "Agent de données", en: "Data agent" }, detail: { fr: "Lit 10 séances de cotation NVDA.", en: "Reads 10 NVDA trading sessions." } },
-      { tone: "ok", title: { fr: "Réponse", en: "Answer" }, detail: { fr: "Aucun conseil personnalisé : simple description.", en: "No personalized advice: a plain description." } },
+      { tone: "neutral", title: { fr: "Notre veille : données de marché", en: "Our watch: market data" }, detail: { fr: "10 séances de bourse de NVDA lues.", en: "10 NVDA trading sessions read." } },
+      { tone: "ok", title: { fr: "Réponse vérifiée", en: "Answer checked" }, detail: { fr: "Aucun conseil personnalisé : simple description.", en: "No personalized advice: a plain description." } },
     ],
   },
 };

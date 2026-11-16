@@ -18,7 +18,7 @@ sources:
     resource: "Énoncé officiel, persona Amira (« profil offensif » sans interpréter « risque élevé » comme « tout est acceptable », p. 5) et Encadrement responsable (p. 17)"
     retrieved_at: "2026-11-15T04:20:00Z"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), section levels (N0 à N5, bandes d'actions et budgets de pertes)"
     retrieved_at: "2026-11-15T04:20:00Z"
   - id: bnc-profil
@@ -66,8 +66,8 @@ Les faits et les limites sont les mêmes à tous les niveaux; seuls les mots cha
 
 ## Comment AlphaForge AI le fixe
 
-Le code fixe le style à l'étape 0 du moteur (active par défaut sur la branche de travail, à valider par l'équipe); le modèle l'explique. Le compilateur de mandat
-fixe d'abord le niveau de risque N0 à N5 (`risk_levels.yaml`); le code en tire un **style par défaut** :
+AlphaForge AI fixe le style selon des règles fixes, au moment du choix des titres; Yan l'explique. Le niveau de
+risque, de N0 à N5, est fixé d'abord à partir du profil. AlphaForge AI en tire un **style par défaut** :
 
 | Niveau | Style par défaut | Repères publics rapprochés par l'équipe |
 | --- | --- | --- |
@@ -90,12 +90,11 @@ définissent pas de style de composition. À valider par l'équipe.
    score, bonus de style, taille visée des satellites sous leur plafond (planchers à 50 % de la place disponible en
    défensive et en dynamique, à 75 % en offensive), et un plafond sectoriel plus serré pour la technologie et
    l'énergie en défensive (voir [Noyau et satellites](noyau-et-satellites.md)).
-5. La trace garde le style par défaut, la préférence, le style retenu et chaque blocage (Facts `strat.style`,
-   `strat.preference`, `strat.preference_refused.*`).
+5. Les étapes suivies montrent le style par défaut, la préférence, le style retenu et chaque blocage.
 
-Le style ne change jamais le niveau, la bande d'actions, la perte acceptable ni les budgets que le Judge contrôle
-(CVaR, [baisse maximale](baisse-maximale.md), stress 2022). Toutes les limites de l'étape 0 sont non bloquantes. Les
-règles exactes et leurs formules sont dans [Étape 0 : style et score des titres](../methodologie/scoring-par-style.md);
+Le style ne change jamais le niveau, la bande d'actions, la perte acceptable ni les budgets que la vérification
+finale contrôle (CVaR, [baisse maximale](baisse-maximale.md), stress 2022). Toutes les limites du choix des titres
+selon le style sont non bloquantes. Les règles exactes et leurs formules sont dans [Choix et score des titres selon le style](../methodologie/scoring-par-style.md);
 ce sont des hypothèses de conception, à valider par l'équipe.
 
 ## Limites
@@ -114,7 +113,7 @@ ce sont des hypothèses de conception, à valider par l'équipe.
   comment le composer.
 - **Profil d'une institution** : les échelles de la Banque Nationale ou de l'AMF classent le risque d'un
   investisseur; le style d'AlphaForge AI ne classe pas le risque.
-- **Style de gestion valeur ou croissance** : une approche de gestion fondée sur des ratios comptables, que l'étape 0
-  n'utilise pas.
+- **Style de gestion valeur ou croissance** : une approche de gestion fondée sur des ratios comptables, que le choix
+  des titres selon le style n'utilise pas.
 - **Agressivité** : un style offensif n'autorise pas plus de pertes qu'un style défensif au même niveau (voir
   [Concentration](concentration.md) et [Diversification](diversification.md)).

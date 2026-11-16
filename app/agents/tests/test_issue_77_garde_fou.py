@@ -21,7 +21,7 @@ SIN_MESSAGE_FR = "Votre message contient un renseignement personnel (NAS) : reti
 SIN_MESSAGE_EN = "Your message contains personal information (SIN): remove it, then send it again."
 SIN_DETAILS = {"reason": "personal_data", "entity": "CA_SIN"}
 GENERIC_FR = (
-    "Cette demande sort du cadre du prototype (simulation seulement, aucun conseil personnalisé). "
+    "Cette demande sort du cadre du service (simulation seulement, aucun conseil personnalisé). "
     "Reformulez votre message sur votre profil d'investisseur."
 )
 FINISH = ("tool", "finish_turn", {"message": "Question.", "questions": [], "profile_complete": False})

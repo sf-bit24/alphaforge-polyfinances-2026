@@ -278,11 +278,11 @@ def test_session_start_creates_the_index_then_the_knowledge_base(service, store,
     state = kb_state(store, client_id)
     assert state["status"] == "creating" and state["data_source_id"] is None
     assert state["pending"] == sorted([profile_key(client_id), journal_key(client_id), index_key(client_id)])
-    assert "Knowledge Base du client créée" in titles(response)
+    assert "Espace de vos documents personnels créé" in titles(response)
     # La trace enregistrée de l'action montre aussi la création.
     [saved] = store.list(f"clients/{client_id}/traces/")
     steps = json.loads(store.get(saved.key).text)["steps"]
-    assert "Knowledge Base du client créée" in [step["title"] for step in steps]
+    assert "Espace de vos documents personnels créé" in [step["title"] for step in steps]
 
 
 def test_active_base_receives_the_pending_documents_then_costs_nothing(service, store, aws):
@@ -307,8 +307,8 @@ def test_active_base_receives_the_pending_documents_then_costs_nothing(service, 
     attributes = {item["key"]: item["value"]["stringValue"] for item in profile_doc["metadata"]["inlineAttributes"]}
     assert attributes["type"] == "Investor Profile" and attributes["client_id"] == client_id
     assert attributes["updated_at"]
-    assert "Knowledge Base du client active" in titles(response)
-    assert "Documents indexés dans la Knowledge Base du client" in titles(response)
+    assert "Vos documents personnels sont prêts" in titles(response)
+    assert "Vos documents personnels sont à jour" in titles(response)
     # Base active, rien en attente : un rapprochement ne fait aucun appel AWS et ne réécrit pas l'état.
     etag = store.get(state_key(client_id)).etag
     calls = len(aws.agent.calls)
@@ -321,7 +321,7 @@ def test_documents_written_while_creating_wait_then_go_in_batches(service, store
     client_id = start(service)["client_id"]
     answer = answer_first(service, client_id)
     assert answer["client_kb"]["status"] == "creating"
-    assert "Documents en attente de la Knowledge Base" in titles(answer)
+    assert "Mise à jour de vos documents personnels en attente" in titles(answer)
     for number in range(12):
         service.store.put_text(f"clients/{client_id}/notes/note-{number:02d}.md", note(f"Note {number}"))
     assert kb_state(store, client_id)["pending"] == sorted(
@@ -372,7 +372,7 @@ def test_quota_reached_keeps_the_questionnaire_going(service, store, aws, monkey
     response = start(service)
     client_id = response["client_id"]
     assert response["ok"] and response["client_kb"]["status"] == "quota" and response["stage"] == "base_questions"
-    assert "Quota de Knowledge Bases atteint" in titles(response)
+    assert "Vos documents personnels ne sont pas encore disponibles" in titles(response)
     state = kb_state(store, client_id)
     assert state["error"]["code"] == "ServiceQuotaExceededException" and state["retry_at"]
     answer = answer_first(service, client_id)
@@ -391,7 +391,7 @@ def test_unexpected_errors_never_fail_the_investor(service, store, aws, monkeypa
     monkeypatch.setattr(aws.vectors, "create_index", broken)
     response = start(service)
     assert response["ok"] and response["client_kb"]["status"] == "failed"
-    assert "Knowledge Base du client en échec" in titles(response)
+    assert "Vos documents personnels ne sont pas encore disponibles" in titles(response)
 
 
 def test_concurrent_creation_gives_one_knowledge_base(store, aws):
@@ -476,7 +476,7 @@ def test_a1_searches_the_client_knowledge_base_of_its_session(settings, store, a
     assert "search_client_knowledge" in model.calls[0]["system_prompt"]
     [call] = aws.runtime.calls
     assert call["knowledgeBaseId"] == "KB00000001" and call["retrievalQuery"] == {"text": "décision passée"}
-    tool_steps = [step for step in response["trace"] if step["title"] == "Outil search_client_knowledge"]
+    tool_steps = [step for step in response["trace"] if step["title"] == "Yan consulte vos documents personnels"]
     assert tool_steps and tool_steps[0]["kind"] == "tool"
 
 
@@ -487,7 +487,7 @@ def test_disabled_mode_changes_nothing(settings, store):
     client_id = response["client_id"]
     assert "client_kb" not in response  # le contrat d'avant, sans champ en plus
     assert store.get(state_key(client_id)) is None
-    assert not any("Knowledge Base" in title for title in titles(response))
+    assert not any("documents personnels" in title for title in titles(response))
     assert service.client_kb.searcher(client_id) is None
     resumed = service.handle({"action": "session.resume", "client_id": client_id})
     assert "client_kb" not in resumed
@@ -636,7 +636,7 @@ def test_transient_creation_error_is_retried_at_the_next_action(service, store, 
     client_id = response["client_id"]
     assert response["ok"] and response["client_kb"]["status"] == "creating"
     assert response["client_kb"]["knowledge_base_id"] is None
-    assert "Création de la Knowledge Base reportée" in titles(response)
+    assert "Préparation de vos documents personnels reportée" in titles(response)
     assert kb_state(store, client_id)["error"]["code"] == "ThrottlingException"
     again = service.handle({"action": "session.resume", "client_id": client_id})
     assert again["client_kb"]["knowledge_base_id"] == "KB00000001"

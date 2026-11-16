@@ -16,7 +16,7 @@ sources:
     title: "Énoncé officiel du défi AlphaForge AI (Datathon PolyFinances 2026)"
     resource: "Énoncé officiel, p. 10 (FNB obligataires) et p. 11 (obligations et taux : sensibilité aux taux, rôle des actifs défensifs)"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, composition (long_duration_max, etf_bond_each_max), history_proxies et reference_portfolios"
 data:
   aliases: [obligation, obligations, taux d'intérêt, taux directeur, rendement obligataire, cpg, bond, durée]
@@ -52,16 +52,16 @@ diapositive 5). Ce prix varie surtout avec les taux d'intérêt du marché.
 
 ## Comment AlphaForge AI les traite
 
-Le code calcule; le modèle explique.
+Les chiffres sont calculés selon des règles fixes, jamais inventés; Yan les explique.
 
 - **FNB obligataires du jeu de départ** : XBB.TO (obligations canadiennes), AGG (obligations américaines), TLT
   (obligations américaines longues) et ZST.TO (très court terme). Leurs statistiques se calculent sur les prix ajustés.
-- **Mandat** : le barème plafonne la part d'obligations longues (`alloc.long_duration`, nulle au niveau le plus prudent)
-  et le poids de chaque FNB obligataire (`conc.etf_bond_each`); ZST.TO compte parmi les quasi-liquidités
-  (`alloc.cash_like`). Les valeurs par niveau sont dans `risk_levels.yaml`, section 6.
+- **Mandat** : le barème plafonne la part d'obligations longues (nulle au niveau le plus prudent) et le poids de chaque
+  FNB obligataire. ZST.TO compte parmi les quasi-liquidités.
 - **Historique long** : avant leur lancement, ces FNB sont prolongés par des séries de taux (XBB.TO par les obligations
-  du Canada à 10 ans, AGG par celles des États-Unis à 5 ans, TLT à 20 ans, ZST.TO par les bons du Trésor). Le moteur
-  reconstitue des rendements d'obligation à échéance constante à partir de ces taux. Ce raccord est une hypothèse.
+  du Canada à 10 ans, AGG par celles des États-Unis à 5 ans, TLT à 20 ans, ZST.TO par les bons du Trésor). Le
+  simulateur reconstitue des rendements d'obligation à échéance constante à partir de ces taux. Ce raccord est une
+  hypothèse.
 
 ## Limites
 

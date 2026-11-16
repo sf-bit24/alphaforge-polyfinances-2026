@@ -13,10 +13,10 @@ sources:
     title: "Atelier BNCD : comprendre l'investisseur avant de bâtir la solution"
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositives 6 (un rendement dépend de la période) et 7 (le temps disponible change la décision)"
   - id: moteur-metriques
-    title: "Moteur de backtest AlphaForge AI : métriques sur rendements mensuels"
+    title: "Simulateur d'AlphaForge AI : mesures sur rendements mensuels"
     resource: "app/agents/src/alphaforge/finance/backtest/metrics.py (worst_window_return) et app/agents/src/alphaforge/finance/portfolio/analysis.py (risk_report)"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), section measurement (CVAR12M)"
 data:
   aliases: [pire année, pire rendement sur 12 mois, pire 12 mois, pire année glissante, worst 12 months]
@@ -53,16 +53,16 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 
 ## Comment AlphaForge AI le calcule
 
-Le code calcule ce chiffre; le modèle ne l'estime jamais.
+Ce chiffre est calculé selon des règles fixes, jamais inventé; Yan l'explique.
 
-- Le rapport de risque du moteur (`risk_report`) calcule le pire rendement composé sur 12 mois consécutifs, à partir
-  des rendements mensuels du portefeuille rééquilibré chaque mois, en CAD par défaut, sur la fenêtre de la politique.
-- Le chiffre est **affiché**, pas plafonné : l'angle « risque » de l'analyse le cite comme fait sourcé (« pire
-  rendement sur 12 mois, historique »), avec la fenêtre et le nombre de mois, à côté de la CVaR, de la baisse maximale
-  et de la volatilité.
-- Le contrôle bloquant du Judge sur les années de 12 mois porte sur une autre mesure : la CVaR des rendements composés
-  sur 12 mois glissants (`CVAR12M`), mesurée sur la série longue raccordée aux proxys (voir [VaR et CVaR](var-cvar.md)).
-- Le moteur rend ce chiffre comme un rendement (négatif en cas de perte), et non comme une perte positive.
+- Le rapport de risque du simulateur calcule le pire rendement composé sur 12 mois consécutifs. Il part des rendements
+  mensuels du portefeuille rééquilibré chaque mois, en CAD par défaut, sur la fenêtre de mesure des niveaux de risque.
+- Le chiffre est **affiché**, pas plafonné. Le point de vue « risque » le cite comme fait sourcé (« pire rendement sur
+  12 mois, historique »), avec la fenêtre et le nombre de mois. Il figure à côté de la CVaR, de la baisse maximale et
+  de la volatilité.
+- Pour les années de 12 mois, la vérification finale bloque sur une autre mesure : la CVaR des rendements composés sur
+  12 mois glissants. Elle est mesurée sur la série longue raccordée aux proxys (voir [VaR et CVaR](var-cvar.md)).
+- Le simulateur donne ce chiffre comme un rendement (négatif en cas de perte), et non comme une perte positive.
 
 ## Limites
 

@@ -13,6 +13,7 @@ import { summarizeRunOutput } from "@/lib/contract/collect";
 import type { CollectRequest } from "@/lib/contract/requests";
 import type { ExecutionDetail, ExecutionStatus, ExecutionSummary } from "@/lib/contract/schemas";
 import { okfDocument, staleAfter, type StoredDoc } from "./documents";
+import { GENERAL_SOURCES } from "./general-seed";
 import { STARTER_SOURCES } from "./starter";
 
 const STATE_MACHINE = "alphaforge-sandbox-collecte";
@@ -60,7 +61,7 @@ function successOutput(runId: string, startedAt: number, { written, rejected }: 
     collected: {
       press: marker("press", runId, startedAt, 3),
       data: dataFailed
-        ? { status: "error", role: "data", error: "marqueur absent dans le delai" }
+        ? { status: "error", role: "data", error: "aucune réponse dans le délai prévu" }
         : marker("data", runId, startedAt, 2),
     },
     curated: {
@@ -89,27 +90,25 @@ function watchNote(runId: string, at: string): StoredDoc {
     {
       type: "News",
       title: `Note de veille simulée du ${day}`,
-      description: "Synthèse produite par le simulateur à partir des séries du jeu de départ; aucune presse réelle n'est lue en mode mock.",
+      description: "Synthèse de démonstration tirée des séries du jeu de départ; aucun article de presse réel n'est lu dans cette démonstration.",
       tags: ["donnees-marche", "actualites"],
       status: "draft",
       owners: ["alphaforge-a6"],
       sensitivity: "public",
       generated: { by: "mock:A6", at },
       stale_after: staleAfter(at, 1),
-      sources: [STARTER_SOURCES.macro, STARTER_SOURCES.fx],
+      sources: [GENERAL_SOURCES.macro, GENERAL_SOURCES.fx],
       data: { run_id: runId, published_at: STARTER_SOURCES.macro.observed_at, observed_at: STARTER_SOURCES.macro.observed_at },
     },
     `# Note de veille simulée du ${day}
 
-> Document du simulateur : en mode AWS, A4 lit la presse et A5 les données sur le Web, et A6 n'écrit que des éléments sourcés et datés.
+> Document de démonstration : en temps normal, notre veille lit la presse et les données publiques, et n'ajoute que des éléments sourcés et datés.
 
 - Le taux cible du financement à un jour de la Banque du Canada est de **2,50 %** depuis le 2026-10-29 (observé le 2026-11-12).
 - Le dollar américain valait **1,4255 $ CA** le 2026-11-12 (Banque du Canada, FXUSDCAD).
 - Le rendement des obligations du Canada à 10 ans était de **3,78 %** le 2026-11-12.
 
-Séries citées : [taux USD/CAD](donnees/usdcad/usdcad-2026-11.md), [taux directeur et rendements obligataires](donnees/taux-directeur/banque-du-canada-2026-11.md).
-
-Collecte \`${runId}\`.`,
+Séries citées : [taux USD/CAD](donnees/usdcad/usdcad-2026-11.md), [taux directeur et rendements obligataires](donnees/taux-directeur/banque-du-canada-2026-11.md).`,
   );
 }
 
@@ -160,7 +159,7 @@ export class MockCollector {
       docs: [],
       applied: true,
       error: "MarkerTimeout",
-      cause: "A6 n'a pas ecrit son marqueur dans le delai.",
+      cause: "La vérification n'a pas terminé dans le délai prévu.",
     });
   }
 

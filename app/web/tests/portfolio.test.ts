@@ -291,7 +291,7 @@ describe("portfolio strings", () => {
   });
 });
 
-describe("grounding line (Bedrock Guardrails, per statement)", () => {
+describe("fact check line (Bedrock Guardrails, per statement)", () => {
   const perStatement = {
     action: "NONE",
     method: "per_statement",
@@ -310,23 +310,20 @@ describe("grounding line (Bedrock Guardrails, per statement)", () => {
     expect(PortfolioBuildResponse.shape.grounding.parse({ action: "GUARDRAIL_INTERVENED", assessments: [] })?.method).toBeUndefined();
   });
 
-  it("says how many statements are grounded, with the engine's own scores", () => {
-    expect(groundingLine(perStatement, portfolioFr.grounding, "fr")).toBe(
-      "19 énoncés ancrés dans les faits cités, la décision et les fiches de méthode (score minimal 0,79, seuil 0,75)",
-    );
-    expect(groundingLine(perStatement, portfolioEn.grounding, "en")).toContain("lowest score 0.79, threshold 0.75");
+  it("says how many statements are checked, without the scores (LANGAGE.md)", () => {
+    expect(groundingLine(perStatement, portfolioFr.grounding)).toBe("19 énoncés vérifiés : chacun s’appuie sur les faits cités et sur la décision");
+    expect(groundingLine(perStatement, portfolioEn.grounding)).toBe("19 statements checked: each one rests on the cited facts and on the decision");
   });
 
   it("names statements below the threshold and checks that could not run", () => {
     const below = { ...perStatement, action: "GUARDRAIL_INTERVENED", below: 2, errors: 1 };
-    expect(groundingLine(below, portfolioFr.grounding, "fr")).toBe(
-      "2 énoncés sur 19 sous le seuil d’ancrage (0,75) : voir le rapport de vérification · 1 vérification impossible",
-    );
-    expect(groundingLine({ ...perStatement, action: "ERROR", checked: 0 }, portfolioFr.grounding, "fr")).toBe(portfolioFr.grounding.failed);
+    expect(groundingLine(below, portfolioFr.grounding)).toBe("2 énoncés sur 19 s’appuient peu sur les faits cités : lisez-les avec prudence · 1 vérification impossible");
+    expect(groundingLine({ ...perStatement, action: "ERROR", checked: 0 }, portfolioFr.grounding)).toBe(portfolioFr.grounding.failed);
   });
 
-  it("keeps the raw outcome for an older response, and nothing without a check", () => {
-    expect(groundingLine({ action: "GUARDRAIL_INTERVENED" }, portfolioFr.grounding, "fr")).toBe("Résultat : GUARDRAIL_INTERVENED");
-    expect(groundingLine({ action: null }, portfolioFr.grounding, "fr")).toBeNull();
+  it("says the outcome of an older response in words, and nothing without a check", () => {
+    expect(groundingLine({ action: "GUARDRAIL_INTERVENED" }, portfolioFr.grounding)).toBe(portfolioFr.grounding.actions.GUARDRAIL_INTERVENED);
+    expect(groundingLine({ action: "SOMETHING_NEW" }, portfolioFr.grounding)).toBe(portfolioFr.grounding.actions.other);
+    expect(groundingLine({ action: null }, portfolioFr.grounding)).toBeNull();
   });
 });

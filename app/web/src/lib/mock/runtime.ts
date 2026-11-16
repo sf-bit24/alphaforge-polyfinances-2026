@@ -173,8 +173,8 @@ export class MockRuntime {
       throw new MockError(
         "not_found",
         {
-          fr: "Aucune base pour ce client. Le simulateur garde ses données en mémoire : elles disparaissent quand le serveur redémarre.",
-          en: "No base for this client. The simulator keeps its data in memory: it is lost when the server restarts.",
+          fr: "Nous ne retrouvons pas votre profil. Commencez un nouveau profil pour continuer.",
+          en: "We cannot find your profile. Start a new profile to continue.",
         },
         { client_id: id },
       );
@@ -186,7 +186,7 @@ export class MockRuntime {
     if (prefix === "general/") return kbItems(this.general.values());
     const record = this.client(clientId ?? prefix.split("/")[1] ?? "");
     if (!prefix.startsWith(`clients/${record.id}/`)) {
-      throw new MockError("not_found", { fr: "Préfixe inconnu.", en: "Unknown prefix." }, { prefix });
+      throw new MockError("not_found", { fr: "Ces documents sont introuvables.", en: "These documents cannot be found." }, { prefix });
     }
     return kbItems(record.docs.values());
   }

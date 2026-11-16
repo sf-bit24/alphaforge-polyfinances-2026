@@ -35,7 +35,7 @@ const STEP_TEXT: Record<DeletionStepName, { fr: string; en: string }> = {
 function notFound(): GatewayError {
   return new GatewayError(
     "not_found",
-    { fr: "Pas de compte à supprimer : la connexion est désactivée (AUTH_MODE=off).", en: "No account to delete: sign-in is off (AUTH_MODE=off)." },
+    { fr: "Aucun compte à supprimer : la connexion n’est pas activée.", en: "No account to delete: sign-in is not on." },
     404,
   );
 }
@@ -47,7 +47,7 @@ function badRequest(text: { fr: string; en: string }, details: Record<string, un
 /** The confirmation of the body, checked here: the word of either language, nothing else. */
 async function requireConfirmation(request: Request): Promise<void> {
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
-    throw badRequest({ fr: "Corps JSON attendu.", en: "JSON body expected." });
+    throw badRequest({ fr: "Votre demande n’a pas pu être lue.", en: "Your request could not be read." });
   }
   const parsed = DeleteAccountRequest.safeParse(await request.json().catch(() => null));
   if (!parsed.success || !isDeleteConfirmation(parsed.data.confirmation)) {
@@ -99,7 +99,7 @@ async function runDeletion(gateway: GatewayConfig, auth: CognitoConfig, session:
   }
   if (gateway.AGENT_MODE === "local") {
     throw badRequest(
-      { fr: "La suppression du compte demande AGENT_MODE=aws (ou mock pour les essais).", en: "Account deletion needs AGENT_MODE=aws (or mock for tests)." },
+      { fr: "La suppression du compte n’est pas disponible ici.", en: "Account deletion is not available here." },
       { mode: "local" },
     );
   }

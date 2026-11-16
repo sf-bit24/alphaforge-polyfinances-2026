@@ -194,6 +194,11 @@ function StartFeedback({ error, startedName, onDismiss }: { error: ApiError | nu
   );
 }
 
+/** The state of the base update in words; a state without a label stays as is. */
+function ingestionLabel(status: string | null | undefined, labels: Record<string, string>): string {
+  return status ? (labels[status] ?? status) : "—";
+}
+
 function ExecutionRow({ execution, open, onSelect }: { execution: ExecutionSummary; open: boolean; onSelect: (arn: string | null) => void }) {
   const { t, locale } = useI18n();
   const duration = execution.stop_date ? Date.parse(execution.stop_date) - Date.parse(execution.start_date) : null;
@@ -224,7 +229,7 @@ function ExecutionRow({ execution, open, onSelect }: { execution: ExecutionSumma
       </td>
       <td className="py-2 pr-3 tabular-nums">{execution.outcome?.curated ? execution.outcome.curated.written.length : "—"}</td>
       <td className="py-2 pr-3 tabular-nums">{execution.outcome?.curated ? execution.outcome.curated.rejected.length : "—"}</td>
-      <td className="py-2 font-mono text-xs">{execution.outcome?.ingestion?.status ?? "—"}</td>
+      <td className="py-2 text-ink-700">{ingestionLabel(execution.outcome?.ingestion?.status, t.collect.ingestionStatuses)}</td>
     </tr>
   );
 }

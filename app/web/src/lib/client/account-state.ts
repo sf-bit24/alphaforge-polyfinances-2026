@@ -19,3 +19,12 @@ export async function readAccount(response: Response): Promise<AccountState> {
   if (!parsed.success || parsed.data.mode === "off") return { status: "off" };
   return { status: "signed_in", user: parsed.data.user };
 }
+
+/**
+ * The team's view: a signed-in member of the `admin` group. Only this view shows the operator
+ * surfaces (collection runs, service status, versions); clients never see them, and neither does
+ * a browser with sign-in off, so a demo on a local server looks like the client's screen.
+ */
+export function isOperator(account: AccountState): boolean {
+  return account.status === "signed_in" && account.user.admin;
+}

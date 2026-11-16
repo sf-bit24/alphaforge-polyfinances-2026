@@ -77,10 +77,10 @@ export function requireStage(record: ClientRecord, allowed: Stage[], action: str
     throw new MockError(
       "conflict",
       {
-        fr: `L'action ${action} n'est pas possible à l'étape ${record.stage}.`,
-        en: `Action ${action} is not possible at stage ${record.stage}.`,
+        fr: "Cette action n'est plus possible à cette étape de votre profil. Rechargez la page pour reprendre où vous en êtes.",
+        en: "This action is no longer possible at this step of your profile. Reload the page to pick up where you are.",
       },
-      { stage: record.stage, allowed },
+      { stage: record.stage, allowed, action },
     );
   }
 }

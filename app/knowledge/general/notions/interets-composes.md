@@ -13,7 +13,7 @@ sources:
     title: "Atelier BNCD : comprendre l'investisseur avant de bâtir la solution"
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositive 6 (période, frais, distributions réinvesties) et diapositive 7 (le temps disponible change la décision)"
   - id: atelier-aws
-    title: "Atelier AWS : aide-mémoire, pièges classiques des données financières"
+    title: "Atelier du Datathon PolyFinances 2026 : aide-mémoire, pièges classiques des données financières"
     resource: "Atelier AWS du Datathon PolyFinances 2026, section 3 (rendement passé)"
 data:
   aliases: [intérêts composés, composition, boule de neige, intérêt sur intérêt, effet composé]
@@ -40,7 +40,7 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 
 ## Ce qu'il faut retenir
 
-- Le temps est le moteur principal : plus l'horizon est long, plus l'effet est fort (atelier BNCD, diapositive 7).
+- Le temps est le facteur principal : plus l'horizon est long, plus l'effet est fort (atelier BNCD, diapositive 7).
 - Un exemple d'arithmétique : 1 000 $ à 5 % par année donnent 1 050 $ après un an, mais environ 1 629 $ après dix ans,
   et non 1 500 $. Les 129 $ d'écart sont des gains sur des gains.
 - La composition joue dans les deux sens. Les frais se composent aussi et réduisent l'écart chaque année (voir
@@ -50,8 +50,8 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 
 ## Comment AlphaForge AI l'utilise
 
-- Les rendements historiques calculés à partir de `adj_close` (dividendes réinvestis) intègrent déjà l'effet composé
-  (voir [Rendement total](rendement-total.md)).
+- Les rendements historiques sont calculés sur les prix ajustés (dividendes réinvestis). Ils intègrent déjà l'effet
+  composé (voir [Rendement total](rendement-total.md)).
 
 ## Limites
 
@@ -60,7 +60,8 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 - **Sans frais ni impôt** : un calcul simple les ignore; un vrai résultat serait plus bas.
 - **Nominal** : la valeur finale est en dollars futurs; l'inflation en réduit le pouvoir d'achat (voir
   [Inflation](inflation.md)).
-- **Hypothèse, pas promesse** : le rendement passé ne garantit pas le rendement futur (atelier AWS, section 3).
+- **Hypothèse, pas promesse** : le rendement passé ne garantit pas le rendement futur (aide-mémoire du Datathon,
+  section 3).
 
 ## À ne pas confondre
 

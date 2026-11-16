@@ -65,19 +65,16 @@ interface ListStatusProps {
   loaded: boolean;
   itemCount: number;
   matchCount: number;
-  hasIndex: boolean;
-  query: string;
 }
 
 /** Loading, error and empty states of the document list. */
-function ListStatus({ error, loaded, itemCount, matchCount, hasIndex, query }: ListStatusProps) {
+function ListStatus({ error, loaded, itemCount, matchCount }: ListStatusProps) {
   const { t } = useI18n();
   return (
     <>
       {error ? <ErrorNotice className="mx-2" error={error} compact /> : null}
       {!loaded && !error ? <Spinner className="mx-2" label={t.common.loading} /> : null}
       {loaded && itemCount === 0 ? <p className="px-2 text-sm text-ink-500">{t.kb.emptyGeneral}</p> : null}
-      {loaded && itemCount > 0 && !hasIndex && !query ? <p className="px-2 pb-2 text-xs text-ink-500">{t.kb.noIndex}</p> : null}
       {itemCount > 0 && matchCount === 0 ? <p className="px-2 text-sm text-ink-500">{t.kb.noMatch}</p> : null}
     </>
   );
@@ -209,7 +206,7 @@ export function DocumentList({ items, error, loaded, current, onSelect }: Docume
       <CardHeader title={t.kb.documents} subtitle={searching ? t.kb.matches(filtered.length) : t.kb.count(items.length)} icon={<BookOpen aria-hidden className="size-4" />} />
       <SearchField id={searchId} query={query} onChange={changeQuery} />
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        <ListStatus error={error} loaded={loaded} itemCount={items.length} matchCount={filtered.length} hasIndex={items.some((item) => item.key === INDEX_KEY)} query={query} />
+        <ListStatus error={error} loaded={loaded} itemCount={items.length} matchCount={filtered.length} />
         {groups.map(({ group, items: groupItems }) => (
           <DocumentGroup
             key={group}

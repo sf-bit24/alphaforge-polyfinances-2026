@@ -63,7 +63,8 @@ def test_build_without_the_finance_engine_reports_a_clear_error(portfolio_settin
     service = build_service(portfolio_settings, app=None, store=store)
     response = service.handle({"action": "build", "client_id": CLIENT_ID, "mode": "rules"})
     assert response["ok"] is False and response["error"]["code"] == "internal"
-    assert "agents-portfolio.zip" in response["error"]["message"]
+    assert response["error"]["details"]["expected_package"] == "agents-portfolio.zip"
+    assert response["error"]["message"] == "Le simulateur ne répond pas pour l'instant : réessayez dans un instant."
     assert response["error"]["details"]["missing_module"] in HEAVY
     assert service.handle({"action": "health"})["ok"] is True
 

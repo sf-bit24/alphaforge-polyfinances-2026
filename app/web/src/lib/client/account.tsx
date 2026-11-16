@@ -1,9 +1,9 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { readAccount, type AccountState } from "./account-state";
+import { isOperator, readAccount, type AccountState } from "./account-state";
 
-export type { AccountState } from "./account-state";
+export { isOperator, type AccountState } from "./account-state";
 
 const AccountContext = createContext<AccountState>({ status: "loading" });
 
@@ -26,4 +26,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
 
 export function useAccount(): AccountState {
   return useContext(AccountContext);
+}
+
+/** True for the team's view only (see `isOperator`). */
+export function useOperator(): boolean {
+  return isOperator(useContext(AccountContext));
 }

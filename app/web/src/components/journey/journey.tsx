@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, FastForward, LayoutDashboard, UserRound } from "lucide-react";
+import { FastForward, LayoutDashboard, ListChecks, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useRef, type CSSProperties, type ReactNode } from "react";
 import type { ClientState, Stage } from "@/lib/contract/schemas";
@@ -64,7 +64,7 @@ function TopBar({ state, onOpen, onSkip, skipDisabled = false }: TopBarProps) {
         {state ? (
           <>
             <button type="button" className={styles.topLink} onClick={() => onOpen("trace")}>
-              <Activity aria-hidden />
+              <ListChecks aria-hidden />
               <span className={styles.topLabel}>{t.journey.trace}</span>
             </button>
             <button type="button" className={styles.topLink} onClick={() => onOpen("profile")}>

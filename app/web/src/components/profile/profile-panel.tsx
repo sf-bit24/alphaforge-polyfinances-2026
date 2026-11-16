@@ -1,16 +1,16 @@
 "use client";
 
-import { ChevronDown, Circle, CircleCheck, CircleDashed, FileJson, FileText, FolderOpen, UserRound } from "lucide-react";
+import { ChevronDown, Circle, CircleCheck, CircleDashed, FileText, FolderOpen, UserRound } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import type { ClientState, DimensionStatus, DimensionView, Fact, KbItem, RiskLevel } from "@/lib/contract/schemas";
-import { PROFILE_DIMENSIONS } from "@/lib/contract/schemas";
+import type { ClientState, Dimension, DimensionStatus, DimensionView, Fact, KbItem, RiskLevel } from "@/lib/contract/schemas";
+import { DIMENSIONS, PROFILE_DIMENSIONS } from "@/lib/contract/schemas";
+import { useOperator } from "@/lib/client/account";
 import { listKb } from "@/lib/client/api";
 import { useSession } from "@/lib/client/session";
 import { useAsync } from "@/lib/client/use-async";
 import type { Dictionary } from "@/lib/i18n/dictionary";
 import { factValueText } from "@/lib/fact-value";
 import { formatDateTime, formatTime } from "@/lib/i18n/locale";
-import { okfTypeLabel } from "@/lib/i18n/okf-types";
 import { useI18n } from "@/lib/i18n/provider";
 import { DocumentDialog } from "@/components/kb/document-view";
 import { Badge } from "@/components/ui/badge";
@@ -20,13 +20,20 @@ import { Spinner } from "@/components/ui/spinner";
 import { ClientKbStatusCard } from "./client-kb-status";
 import { CompletenessMeter, KnowledgeMeter, RiskMeter } from "./meters";
 
-export function provenanceLabel(provenance: string, t: Dictionary): string {
-  const [kind, ref = ""] = provenance.split(":");
-  if (kind === "base") return t.provenance.base(ref);
-  if (kind === "a1") return t.provenance.a1(ref);
-  if (kind === "a2") return t.provenance.a2(ref);
+/** Where a fact comes from, in the investor's words; null for an origin the investor has no name for. */
+export function provenanceLabel(provenance: string, t: Dictionary): string | null {
+  const [kind] = provenance.split(":");
+  if (kind === "base") return t.provenance.base;
+  if (kind === "a1") return t.provenance.a1;
+  if (kind === "a2") return t.provenance.a2;
   if (kind === "settings") return t.provenance.settings;
-  return provenance;
+  return null;
+}
+
+/** The dimension a fact belongs to (`objective.goal` → « Objectif »), never the field's own key. */
+function factDimension(field: string, t: Dictionary): string | null {
+  const dimension = field.split(".")[0] as Dimension;
+  return (DIMENSIONS as readonly string[]).includes(dimension) ? t.dimensions[dimension] : null;
 }
 
 const STATUS_ICON: Record<DimensionStatus, ReactNode> = {
@@ -84,20 +91,25 @@ function FactsList({ facts }: { facts: Fact[] }) {
   if (facts.length === 0) return <p className="text-sm text-ink-500">{t.panel.noFacts}</p>;
   return (
     <ul className="space-y-2">
-      {[...facts].reverse().map((fact) => (
-        <li key={`${fact.field}-${fact.at}`} className="rounded-lg bg-ink-50 px-3 py-2 ring-1 ring-ink-150">
-          <p className="flex items-center justify-between gap-2">
-            <span className="truncate font-mono text-[0.7rem] text-ink-600">{fact.field}</span>
-            <time dateTime={fact.at} className="shrink-0 text-[0.7rem] text-ink-400" title={formatDateTime(fact.at, locale)}>
-              {formatTime(fact.at, locale)}
-            </time>
-          </p>
-          <p className="mt-0.5 text-sm font-medium break-words text-ink-900">{factValueText(fact)}</p>
-          <Badge tone="outline" className="mt-1 font-mono">
-            {provenanceLabel(fact.provenance, t)}
-          </Badge>
-        </li>
-      ))}
+      {[...facts].reverse().map((fact) => {
+        const origin = provenanceLabel(fact.provenance, t);
+        return (
+          <li key={`${fact.field}-${fact.at}`} className="rounded-lg bg-ink-50 px-3 py-2 ring-1 ring-ink-150">
+            <p className="flex items-center justify-between gap-2">
+              <span className="truncate text-[0.7rem] font-medium text-ink-600">{factDimension(fact.field, t)}</span>
+              <time dateTime={fact.at} className="shrink-0 text-[0.7rem] text-ink-400" title={formatDateTime(fact.at, locale)}>
+                {formatTime(fact.at, locale)}
+              </time>
+            </p>
+            <p className="mt-0.5 text-sm font-medium break-words text-ink-900">{factValueText(fact)}</p>
+            {origin ? (
+              <Badge tone="outline" className="mt-1">
+                {origin}
+              </Badge>
+            ) : null}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -125,58 +137,32 @@ function Section({
   );
 }
 
-interface DocumentRowProps {
-  item: KbItem;
-  /** The client's folder, left out of the key shown under the title. */
-  prefix: string;
-  json?: boolean;
-  onOpen: (item: KbItem) => void;
-}
-
-function DocumentRow({ item, prefix, json = false, onOpen }: DocumentRowProps) {
-  const { t, locale } = useI18n();
+/** A document of the investor, by its title: never its key or its file name. */
+function DocumentRow({ item, onOpen }: { item: KbItem; onOpen: (item: KbItem) => void }) {
+  const { t } = useI18n();
+  const title = item.title ?? t.panel.untitled;
   return (
     <li>
       <button
         type="button"
         onClick={() => onOpen(item)}
-        aria-label={t.panel.open(item.title ?? item.key)}
+        aria-label={t.panel.open(title)}
         className="flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-ink-50 focus-visible:outline-2 focus-visible:outline-focus"
       >
-        {json ? (
-          <FileJson aria-hidden className="mt-0.5 size-4 shrink-0 text-ink-400" />
-        ) : (
-          <FileText aria-hidden className="mt-0.5 size-4 shrink-0 text-navy" />
-        )}
+        <FileText aria-hidden className="mt-0.5 size-4 shrink-0 text-navy" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-ink-900">{item.title ?? item.key.split("/").pop()}</span>
-          <span className="block truncate font-mono text-[0.7rem] text-ink-500">{item.key.replace(prefix, "")}</span>
+          <span className="block truncate text-sm font-medium text-ink-900">{title}</span>
         </span>
-        {item.type && !json ? (
-          <Badge tone="outline" className="mt-0.5">
-            {okfTypeLabel(item.type, locale)}
-          </Badge>
-        ) : null}
       </button>
     </li>
   );
 }
 
-function TracesList({ traces, prefix, onOpen }: { traces: KbItem[]; prefix: string; onOpen: (item: KbItem) => void }) {
-  const { t } = useI18n();
-  return (
-    <details className="mt-2">
-      <summary className="text-xs font-medium text-ink-600 hover:text-ink-900">{t.panel.traces(traces.length)}</summary>
-      <ul className="-mx-2 mt-1 max-h-56 space-y-0.5 overflow-y-auto">
-        {traces.map((item) => (
-          <DocumentRow key={item.key} item={item} prefix={prefix} json onOpen={onOpen} />
-        ))}
-      </ul>
-    </details>
-  );
-}
-
-/** The client's documents and traces, reloaded after every request (`revision`) and on a change of language. */
+/**
+ * The client's documents, reloaded after every request (`revision`) and on a change of language. The steps
+ * of each request (`traces/`) and the table of contents (`index.md`) are left out: the investor reads the
+ * steps in « Les étapes suivies », and the documents themselves here.
+ */
 function useClientDocuments(clientId: string, revision: number) {
   const { t, locale } = useI18n();
   const prefix = `clients/${clientId}/`;
@@ -193,15 +179,14 @@ function useClientDocuments(clientId: string, revision: number) {
     error,
     loading: !data && !previous && !error,
     empty: items.length === 0 && Boolean(data || previous),
-    docs: items.filter((item) => !item.key.includes("/traces/")),
-    traces: items.filter((item) => item.key.includes("/traces/")).reverse(),
+    docs: items.filter((item) => !item.key.includes("/traces/") && !item.key.endsWith("/index.md")),
   };
 }
 
 function DocumentsSection({ clientId, revision }: { clientId: string; revision: number }) {
   const { t } = useI18n();
   const [open, setOpen] = useState<KbItem | null>(null);
-  const { prefix, error, loading, empty, docs, traces } = useClientDocuments(clientId, revision);
+  const { error, loading, empty, docs } = useClientDocuments(clientId, revision);
   return (
     <>
       {error ? <ErrorNotice error={error} compact /> : null}
@@ -209,13 +194,12 @@ function DocumentsSection({ clientId, revision }: { clientId: string; revision: 
       {empty ? <p className="text-sm text-ink-500">{t.panel.noDocuments}</p> : null}
       <ul className="-mx-2 space-y-0.5">
         {docs.map((item) => (
-          <DocumentRow key={item.key} item={item} prefix={prefix} onOpen={setOpen} />
+          <DocumentRow key={item.key} item={item} onOpen={setOpen} />
         ))}
       </ul>
-      {traces.length > 0 ? <TracesList traces={traces} prefix={prefix} onOpen={setOpen} /> : null}
       <DocumentDialog
         documentKey={open?.key ?? null}
-        title={open?.title ?? open?.key ?? ""}
+        title={open ? (open.title ?? t.panel.untitled) : ""}
         clientId={clientId}
         onClose={() => setOpen(null)}
       />
@@ -227,15 +211,13 @@ function DocumentsSection({ clientId, revision }: { clientId: string; revision: 
 export function ProfilePanel({ state }: { state: ClientState }) {
   const { t } = useI18n();
   const session = useSession();
+  const operator = useOperator();
   const { profile, completeness } = state;
   return (
     <div className="overflow-hidden rounded-xl bg-surface shadow-card ring-1 ring-ink-200/80">
       <header className="flex items-center gap-2 px-5 pt-4">
         <UserRound aria-hidden className="size-4 text-navy" />
         <h2 className="flex-1 text-[0.95rem] font-semibold tracking-tight text-ink-950">{t.panel.title}</h2>
-        <span className="font-mono text-[0.7rem] text-ink-400" title={state.client_id}>
-          {t.session.id} {state.client_id.slice(0, 8)}
-        </span>
       </header>
       <div className="px-5 pt-4 pb-5">
         <CompletenessMeter completeness={completeness} />
@@ -255,7 +237,7 @@ export function ProfilePanel({ state }: { state: ClientState }) {
           <ul className="flex flex-wrap gap-1.5">
             {completeness.missing.map((item) => (
               <li key={`${item.dimension}.${item.field}`}>
-                <Badge tone="outline" title={`${t.dimensions[item.dimension]} · ${item.field}`}>
+                <Badge tone="outline" title={t.dimensions[item.dimension]}>
                   {item.label}
                 </Badge>
               </li>
@@ -267,8 +249,8 @@ export function ProfilePanel({ state }: { state: ClientState }) {
         <FactsList facts={profile.facts} />
       </Section>
       <Section title={t.panel.documentsTitle} icon={<FolderOpen aria-hidden className="size-4 text-ink-500" />} defaultOpen>
-        {/* Absent when the runtime has no client knowledge base; "disabled" came from the first runtime version. */}
-        {state.client_kb && state.client_kb.status !== "disabled" ? <ClientKbStatusCard kb={state.client_kb} /> : null}
+        {/* Absent when the runtime has no client knowledge base; "disabled" came from the first runtime version. The team's view only. */}
+        {operator && state.client_kb && state.client_kb.status !== "disabled" ? <ClientKbStatusCard kb={state.client_kb} /> : null}
         <DocumentsSection clientId={state.client_id} revision={session.revision} />
       </Section>
     </div>

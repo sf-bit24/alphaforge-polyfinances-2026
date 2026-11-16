@@ -3,7 +3,7 @@ import type { ClientState, KnowledgeLevel, Locale, Question } from "@/lib/contra
 import { reconcileClientKb } from "./client-kb";
 import { knowledgeLevelOf, type ClientRecord } from "./client-record";
 import { MOCK_RELEASE, type Envelope } from "./envelope";
-import { completeness, dimensionViews, effectiveRisk, PORTFOLIO_DRAFT_FIELD, riskDetail } from "./profile";
+import { completeness, dimensionViews, effectiveRisk, factLabel, PORTFOLIO_DRAFT_FIELD, riskDetail } from "./profile";
 import { a1Question, baseQuestion, renderQuestion, tr } from "./questions";
 import type { Trace } from "./trace";
 
@@ -40,7 +40,7 @@ export function clientState(record: ClientRecord, trace: Trace, locale: Locale):
       facts: [...record.values.values()]
         .filter((fact) => fact.field !== PORTFOLIO_DRAFT_FIELD)
         .sort((left, right) => left.at.localeCompare(right.at))
-        .map((fact) => ({ ...fact })),
+        .map((fact) => ({ ...fact, label: factLabel(fact.field, fact.value, locale) })),
     },
     completeness: completeness(record.values, locale),
     portfolio: record.portfolio,

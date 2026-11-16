@@ -90,7 +90,7 @@ describe("gateway in mock mode", () => {
     const unknown = await post({ action: "drop.tables" }, { "x-alphaforge-locale": "en" });
     expect(unknown.status).toBe(400);
     const body = ErrorEnvelope.parse(await unknown.json());
-    expect(body.error).toMatchObject({ code: "unknown_action", message: "Unknown action: drop.tables" });
+    expect(body.error).toMatchObject({ code: "unknown_action", message: "This action is not available.", details: { action: "drop.tables" } });
     expect(body.release).toBeNull();
   });
 

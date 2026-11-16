@@ -26,7 +26,7 @@ sources:
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositive 9 (dix titres technologiques dépendent des mêmes moteurs) et diapositive 10 (concentration existante parmi les contraintes)"
     retrieved_at: "2026-11-15T04:20:00Z"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), sections capacity (income_stability, employer_equity_haircut), satellites.theme_tech et biases.familiarite"
     retrieved_at: "2026-11-15T04:20:00Z"
 data:
@@ -68,35 +68,36 @@ Les faits et les limites sont les mêmes à tous les niveaux; seuls les mots cha
 
 ## Comment AlphaForge AI l'utilise
 
-Le code applique des règles fixes; le modèle les explique.
+AlphaForge AI applique des règles fixes. Yan les explique; les chiffres sont calculés, jamais inventés.
 
 - **Capacité** : la stabilité du revenu entre dans la capacité de risque, et les actions de l'employeur y comptent
-  avec une décote (`risk_levels.yaml`, section `capacity`; voir [Tolérance et capacité](tolerance-et-capacite.md)).
-- **Étape 0** : si le secteur d'emploi déclaré est la technologie, la finance, l'énergie ou la santé, trois règles
-  s'ajoutent (voir [Étape 0 : style et score des titres](../methodologie/scoring-par-style.md)) :
+  avec une décote (voir [Tolérance et capacité](tolerance-et-capacite.md)).
+- **Choix des titres selon le style** : si le secteur d'emploi déclaré est la technologie, la finance, l'énergie ou
+  la santé, trois règles s'ajoutent (voir
+  [Choix et score des titres selon le style](../methodologie/scoring-par-style.md)) :
   - l'exposition consolidée à ce secteur, FNB compris, est plafonnée **au poids du marché** : part maximale d'actions
-    du portefeuille (e_cap) × part du secteur dans le marché de référence (s_ref), sans la marge habituelle des
-    satellites (voir [Expositions consolidées](expositions-consolidees.md));
+    du portefeuille × part du secteur dans le marché de référence, sans la marge habituelle des satellites (voir
+    [Expositions consolidées](expositions-consolidees.md));
   - aucun titre de ce secteur n'entre dans la [sélection de titres par règles](selection-par-regles.md) : un titre
-    est écarté s'il appartient au secteur d'emploi **par le secteur du jeu de départ ou par le tag du moteur**; les
-    titres de l'employeur, quand ils sont connus, sont écartés aussi;
+    est écarté s'il appartient au secteur d'emploi **par le secteur du jeu de départ ou par l'étiquette de thème
+    qu'AlphaForge AI lui donne**; les titres de l'employeur, quand ils sont connus, sont écartés aussi;
   - le secteur d'emploi ne reçoit aucun bonus de score, ni de style ni d'intérêt.
-- **Exemple** : pour une personne qui développe des logiciels, le moteur écarte les actions du secteur Technologie de
-  l'information du jeu de départ (AAPL, MSFT, NVDA, SHOP.TO, CSU.TO) et GOOGL, classée Services de communication mais
-  portant le tag `tech` du moteur. La technologie vue par transparence reste plafonnée au poids du marché, sans bonus
-  technologique. Le [noyau](noyau-et-satellites.md) en FNB larges en contient déjà sa part.
-- La trace cite le secteur déclaré, la règle appliquée et chaque titre écarté avec sa raison.
+- **Exemple** : pour une personne qui développe des logiciels, AlphaForge AI écarte les actions du secteur
+  Technologie de l'information du jeu de départ (AAPL, MSFT, NVDA, SHOP.TO, CSU.TO) et GOOGL, classée Services de
+  communication mais portant l'étiquette « technologie ». La technologie vue par transparence reste plafonnée au poids
+  du marché, sans bonus technologique. Le [noyau](noyau-et-satellites.md) en FNB larges en contient déjà sa part.
+- Les étapes suivies citent le secteur déclaré, la règle appliquée et chaque titre écarté avec sa raison.
 
-Ces règles sont des hypothèses de conception, à valider par l'équipe.
+Ces règles sont des choix d'AlphaForge AI, encore à valider.
 
 ## Limites
 
 - **Secteur d'emploi ≠ exposition réelle** : une développeuse dans une banque dépend surtout de la finance; le profil
   demande le secteur, pas le nom de l'employeur.
-- **Frontière des secteurs** : AMZN est classée Consommation discrétionnaire et porte les tags
-  `consumer_discretionary` et `tech_platform`, sans le tag `tech` : elle reste éligible pour une personne qui
-  travaille en technologie, et le plafond par transparence ne la compte pas comme technologie. Avec le style
-  offensif, elle peut même recevoir les bonus liés à ces deux tags.
+- **Frontière des secteurs** : AMZN est classée Consommation discrétionnaire et porte les étiquettes « consommation
+  discrétionnaire » et « plateforme technologique », sans l'étiquette « technologie » : elle reste éligible pour une
+  personne qui travaille en technologie, et le plafond par transparence ne la compte pas comme technologie. Avec le style
+  offensif, elle peut même recevoir les bonus liés à ces deux étiquettes.
 - **Pas de valeur chiffrée** : AlphaForge AI ne calcule pas la valeur actualisée des revenus futurs ni leur
   corrélation avec les marchés; il applique des règles qualitatives.
 - **Simulation** : ces règles décrivent un profil fictif et ne remplacent pas l'analyse d'un conseiller.

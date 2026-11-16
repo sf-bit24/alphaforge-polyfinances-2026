@@ -75,10 +75,11 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 
 ## Comment AlphaForge AI l'utilise
 
-- Le questionnaire demande dans quels types de comptes l'argent sera placé (CELI, REER, REEE, FERR, non enregistré,
-  ou « je ne sais pas »); A2 relève aussi le type de compte des lignes d'un portefeuille existant.
-- Les plafonds sont versionnés avec leur source dans `finance/rules/canada_2026.yaml`; seules les valeurs marquées
-  vérifiées peuvent être citées. Le moteur ne calcule pas encore l'impôt ni les droits de cotisation d'un investisseur.
+- Le questionnaire vous demande dans quels types de comptes votre argent sera placé (CELI, REER, REEE, FERR, non
+  enregistré, ou « je ne sais pas »).
+- Quand Yan lit votre portefeuille existant, il relève aussi le type de compte de chaque ligne.
+- Les plafonds sont conservés avec leur source et leur date. Seules les valeurs marquées vérifiées peuvent être citées.
+- Le simulateur ne calcule pas encore l'impôt ni vos droits de cotisation.
 
 ## Limites
 

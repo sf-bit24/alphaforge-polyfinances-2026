@@ -16,7 +16,7 @@ sources:
     title: "Énoncé officiel du défi AlphaForge AI (Datathon PolyFinances 2026)"
     resource: "Énoncé officiel, p. 11 (FNB : titres détenus, pondérations, secteur, pays; expositions sous-jacentes)"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, satellites.theme_tech, exposure_overrides et limits_template (exp.tech)"
 data:
   aliases: [exposition consolidée, expositions consolidées, transparence, look-through, chevauchement, ce que je détiens vraiment]
@@ -48,29 +48,30 @@ travers des FNB. On parle aussi de transparence (*look-through*).
 
 ## Comment AlphaForge AI les calcule
 
-Le code calcule; le modèle explique. Deux calculs existent.
+AlphaForge AI calcule selon des règles fixes. Yan explique; les chiffres sont calculés, jamais inventés. Deux calculs
+existent.
 
 | Où | Méthode | Résultat |
 | --- | --- | --- |
-| Portefeuille proposé (moteur, Judge) | `portfolio.lookthrough_report` : pour chaque thème, vecteur d'exposition des actifs × poids | Part du portefeuille exposée au thème, détail par actif, actifs sans donnée, hypothèses |
-| Portefeuille existant (A2) | Regroupement des positions évaluées en CAD | Parts par classe d'actifs, devise, marché et secteur, et cinq plus grosses positions |
+| Portefeuille proposé (simulateur, vérification finale) | Pour chaque thème, exposition de chaque actif au thème × son poids | Part du portefeuille exposée au thème, détail par actif, actifs sans donnée, hypothèses |
+| Votre portefeuille existant (quand Yan le lit) | Regroupement des positions évaluées en CAD | Parts par classe d'actifs, devise, marché et secteur, et cinq plus grosses positions |
 
-- L'exposition d'un actif à un thème vient, dans l'ordre : d'une valeur déclarée dans le mandat (`exposure_overrides`),
-  de la part du secteur dans le marché américain à la date étudiée (indices sectoriels de Kenneth French, utilisée pour
-  le marché américain et les FNB qui le répliquent), de la colonne `exposures` du catalogue d'actifs, sinon de 1 ou 0
-  selon l'étiquette de l'actif.
-- Le mandat plafonne l'exposition technologique consolidée (`exp.tech`). Pour QQQ et XIU.TO, la part technologique est
+- L'exposition d'un actif à un thème vient, dans l'ordre : d'une valeur déclarée dans le mandat, de la part du
+  secteur dans le marché américain à la date étudiée (indices sectoriels de Kenneth French, utilisée pour le marché
+  américain et les FNB qui le répliquent), des expositions notées dans la liste des actifs, sinon de 1 ou 0 selon
+  l'étiquette de l'actif.
+- Le mandat plafonne l'exposition technologique consolidée. Pour QQQ et XIU.TO, la part technologique est
   une **hypothèse déclarée**, en attente d'une fiche de l'émetteur datée; sans elle, ces fonds compteraient 0.
-- Le Judge contrôle ce plafond sur les poids proposés et refuse la proposition en cas de dépassement.
+- La vérification finale contrôle ce plafond sur les poids proposés et refuse la proposition en cas de dépassement.
 
 ## Limites
 
 - **Thèmes limités** : la transparence ne couvre que quelques thèmes (technologie, énergie, finance, etc.), pas toute
   la composition des fonds.
-- **Hypothèses** : les parts déclarées à la main sont marquées `HYPOTHESE` et doivent être remplacées par des fiches
+- **Hypothèses** : les parts déclarées à la main sont marquées HYPOTHÈSE et doivent être remplacées par des fiches
   datées.
-- **Inconnu compté 0** : un fonds large sans donnée compte 0 pour un thème; le code liste ces actifs pour le dire.
-- **Portefeuille existant** : la vue d'A2 ne regarde pas dans les fonds. Un FNB coté à Toronto qui détient des actions
+- **Inconnu compté 0** : un fonds large sans donnée compte 0 pour un thème; AlphaForge AI liste ces actifs pour le dire.
+- **Portefeuille existant** : la lecture de votre portefeuille existant ne regarde pas dans les fonds. Un FNB coté à Toronto qui détient des actions
   américaines y compte comme canadien et en dollars canadiens.
 - **Date** : la composition d'un fonds change; une exposition vaut à la date de sa donnée.
 

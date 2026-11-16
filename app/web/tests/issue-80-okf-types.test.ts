@@ -36,7 +36,7 @@ describe("okfTypeLabel (#80)", () => {
     expect(okfTypeLabel("Methodology", "fr")).toBe("Méthodologie");
     expect(okfTypeLabel("Data Series", "fr")).toBe("Série de données");
     expect(okfTypeLabel("News", "fr")).toBe("Actualité");
-    expect(okfTypeLabel("Index", "fr")).toBe("Index");
+    expect(okfTypeLabel("Index", "fr")).toBe("Sommaire");
     expect(okfTypeLabel("Profile Note", "fr")).toBe("Note de profil");
     expect(okfTypeLabel("Profile Journal", "fr")).toBe("Journal du profil");
     expect(okfTypeLabel("Investor Profile", "fr")).toBe("Profil d’investisseur");
@@ -76,12 +76,11 @@ describe("okfTypeLabel (#80)", () => {
     for (const type of written) expect(OKF_TYPES).toContain(type);
   });
 
-  it("translates every known type into French, except the names kept as is", () => {
-    const same = new Set(["Index", "Trace"]);
+  it("translates every known type into French", () => {
     for (const type of OKF_TYPES) {
       expect(okfTypeLabel(type, "fr")).not.toBe("");
       expect(okfTypeLabel(type, "en")).not.toBe("");
-      if (!same.has(type)) expect(okfTypeLabel(type, "fr")).not.toBe(type);
+      expect(okfTypeLabel(type, "fr")).not.toBe(type);
     }
   });
 });

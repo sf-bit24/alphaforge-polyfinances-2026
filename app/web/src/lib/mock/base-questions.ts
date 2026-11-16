@@ -296,8 +296,8 @@ export const BASE_QUESTIONS: QuestionDef[] = [
       en: "Do you already have investments (an existing portfolio)?",
     },
     help: {
-      fr: "Si oui, vous pourrez le transmettre sous n'importe quelle forme : texte collé, CSV, tableur, PDF ou image.",
-      en: "If so, you can share it in any form: pasted text, CSV, spreadsheet, PDF or image.",
+      fr: "Si oui, vous pourrez le transmettre sous n'importe quelle forme : texte collé, relevé, tableur, PDF ou photo.",
+      en: "If so, you can share it in any form: pasted text, statement, spreadsheet, PDF or photo.",
     },
   },
 ];

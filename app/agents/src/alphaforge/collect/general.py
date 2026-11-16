@@ -248,7 +248,7 @@ def stock_features_doc(data: dict[str, Any], *, now: str, generated_by: str) -> 
             key,
             {
                 "id": f"input-{feature['source_sha256'][:12]}",
-                "title": f"Entrée {key}",
+                "title": "Données utilisées pour le calcul",
                 "resource": key,
                 "sha256": feature["source_sha256"],
                 "etag": etags.get(key),
@@ -265,8 +265,7 @@ def stock_features_doc(data: dict[str, Any], *, now: str, generated_by: str) -> 
     body = [
         f"# Caractéristiques de {ticker} au {as_of}",
         "",
-        f"- Jeu de caractéristiques : {data['feature_set']}",
-        f"- Calculées par : {generated_by}",
+        "- Calculées selon des règles fixes, à partir des données citées en sources.",
         "",
         "## Valeurs",
         "",
@@ -274,10 +273,10 @@ def stock_features_doc(data: dict[str, Any], *, now: str, generated_by: str) -> 
         "| --- | --- | --- | --- | --- | --- | --- |",
         *rows,
         "",
-        "## Formules et sources",
+        "## Formules",
         "",
         *[
-            f"- {name} : {f['formula']} (source : {f['source_key']}, sha256 {f['source_sha256'][:12]})"
+            f"- {name} : {f['formula']}"
             for name, f in sorted(features.items())
         ],
         "",
@@ -287,7 +286,7 @@ def stock_features_doc(data: dict[str, Any], *, now: str, generated_by: str) -> 
         "",
         "## Limites",
         "",
-        "- Valeurs calculées par le code du volet finance à partir des entrées citées; aucune ne vient d'un modèle.",
+        "- Valeurs calculées selon des règles fixes à partir des données citées; aucune n'est estimée ni rédigée.",
         "- Données passées seulement : ces caractéristiques décrivent l'historique, ce ne sont pas des prévisions.",
         "- Un document n'entre dans une simulation qu'à partir de la publication de sa plus récente entrée.",
         "",
@@ -296,8 +295,8 @@ def stock_features_doc(data: dict[str, Any], *, now: str, generated_by: str) -> 
         type="Stock Features",
         title=f"Caractéristiques de {ticker} au {as_of}",
         description=(
-            f"Jeu {data['feature_set']} pour {ticker} au {as_of} : {len(features)} caractéristiques calculées "
-            f"par le code, {len(data['missing'])} non calculées."
+            f"{ticker} au {as_of} : {len(features)} caractéristiques calculées selon des règles fixes, "
+            f"{len(data['missing'])} non calculées."
         ),
         tags=list(
             dict.fromkeys(

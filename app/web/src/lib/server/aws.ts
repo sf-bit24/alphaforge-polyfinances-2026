@@ -258,7 +258,7 @@ async function describe(config: GatewayConfig, executionArn: string): Promise<Ex
     output = await sfn(config.AWS_REGION).send(new DescribeExecutionCommand({ executionArn }));
   } catch (error) {
     if (error instanceof Error && error.name === "ExecutionDoesNotExist") {
-      throw new GatewayError("not_found", { fr: "Exécution introuvable.", en: "Execution not found." }, 404, {
+      throw new GatewayError("not_found", { fr: "Cette collecte est introuvable.", en: "This collection run was not found." }, 404, {
         execution_arn: executionArn,
       });
     }
@@ -336,7 +336,7 @@ export async function describeExecution(config: GatewayConfig, executionArn: str
   if (!executionArn.startsWith(expectedPrefix)) {
     throw new GatewayError(
       "bad_request",
-      { fr: "Cette exécution n'appartient pas à la machine de collecte.", en: "This execution does not belong to the collection machine." },
+      { fr: "Cette collecte n’existe pas.", en: "This collection run does not exist." },
       400,
       { execution_arn: executionArn },
     );

@@ -1,15 +1,15 @@
 "use client";
 
-import { ChevronRight, Code, Eye, FileJson } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { ChevronRight, ExternalLink, FileJson } from "lucide-react";
+import type { ReactNode } from "react";
+import { useOperator } from "@/lib/client/account";
 import { callMessages, getKbDocument } from "@/lib/client/api";
 import { useAsync } from "@/lib/client/use-async";
-import { formatDateTime } from "@/lib/i18n/locale";
+import { formatDate } from "@/lib/i18n/locale";
 import { okfTypeLabel } from "@/lib/i18n/okf-types";
 import { useI18n } from "@/lib/i18n/provider";
 import { parseOkf, resolveOkfLink } from "@/lib/okf";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { ErrorNotice } from "@/components/ui/error-notice";
 import { JsonView } from "@/components/ui/json-view";
@@ -17,12 +17,14 @@ import { Markdown, type LinkRenderer } from "@/components/ui/markdown";
 import { Spinner } from "@/components/ui/spinner";
 
 function asList(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map((item) => (typeof item === "string" ? item : JSON.stringify(item)));
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
   return typeof value === "string" ? [value] : [];
 }
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+const asText = (value: unknown): string | null => (typeof value === "string" && value ? value : null);
 
 function Meta({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -33,9 +35,11 @@ function Meta({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** A JSON document (traces, data), pretty-printed; shown as text if it does not parse. */
+/** A JSON document (a client's steps): its raw content is for the team's view only. */
 function JsonDocument({ content }: { content: string }) {
   const { t } = useI18n();
+  const operator = useOperator();
+  if (!operator) return <p className="text-sm text-ink-600">{t.documentView.unavailable}</p>;
   let parsed: unknown = content;
   try {
     parsed = JSON.parse(content);
@@ -46,36 +50,24 @@ function JsonDocument({ content }: { content: string }) {
     <div>
       <p className="mb-2 flex items-center gap-2 text-sm text-ink-600">
         <FileJson aria-hidden className="size-4 text-navy" />
-        {t.documentView.json}
+        {t.documentView.rawTeam}
       </p>
       <JsonView value={parsed} maxHeight="max-h-[60vh]" />
     </div>
   );
 }
 
-function GeneratedMeta({ generated }: { generated: Record<string, unknown> }) {
-  const { t, locale } = useI18n();
-  return (
-    <Meta label={t.documentView.generated}>
-      <span className="font-mono text-xs">{String(generated.by ?? "—")}</span>
-      {generated.at ? (
-        <span className="text-ink-500">
-          {" "}
-          {t.documentView.generatedAt} {formatDateTime(String(generated.at), locale)}
-        </span>
-      ) : null}
-    </Meta>
-  );
-}
-
-function TagsMeta({ tags }: { tags: string[] }) {
+/** The topics of a document, from its tags: only those with a label; the others are internal. */
+function TopicsMeta({ tags }: { tags: string[] }) {
   const { t } = useI18n();
+  const labels = [...new Set(tags.map((tag) => t.documentView.topicLabels[tag]).filter((label): label is string => Boolean(label)))];
+  if (!labels.length) return null;
   return (
-    <Meta label={t.documentView.tags}>
+    <Meta label={t.documentView.topics}>
       <span className="flex flex-wrap gap-1">
-        {tags.map((tag) => (
-          <Badge key={tag} tone="outline">
-            {tag}
+        {labels.map((label) => (
+          <Badge key={label} tone="outline">
+            {label}
           </Badge>
         ))}
       </span>
@@ -83,39 +75,66 @@ function TagsMeta({ tags }: { tags: string[] }) {
   );
 }
 
+/** What a reader needs: the kind of document, when it was updated, when it is due for review, its topics. */
 function MetadataFields({ front }: { front: Record<string, unknown> }) {
   const { t, locale } = useI18n();
-  const generated = asRecord(front.generated);
-  const owners = asList(front.owners);
-  const tags = asList(front.tags);
+  const updated = asText(asRecord(front.generated)?.at);
+  const review = asText(front.stale_after);
   return (
-    <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+    <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
       {front.type ? (
         <Meta label={t.documentView.type}>
           <Badge tone="brand">{okfTypeLabel(String(front.type), locale)}</Badge>
         </Meta>
       ) : null}
-      {front.status ? <Meta label={t.documentView.status}>{String(front.status)}</Meta> : null}
-      {front.sensitivity ? <Meta label={t.documentView.sensitivity}>{String(front.sensitivity)}</Meta> : null}
-      {generated ? <GeneratedMeta generated={generated} /> : null}
-      {front.stale_after ? <Meta label={t.documentView.staleAfter}>{formatDateTime(String(front.stale_after), locale)}</Meta> : null}
-      {owners.length ? <Meta label={t.documentView.owners}>{owners.join(", ")}</Meta> : null}
-      {tags.length ? <TagsMeta tags={tags} /> : null}
+      {updated ? <Meta label={t.documentView.updated}>{formatDate(updated, locale)}</Meta> : null}
+      {review ? <Meta label={t.documentView.staleAfter}>{formatDate(review, locale)}</Meta> : null}
+      <TopicsMeta tags={asList(front.tags)} />
     </dl>
   );
 }
 
-function SourceList({ sources }: { sources: Array<Record<string, unknown> | null> }) {
+/** The first web address in a source's reference, if any: the only part of it a reader may follow. */
+function webLink(resource: unknown): string | null {
+  const match = typeof resource === "string" ? /https?:\/\/[^\s),;»]+/.exec(resource) : null;
+  return match ? match[0].replace(/[.:]+$/, "") : null;
+}
+
+/** A source by its title and its date, with a link when it is on the web; never its path or its key. */
+function SourceItem({ source }: { source: Record<string, unknown> }) {
+  const { t, locale } = useI18n();
+  const title = asText(source.title);
+  if (!title) return null;
+  const date = asText(source.published_at) ?? asText(source.observed_at) ?? asText(source.retrieved_at);
+  const url = webLink(source.resource);
+  return (
+    <li className="text-sm text-ink-700">
+      <span className="font-medium">{title}</span>
+      {date ? <span className="text-ink-500"> · {formatDate(date, locale)}</span> : null}
+      {url ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer noopener"
+          aria-label={`${t.documentView.openSource}, ${title}`}
+          className="ml-2 inline-flex items-center gap-1 text-navy underline underline-offset-2 hover:text-ink-950"
+        >
+          {t.documentView.openSource}
+          <ExternalLink aria-hidden className="size-3" />
+        </a>
+      ) : null}
+    </li>
+  );
+}
+
+function SourceList({ sources }: { sources: Array<Record<string, unknown>> }) {
   const { t } = useI18n();
   return (
     <div className="mt-4">
       <p className="text-[0.7rem] font-semibold tracking-wide text-ink-500 uppercase">{t.documentView.sources}</p>
       <ul className="mt-1 space-y-1">
         {sources.map((source, index) => (
-          <li key={`${String(source?.id)}-${index}`} className="text-sm text-ink-700">
-            <span className="font-medium">{String(source?.title ?? source?.id ?? "")}</span>
-            {source?.resource ? <span className="ml-2 font-mono text-xs text-ink-500">{String(source.resource)}</span> : null}
-          </li>
+          <SourceItem key={`${String(source.id)}-${index}`} source={source} />
         ))}
       </ul>
     </div>
@@ -128,7 +147,6 @@ function MetadataSummary({ front, sources }: { front: Record<string, unknown>; s
   return (
     <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-ink-500">
       {front.type ? <Badge tone="brand">{okfTypeLabel(String(front.type), locale)}</Badge> : null}
-      {front.status ? <span>{String(front.status)}</span> : null}
       {sources ? <span>{t.documentView.sourceCount(sources)}</span> : null}
     </span>
   );
@@ -137,9 +155,9 @@ function MetadataSummary({ front, sources }: { front: Record<string, unknown>; s
 /** The description, then the metadata folded into one line: the body of the document comes first. */
 function Frontmatter({ front }: { front: Record<string, unknown> }) {
   const { t } = useI18n();
-  const sources = Array.isArray(front.sources) ? (front.sources as unknown[]).map(asRecord).filter(Boolean) : [];
-  const data = front.data;
-  const hasData = data !== undefined && data !== null && !(typeof data === "object" && Object.keys(data as object).length === 0);
+  const sources = Array.isArray(front.sources)
+    ? (front.sources as unknown[]).map(asRecord).filter((source): source is Record<string, unknown> => Boolean(source && asText(source.title)))
+    : [];
   return (
     <section aria-label={t.documentView.metadata} className="space-y-3">
       {front.description ? <p className="text-sm text-ink-600">{String(front.description)}</p> : null}
@@ -152,12 +170,6 @@ function Frontmatter({ front }: { front: Record<string, unknown> }) {
         <div className="px-4 pt-1 pb-4">
           <MetadataFields front={front} />
           {sources.length ? <SourceList sources={sources} /> : null}
-          {hasData ? (
-            <details className="mt-4">
-              <summary className="text-sm font-medium text-navy hover:underline">{t.documentView.data}</summary>
-              <JsonView value={data} className="mt-2 bg-white" />
-            </details>
-          ) : null}
         </div>
       </details>
     </section>
@@ -187,17 +199,16 @@ function useLinkRenderer(documentKey: string, links: DocumentLinks | undefined):
       );
     }
     return (
-      <button type="button" title={key} onClick={() => links.open(key)} className="text-navy underline underline-offset-2 hover:text-ink-950 focus-visible:outline-2 focus-visible:outline-focus">
+      <button type="button" onClick={() => links.open(key)} className="text-navy underline underline-offset-2 hover:text-ink-950 focus-visible:outline-2 focus-visible:outline-focus">
         {label}
       </button>
     );
   };
 }
 
-/** An OKF document: frontmatter as metadata, then the Markdown body; JSON traces as JSON. */
+/** An OKF document: what a reader needs to know about it, then its text; a JSON document only in the team's view. */
 export function DocumentContent({ content, documentKey, links }: { content: string; documentKey: string; links?: DocumentLinks }) {
   const { t } = useI18n();
-  const [raw, setRaw] = useState(false);
   const renderLink = useLinkRenderer(documentKey, links);
 
   if (documentKey.endsWith(".json")) return <JsonDocument content={content} />;
@@ -205,26 +216,9 @@ export function DocumentContent({ content, documentKey, links }: { content: stri
   const doc = parseOkf(content);
   return (
     <div className="space-y-5">
-      <div className="flex justify-end">
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => setRaw((value) => !value)}
-          icon={raw ? <Eye aria-hidden className="size-4" /> : <Code aria-hidden className="size-4" />}
-          aria-pressed={raw}
-        >
-          {raw ? t.documentView.rendered : t.documentView.raw}
-        </Button>
-      </div>
-      {raw ? (
-        <JsonView value={content} className="whitespace-pre-wrap" maxHeight="max-h-[65vh]" />
-      ) : (
-        <>
-          {doc.error ? <p className="text-sm text-warning-ink">{t.documentView.invalidFrontmatter}</p> : null}
-          {doc.frontmatter ? <Frontmatter front={doc.frontmatter} /> : null}
-          <Markdown renderLink={renderLink}>{doc.body}</Markdown>
-        </>
-      )}
+      {doc.error ? <p className="text-sm text-warning-ink">{t.documentView.invalidFrontmatter}</p> : null}
+      {doc.frontmatter ? <Frontmatter front={doc.frontmatter} /> : null}
+      <Markdown renderLink={renderLink}>{doc.body}</Markdown>
     </div>
   );
 }
@@ -253,7 +247,7 @@ export function DocumentDialog({
   onClose: () => void;
 }) {
   return (
-    <Dialog open={documentKey !== null} onClose={onClose} title={title} subtitle={documentKey ?? undefined}>
+    <Dialog open={documentKey !== null} onClose={onClose} title={title}>
       {documentKey ? <DocumentLoader key={documentKey} documentKey={documentKey} clientId={clientId} /> : null}
     </Dialog>
   );

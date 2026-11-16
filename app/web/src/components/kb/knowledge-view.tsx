@@ -3,6 +3,7 @@
 import { BookOpen, LibraryBig, Radar, Waypoints } from "lucide-react";
 import { Activity, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KbItem } from "@/lib/contract/schemas";
+import { useOperator } from "@/lib/client/account";
 import { callMessages, listKb, type ApiError } from "@/lib/client/api";
 import { useAsync } from "@/lib/client/use-async";
 import { useHashTab } from "@/lib/client/use-hash-tab";
@@ -17,6 +18,8 @@ import { KnowledgeGraphPanel } from "./knowledge-graph";
 /** Sub-tabs of the page, named in the URL fragment: `/knowledge#graph`, `/knowledge#collect`. */
 const TABS = ["documents", "graph", "collect"] as const;
 type KnowledgeTab = (typeof TABS)[number];
+/** A client never sees the collection tab: `/knowledge#collect` opens the documents. */
+const CLIENT_TABS: readonly KnowledgeTab[] = ["documents", "graph"];
 
 /**
  * The document to read. general/index.md is written by A6 and is absent before the first collection: fall back
@@ -56,7 +59,7 @@ function CurrentDocument({ current, item, version, empty, links }: CurrentDocume
   if (current) {
     return (
       <>
-        <CardHeader className="rounded-t-xl bg-surface lg:sticky lg:top-0 lg:z-10" title={item?.title ?? current} subtitle={<span className="font-mono text-xs break-all">{current}</span>} />
+        <CardHeader className="rounded-t-xl bg-surface lg:sticky lg:top-0 lg:z-10" title={item?.title ?? t.kb.documents} />
         <div className="px-6 py-5">
           <DocumentLoader key={`${current}|${version}`} documentKey={current} clientId={null} links={links} />
         </div>
@@ -109,21 +112,22 @@ function DocumentsTab({ items, error, loaded, version, current, onSelect, onOpen
   );
 }
 
-function useKnowledgeTabs(): Array<TabItem<KnowledgeTab>> {
+function useKnowledgeTabs(operator: boolean): Array<TabItem<KnowledgeTab>> {
   const { t } = useI18n();
   return [
     { id: "documents", label: t.kb.tabs.documents, icon: <BookOpen aria-hidden className="size-4" /> },
     { id: "graph", label: t.kb.tabs.graph, icon: <Waypoints aria-hidden className="size-4" /> },
-    { id: "collect", label: t.kb.tabs.collect, icon: <Radar aria-hidden className="size-4" /> },
+    ...(operator ? [{ id: "collect" as const, label: t.kb.tabs.collect, icon: <Radar aria-hidden className="size-4" /> }] : []),
   ];
 }
 
-/** The general base in three tabs: read its documents, see how they link, feed it. */
+/** The general base in tabs: read its documents, see how they link; the team's view can also feed it. */
 export function KnowledgeView() {
   const { t, locale } = useI18n();
   const idPrefix = useId();
-  const tabs = useKnowledgeTabs();
-  const [tab, setTab] = useHashTab(TABS, "documents");
+  const operator = useOperator();
+  const tabs = useKnowledgeTabs(operator);
+  const [tab, setTab] = useHashTab(operator ? TABS : CLIENT_TABS, "documents");
   const [version, setVersion] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const { data, error, previous } = useAsync(`general/|${version}|${locale}`, (signal) =>
@@ -154,16 +158,18 @@ export function KnowledgeView() {
           <KnowledgeGraphPanel items={items} loaded={loaded} stale={!data && Boolean(previous)} error={error} onOpenDoc={openDocument} />
         </Activity>
       </div>
-      {/* Hidden but mounted: a run in progress keeps being polled, and the list refreshes when it ends. */}
-      <div {...tabPanelProps(idPrefix, "collect", tab === "collect")} className="pt-6">
-        <CollectPanel
-          onWritten={refresh}
-          onOpenDoc={(key) => {
-            refresh();
-            openDocument(key);
-          }}
-        />
-      </div>
+      {/* The team's view only. Hidden but mounted: a run in progress keeps being polled, and the list refreshes when it ends. */}
+      {operator ? (
+        <div {...tabPanelProps(idPrefix, "collect", tab === "collect")} className="pt-6">
+          <CollectPanel
+            onWritten={refresh}
+            onOpenDoc={(key) => {
+              refresh();
+              openDocument(key);
+            }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

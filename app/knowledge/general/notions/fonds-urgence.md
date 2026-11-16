@@ -19,7 +19,7 @@ sources:
     title: "Paramètres canadiens d'AlphaForge AI : protection SADC"
     resource: "app/agents/src/alphaforge/finance/rules/canada_2026.yaml, cdic.coverage_limit_per_category et cdic.insured_categories (vérifiés, 2026, https://www.cdic.ca/your-coverage/whats-covered/)"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, section capacity (emergency_req_months, hard_caps)"
 data:
   aliases: [fonds d'urgence, coussin, réserve d'urgence, imprévu, liquidité]
@@ -51,7 +51,7 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 - Il protège le reste du placement : il évite de vendre au creux d'une [baisse](baisse-maximale.md).
 - Des revenus variables demandent un coussin plus grand que des revenus stables.
 - Les dépôts admissibles (comptes d'épargne, CPG) sont protégés par la SADC jusqu'à 100 000 $ par catégorie et par
-  institution membre; les actions, obligations, FNB et cryptoactifs ne le sont pas (`canada_2026.yaml`, vérifié en
+  institution membre; les actions, obligations, FNB et cryptoactifs ne le sont pas (vérifié auprès de la SADC en
   2026).
 
 ## Comment AlphaForge AI l'utilise
@@ -59,16 +59,15 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 - **Questionnaire** : la question « Votre fonds d'urgence couvre combien de mois de dépenses essentielles? » alimente
   le score de capacité; moins de mois donne moins de points (voir
   [Tolérance, capacité et risque effectif](../methodologie/tolerance-capacite-risque-effectif.md)).
-- **Mandat** : le compilateur compare les mois déclarés aux mois requis selon la stabilité des revenus, plus exigeants
-  après 55 ans ou à la retraite. Un coussin de moins d'un mois plafonne la capacité; une réponse manquante est traitée
-  comme aucune réserve, par prudence (`risk_levels.yaml`, section `capacity`).
-- Un coussin insuffisant donne plus de poids à la lentille « risque » de l'explication, sans changer les limites.
+- **Mandat** : AlphaForge AI compare les mois déclarés aux mois requis selon la stabilité des revenus, plus exigeants
+  après 55 ans ou à la retraite. Un coussin de moins d'un mois plafonne la capacité. Une réponse manquante est traitée
+  comme aucune réserve, par prudence.
+- Un coussin insuffisant donne plus de poids au point de vue « risque » dans l'explication, sans changer les limites.
 
 ## Limites
 
 - Le montant est déclaré par l'investisseur; AlphaForge AI ne le vérifie pas.
-- Le nombre de mois requis est un paramètre de simulation, à relire par le volet finance; ce n'est pas une règle
-  universelle.
+- Le nombre de mois requis est une hypothèse de simulation; ce n'est pas une règle universelle.
 - AlphaForge AI ne dit pas où placer ce fonds : simulation seulement, sans conseil personnalisé (énoncé, p. 17).
 
 ## À ne pas confondre

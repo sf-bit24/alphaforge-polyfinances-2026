@@ -54,4 +54,5 @@ def test_missing_manifest_is_a_clear_app_error(store, no_local_data):
 
     with pytest.raises(AppError) as exc:
         FinanceEngine(store).load()
-    assert exc.value.code == "internal" and "runtime/data/long/" in exc.value.message
+    assert exc.value.code == "internal" and exc.value.details["path"] == "runtime/data/long/"
+    assert "runtime" not in exc.value.message  # le message s'adresse à l'investisseur, le chemin reste dans details

@@ -6,6 +6,10 @@ Simulation seulement : aucune transaction réelle, aucun conseil financier perso
 
 Le contrat avec les runtimes Python et l'infrastructure est `app/CONTRACTS.md` : chaque réponse est validée par zod (`src/lib/contract/`) avant d'arriver à l'écran.
 
+## Langage de l'interface
+
+Les clients ne voient aucun mot technique : ni nom de service, ni identifiant, ni chemin de fichier, ni journal. La règle, le vocabulaire et le garde-fou (`tests/client-language.test.ts`) sont dans [`LANGAGE.md`](LANGAGE.md). Les écrans de l'équipe (collecte, état du service, versions, détails des erreurs) ne s'affichent que pour un compte connecté du groupe `admin` (`useOperator()`).
+
 ## Écrans
 
 | Route | Écran |

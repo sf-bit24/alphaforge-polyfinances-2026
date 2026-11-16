@@ -54,12 +54,12 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 
 ## Comment AlphaForge AI les calcule
 
-Le code fait le calcul; le modèle ne l'estime jamais.
+Les chiffres sont calculés selon des règles fixes, jamais inventés; Yan les explique.
 
-- Les rendements historiques viennent de `adj_close`. Pour un FNB, le RFG est déjà prélevé dans la valeur du fonds :
+- Les rendements historiques viennent des prix ajustés. Pour un FNB, le RFG est déjà prélevé dans la valeur du fonds :
   ses rendements passés sont donc nets de ses frais de gestion.
-- L'optimiseur peut compter des frais d'opération sur la rotation, avec `transaction_cost_bps` (zéro par défaut) et un
-  plafond de rotation `max_turnover`. Les titres vendus parce qu'ils sortent de l'univers comptent dans la rotation.
+- Le simulateur peut compter des frais d'opération sur la rotation, en points de base (zéro par défaut). Il peut aussi
+  plafonner la rotation. Les titres vendus parce qu'ils sortent de l'univers comptent dans la rotation.
 
 ## Limites
 
@@ -67,7 +67,7 @@ Le code fait le calcul; le modèle ne l'estime jamais.
   chaque fonds ne sont donc pas comparés par l'application.
 - **Frais de conseil et de courtage** : ils ne sont pas dans les prix; les rendements historiques ne les déduisent
   pas. Les hypothèses de projection de FP Canada sont aussi brutes de frais : il faut les retirer soi-même.
-- **Frais d'opération à zéro par défaut** : sans paramètre explicite, la rotation d'un portefeuille paraît gratuite.
+- **Frais d'opération à zéro par défaut** : sans coût indiqué, la rotation d'un portefeuille paraît gratuite.
 
 ## À ne pas confondre
 

@@ -103,8 +103,8 @@ export function generalIndex(docs: StoredDoc[]): StoredDoc {
     "general/index.md",
     {
       type: "Index",
-      title: "Base générale d'AlphaForge AI",
-      description: "Index des méthodologies, actualités et séries de données communes à tous les investisseurs.",
+      title: "Base de connaissances d'AlphaForge AI",
+      description: "Sommaire des méthodologies, actualités et séries de données communes à tous les investisseurs.",
       tags: ["index"],
       status: "stable",
       owners: ["alphaforge-a6"],
@@ -114,9 +114,9 @@ export function generalIndex(docs: StoredDoc[]): StoredDoc {
       sources: [],
       data: { documents: listed.length },
     },
-    `# Base générale d'AlphaForge AI
+    `# Base de connaissances d'AlphaForge AI
 
-Commune à tous les investisseurs, elle ne contient rien d'un client. A6 l'alimente à partir de ce que A4 (presse) et A5 (données) collectent.
+Commune à tous les investisseurs, elle ne contient aucun renseignement sur vous. Notre veille la tient à jour avec des actualités et des données, vérifiées (source et date) avant d'être ajoutées.
 
 ${lines.join("\n")}`,
   );

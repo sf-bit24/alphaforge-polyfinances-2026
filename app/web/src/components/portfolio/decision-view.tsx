@@ -1,10 +1,12 @@
 "use client";
 
 import { EXPLANATION_SECTIONS, type Decision, type ExplanationSection, type PortfolioBuildResponse, type Statement } from "@/lib/contract/portfolio";
+import { useOperator } from "@/lib/client/account";
 import { curly, formatDateTime, formatDate } from "@/lib/i18n/locale";
 import { useI18n } from "@/lib/i18n/provider";
 import { requestFacts } from "@/lib/portfolio/decision";
 import { groundingLine } from "@/lib/portfolio/grounding";
+import { engineText, stepTitle } from "@/lib/portfolio/wording";
 import { cn } from "@/components/ui/cn";
 import { AllocationBreakdown } from "./allocation-breakdown";
 import { Positions, StylePanel } from "./allocation-panels";
@@ -47,14 +49,14 @@ function RequestCheck({ decision }: { decision: Decision }) {
         <p key={event.trace_id}>
           <b>{v.constraints.requestCheck}</b>
           {v.colon}
-          {event.output_summary ?? v.trace.status[event.status]}
+          {event.output_summary ? engineText(event.output_summary) : v.trace.status[event.status]}
         </p>
       ))}
     </div>
   );
 }
 
-/** Date, mode, ids and release of the decision, with its X-Ray trace and audit link when there are. */
+/** The date of the data and of the calculation, and whether the decision is kept for a later check. */
 function SummaryMeta({ response, fixture }: { response: PortfolioBuildResponse; fixture: boolean }) {
   const { t, locale } = useI18n();
   const v = t.portfolioView;
@@ -62,35 +64,15 @@ function SummaryMeta({ response, fixture }: { response: PortfolioBuildResponse; 
     <dl className={p.meta}>
       <dt>{v.meta.asOf}</dt>
       <dd>{formatDate(response.as_of, locale)}</dd>
-      <dt>{v.meta.mode}</dt>
-      <dd>{v.modes[response.mode]}</dd>
       <dt>{v.meta.created}</dt>
-      <dd>{formatDateTime(response.decision.created_utc, locale)}</dd>
-      <dt>{v.meta.decision}</dt>
-      <dd className={p.mono}>{response.decision.decision_id}</dd>
-      <dt>{v.meta.release}</dt>
       <dd>
-        <span className={p.mono}>{response.release}</span>
+        {formatDateTime(response.decision.created_utc, locale)}
         {fixture ? <span className={p.sub} style={{ display: "block" }}>{v.meta.fixture}</span> : null}
       </dd>
-      {response.xray_trace_id ? (
+      {response.audit && !("error" in response.audit) ? (
         <>
-          <dt>{v.meta.xray}</dt>
-          <dd className={p.mono} title={v.meta.xrayHelp}>
-            {response.xray_trace_id}
-          </dd>
-        </>
-      ) : null}
-      {response.audit ? (
-        <>
-          <dt>{v.meta.audit}</dt>
-          {"error" in response.audit ? (
-            <dd>{v.meta.auditFailed}</dd>
-          ) : (
-            <dd title={`${v.meta.auditHelp} — ${response.audit.s3_key}`}>
-              <span className={p.mono}>{v.meta.auditLink(response.audit.seq, response.audit.record_hash.slice(0, 12))}</span>
-            </dd>
-          )}
+          <dt>{v.meta.archived}</dt>
+          <dd>{v.meta.archivedText}</dd>
         </>
       ) : null}
     </dl>
@@ -134,7 +116,7 @@ function ExplanationQuestion({ section, statements }: { section: ExplanationSect
             <li key={`${section}-${index}`} className={p.statement}>
               <div className={p.statementHead}>
                 <LabelBadge label={statement.label} />
-                <p>{curly(statement.text_fr)}</p>
+                <p>{curly(engineText(statement.text_fr))}</p>
               </div>
               <FactChips ids={statement.fact_ids} />
             </li>
@@ -145,10 +127,10 @@ function ExplanationQuestion({ section, statements }: { section: ExplanationSect
   );
 }
 
-/** The outcome of the Bedrock Guardrails contextual grounding check, when a guardrail ran. */
+/** The outcome of the fact check of the explanation (Bedrock Guardrails contextual grounding), when one ran. */
 function GroundingNote({ grounding }: { grounding: PortfolioBuildResponse["grounding"] }) {
-  const { t, locale } = useI18n();
-  const line = grounding ? groundingLine(grounding, t.portfolioView.grounding, locale) : null;
+  const { t } = useI18n();
+  const line = grounding ? groundingLine(grounding, t.portfolioView.grounding) : null;
   if (!line) return null;
   return (
     <p className={cn(d.cap, p.block)}>
@@ -159,6 +141,7 @@ function GroundingNote({ grounding }: { grounding: PortfolioBuildResponse["groun
 
 function ExplanationPanel({ response }: { response: PortfolioBuildResponse }) {
   const { t } = useI18n();
+  const operator = useOperator();
   const v = t.portfolioView.explanation;
   const explanation = response.decision.explanation;
   return (
@@ -174,7 +157,7 @@ function ExplanationPanel({ response }: { response: PortfolioBuildResponse }) {
           <ExplanationQuestion key={section} section={section} statements={explanation[section]} />
         ))}
       </div>
-      {response.explanation_report.length > 0 ? (
+      {operator && response.explanation_report.length > 0 ? (
         <details className={p.block}>
           <summary className={d.cap}>{t.portfolioView.report}</summary>
           <ul className={p.notes}>
@@ -207,7 +190,7 @@ function Counterfactuals({ response }: { response: PortfolioBuildResponse }) {
         <ul className={p.list}>
           {items.map((item, index) => (
             <li key={index}>
-              <p>{curly(item.change_fr)}</p>
+              <p>{curly(engineText(item.change_fr))}</p>
               <FactChips ids={item.result_fact_ids} />
             </li>
           ))}
@@ -218,7 +201,7 @@ function Counterfactuals({ response }: { response: PortfolioBuildResponse }) {
 }
 
 function Trace({ response }: { response: PortfolioBuildResponse }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const v = t.portfolioView.trace;
   const { open } = useDecisionLookup();
   const events = response.decision.trace;
@@ -230,27 +213,26 @@ function Trace({ response }: { response: PortfolioBuildResponse }) {
           <span>{v.count(events.length)}</span>
         </summary>
         <ol className={p.traceList}>
-          {events.map((event, index) => (
-            <li key={event.trace_id} className={event.parent_id ? p.traceChild : undefined}>
-              <span className={p.n}>{index + 1}</span>
-              <span>
-                <b>{event.agent}</b>
-                {event.tool ? <span className={p.mono}> · {event.tool}</span> : null}
-                {event.output_summary ? <span className={p.sub}> · {event.output_summary}</span> : null}
-                {event.status !== "ok" ? <span className={cn(d.chip, d.stop)} style={{ marginLeft: 6 }}>{v.status[event.status] ?? event.status}</span> : null}
-                <span className={cn(p.sub, p.mono)} style={{ display: "block" }}>
-                  {formatDateTime(event.started_utc, locale)}
+          {events.map((event, index) => {
+            const title = stepTitle(event, t.portfolioView);
+            return (
+              <li key={event.trace_id} className={event.parent_id ? p.traceChild : undefined}>
+                <span className={p.n}>{index + 1}</span>
+                <span>
+                  <b>{title}</b>
+                  {event.output_summary ? <span className={p.sub}> · {engineText(event.output_summary)}</span> : null}
+                  {event.status !== "ok" ? <span className={cn(d.chip, d.stop)} style={{ marginLeft: 6 }}>{v.status[event.status] ?? v.status.erreur}</span> : null}
                 </span>
-              </span>
-              {event.fact_ids.length > 0 ? (
-                <button type="button" className={p.linkBtn} aria-haspopup="dialog" onClick={() => open(event.fact_ids, `${event.agent}${event.tool ? ` · ${event.tool}` : ""}`)}>
-                  {v.facts(event.fact_ids.length)}
-                </button>
-              ) : (
-                <span />
-              )}
-            </li>
-          ))}
+                {event.fact_ids.length > 0 ? (
+                  <button type="button" className={p.linkBtn} aria-haspopup="dialog" onClick={() => open(event.fact_ids, title)}>
+                    {v.facts(event.fact_ids.length)}
+                  </button>
+                ) : (
+                  <span />
+                )}
+              </li>
+            );
+          })}
         </ol>
       </details>
     </section>

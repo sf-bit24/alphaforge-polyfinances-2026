@@ -39,10 +39,10 @@ L'horizon est le temps avant d'avoir besoin d'une part importante de l'argent in
 
 ## Application dans AlphaForge AI
 
-- La question de base demande la bande d'horizon, sans jamais la déduire de l'âge ni de la tolérance. A1 précise
-  ensuite le nombre d'années avant le premier retrait important et la façon de retirer l'argent (en une fois, par
-  étapes, en revenu régulier).
-- Le code vérifie la cohérence entre la bande et le nombre d'années; une contradiction donne une question de
-  clarification plutôt qu'une correction silencieuse.
+- La question de base demande la bande d'horizon, sans jamais la déduire de l'âge ni de la tolérance. Yan précise
+  ensuite avec vous le nombre d'années avant le premier retrait important et la façon de retirer l'argent (en une
+  fois, par étapes, en revenu régulier).
+- AlphaForge AI vérifie, selon des règles fixes, la cohérence entre la bande et le nombre d'années. Une contradiction
+  donne une question de clarification plutôt qu'une correction silencieuse.
 - L'horizon plafonne la capacité à prendre du risque : moins de 3 ans la limite au niveau « faible à moyen », de 3 à
   10 ans au niveau « moyen à élevé » (voir « Tolérance, capacité et risque effectif »).

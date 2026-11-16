@@ -27,18 +27,18 @@ function render(locale: Locale, response: PortfolioBuildResponse, view: (respons
 
 const decisionView = (response: PortfolioBuildResponse) => createElement(DecisionView, { response, fixture: true });
 
-describe("Bedrock Guardrails outcome", () => {
+describe("fact check outcome (Bedrock Guardrails)", () => {
   it("shows the readable line of the per-statement check (#94), in French and in English", () => {
     const grounding = { action: "GUARDRAIL_INTERVENED", method: "per_statement", checked: 19, below: 2, errors: 0, threshold: 0.75, min_score: 0.6 };
     const response = { ...robert(), grounding } as PortfolioBuildResponse;
-    expect(render("fr", response, decisionView)).toContain("Ancrage vérifié par Bedrock Guardrails · 2 énoncés sur 19 sous le seuil d’ancrage");
-    expect(render("en", response, decisionView)).toContain("Grounding checked by Bedrock Guardrails · 2 of 19 statements below the grounding threshold");
-    expect(render("fr", response, decisionView)).not.toContain("GUARDRAIL_INTERVENED");
+    expect(render("fr", response, decisionView)).toContain("Vérification des faits · 2 énoncés sur 19 s’appuient peu sur les faits cités");
+    expect(render("en", response, decisionView)).toContain("Fact check · 2 of 19 statements rest little on the cited facts");
+    for (const raw of ["GUARDRAIL_INTERVENED", "Bedrock", "Guardrails", "0,75", "0.75"]) expect(render("fr", response, decisionView)).not.toContain(raw);
   });
 });
 
 describe("evidence of a lens missing from the decision", () => {
-  it("says it in words and keeps the identifier small, for the audit", () => {
+  it("says it in words, without the identifier (LANGAGE.md)", () => {
     const response = robert();
     const known = response.decision.facts[0]!.fact_id;
     const rejected = {
@@ -50,17 +50,17 @@ describe("evidence of a lens missing from the decision", () => {
     const withRound = { ...response, rounds: [{ round: 1 as const, verdicts: {}, amendments: [rejected] }, ...response.rounds.slice(1)] };
     const html = render("fr", withRound, (r) => createElement(Debate, { response: r }));
     expect(html).toContain("preuve inconnue : le fait cité est introuvable dans la décision");
-    expect(html).toContain(`title="${portfolioFr.debate.missingEvidence}">risk.cdar_m</p>`);
-    expect(html).not.toContain(`>risk.cdar_m ; ${known}<`); // a fact of the decision stays a chip, not an audit id
+    expect(html).not.toContain("risk.cdar_m");
+    expect(html).not.toContain(`>${known}<`); // a fact of the decision stays a chip, not an id
     expect(html).not.toContain("[&#x27;risk.cdar_m&#x27;]");
   });
 });
 
 describe("counters agree in number", () => {
   it("take the singular for 0 and 1 in French", () => {
-    expect(portfolioFr.constraints.summary(0, 0, 0)).toBe("0 contrôle · 0 saturé · 0 violé");
-    expect(portfolioFr.constraints.summary(1, 1, 1)).toBe("1 contrôle · 1 saturé · 1 violé");
-    expect(portfolioFr.constraints.summary(28, 6, 2)).toBe("28 contrôles · 6 saturés · 2 violés");
+    expect(portfolioFr.constraints.summary(0, 0, 0)).toBe("0 vérification · 0 limite atteinte · 0 limite violée");
+    expect(portfolioFr.constraints.summary(1, 1, 1)).toBe("1 vérification · 1 limite atteinte · 1 limite violée");
+    expect(portfolioFr.constraints.summary(28, 6, 2)).toBe("28 vérifications · 6 limites atteintes · 2 limites violées");
     expect(portfolioFr.positions.count(0)).toBe("0 position");
     expect(portfolioFr.trace.facts(2)).toBe("2 faits");
   });
@@ -71,8 +71,8 @@ describe("counters agree in number", () => {
     expect(portfolioEn.positions.count(5)).toBe("5 positions");
     expect(portfolioEn.trace.facts(0)).toBe("0 facts");
     expect(portfolioEn.explanation.more(1)).toBe("+ 1 fact");
-    expect(portfolioEn.constraints.summary(1, 0, 0)).toBe("1 check · 0 binding · 0 violated");
-    expect(portfolioEn.constraints.summary(0, 0, 0)).toBe("0 checks · 0 binding · 0 violated");
+    expect(portfolioEn.constraints.summary(1, 0, 0)).toBe("1 check · 0 limits reached · 0 limits violated");
+    expect(portfolioEn.constraints.summary(0, 1, 1)).toBe("0 checks · 1 limit reached · 1 limit violated");
   });
 });
 

@@ -41,7 +41,7 @@ const LABELS: Record<Locale, Record<OkfType, string>> = {
     Methodology: "Méthodologie",
     "Financial Concept": "Notion financière",
     "Company Fundamentals": "Fondamentaux d’une société",
-    Index: "Index",
+    Index: "Sommaire",
     "Profile Note": "Note de profil",
     Fact: "Fait sourcé",
     "Market Signal": "Signal de contexte",
@@ -49,7 +49,7 @@ const LABELS: Record<Locale, Record<OkfType, string>> = {
     "Research Brief": "Synthèse de recherche",
     "Stock Features": "Caractéristiques d’un titre",
     "Portfolio Decision": "Décision de portefeuille",
-    Trace: "Trace",
+    Trace: "Étapes suivies",
   },
   en: {
     "Investor Profile": "Investor profile",
@@ -60,7 +60,7 @@ const LABELS: Record<Locale, Record<OkfType, string>> = {
     Methodology: "Methodology",
     "Financial Concept": "Financial concept",
     "Company Fundamentals": "Company fundamentals",
-    Index: "Index",
+    Index: "Contents",
     "Profile Note": "Profile note",
     Fact: "Sourced fact",
     "Market Signal": "Context signal",
@@ -68,7 +68,7 @@ const LABELS: Record<Locale, Record<OkfType, string>> = {
     "Research Brief": "Research brief",
     "Stock Features": "Stock features",
     "Portfolio Decision": "Portfolio decision",
-    Trace: "Trace",
+    Trace: "Steps taken",
   },
 };
 

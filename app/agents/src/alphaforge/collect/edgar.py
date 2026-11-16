@@ -422,7 +422,7 @@ class _Tables:
         return [
             {
                 "id": _source_id(accn),
-                "title": f"SEC EDGAR, formulaire {form} de {issuer.name} déposé le {filed.isoformat()} (numéro {accn})",
+                "title": f"SEC EDGAR, formulaire {form} de {issuer.name} déposé le {filed.isoformat()}",
                 "resource": f"https://www.sec.gov/Archives/edgar/data/{issuer.cik}/{accn.replace('-', '')}/",
                 "retrieved_at": retrieved_at,
             }

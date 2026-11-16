@@ -13,7 +13,7 @@ sources:
     title: "Atelier BNCD : comprendre l'investisseur avant de bâtir la solution"
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositive 7 (le temps disponible change la décision)"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, sections horizon_cap, capacity et satellites.rules"
 data:
   aliases: [horizon, horizon de placement, long terme, court terme, moyen terme]
@@ -45,9 +45,8 @@ Les bandes utilisées par AlphaForge AI et la façon de les demander sont dans
 
 - L'horizon est demandé, jamais déduit de l'âge.
 - Il plafonne la capacité à prendre du risque (voir [Tolérance et capacité](tolerance-et-capacite.md)).
-- Le compilateur de mandat retient le nombre d'années avant le premier retrait de la poche de risque. Plus cette durée
-  est courte, plus le niveau de risque maximal est bas (`horizon_cap` dans `risk_levels.yaml`). Un retrait récurrent
-  proche crée en plus une réserve prudente.
+- AlphaForge AI retient le nombre d'années avant le premier retrait de la poche de risque. Plus cette durée est
+  courte, plus le niveau de risque maximal est bas. Un retrait récurrent proche crée en plus une réserve prudente.
 
 ## Limites
 

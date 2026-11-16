@@ -15,7 +15,8 @@ import type { Locale } from "@/lib/contract/schemas";
 import { portfolioEn, portfolioFr } from "@/lib/i18n/portfolio";
 import { I18nProvider } from "@/lib/i18n/provider";
 import { PORTFOLIO_FIXTURES } from "@/lib/mock/decisions";
-import { derivedFromLabel, indexFacts, indexTrace, showsRawProvenance } from "@/lib/portfolio/decision";
+import { derivedFromLabel, indexFacts, indexTrace } from "@/lib/portfolio/decision";
+import { engineText } from "@/lib/portfolio/wording";
 
 const fixtures = DEMO_PERSONAS.map((persona) => [persona, PortfolioBuildResponse.parse(PORTFOLIO_FIXTURES[persona])] as const);
 
@@ -154,28 +155,38 @@ describe("provenance of the Judge's checks (issue #78, review)", () => {
     expect(derivedFromLabel("constructor", fr)).toBe("constructor");
   });
 
-  it("does not repeat a provenance whose name only changes the apostrophe", () => {
-    const raw = "définition d'un portefeuille";
-    expect(showsRawProvenance(derivedFromLabel(raw, portfolioFr.constraints.derivedFrom), raw)).toBe(false);
-    expect(showsRawProvenance(derivedFromLabel(raw, portfolioEn.constraints.derivedFrom), raw)).toBe(true);
-    expect(showsRawProvenance(derivedFromLabel("level", portfolioFr.constraints.derivedFrom), "level")).toBe(true);
+  it("shows the name in the table, in the client's words, never the raw identifier (LANGAGE.md)", () => {
+    const fr = renderChecks("fr");
+    expect(fr).toContain("<td>sang-froid sous 40</td>");
+    expect(fr).toContain("<td>score de risque R du profil, puis niveau, règle des dollars (part actions maximale)</td>");
+    expect(fr).toContain("<td>style du portefeuille : style défensif</td>");
+    expect(fr).toContain("<td>définition d’un portefeuille</td>");
+    const en = renderChecks("en");
+    expect(en).toContain("<td>composure below 40</td>");
+    expect(en).toContain("<td>risk level</td>");
+    expect(en).toContain("<td>definition of a portfolio</td>");
+    for (const html of [fr, en]) {
+      for (const raw of ["profile.composure", "dollar_rule", "profile-&gt;R", ">level<", "étape 0", "τ", "strat.floor", "conc.single_each", "somme_poids"]) {
+        expect(html, raw).not.toContain(raw);
+      }
+    }
   });
 
-  it("shows the name in the table and the raw identifier under it, for the audit", () => {
-    const fr = renderChecks("fr");
-    expect(fr).toContain("sang-froid sous 40<span");
-    expect(fr).toContain(">profile.composure&lt;40</span>");
-    expect(fr).toContain("score de risque R du profil, puis niveau, règle des dollars (part actions maximale)<span");
-    expect(fr).toContain(">profile-&gt;R-&gt;level ; dollar_rule.e_cap</span>");
-    const en = renderChecks("en");
-    expect(en).toContain("composure below 40<span");
-    expect(en).toContain("risk level<span");
-    expect(en).toContain(">level</span>");
-    // A provenance the engine wrote as a sentence has nothing to show under it, nor one only retypeset (’).
-    expect(fr).toContain("<td>étape 0 : style défensif (τ = -0,25)</td>");
-    expect(fr).toContain("<td>définition d’un portefeuille</td>");
-    expect(fr).not.toContain(">définition d&#x27;un portefeuille</span>");
-    expect(en).toContain("definition of a portfolio<span");
-    expect(en).toContain(">définition d&#x27;un portefeuille</span>");
+  it("rewords the engine's internal names, never a number", () => {
+    expect(engineText("style de composition retenu (étape 0)")).toBe("style du portefeuille retenu");
+    expect(engineText("risque minimisé du mandat sans l'étape 0")).toBe("risque minimisé sans le style du portefeuille");
+    expect(engineText("étape 0 appliquée au mandat")).toBe("style du portefeuille appliqué au mandat");
+    expect(engineText("étape 0 : secteur d'un titre retenu : plafond affiché (Brain D7)")).toBe("style du portefeuille : secteur d'un titre retenu : plafond affiché");
+    expect(engineText("plafond d'exposition au secteur de l'énergie (look-through)")).toBe("plafond d'exposition au secteur de l'énergie (en tenant compte du contenu des FNB)");
+    expect(engineText("baisse maximale longue 93 % > 80 % (δ des titres individuels)")).toBe("baisse maximale longue 93 % > 80 % (limite des titres individuels)");
+    expect(engineText("Objection maintenue par la lentille « diversité et préférences » au second tour.")).toBe(
+      "Objection maintenue par le point de vue « diversité et préférences » au second tour.",
+    );
+    expect(engineText("Sans le style ni la sélection (mandat de base, avant les lentilles), le risque minimisé serait de 3,1 %.")).toBe(
+      "Sans le style ni la sélection (mandat de base, avant les quatre points de vue), le risque minimisé serait de 3,1 %.",
+    );
+    expect(engineText("Poids de la lentille risque")).toBe("Poids du point de vue risque");
+    expect(engineText("allocation optimale du mandat (F2)")).toBe("allocation optimale du mandat");
+    expect(engineText("0,513")).toBe("0,513");
   });
 });

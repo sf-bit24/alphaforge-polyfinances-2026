@@ -1,7 +1,7 @@
 ---
 type: Methodology
 title: Du profil au portefeuille
-description: L'enchaînement fixe en sept étapes qui mène du profil investisseur aux limites du portefeuille, le rôle des signaux comportementaux et des règles de contradiction, et ce que le modèle de langage fait ou ne fait pas.
+description: L'enchaînement fixe en sept étapes qui mène du profil investisseur aux limites du portefeuille, le rôle des signaux comportementaux et des règles de contradiction, et ce que Yan fait ou ne fait pas.
 tags: [methodologie, profil-investisseur, construction-portefeuille, gouvernance]
 status: draft
 owners: [alphaforge-a1]
@@ -54,7 +54,7 @@ sources:
     resource: "https://rpc.cfainstitute.org/sites/default/files/-/media/documents/book/rf-publication/2007/rf-v2007-n1-4580-pdf.pdf"
     retrieved_at: "2026-11-14"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), sections horizon_cap, capacity, tolerance, R, dollar_rule, buckets, knowledge, status et biases"
     retrieved_at: "2026-11-15T04:20:00Z"
 data:
@@ -75,17 +75,17 @@ data:
 
 AlphaForge AI passe du profil au portefeuille par un **enchaînement fixe** de sept étapes, que l'investisseur peut
 suivre pas à pas : les mêmes réponses donnent toujours le même résultat. L'enchaînement vient du rapport de recherche
-de l'équipe, « Investor profiling for portfolio construction » (2026-11-14,
-`brain:references/recherche-profil-investisseur.md`). Le déterminisme compte : selon ce rapport, 53 robots-conseillers
-proposaient de 0 % à 100 % d'actions au même investisseur « prudent » (Boreiko et Massarotti, 2020). Tout ceci reste
+de l'équipe, « Investor profiling for portfolio construction » (2026-11-14). Ces règles fixes comptent : selon ce
+rapport, 53 robots-conseillers proposaient de 0 % à 100 % d'actions au même investisseur « prudent » (Boreiko et
+Massarotti, 2020). Tout ceci reste
 une simulation éducative, jamais un conseil personnalisé (énoncé, p. 17).
 
 ## Les sept étapes
 
 1. **La liquidité d'abord.** Le fonds d'urgence et les dépenses prévues d'ici environ deux ans sortent du budget de
    risque et vont en épargne, en dépôts à court terme ou en CPG (rapport).
-   - *Dans AlphaForge AI* : un objectif « besoin » à moins de 3 ans est plafonné à N0, à moins de 5 ans à N1
-     (`risk_levels.yaml`, section `buckets`); un coussin d'urgence insuffisant abaisse la capacité (voir
+   - *Dans AlphaForge AI* : un objectif « besoin » à moins de 3 ans est plafonné à N0, à moins de 5 ans à N1; un
+     coussin d'urgence insuffisant abaisse la capacité (voir
      [Fonds d'urgence](../notions/fonds-urgence.md)).
 2. **Une base par objectif et par horizon.** L'objectif et l'horizon posent la base (Wealthsimple).
    - *Dans AlphaForge AI* : un plafond d'horizon limite le niveau (moins de 1 an : N0; moins de 3 ans : N1; moins de
@@ -93,52 +93,51 @@ une simulation éducative, jamais un conseil personnalisé (énoncé, p. 17).
      [Horizon de placement](horizon-de-placement.md)).
 3. **La tolérance mesurée place le portefeuille dans sa bande.** La tolérance oriente la proposition, sous le
    plafond de la capacité (Wealthsimple).
-   - *Dans AlphaForge AI* : l'étape 0 fixe un plancher d'actions dans la bande du niveau, selon la place du score de
-     tolérance dans l'intervalle de ce niveau; quand la capacité est la limite, le plancher rejoint le plafond
-     (voir [Étape 0 : style et score des titres](scoring-par-style.md); hypothèse de conception, à valider par
-     l'équipe).
+   - *Dans AlphaForge AI* : le choix des titres selon le style fixe un plancher d'actions dans la bande du niveau,
+     selon la place du score de tolérance dans l'intervalle de ce niveau; quand la capacité est la limite, le
+     plancher rejoint le plafond (voir [Choix et score des titres selon le style](scoring-par-style.md); hypothèse
+     de conception, à valider par l'équipe).
 4. **La capacité fixe le plafond.** Tolérance et capacité s'évaluent séparément, et le profil de risque retient la
    plus basse des deux (avis 31-368; atelier BNCD, diapositive 8). L'OCRI demande une capacité définie, comparable
    directement à la tolérance (bulletin 26-0200). Pour la plupart des investisseurs, la capacité compte bien plus que
    la tolérance (Davies, 2017); chez Wealthsimple, les vérifications de capacité agissent comme un plafond, pas comme
    une pénalité. Le niveau effectif est le plus bas des deux, **jamais la moyenne**.
    - *Dans AlphaForge AI* : score de risque = min(tolérance, capacité), moins des pénalités; la perte acceptable est
-     la plus petite de la perte du niveau, de la perte déclarée et du plafond de capacité (`dollar_rule`; voir
+     la plus petite de la perte du niveau, de la perte déclarée et du plafond de capacité (voir
      [Tolérance, capacité et risque effectif](tolerance-capacite-risque-effectif.md)).
 5. **Le capital humain ajuste.** Un revenu stable, proche d'une obligation, laisse plus de place aux actions; un
    revenu lié aux marchés en laisse moins, avec des limites sectorielles (Ibbotson et al., 2007).
-   - *Dans AlphaForge AI* : la stabilité du revenu entre dans la capacité; l'étape 0 plafonne le secteur d'emploi
-     au poids du marché et n'en sélectionne aucun titre (voir [Capital humain](../notions/capital-humain.md)).
+   - *Dans AlphaForge AI* : la stabilité du revenu entre dans la capacité; le choix des titres selon le style
+     plafonne le secteur d'emploi au poids du marché et n'en sélectionne aucun titre (voir [Capital humain](../notions/capital-humain.md)).
 6. **Le besoin de rendement est vérifié, sans relever le risque.** On ne passe pas outre au risque qu'un client veut
    et peut accepter parce que ses attentes de rendement ne seraient pas atteintes; on explique plutôt d'autres
    leviers : épargner davantage, dépenser moins, prendre sa retraite plus tard (31-103CP). Un objectif inatteignable
    s'ajuste; le profil de risque, non (Davies, 2017). La vérification se fait avec les Normes d'hypothèses de
    projection 2026 de FP Canada et de l'IQPF, nettes de frais.
-   - *Dans AlphaForge AI* : ces hypothèses sont relevées et vérifiées dans `canada_2026.yaml`, brutes de frais. Le
-     calcul du rendement requis par objectif n'est pas encore relié au moteur.
-7. **Les préférences en dernier, puis tous les garde-fous.** Les préférences de durabilité se demandent après
+   - *Dans AlphaForge AI* : ces hypothèses sont relevées et vérifiées, brutes de frais. Le calcul du rendement requis
+     par objectif n'est pas encore relié au simulateur.
+7. **Les préférences en dernier, puis toutes les vérifications.** Les préférences de durabilité se demandent après
    l'évaluation de convenance; quand aucun produit ne convient, seules les préférences peuvent être adaptées, jamais
    le profil de risque (ESMA, 2022). Les contraintes établissent les limites; les préférences orientent les choix à
    l'intérieur (atelier BNCD, diapositive 10).
-   - *Dans AlphaForge AI* : exclusions et préférences ESG s'appliquent après le niveau et le style, puis le Judge
-     recontrôle chaque limite sur le portefeuille filtré : budgets de pertes, concentration et exposition
-     technologique.
+   - *Dans AlphaForge AI* : exclusions et préférences ESG s'appliquent après le niveau et le style, puis la
+     vérification finale recontrôle chaque limite sur le portefeuille filtré : budgets de pertes, concentration et
+     exposition technologique.
 
-## Les signaux comportementaux règlent les garde-fous, pas l'allocation
+## Les signaux comportementaux règlent les protections, pas l'allocation
 
 Les attitudes comportementales raffinent la solution sans la définir (Davies, 2017). Un signal ne déplace pas
-l'allocation de base vers plus de risque : il ajoute un garde-fou ou resserre une limite, jamais l'inverse.
+l'allocation de base vers plus de risque : il ajoute une protection ou resserre une limite, jamais l'inverse.
 
-| Signal | Garde-fou | Dans AlphaForge AI |
+| Signal | Protection | Dans AlphaForge AI |
 | --- | --- | --- |
-| Excès de confiance | Poche satellite réduite, retour sur les coûts | La réponse testée pèse plus que la déclaration; à l'étape 0, un titre de moins (K − 1) et des planchers divisés par deux |
-| Attention et FOMO | Délai de réflexion, contrôle de concentration sur les titres médiatisés | Délai de réflexion du bac à sable; plafonds par titre; à l'étape 0, aucune montée de style |
-| Sang-froid faible | Entrée progressive, plan de baisse écrit, contact proactif | Limite de baisse conditionnelle (CDaR) ajoutée; à l'étape 0, position dans la bande d'au plus 0,5 et aucune montée de style |
-| Littératie faible | Choix diversifiés par défaut | Profil débutant : plafond de 2 % par titre, cryptoactifs par FNB seulement; à l'étape 0, aucun titre individuel (K = 0) et style au plus dynamique |
+| Excès de confiance | Poche satellite réduite, retour sur les coûts | La réponse testée pèse plus que la déclaration; au choix des titres selon le style, un titre de moins (K − 1) et des planchers divisés par deux |
+| Attention et FOMO | Délai de réflexion, contrôle de concentration sur les titres médiatisés | Délai de réflexion du bac à sable; plafonds par titre; au choix des titres selon le style, aucune montée de style |
+| Sang-froid faible | Entrée progressive, plan de baisse écrit, contact proactif | Limite de baisse conditionnelle (CDaR) ajoutée; au choix des titres selon le style, position dans la bande d'au plus 0,5 et aucune montée de style |
+| Littératie faible | Choix diversifiés par défaut | Profil débutant : plafond de 2 % par titre, cryptoactifs par FNB seulement; au choix des titres selon le style, aucun titre individuel (K = 0) et style au plus dynamique |
 
-Les valeurs sont dans `risk_levels.yaml` (sections `tolerance`, `biases`, `knowledge`, `satellites`) et dans
-`strategy.yaml`, décrit dans [Étape 0 : style et score des titres](scoring-par-style.md); ce sont des hypothèses de
-conception, à valider par l'équipe (voir [Noyau et satellites](../notions/noyau-et-satellites.md)).
+Les valeurs sont décrites dans [Choix et score des titres selon le style](scoring-par-style.md); ce sont des
+hypothèses de conception, à valider par l'équipe (voir [Noyau et satellites](../notions/noyau-et-satellites.md)).
 
 ## Les contradictions : la réponse la plus prudente l'emporte
 
@@ -149,24 +148,26 @@ important proche avec une préférence pour beaucoup d'actions; expertise décla
 - La contradiction est d'abord montrée à l'investisseur, qui peut corriger sa réponse.
 - Si elle reste ouverte, la réponse la plus prudente l'emporte, jamais la moyenne, et le point est noté comme non
   résolu (rapport).
-- *Dans AlphaForge AI* : quand la perte déclarée et la perte supportable divergent, la capacité l'emporte; à
-  l'étape 0, une contradiction empêche le [style](../notions/style-de-portefeuille.md) de monter vers l'offensive.
+- *Dans AlphaForge AI* : quand la perte déclarée et la perte supportable divergent, la capacité l'emporte; au choix
+  des titres selon le style, une contradiction empêche le [style](../notions/style-de-portefeuille.md) de monter vers
+  l'offensive.
 
-## Le modèle de langage pose, clarifie et explique
+## Yan pose les questions, clarifie et explique
 
-Le rapport conclut que le modèle de langage est la composante la plus risquée du profilage : il doit être confiné à
-poser les questions, clarifier et expliquer. Dans AlphaForge AI :
+Le rapport conclut que l'assistant qui converse est la partie la plus risquée du profilage : son rôle doit se limiter
+à poser les questions, clarifier et expliquer. Dans AlphaForge AI, c'est le rôle de Yan :
 
-- les scores, la règle du minimum, les contradictions et les plafonds sont calculés par le code;
+- les scores, la règle du minimum, les contradictions et les plafonds sont calculés selon des règles fixes; Yan
+  explique, et les chiffres sont calculés, jamais inventés;
 - un fait tiré d'un texte libre reste non confirmé, hors des scores, tant que l'investisseur ne l'a pas confirmé;
-- la trace garde les entrées, la règle appliquée et le résultat, comme l'OCRI l'attend d'une approche algorithmique
-  (bulletin 26-0200), pour répondre aux quatre questions d'une explication crédible : quelles données, pourquoi ce
-  choix, quelles limites, qu'est-ce qui changerait la réponse (atelier BNCD, diapositive 12).
+- les étapes suivies gardent les réponses utilisées, la règle appliquée et le résultat, comme l'OCRI l'attend d'une
+  approche automatisée (bulletin 26-0200), pour répondre aux quatre questions d'une explication crédible : quelles
+  données, pourquoi ce choix, quelles limites, qu'est-ce qui changerait la réponse (atelier BNCD, diapositive 12).
 
 ## Limites
 
 - Les seuils sont des hypothèses de conception; les paramètres de tolérance ne sont pas calibrés
-  psychométriquement (`risk_levels.yaml`).
-- L'étape 6 n'est pas encore reliée au moteur : un manque de rendement n'est pas encore calculé par objectif.
+  psychométriquement.
+- L'étape 6 n'est pas encore reliée au simulateur : un manque de rendement n'est pas encore calculé par objectif.
 - L'enchaînement décrit un profil fictif; il ne remplace pas l'évaluation de convenance d'un conseiller (énoncé,
   p. 17).

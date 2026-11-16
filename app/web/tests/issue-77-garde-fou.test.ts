@@ -39,7 +39,7 @@ describe("guardrail notice for personal data (#77)", () => {
     expect(html).toContain(notice!.title);
     expect(html).toContain(notice!.hint);
     expect(html).toContain(SIN_ERROR.message);
-    expect(html).toContain("le modèle ne les reçoit pas");
+    expect(html).toContain("Yan ne les reçoit pas");
     expect(html).not.toMatch(/\b(ordres?|conseils?)\b/i);
     // Renvoyer le même texte serait refusé à nouveau : pas de bouton Réessayer.
     expect(html).not.toContain(dictionaries.fr.common.retry);
@@ -48,7 +48,7 @@ describe("guardrail notice for personal data (#77)", () => {
   it("speaks English in English", () => {
     const html = render({ ...SIN_ERROR, message: "Your message contains personal information (SIN): remove it, then send it again." }, "en");
     expect(html).toContain(dictionaries.en.errors.calm.guardrail_blocked!.reasons!.personal_data!.hint);
-    expect(html).toContain("the model does not receive them");
+    expect(html).toContain("Yan does not receive them");
     expect(html).not.toMatch(/\b(orders?|advice)\b/i);
   });
 

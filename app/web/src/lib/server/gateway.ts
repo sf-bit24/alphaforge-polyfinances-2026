@@ -41,8 +41,10 @@ export function configOrThrow(): GatewayConfig {
   }
 }
 
+/** The screen no longer shows a failure's cause to a client (LANGAGE.md): the team finds it in the server log. */
 function errorResponse(error: unknown, locale: Locale): Response {
   const gatewayError = toGatewayError(error);
+  if (gatewayError.status >= 500) console.error(`Gateway error ${gatewayError.code}:`, gatewayError.text.en);
   return jsonResponse(gatewayError.status, gatewayError.envelope(locale));
 }
 
@@ -59,8 +61,8 @@ export async function readAgentRequest(request: Request, identity: Identity = { 
     throw new GatewayError(
       "bad_request",
       {
-        fr: `Requête trop volumineuse : ${UPLOAD_LIMITS.maxFiles} fichiers de 10 Mo au plus.`,
-        en: `Request too large: at most ${UPLOAD_LIMITS.maxFiles} files of 10 MB.`,
+        fr: `Envoi trop volumineux : ${UPLOAD_LIMITS.maxFiles} fichiers de 10 Mo au plus.`,
+        en: `Upload too large: at most ${UPLOAD_LIMITS.maxFiles} files of 10 MB.`,
       },
       413,
       { limit_bytes: MAX_BODY_BYTES, content_length: length },
@@ -70,19 +72,19 @@ export async function readAgentRequest(request: Request, identity: Identity = { 
   try {
     raw = await request.json();
   } catch {
-    throw new GatewayError("bad_request", { fr: "Corps JSON invalide.", en: "Invalid JSON body." }, 400);
+    throw new GatewayError("bad_request", { fr: "Votre demande n’a pas pu être lue.", en: "Your request could not be read." }, 400);
   }
   return validateAgentRequest(bindAgentBody(raw, identity));
 }
 
 export function validateAgentRequest(raw: unknown): AgentRequest {
   if (!isRecord(raw) || typeof raw.action !== "string") {
-    throw new GatewayError("bad_request", { fr: "Le champ action est requis.", en: "The action field is required." }, 400);
+    throw new GatewayError("bad_request", { fr: "Votre demande est incomplète.", en: "Your request is incomplete." }, 400);
   }
   if (!(AGENT_ACTIONS as readonly string[]).includes(raw.action)) {
     throw new GatewayError(
       "unknown_action",
-      { fr: `Action inconnue : ${raw.action}`, en: `Unknown action: ${raw.action}` },
+      { fr: "Cette action n’est pas disponible.", en: "This action is not available." },
       400,
       { action: raw.action, allowed: AGENT_ACTIONS },
     );
@@ -90,7 +92,10 @@ export function validateAgentRequest(raw: unknown): AgentRequest {
   if (Array.isArray(raw.files) && raw.files.length > UPLOAD_LIMITS.maxFiles) {
     throw new GatewayError(
       "bad_request",
-      { fr: `Au plus ${UPLOAD_LIMITS.maxFiles} fichiers.`, en: `At most ${UPLOAD_LIMITS.maxFiles} files.` },
+      {
+        fr: `Vous pouvez envoyer au plus ${UPLOAD_LIMITS.maxFiles} fichiers à la fois.`,
+        en: `You can send at most ${UPLOAD_LIMITS.maxFiles} files at a time.`,
+      },
       400,
       { limit: UPLOAD_LIMITS.maxFiles, received: raw.files.length },
     );
@@ -103,7 +108,7 @@ export function validateAgentRequest(raw: unknown): AgentRequest {
       "bad_request",
       tooLarge
         ? { fr: "Un fichier dépasse 10 Mo.", en: "A file exceeds 10 MB." }
-        : { fr: `Requête ${raw.action} invalide.`, en: `Invalid ${raw.action} request.` },
+        : { fr: "Votre demande est incomplète.", en: "Your request is incomplete." },
       400,
       { action: raw.action, issues },
     );
@@ -167,19 +172,19 @@ const PORTFOLIO_TIMEOUT_MS = 600_000;
 
 export function validatePortfolioRequest(raw: unknown): PortfolioBuildRequest {
   if (!isRecord(raw)) {
-    throw new GatewayError("bad_request", { fr: "Le corps doit être un objet JSON.", en: "The body must be a JSON object." }, 400);
+    throw new GatewayError("bad_request", { fr: "Votre demande n’a pas pu être lue.", en: "Your request could not be read." }, 400);
   }
   if (raw.action !== undefined && raw.action !== "build") {
     throw new GatewayError(
       "unknown_action",
-      { fr: `Action inconnue : ${String(raw.action)}`, en: `Unknown action: ${String(raw.action)}` },
+      { fr: "Cette action n’est pas disponible.", en: "This action is not available." },
       400,
       { action: raw.action, allowed: ["build"] },
     );
   }
   const parsed = PortfolioBuildRequest.safeParse(raw);
   if (!parsed.success) {
-    throw new GatewayError("bad_request", { fr: "Requête build invalide.", en: "Invalid build request." }, 400, {
+    throw new GatewayError("bad_request", { fr: "Votre demande est incomplète.", en: "Your request is incomplete." }, 400, {
       action: "build",
       issues: parsed.error.issues.slice(0, 10).map((issue) => ({ path: issue.path.join("."), message: issue.message })),
     });
@@ -225,7 +230,7 @@ export async function handlePortfolio(request: Request): Promise<Response> {
     const config = configOrThrow();
     const length = Number(request.headers.get("content-length") ?? "0");
     if (length > MAX_PORTFOLIO_BODY_BYTES) {
-      throw new GatewayError("bad_request", { fr: "Requête trop volumineuse.", en: "Request too large." }, 413, {
+      throw new GatewayError("bad_request", { fr: "Votre demande est trop volumineuse.", en: "Your request is too large." }, 413, {
         limit_bytes: MAX_PORTFOLIO_BODY_BYTES,
         content_length: length,
       });
@@ -234,7 +239,7 @@ export async function handlePortfolio(request: Request): Promise<Response> {
     try {
       raw = await request.json();
     } catch {
-      throw new GatewayError("bad_request", { fr: "Corps JSON invalide.", en: "Invalid JSON body." }, 400);
+      throw new GatewayError("bad_request", { fr: "Votre demande n’a pas pu être lue.", en: "Your request could not be read." }, 400);
     }
     const build = validatePortfolioRequest(bindPortfolioBody(raw, identity));
     return await withHeartbeat(portfolioAnswer(config, build, locale, request.signal), {
@@ -295,8 +300,8 @@ function collectUnavailable(): GatewayError {
   return new GatewayError(
     "bad_request",
     {
-      fr: "La collecte passe par Step Functions : elle est simulée en mode mock et réelle en mode aws, mais indisponible en mode local.",
-      en: "Collection runs on Step Functions: it is simulated in mock mode and real in aws mode, but unavailable in local mode.",
+      fr: "La veille n’est pas disponible pour l’instant.",
+      en: "Our watch is not available right now.",
     },
     501,
     { mode: "local", available_in: ["mock", "aws"] },
@@ -310,7 +315,7 @@ function mockCollection(executionArn: string | null): Response {
   const collector = getMockRuntime().collector;
   if (executionArn) {
     const execution = collector.describe(executionArn);
-    if (!execution) throw new GatewayError("not_found", { fr: "Exécution introuvable.", en: "Execution not found." }, 404);
+    if (!execution) throw new GatewayError("not_found", { fr: "Cette collecte est introuvable.", en: "This collection run was not found." }, 404);
     return jsonResponse(200, { ok: true, execution });
   }
   return jsonResponse(200, { ok: true, state_machine: collector.stateMachine, executions: collector.list() });
@@ -331,7 +336,7 @@ export async function handleCollectGet(request: Request): Promise<Response> {
     const config = configOrThrow();
     const executionArn = new URL(request.url).searchParams.get("execution_arn");
     if (executionArn !== null && !EXECUTION_ARN.test(executionArn)) {
-      throw new GatewayError("bad_request", { fr: "ARN d'exécution invalide.", en: "Invalid execution ARN." }, 400);
+      throw new GatewayError("bad_request", { fr: "Cette collecte n’existe pas.", en: "This collection run does not exist." }, 400);
     }
     if (config.AGENT_MODE === "local") throw collectUnavailable();
     if (config.AGENT_MODE === "mock") return mockCollection(executionArn);
@@ -349,7 +354,7 @@ async function readCollectRequest(request: Request): Promise<CollectRequest> {
     try {
       raw = JSON.parse(text);
     } catch {
-      throw new GatewayError("bad_request", { fr: "Corps JSON invalide.", en: "Invalid JSON body." }, 400);
+      throw new GatewayError("bad_request", { fr: "Votre demande n’a pas pu être lue.", en: "Your request could not be read." }, 400);
     }
   }
   const parsed = CollectRequest.safeParse(raw);

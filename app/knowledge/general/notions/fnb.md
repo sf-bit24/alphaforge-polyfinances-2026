@@ -16,7 +16,7 @@ sources:
     title: "Énoncé officiel du défi AlphaForge AI (Datathon PolyFinances 2026)"
     resource: "Énoncé officiel, p. 10 (exemples de FNB d'actions, obligataires et liés à l'or) et p. 11 (données des FNB)"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, composition (etf_equity_each_max, etf_bond_each_max, forbidden_all)"
 data:
   aliases: [fnb, fonds négocié en bourse, fonds indiciel, etf, exchange-traded fund, fonds coté]
@@ -50,24 +50,27 @@ qu'il détient, moins les frais (atelier BNCD, diapositive 5).
 
 ## Comment AlphaForge AI l'utilise
 
-Le code calcule; le modèle explique. Le jeu de départ contient des FNB d'actions, obligataires et liés à l'or (par
-exemple XIU.TO, SPY, QQQ, XBB.TO, AGG, TLT, GLD), comme les exemples de l'énoncé (p. 10).
+Les chiffres sont calculés selon des règles fixes, jamais inventés; Yan les explique. Le jeu de départ contient
+des FNB d'actions, obligataires et liés à l'or (par exemple XIU.TO, SPY, QQQ, XBB.TO, AGG, TLT, GLD), comme les
+exemples de l'énoncé (p. 10).
 
 - **Statistiques** : rendement, volatilité et [baisse maximale](baisse-maximale.md) d'un FNB se calculent sur ses prix
   quotidiens ajustés, comme pour une action.
 - **Mandat** : le barème plafonne le poids de chaque FNB d'actions et de chaque FNB obligataire, pour qu'un portefeuille
   ne repose pas sur un seul fonds (ce plafond oblige en général à détenir au moins deux FNB d'actions). Les FNB à effet
-  de levier et inversés sont exclus (`forbidden_all`). Les formules sont dans `risk_levels.yaml`, section 6.
-- **Portefeuille existant** : un FNB ou un fonds n'est pas compté comme un titre individuel pour le constat de
-  concentration sur une position, et sa présence évite le constat `few_holdings`.
+  de levier et inversés sont exclus.
+- **Votre portefeuille existant** : quand Yan lit votre portefeuille, un FNB ou un fonds n'est pas compté comme un
+  titre individuel pour le constat de concentration sur une position. Sa présence évite aussi le constat « trop peu de
+  positions ».
 - **Historique long** : avant leur lancement, certains FNB sont prolongés par un indice proche déclaré (par exemple
   XIU.TO par les actions canadiennes, SPY par le marché américain); ce raccord est une hypothèse.
 
 ## Limites
 
-- **Contenu approximé** : le code ne lit pas la liste complète des titres de chaque FNB; la transparence se limite à
-  quelques thèmes et à des hypothèses déclarées.
-- **Frais et écart de suivi** : les prix ajustés intègrent déjà les frais passés; le code ne ventile pas leur effet.
+- **Contenu approximé** : AlphaForge AI ne lit pas la liste complète des titres de chaque FNB; la transparence se
+  limite à quelques thèmes et à des hypothèses déclarées.
+- **Frais et écart de suivi** : les prix ajustés intègrent déjà les frais passés; AlphaForge AI ne ventile pas leur
+  effet.
 - **Liquidité** : le prix simulé est un prix de clôture, sans écart acheteur-vendeur.
 - **Passé seulement** : le comportement passé d'un FNB ne garantit pas son comportement futur.
 

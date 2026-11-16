@@ -61,7 +61,7 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 
 ## Comment AlphaForge AI le calcule
 
-Le code calcule le bêta; le modèle ne l'estime jamais.
+AlphaForge AI calcule le bêta selon des règles fixes. Yan l'explique; les chiffres sont calculés, jamais inventés.
 
 - **Formule** : covariance des rendements quotidiens du titre et de l'indice, divisée par la variance des rendements
   de l'indice, sur les 504 dernières dates communes au titre et à son indice (environ deux ans), comme les règles des
@@ -69,12 +69,12 @@ Le code calcule le bêta; le modèle ne l'estime jamais.
 - **Indice local** : XIU.TO (FNB du S&P/TSX 60) pour un titre coté en CAD, SPY (FNB du S&P 500) pour les autres. Le
   titre et son indice se négocient dans la même devise : aucune conversion de change n'entre dans le calcul, comme
   FTSE le prévoit pour un indice d'un seul pays.
-- **Prix** : rendements tirés de la clôture ajustée (`adj_close`), qui tient compte des dividendes et des
-  fractionnements; FTSE utilise aussi des rendements totaux.
+- **Prix** : rendements tirés de la clôture ajustée, qui tient compte des dividendes et des fractionnements; FTSE
+  utilise aussi des rendements totaux.
 - **Usage** : le bêta est un des critères de la [sélection de titres par règles](selection-par-regles.md). Le
   [style](style-de-portefeuille.md) défensif favorise un bêta bas (poids 1), le style offensif un bêta plus élevé
   (poids 2), toujours sous les mêmes plafonds de satellites et budgets de pertes (voir
-  [Étape 0 : style et score des titres](../methodologie/scoring-par-style.md)).
+  [Choix et score des titres selon le style](../methodologie/scoring-par-style.md)).
 
 ## Limites
 
@@ -86,7 +86,7 @@ Le code calcule le bêta; le modèle ne l'estime jamais.
   l'indice lui-même, ce qui rapproche mécaniquement son bêta de 1.
 - **Pas de comparaison directe entre marchés** : un bêta contre XIU.TO et un bêta contre SPY ne se comparent pas.
 - **Relation linéaire moyenne** : le bêta ne dit pas si un titre réagit plus fort aux baisses qu'aux hausses.
-- **Prix ajustés** : les valeurs passées de `adj_close` changent à chaque téléchargement (voir
+- **Prix ajustés** : les valeurs passées de la clôture ajustée changent à chaque mise à jour des données (voir
   [Pièges du jeu de départ](../methodologie/pieges-du-jeu-de-depart.md)).
 
 ## À ne pas confondre

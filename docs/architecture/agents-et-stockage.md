@@ -46,4 +46,4 @@ Points communs :
 | DynamoDB `alphaforge-decisions`, `alphaforge-llm-replay` | Anciennes tables du même script boto3, hors Terraform, plus utilisées (4 éléments et 0). |
 | ECR `alphaforge-web` | L'image de l'interface Next.js, déployée sur ECS Fargate. |
 
-Voir aussi : le [diagramme de la plateforme](img/alphaforge-plateforme-aws.png), [`app/agents/README.md`](../../app/agents/README.md) et [`infrastructure/README.md`](../../infrastructure/README.md).
+Voir aussi : le [diagramme de la plateforme](assets/alphaforge-plateforme-aws.png), [`app/agents/README.md`](../../app/agents/README.md) et [`infrastructure/README.md`](../../infrastructure/README.md).

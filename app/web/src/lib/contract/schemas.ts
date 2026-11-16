@@ -324,7 +324,10 @@ export const ErrorEnvelope = z.object({
 });
 export type ErrorEnvelope = z.infer<typeof ErrorEnvelope>;
 
-/** State of the client's own Bedrock knowledge base (search index built from its OKF documents). */
+/**
+ * State of the client's own Bedrock knowledge base (search index built from its OKF documents). When the feature is
+ * off the runtime sends no `client_kb` at all; "disabled" is still read, as the first runtime version sent it.
+ */
 export const CLIENT_KB_STATUSES = ["disabled", "creating", "active", "failed", "quota"] as const;
 export const ClientKbStatus = z.enum(CLIENT_KB_STATUSES);
 export type ClientKbStatus = z.infer<typeof ClientKbStatus>;

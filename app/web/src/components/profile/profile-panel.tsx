@@ -267,7 +267,8 @@ export function ProfilePanel({ state }: { state: ClientState }) {
         <FactsList facts={profile.facts} />
       </Section>
       <Section title={t.panel.documentsTitle} icon={<FolderOpen aria-hidden className="size-4 text-ink-500" />} defaultOpen>
-        {state.client_kb ? <ClientKbStatusCard kb={state.client_kb} /> : null}
+        {/* Absent when the runtime has no client knowledge base; "disabled" came from the first runtime version. */}
+        {state.client_kb && state.client_kb.status !== "disabled" ? <ClientKbStatusCard kb={state.client_kb} /> : null}
         <DocumentsSection clientId={state.client_id} revision={session.revision} />
       </Section>
     </div>

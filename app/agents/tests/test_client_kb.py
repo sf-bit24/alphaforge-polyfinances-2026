@@ -10,6 +10,7 @@ from alphaforge import clock, okf
 from alphaforge.config import Settings
 from alphaforge.portfolio_service import PortfolioService
 from alphaforge.profile import brain
+from alphaforge.profile import client_kb as client_kb_module
 from alphaforge.profile.client_kb import (
     AwsClients,
     ClientKbConfig,
@@ -57,6 +58,9 @@ class FakeAgent:
         self.calls = []
         self.documents = {}
         self.fail = {}  # opération -> codes d'erreur à lever, un par appel
+        self.data_sources = []  # sources déjà créées, rendues par ListDataSources
+        self.rejected = set()  # clés dont la présence fait refuser le lot (ValidationException)
+        self.failed = set()  # clés rendues FAILED dans la réponse d'Ingest
 
     def _maybe_fail(self, operation):
         codes = self.fail.get(operation) or []
@@ -85,18 +89,29 @@ class FakeAgent:
 
     def create_data_source(self, **params):
         self.calls.append(("create_data_source", params))
+        self._maybe_fail("create_data_source")
         return {"dataSource": {"dataSourceId": f"DS-{params['knowledgeBaseId']}", "status": "AVAILABLE"}}
 
     def ingest_knowledge_base_documents(self, **params):
         self.calls.append(("ingest", params))
         self._maybe_fail("ingest")
         assert len(params["documents"]) <= 10  # borne du modèle botocore
+        keys = [item["content"]["custom"]["customDocumentIdentifier"]["id"] for item in params["documents"]]
+        if self.rejected & set(keys):
+            raise client_error("ValidationException", "IngestKnowledgeBaseDocuments")
         docs = self.documents.setdefault(params["knowledgeBaseId"], {})
         details = []
-        for item in params["documents"]:
-            key = item["content"]["custom"]["customDocumentIdentifier"]["id"]
-            docs[key] = item
-            details.append({"identifier": {"dataSourceType": "CUSTOM", "custom": {"id": key}}, "status": "STARTING"})
+        for key, item in zip(keys, params["documents"], strict=True):
+            status = "FAILED" if key in self.failed else "STARTING"
+            if status == "STARTING":
+                docs[key] = item
+            details.append(
+                {
+                    "identifier": {"dataSourceType": "CUSTOM", "custom": {"id": key}},
+                    "status": status,
+                    **({"statusReason": "unsupported content"} if status == "FAILED" else {}),
+                }
+            )
         return {"documentDetails": details}
 
     def delete_knowledge_base_documents(self, **params):
@@ -108,7 +123,7 @@ class FakeAgent:
     def get_paginator(self, name):
         if name == "list_knowledge_bases":
             return FakePaginator([{"knowledgeBaseSummaries": list(self.kbs.values())}])
-        return FakePaginator([{"dataSourceSummaries": []}])
+        return FakePaginator([{"dataSourceSummaries": list(self.data_sources)}])
 
     def operations(self):
         return [name for name, _ in self.calls]
@@ -138,9 +153,12 @@ class FakeRuntime:
     def __init__(self):
         self.calls = []
         self.results = []
+        self.error = None
 
     def retrieve(self, **params):
         self.calls.append(params)
+        if self.error:
+            raise client_error(self.error, "Retrieve")
         return {"retrievalResults": self.results}
 
 
@@ -467,12 +485,14 @@ def test_disabled_mode_changes_nothing(settings, store):
     assert not isinstance(service.store, IndexingStore) and not service.client_kb.enabled
     response = service.handle({"action": "session.start", "locale": "fr"})
     client_id = response["client_id"]
-    assert response["client_kb"] == {"status": "disabled", "knowledge_base_id": None, "documents": 0, "pending": 0}
+    assert "client_kb" not in response  # le contrat d'avant, sans champ en plus
     assert store.get(state_key(client_id)) is None
     assert not any("Knowledge Base" in title for title in titles(response))
     assert service.client_kb.searcher(client_id) is None
     resumed = service.handle({"action": "session.resume", "client_id": client_id})
-    assert resumed["client_kb"]["status"] == "disabled"
+    assert "client_kb" not in resumed
+    profile = service.handle({"action": "profile.get", "client_id": client_id})
+    assert "client_kb" not in profile
 
 
 def test_configuration_needs_s3_and_every_variable(tmp_path):
@@ -522,6 +542,139 @@ def build(service):
     response = service.handle({"action": "build", "client_id": CLIENT_ID, "mode": "rules"})
     assert response["ok"], response
     return response
+
+
+def ingest_calls(aws):
+    return [params for name, params in aws.agent.calls if name == "ingest"]
+
+
+def test_refused_batch_is_resent_one_by_one_and_only_the_culprit_fails(service, store, aws):
+    client_id = start(service)["client_id"]
+    bad = f"clients/{client_id}/notes/note-02.md"
+    for number in range(5):
+        service.store.put_text(f"clients/{client_id}/notes/note-{number:02d}.md", note(f"Note {number}"))
+    aws.agent.rejected = {bad}
+    response = activate(service, aws, client_id)
+    assert response["client_kb"]["documents"] == 7 and response["client_kb"]["pending"] == 0
+    assert [len(params["documents"]) for params in ingest_calls(aws)] == [8] + [1] * 8
+    state = kb_state(store, client_id)
+    assert state["document_errors"] == {bad: "ValidationException"}
+    assert bad not in state["indexed"] and bad not in state["pending"]
+
+
+def test_failed_documents_of_the_ingest_response_are_errors_not_pending(service, store, aws):
+    client_id = start(service)["client_id"]
+    aws.agent.failed = {journal_key(client_id)}
+    response = activate(service, aws, client_id)
+    assert response["client_kb"] == {
+        "status": "active",
+        "knowledge_base_id": "KB00000001",
+        "documents": 2,
+        "pending": 0,
+    }
+    state = kb_state(store, client_id)
+    assert state["document_errors"] == {journal_key(client_id): "unsupported content"}
+    assert journal_key(client_id) not in state["indexed"]
+
+
+def test_missing_knowledge_base_on_a_batch_marks_the_base_failed(service, store, aws):
+    client_id = start(service)["client_id"]
+    activate(service, aws, client_id)
+    aws.agent.fail["ingest"] = ["ResourceNotFoundException"]
+    service.store.put_text(f"clients/{client_id}/synthese.md", note("Synthèse"))
+    response = service.handle({"action": "session.resume", "client_id": client_id})
+    assert response["ok"] and response["client_kb"]["status"] == "failed" and response["client_kb"]["pending"] == 1
+    assert kb_state(store, client_id)["error"]["code"] == "ResourceNotFoundException"
+
+
+def test_failed_base_retries_after_a_few_minutes_even_with_an_older_retry_at(service, store, aws, monkeypatch):
+    client_id = start(service)["client_id"]
+    aws.agent.kb_status = "FAILED"
+    response = service.handle({"action": "session.resume", "client_id": client_id})
+    assert response["client_kb"]["status"] == "failed"
+    assert kb_state(store, client_id)["error"]["code"] == "knowledge_base_failed"
+    gets = aws.agent.operations().count("get_knowledge_base")
+    service.handle({"action": "session.resume", "client_id": client_id})
+    assert aws.agent.operations().count("get_knowledge_base") == gets  # pas de nouvel essai tout de suite
+    # kb.json écrit par la première version (nouvel essai 30 minutes plus tard) : le délai actuel s'applique.
+    state = kb_state(store, client_id)
+    state["retry_at"] = clock.iso(clock.utcnow() + timedelta(minutes=30))
+    stored = store.get(state_key(client_id))
+    store.put_json(state_key(client_id), state, if_match=stored.etag)
+    aws.agent.kb_status = "ACTIVE"
+    later = clock.utcnow() + timedelta(minutes=4)
+    monkeypatch.setattr(clock, "utcnow", lambda: later)
+    retried = service.handle({"action": "session.resume", "client_id": client_id})
+    assert retried["client_kb"]["status"] == "active" and retried["client_kb"]["documents"] == 3
+
+
+def test_conflicts_on_creation_resume_the_existing_base_and_source(service, store, aws):
+    client_id = "3c2b1a09-8f7e-4d6c-9b5a-4f3e2d1c0b9a"
+    aws.agent.kbs["KB00000099"] = {
+        "knowledgeBaseId": "KB00000099",
+        "knowledgeBaseArn": "arn:aws:bedrock:us-east-1:123456789012:knowledge-base/KB00000099",
+        "name": f"alphaforge-test-client-{client_id}",
+        "status": "ACTIVE",
+    }
+    aws.agent.kb_status = "ACTIVE"
+    aws.agent.fail = {"create_knowledge_base": ["ConflictException"], "create_data_source": ["ConflictException"]}
+    aws.agent.data_sources = [{"dataSourceId": "DS-EXISTING", "name": "client-okf"}]
+    response = service.handle({"action": "session.start", "locale": "fr", "client_id": client_id})
+    assert response["client_kb"] == {
+        "status": "active",
+        "knowledge_base_id": "KB00000099",
+        "documents": 3,
+        "pending": 0,
+    }
+    state = kb_state(store, client_id)
+    assert state["data_source_id"] == "DS-EXISTING" and not aws.agent.tokens  # aucune base de plus
+
+
+def test_transient_creation_error_is_retried_at_the_next_action(service, store, aws):
+    aws.agent.fail["create_knowledge_base"] = ["ThrottlingException"]
+    response = start(service)
+    client_id = response["client_id"]
+    assert response["ok"] and response["client_kb"]["status"] == "creating"
+    assert response["client_kb"]["knowledge_base_id"] is None
+    assert "Création de la Knowledge Base reportée" in titles(response)
+    assert kb_state(store, client_id)["error"]["code"] == "ThrottlingException"
+    again = service.handle({"action": "session.resume", "client_id": client_id})
+    assert again["client_kb"]["knowledge_base_id"] == "KB00000001"
+    assert kb_state(store, client_id)["error"] is None
+
+
+def test_retrieve_error_is_reported_by_the_tool(service, store, aws):
+    client_id = start(service)["client_id"]
+    activate(service, aws, client_id)
+    aws.runtime.error = "ThrottlingException"
+    found = service.client_kb.search(client_id, "décision passée")
+    assert found == {"results": [], "status": "active", "note": "search failed (ThrottlingException)"}
+
+
+def test_activation_sends_at_most_30_documents_per_action(service, store, aws):
+    client_id = start(service)["client_id"]
+    for number in range(40):
+        service.store.put_text(f"clients/{client_id}/notes/note-{number:02d}.md", note(f"Note {number}"))
+    response = activate(service, aws, client_id)
+    assert response["client_kb"]["documents"] == 30 and response["client_kb"]["pending"] == 13
+    assert sum(len(params["documents"]) for params in ingest_calls(aws)) == 30
+    rest = service.handle({"action": "session.resume", "client_id": client_id})
+    assert rest["client_kb"]["documents"] == 43 and rest["client_kb"]["pending"] == 0
+
+
+def test_pending_keeps_the_most_recent_and_drops_old_portfolio_versions_first():
+    base = "clients/8f0c3a8e-5d7b-4e2a-9f51-2c6d3b1a7e90/"
+    keys = (
+        [f"{base}profil.md"] + [f"{base}portefeuilles/{n:04d}-202611.md" for n in range(250)] + [f"{base}synthese.md"]
+    )
+    kept = client_kb_module.capped_pending(keys)
+    assert len(kept) == client_kb_module.MAX_PENDING
+    assert kept[0] == f"{base}profil.md" and kept[-1] == f"{base}synthese.md"
+    assert f"{base}portefeuilles/0000-202611.md" not in kept and f"{base}portefeuilles/0249-202611.md" in kept
+    # Une clé qui attend de nouveau passe à la fin (la plus récente).
+    state = {"pending": [f"{base}profil.md", f"{base}journal.md"], "indexed": []}
+    client_kb_module.SendOutcome(waiting={f"{base}profil.md"}).apply(state)
+    assert state["pending"] == [f"{base}journal.md", f"{base}profil.md"]
 
 
 def test_portfolio_never_creates_a_knowledge_base(store, aws, tmp_path):

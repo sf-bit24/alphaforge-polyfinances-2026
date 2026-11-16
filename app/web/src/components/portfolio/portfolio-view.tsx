@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { BuildMode, DemoPersona, PortfolioBuildRequestInput, PortfolioBuildResponse } from "@/lib/contract/portfolio";
 import type { Locale } from "@/lib/contract/schemas";
+import { useOperator } from "@/lib/client/account";
 import { ApiError, buildPortfolio, isAbort } from "@/lib/client/api";
 import { useHealth } from "@/lib/client/health";
 import { useSession } from "@/lib/client/session";
@@ -181,6 +182,8 @@ function PersonaPicker({ targets, target, onPick }: { targets: Target[]; target:
 }
 
 interface ToolbarProps {
+  /** The engine choice is the team's (`useOperator`); a client always builds with the fixed rules. */
+  showEngine: boolean;
   engine: BuildMode;
   onEngine: (engine: BuildMode) => void;
   status: BuildState["status"] | undefined;
@@ -188,18 +191,20 @@ interface ToolbarProps {
 }
 
 /** The engine to build with and the build button, outside the simulator. */
-function BuildToolbar({ engine, onEngine, status, onBuild }: ToolbarProps) {
+function BuildToolbar({ showEngine, engine, onEngine, status, onBuild }: ToolbarProps) {
   const { t } = useI18n();
   const v = t.portfolioView;
   return (
     <div className={p.toolbar}>
-      <label>
-        {v.engine.label}
-        <select className={p.select} value={engine} onChange={(event) => onEngine(event.target.value as BuildMode)}>
-          <option value="rules">{v.engine.rules}</option>
-          <option value="llm">{v.engine.llm}</option>
-        </select>
-      </label>
+      {showEngine ? (
+        <label>
+          {v.engine.label}
+          <select className={p.select} value={engine} onChange={(event) => onEngine(event.target.value as BuildMode)}>
+            <option value="rules">{v.engine.rules}</option>
+            <option value="llm">{v.engine.llm}</option>
+          </select>
+        </label>
+      ) : null}
       <button type="button" className={cn(d.btn, p.primary)} disabled={status === "loading"} onClick={onBuild}>
         {status === "done" ? <RefreshCw aria-hidden className="size-4" /> : null}
         {status === "done" ? v.rebuild : v.build}
@@ -251,6 +256,7 @@ export function PortfolioView() {
   const v = t.portfolioView;
   const { status: healthStatus, health } = useHealth(locale);
   const session = useSession();
+  const operator = useOperator();
   const mode = health?.mode ?? null;
   const mock = mode === "mock";
   const [picked, setPicked] = useState<Target>("amira");
@@ -258,7 +264,7 @@ export function PortfolioView() {
   const canSelf = !mock && mode !== null && session.clientId !== null;
   // « Mon profil » only exists with a client outside the simulator; fall back to the first persona.
   const target: Target = picked === "self" && !canSelf ? "amira" : picked;
-  const used: BuildMode = mock ? "rules" : engine;
+  const used: BuildMode = mock || !operator ? "rules" : engine;
   const build = usePortfolioBuild({ target, engine: used, mock, clientId: session.clientId });
   const targets: Target[] = canSelf ? [...DEMO_PERSONAS, "self"] : [...DEMO_PERSONAS];
 
@@ -272,7 +278,7 @@ export function PortfolioView() {
           </div>
         </div>
         <PersonaPicker targets={targets} target={target} onPick={setPicked} />
-        {mode !== null && !mock ? <BuildToolbar engine={engine} onEngine={setEngine} status={build.current?.status} onBuild={build.ask} /> : null}
+        {mode !== null && !mock ? <BuildToolbar showEngine={operator} engine={engine} onEngine={setEngine} status={build.current?.status} onBuild={build.ask} /> : null}
         <BuildStatus health={healthStatus} build={build} mock={mock} engine={used} />
       </div>
       <div className={p.banner} role="note">

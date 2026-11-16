@@ -279,7 +279,7 @@ def test_active_base_receives_the_pending_documents_then_costs_nothing(service, 
     }
     assert aws.agent.operations() == ["create_knowledge_base", "get_knowledge_base", "create_data_source", "ingest"]
     source = aws.agent.calls[2][1]
-    assert source["dataSourceConfiguration"] == {"type": "CUSTOM"}
+    assert source["dataSourceConfiguration"] == {"type": "CUSTOM"} and source["dataDeletionPolicy"] == "RETAIN"
     assert source["clientToken"] == f"alphaforge-test-ds-{client_id}"
     ingested = aws.agent.documents["KB00000001"]
     assert set(ingested) == {profile_key(client_id), journal_key(client_id), index_key(client_id)}

@@ -615,7 +615,10 @@ class ClientKnowledgeBases:
                 name=DATA_SOURCE_NAME,
                 description="Documents OKF du client, ingeres un par un (identifiant = cle OKF).",
                 dataSourceConfiguration={"type": "CUSTOM"},
-                dataDeletionPolicy="DELETE",
+                # RETAIN : supprimer la base (scripts/clean-client-kbs.sh) ne touche pas aux vecteurs, qui partent
+                # avec l'index; avec DELETE, la suppression échoue si l'index ou le rôle n'existe plus. Un document
+                # retiré sort toujours par DeleteKnowledgeBaseDocuments.
+                dataDeletionPolicy="RETAIN",
                 vectorIngestionConfiguration={"chunkingConfiguration": CHUNKING},
             )
             return source["dataSource"]["dataSourceId"]

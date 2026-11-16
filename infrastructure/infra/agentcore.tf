@@ -6,7 +6,8 @@
 # ne different que par AGENT_ROLE et par leur role IAM (moindre privilege) :
 #
 #   profile     questions de base deterministes, relances A1, portefeuille
-#               existant A2 ; appele par l'interface locale
+#               existant A2 ; appele par l'interface locale ; cree la
+#               Knowledge Base de chaque client (client_kb.tf)
 #   press       A4, specialiste de la presse ; appele par Step Functions
 #   data        A5, specialiste des donnees ; appele par Step Functions
 #   supervisor  A6, superviseur de la base generale ; appele par Step Functions
@@ -149,11 +150,14 @@ locals {
     AGENT_OBSERVABILITY_ENABLED = "true"
   }
 
-  agentcore_profile_env = {
+  # Knowledge Base de chaque client (client_kb.tf) : profile et portfolio
+  # (qui reprend ces variables) recoivent le bucket de vecteurs, le role et le
+  # modele d'embedding ; vides si client_kb_enabled = false.
+  agentcore_profile_env = merge({
     ALPHAFORGE_KB_ID             = aws_bedrockagent_knowledge_base.general.id
     ALPHAFORGE_GUARDRAIL_ID      = aws_bedrock_guardrail.cadre.guardrail_id
     ALPHAFORGE_GUARDRAIL_VERSION = aws_bedrock_guardrail_version.cadre.version
-  }
+  }, local.client_kb_env)
 
   # portfolio : celles de profile, puis la tracabilite du volet finance
   # (traceability.tf) et le modele des roles du debat. finance/debate/roles.py
@@ -401,6 +405,115 @@ data "aws_iam_policy_document" "agentcore" {
       sid       = "ApplyGuardrail"
       actions   = ["bedrock:ApplyGuardrail"]
       resources = [aws_bedrock_guardrail.cadre.guardrail_arn]
+    }
+  }
+
+  # ---------------------------------------------------------------------------
+  # Knowledge Base de chaque client (client_kb.tf). profile cree l'index
+  # client-<id>, la Knowledge Base etiquetee alphaforge:scope=client et sa
+  # source CUSTOM ; profile et portfolio y ingerent et y cherchent. Aucun droit
+  # de suppression : seul scripts/clean-client-kbs.sh supprime, avec les
+  # identifiants de l'equipe.
+  # ---------------------------------------------------------------------------
+  dynamic "statement" {
+    for_each = contains(local.client_kb_creator_roles, each.key) ? [1] : []
+    content {
+      sid       = "ClientKbIndex"
+      actions   = ["s3vectors:CreateIndex", "s3vectors:GetIndex"]
+      resources = [local.client_kb_index_arn_pattern]
+    }
+  }
+
+  # CreateKnowledgeBase n'a pas de type de ressource : condition sur
+  # l'etiquette demandee. TagResource suit, pour les etiquettes posees a la
+  # creation.
+  dynamic "statement" {
+    for_each = contains(local.client_kb_creator_roles, each.key) ? [1] : []
+    content {
+      sid       = "ClientKbCreate"
+      actions   = ["bedrock:CreateKnowledgeBase"]
+      resources = ["*"]
+      condition {
+        test     = "StringEquals"
+        variable = "aws:RequestTag/alphaforge:scope"
+        values   = ["client"]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = contains(local.client_kb_creator_roles, each.key) ? [1] : []
+    content {
+      sid       = "ClientKbTag"
+      actions   = ["bedrock:TagResource"]
+      resources = [local.client_kb_arn_pattern]
+      condition {
+        test     = "StringEquals"
+        variable = "aws:RequestTag/alphaforge:scope"
+        values   = ["client"]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = contains(local.client_kb_creator_roles, each.key) ? [1] : []
+    content {
+      sid = "ClientKbManage"
+      actions = [
+        "bedrock:CreateDataSource",
+        "bedrock:GetDataSource",
+        "bedrock:GetKnowledgeBase",
+        "bedrock:ListDataSources",
+      ]
+      resources = [local.client_kb_arn_pattern]
+      condition {
+        test     = "StringEquals"
+        variable = "aws:ResourceTag/alphaforge:scope"
+        values   = ["client"]
+      }
+    }
+  }
+
+  # Reprise d'une creation dont l'identifiant s'est perdu : la base est
+  # retrouvee par son nom (ListKnowledgeBases n'a pas de type de ressource).
+  dynamic "statement" {
+    for_each = contains(local.client_kb_creator_roles, each.key) ? [1] : []
+    content {
+      sid       = "ClientKbList"
+      actions   = ["bedrock:ListKnowledgeBases"]
+      resources = ["*"]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = contains(local.client_kb_creator_roles, each.key) ? [1] : []
+    content {
+      sid       = "PassClientKbRole"
+      actions   = ["iam:PassRole"]
+      resources = [aws_iam_role.client_knowledge_base.arn]
+      condition {
+        test     = "StringEquals"
+        variable = "iam:PassedToService"
+        values   = ["bedrock.amazonaws.com"]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = contains(local.client_kb_user_roles, each.key) ? [1] : []
+    content {
+      sid = "ClientKbDocuments"
+      actions = [
+        "bedrock:DeleteKnowledgeBaseDocuments",
+        "bedrock:IngestKnowledgeBaseDocuments",
+        "bedrock:Retrieve",
+      ]
+      resources = [local.client_kb_arn_pattern]
+      condition {
+        test     = "StringEquals"
+        variable = "aws:ResourceTag/alphaforge:scope"
+        values   = ["client"]
+      }
     }
   }
 }

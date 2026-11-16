@@ -8,19 +8,19 @@ La documentation nomme chaque agent par son nom. L'application, elle, l'affiche 
 
 | Agent | Code dans la trace | Ce qu'il fait | Moteur | Runtime |
 | --- | --- | --- | --- | --- |
-| Les questions de base | questionnaire | Pose les questions fixes du profil et valide chaque réponse. | code | `profile` |
+| Les questions de base | `questionnaire` | Pose les questions fixes du profil et valide chaque réponse. | code | `profile` |
 | L'agent du profil | A1 | Ne demande que ce qui manque pour compléter le profil, au plus trois questions par tour, puis l'écrit. | modèle | `profile` |
 | L'agent du portefeuille existant | A2 | Lit un relevé (PDF, tableur, image, texte) et en extrait les positions ; le code les valorise. | modèle | `profile` |
-| Le calcul du portefeuille (étape 0 et optimiseur) | étape 0, F2 | Traduit le profil en limites, choisit le style et les titres, puis calcule les poids (cvxpy). | code | `portfolio` |
-| L'avocat | A3 | Défend le portefeuille construit, puis répond aux critiques au second tour. | modèle | `portfolio` |
-| Les quatre lentilles critiques | lentilles | Horizon, risque, diversification, contraintes : contestent le portefeuille, et ne peuvent que resserrer une limite. | modèle | `portfolio` |
-| Le Judge | Judge | Contrôle chaque limite du profil, sans dérogation ; refuse une demande qui dépasse une limite bloquante et propose une version encadrée. | code | `portfolio` |
+| Le calcul du portefeuille (étape 0 et optimiseur) | `s0.*`, `s0b.*`, `s2.optimize` | Traduit le profil en limites, choisit le style et les titres, puis calcule les poids (cvxpy). | code | `portfolio` |
+| L'avocat | `a3.advocate` | Défend le portefeuille construit, puis répond aux critiques au second tour. | modèle | `portfolio` |
+| Les quatre lentilles critiques | `lens.*` | Horizon, risque, diversification, contraintes : contestent le portefeuille, et ne peuvent que resserrer une limite. | modèle | `portfolio` |
+| Le Judge | `judge` | Contrôle chaque limite du profil, sans dérogation ; refuse une demande qui dépasse une limite bloquante et propose une version encadrée. | code | `portfolio` |
 | L'agent de la presse | A4 | Collecte les communiqués et les actualités, datés et sourcés. | modèle | `press` |
 | L'agent des données | A5 | Collecte les séries économiques et les cours ; les fondamentaux SEC EDGAR viennent du code. | modèle | `data` |
 | Le superviseur | A6 | Relit tout ce qui est collecté, rejette ce qui n'a ni source ni date ou fait double emploi, et écrit la base générale. | modèle | `supervisor` |
 | Le routeur | A0 | Choisit les sujets d'une question de recherche, puis rédige la synthèse. | modèle | `router` |
 | Les experts de sujet | E1 à E7 | Un expert par sujet : consulte la base générale et lance ses chercheurs. | modèle | `expert` |
-| Les chercheurs | chercheur | Une mission chacun : lisent les sites publics de leur liste, en respectant `robots.txt`. | modèle | `researcher` |
+| Les chercheurs | `researcher` | Une mission chacun : lisent les sites publics de leur liste, en respectant `robots.txt`. | modèle | `researcher` |
 
 ## Les 8 runtimes AgentCore
 

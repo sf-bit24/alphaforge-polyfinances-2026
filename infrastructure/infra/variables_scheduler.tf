@@ -2,9 +2,9 @@
 # Variables specifiques au Scheduler.
 # =============================================================================
 variable "collecte_schedule_expression" {
-  description = "Cadence de la veille (expression rate() ou cron() d'EventBridge Scheduler)."
+  description = "Cadence de la collecte (expression rate() ou cron() d'EventBridge Scheduler, heure de Toronto) : chaque jour a 6 h par defaut."
   type        = string
-  default     = "rate(6 hours)"
+  default     = "cron(0 6 * * ? *)"
 }
 
 variable "collecte_schedule_enabled" {

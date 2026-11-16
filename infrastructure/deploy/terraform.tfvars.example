@@ -12,7 +12,7 @@ release_id  = "1a2b3c4d" # SHA court du commit, jamais un tag mobile
 tfc_aws_run_role_arn     = "arn:aws:iam::123456789012:role/alphaforge-tfc-run"
 kms_admin_principal_arns = ["arn:aws:iam::123456789012:role/WSParticipantRole"]
 
-collecte_schedule_expression = "rate(6 hours)"
+collecte_schedule_expression = "cron(0 6 * * ? *)"
 collecte_schedule_enabled    = true
 
 additional_tags = {

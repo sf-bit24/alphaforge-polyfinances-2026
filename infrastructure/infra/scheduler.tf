@@ -1,7 +1,8 @@
 # =============================================================================
-# Service : Amazon EventBridge Scheduler, veille periodique.
-# Lance la machine de collecte a intervalle regulier ; l'interface peut aussi
-# la lancer a la demande.
+# Service : Amazon EventBridge Scheduler, veille quotidienne.
+# Lance la machine de collecte selon collecte_schedule_expression : une fois
+# par jour, a 6 h heure de Toronto, par defaut. L'interface peut aussi la
+# lancer a la demande.
 # =============================================================================
 
 data "aws_iam_policy_document" "scheduler_trust" {

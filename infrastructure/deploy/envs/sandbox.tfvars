@@ -27,8 +27,8 @@ scenarios_enabled = true
 # press, data et researcher seulement. Courriel du volet recherche.
 sec_contact_email = "sacha.burelle.1@ens.etsmtl.ca"
 
-# Veille : collecte toutes les 6 heures.
-collecte_schedule_expression = "rate(6 hours)"
+# Veille : collecte chaque jour a 6 h, heure de Toronto (scheduler.tf).
+collecte_schedule_expression = "cron(0 6 * * ? *)"
 collecte_schedule_enabled    = true
 
 # Runtime portfolio (A3, lentilles, Judge du volet finance) : zip

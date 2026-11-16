@@ -455,6 +455,18 @@ data "aws_iam_policy_document" "agentcore" {
     }
   }
 
+  # TagResource porte sur knowledge-base/* : sans ce refus, profile pourrait
+  # etiqueter la base generale alphaforge:scope=client, puis y ingerer.
+  dynamic "statement" {
+    for_each = contains(local.client_kb_user_roles, each.key) ? [1] : []
+    content {
+      sid       = "ProtectGeneralKbTags"
+      effect    = "Deny"
+      actions   = ["bedrock:TagResource", "bedrock:UntagResource"]
+      resources = [aws_bedrockagent_knowledge_base.general.arn]
+    }
+  }
+
   dynamic "statement" {
     for_each = contains(local.client_kb_creator_roles, each.key) ? [1] : []
     content {
@@ -569,6 +581,9 @@ resource "aws_bedrockagentcore_agent_runtime" "this" {
 
   tags = local.common_tags
 
-  # AgentCore verifie le role a la creation : ses permissions d'abord.
-  depends_on = [aws_iam_role_policy.agentcore]
+  # AgentCore verifie le role a la creation : ses permissions d'abord. Le role
+  # des Knowledge Bases des clients aussi : sans sa politique, la premiere
+  # creation d'une base apres l'apply echouerait (etat failed, nouvel essai
+  # 3 minutes plus tard).
+  depends_on = [aws_iam_role_policy.agentcore, aws_iam_role_policy.client_knowledge_base]
 }

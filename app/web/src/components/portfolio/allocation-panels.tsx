@@ -1,9 +1,10 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import type { DecisionPosition, PortfolioBuildResponse, StrategySummary } from "@/lib/contract/portfolio";
+import type { Allocation, DecisionPosition, PortfolioBuildResponse, StrategySummary } from "@/lib/contract/portfolio";
 import { useI18n } from "@/lib/i18n/provider";
-import { bandPosition, styleBand, styleNotes, type FactIndex, type StyleBand } from "@/lib/portfolio/decision";
+import { allocationAmount, positionAmounts } from "@/lib/portfolio/allocation";
+import { bandPosition, shortlistReason, styleBand, styleNotes, type FactIndex, type StyleBand } from "@/lib/portfolio/decision";
 import { formatFact, formatWeight } from "@/lib/portfolio/format";
 import { cn } from "@/components/ui/cn";
 import d from "./base.module.css";
@@ -56,9 +57,11 @@ function AllocationBar({ positions }: { positions: DecisionPosition[] }) {
   );
 }
 
-function PositionsTable({ positions }: { positions: DecisionPosition[] }) {
-  const { t } = useI18n();
+/** `amounts` (the engine's dollars per asset) adds an « Amount » column; without an allocation there is none. */
+function PositionsTable({ positions, amounts }: { positions: DecisionPosition[]; amounts: ReadonlyMap<string, number | null> | null }) {
+  const { t, locale } = useI18n();
   const v = t.portfolioView.positions;
+  const a = t.portfolioView.allocation;
   return (
     <div className={d.tableWrap}>
       <table className={d.table} style={{ minWidth: 480 }}>
@@ -70,6 +73,11 @@ function PositionsTable({ positions }: { positions: DecisionPosition[] }) {
             <th scope="col" className={d.n}>
               {v.weight}
             </th>
+            {amounts ? (
+              <th scope="col" className={d.n}>
+                {a.amount}
+              </th>
+            ) : null}
             <th scope="col">{v.facts}</th>
           </tr>
         </thead>
@@ -83,6 +91,7 @@ function PositionsTable({ positions }: { positions: DecisionPosition[] }) {
                 <span className={cn(d.chip, pos.role === "satellite" ? d.stop : d.navy)}>{roleLabel(pos.role, v)}</span>
               </td>
               <td className={cn(d.n, p.num)}>{formatWeight(pos.weight)}</td>
+              {amounts ? <td className={cn(d.n, p.num)}>{allocationAmount(amounts.get(pos.asset_id), locale) ?? a.noAmount}</td> : null}
               <td>
                 <FactChips ids={pos.rationale_fact_ids} limit={2} />
               </td>
@@ -94,9 +103,10 @@ function PositionsTable({ positions }: { positions: DecisionPosition[] }) {
   );
 }
 
-export function Positions({ positions }: { positions: DecisionPosition[] }) {
+export function Positions({ positions, allocation }: { positions: DecisionPosition[]; allocation?: Allocation | null }) {
   const { t } = useI18n();
   const v = t.portfolioView.positions;
+  const amounts = allocation && allocation.positions.length > 0 ? positionAmounts(allocation) : null;
   return (
     <section className={cn(d.tile, p.half)} aria-labelledby="pf-positions">
       <header>
@@ -110,7 +120,7 @@ export function Positions({ positions }: { positions: DecisionPosition[] }) {
       ) : (
         <>
           <AllocationBar positions={positions} />
-          <PositionsTable positions={positions} />
+          <PositionsTable positions={positions} amounts={amounts} />
         </>
       )}
     </section>
@@ -199,6 +209,29 @@ function floorFactIds(facts: FactIndex, ticker: string): string[] {
   return [floor, `strat.floor_cad.${ticker}`].filter((id) => facts.has(id));
 }
 
+/** No single stock kept, and the engine's reason for it (the processing of `strat.K`), with its fact. */
+function NoShortlist() {
+  const { t } = useI18n();
+  const v = t.portfolioView.style;
+  const { facts } = useDecisionLookup();
+  const why = shortlistReason(facts);
+  return (
+    <>
+      <p className={p.sub}>{v.noShortlist}</p>
+      {why ? (
+        <p className={cn(p.sub, p.chips)} style={{ alignItems: "baseline", marginTop: 6 }}>
+          <span>
+            {v.shortlistReason}
+            {t.portfolioView.colon}
+            {why.reason}
+          </span>
+          <FactChip id={why.fact.fact_id} />
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 function Shortlist({ shortlist }: { shortlist: string[] }) {
   const { t } = useI18n();
   const v = t.portfolioView.style;
@@ -207,7 +240,7 @@ function Shortlist({ shortlist }: { shortlist: string[] }) {
     <div className={p.block}>
       <h3>{v.shortlist}</h3>
       {shortlist.length === 0 ? (
-        <p className={p.sub}>{v.noShortlist}</p>
+        <NoShortlist />
       ) : (
         <div className={p.chips}>{shortlist.flatMap((ticker) => floorFactIds(facts, ticker).map((id) => <FactChip key={id} id={id} />))}</div>
       )}

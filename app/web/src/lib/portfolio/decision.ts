@@ -97,6 +97,17 @@ export function styleNotes(facts: FactIndex): StyleNotes {
   };
 }
 
+/**
+ * Why step 0 kept no single stock, as the engine wrote it: the `processing` of the first source of
+ * `strat.K` (« niveau N0 : aucun titre individuel », « preferences.approach = fonds indiciels : FNB seulement »...).
+ * Shown as is; null when the fact or its text is missing.
+ */
+export function shortlistReason(facts: FactIndex): { fact: DecisionFact; reason: string } | null {
+  const fact = facts.get("strat.K");
+  const reason = fact?.sources[0]?.processing?.trim();
+  return fact && reason ? { fact, reason } : null;
+}
+
 /* ------------------------------------------------------------------ */
 /* Ranking of single stocks                                            */
 /* ------------------------------------------------------------------ */

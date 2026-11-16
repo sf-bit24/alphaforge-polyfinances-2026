@@ -82,6 +82,15 @@ describe("contract examples (CONTRACTS.md 3.3)", () => {
     expect(TraceStep.parse(withoutSources).sources).toEqual([]);
   });
 
+  it("reads client_kb, the client's own knowledge base, and accepts a runtime without it", () => {
+    const clientKb = { status: "active", knowledge_base_id: "KB12345678", documents: 6, pending: 1 };
+    expect(ClientState.parse({ ...examples.clientState, client_kb: clientKb }).client_kb).toEqual(clientKb);
+    expect(ClientState.parse(examples.clientState).client_kb).toBeUndefined();
+    const disabled = { status: "disabled", knowledge_base_id: null, documents: 0, pending: 0 };
+    expect(ClientState.parse({ ...examples.clientState, client_kb: disabled }).client_kb?.status).toBe("disabled");
+    expect(ClientState.safeParse({ ...examples.clientState, client_kb: { ...clientKb, status: "ready" } }).success).toBe(false);
+  });
+
   it("keeps unknown optional fields out of the parsed value (forward compatible)", () => {
     const parsed = Question.parse({ ...examples.question, future_field: 1 });
     expect("future_field" in parsed).toBe(false);

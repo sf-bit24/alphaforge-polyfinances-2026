@@ -4,6 +4,7 @@
  * (CONTRACTS.md 5) records each of them.
  */
 import type { AnswerValue, KnowledgeLevel, Locale, PortfolioView, Stage } from "@/lib/contract/schemas";
+import { newMockClientKb, type MockClientKb } from "./client-kb";
 import type { StoredDoc } from "./documents";
 import { MockError } from "./envelope";
 import { knowledgeLevel, type FieldValues, type StoredFact } from "./profile";
@@ -30,6 +31,8 @@ export interface ClientRecord {
   message: L | null;
   portfolio: PortfolioView | null;
   docs: Map<string, StoredDoc>;
+  /** The client's own knowledge base (`clients/<id>/kb.json`), simulated. */
+  kb: MockClientKb;
 }
 
 export interface PendingFollowup {
@@ -61,6 +64,7 @@ export function newClientRecord(id: string, locale: Locale, createdAt: string): 
     message: null,
     portfolio: null,
     docs: new Map(),
+    kb: newMockClientKb(),
   };
 }
 

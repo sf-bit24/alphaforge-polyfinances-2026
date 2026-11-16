@@ -23,6 +23,8 @@ STATE_KEYS = {
     "completeness",
     "portfolio",
     "trace",
+    # Knowledge Base du client : désactivée avec le magasin local (statut disabled, rien d'autre ne change).
+    "client_kb",
 }
 TRACE_KEYS = {"id", "at", "kind", "actor", "title", "detail", "inputs", "outputs", "sources", "duration_ms"}
 

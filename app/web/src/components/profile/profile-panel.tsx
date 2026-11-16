@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/components/ui/cn";
 import { ErrorNotice } from "@/components/ui/error-notice";
 import { Spinner } from "@/components/ui/spinner";
+import { ClientKbStatusCard } from "./client-kb-status";
 import { CompletenessMeter, KnowledgeMeter, RiskMeter } from "./meters";
 
 export function provenanceLabel(provenance: string, t: Dictionary): string {
@@ -266,6 +267,7 @@ export function ProfilePanel({ state }: { state: ClientState }) {
         <FactsList facts={profile.facts} />
       </Section>
       <Section title={t.panel.documentsTitle} icon={<FolderOpen aria-hidden className="size-4 text-ink-500" />} defaultOpen>
+        {state.client_kb ? <ClientKbStatusCard kb={state.client_kb} /> : null}
         <DocumentsSection clientId={state.client_id} revision={session.revision} />
       </Section>
     </div>

@@ -31,6 +31,11 @@ sec_contact_email = "sacha.burelle.1@ens.etsmtl.ca"
 collecte_schedule_expression = "rate(6 hours)"
 collecte_schedule_enabled    = true
 
+# Knowledge Base de chaque client (client_kb.tf) : creee par le runtime profile
+# a la premiere action d'un client, alimentee par profile et portfolio. false
+# pour s'en passer sans toucher au code (les runtimes font comme avant).
+client_kb_enabled = true
+
 # Runtime portfolio (A3, lentilles, Judge du volet finance) : zip
 # agents-portfolio.zip construit par defaut par package.sh, donnees longues lues
 # sous runtime/data/long/ (scripts/finance/upload_long_data.py).

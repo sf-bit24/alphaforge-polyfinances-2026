@@ -5,6 +5,7 @@
 import type {
   AccountType,
   AssetClass,
+  ClientKbStatus,
   Dimension,
   DimensionStatus,
   ExecutionStatus,
@@ -395,6 +396,27 @@ const fr = {
     noDocuments: "Aucun document pour l’instant.",
     traces: ((count: number) => `Traces d’exécution (${count})`) as Fn<[number]>,
     open: ((title: string) => `Ouvrir ${title}`) as Fn<[string]>,
+    clientKb: {
+      title: "Index de recherche de votre base",
+      caption: "Une Knowledge Base Bedrock à vous seul, construite à partir de ces documents. Les chiffres viennent toujours des documents.",
+      status: {
+        disabled: "Désactivé",
+        creating: "En création",
+        active: "Actif",
+        failed: "En échec",
+        quota: "Quota atteint",
+      } satisfies Record<ClientKbStatus, string>,
+      detail: {
+        disabled: "Pas d’index en local : la recherche se fait dans les documents seulement.",
+        creating: "Bedrock prépare l’index. Les documents écrits entre-temps attendent, puis partent ensemble.",
+        active: "Chaque document écrit dans votre base y est indexé.",
+        failed: "L’index n’a pas pu être créé. Un nouvel essai suivra; votre profil n’en dépend pas.",
+        quota: "Le compte a atteint sa limite de 100 Knowledge Bases. Un nouvel essai suivra; votre profil n’en dépend pas.",
+      } satisfies Record<ClientKbStatus, string>,
+      documents: ((count: number) => (count > 1 ? `${count} documents indexés` : `${count} document indexé`)) as Fn<[number]>,
+      pending: ((count: number) => `${count} en attente`) as Fn<[number]>,
+      id: "Identifiant",
+    },
   },
   provenance: {
     base: ((id: string) => `Question de base ${id}`) as Fn<[string]>,
@@ -996,6 +1018,27 @@ const en: Dictionary = {
     noDocuments: "No document yet.",
     traces: (count: number) => `Execution traces (${count})`,
     open: (title: string) => `Open ${title}`,
+    clientKb: {
+      title: "Search index of your base",
+      caption: "A Bedrock knowledge base of your own, built from these documents. Figures always come from the documents.",
+      status: {
+        disabled: "Disabled",
+        creating: "Being created",
+        active: "Active",
+        failed: "Failed",
+        quota: "Quota reached",
+      },
+      detail: {
+        disabled: "No index locally: search uses the documents only.",
+        creating: "Bedrock is preparing the index. Documents written meanwhile wait, then go together.",
+        active: "Every document written to your base is indexed there.",
+        failed: "The index could not be created. A new attempt will follow; your profile does not depend on it.",
+        quota: "The account reached its limit of 100 knowledge bases. A new attempt will follow; your profile does not depend on it.",
+      },
+      documents: (count: number) => (count === 1 ? "1 document indexed" : `${count} documents indexed`),
+      pending: (count: number) => `${count} pending`,
+      id: "Identifier",
+    },
   },
   provenance: {
     base: (id: string) => `Base question ${id}`,

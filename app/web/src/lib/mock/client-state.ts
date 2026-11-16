@@ -1,5 +1,6 @@
 /** `ClientState` (CONTRACTS.md 3.2), rendered from a client record in the requested language. */
 import type { ClientState, KnowledgeLevel, Locale, Question } from "@/lib/contract/schemas";
+import { reconcileClientKb } from "./client-kb";
 import { knowledgeLevelOf, type ClientRecord } from "./client-record";
 import { MOCK_RELEASE, type Envelope } from "./envelope";
 import { completeness, dimensionViews, effectiveRisk, PORTFOLIO_DRAFT_FIELD, riskDetail } from "./profile";
@@ -20,6 +21,8 @@ function pendingQuestions(record: ClientRecord, locale: Locale, level: Knowledge
 }
 
 export function clientState(record: ClientRecord, trace: Trace, locale: Locale): Envelope {
+  // Once per action, like the runtime: the knowledge base of the client moves on and receives the new documents.
+  const clientKb = reconcileClientKb(record, trace);
   const level = knowledgeLevelOf(record);
   const state: ClientState = {
     ok: true,
@@ -42,6 +45,7 @@ export function clientState(record: ClientRecord, trace: Trace, locale: Locale):
     completeness: completeness(record.values, locale),
     portfolio: record.portfolio,
     trace: trace.steps,
+    client_kb: clientKb,
   };
   return state as unknown as Envelope;
 }

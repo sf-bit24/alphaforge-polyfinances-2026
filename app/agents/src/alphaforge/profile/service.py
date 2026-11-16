@@ -5,6 +5,10 @@ Les actions déterministes (``session.*``, ``base.answer``, ``portfolio.confirm`
 ``followup.reply`` appelle A1. À la fin du questionnaire (passage à ``complete``, y compris par ``stop: true``),
 le service invoque aussi A1 avec son skill de base du client (``brain.run_brain``) : ``client-brain-init``, puis
 ``client-brain-update`` quand les faits ou les skills ont changé.
+
+Knowledge Base du client (``client_kb``) : le magasin est enveloppé pour noter les documents ``.md`` écrits; à la fin
+de chaque action (``_commit``, ou ``session.resume``, ``profile.get`` et ``session.start`` d'une base existante), un
+rapprochement crée la base au premier passage, fait avancer sa création et envoie les documents. Désactivée en local.
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ from . import a1 as a1_agent
 from . import a2 as a2_agent
 from . import brain, kb, rules
 from .agent_runner import AgentRunner
+from .client_kb import ClientKnowledgeBases
 from .portfolio import ACCOUNT_TYPES, QuoteFetcher, build_view, positions_to_raws
 from .questionnaire import (
     InvalidValueError,
@@ -57,6 +62,8 @@ class Request:
     payload: dict[str, Any]
     trace: Trace
     emitter: Emitter | None
+    # ``client_kb`` de la réponse, rendu par le rapprochement de la Knowledge Base du client.
+    client_kb: dict[str, Any] | None = None
 
     @property
     def locale_hint(self) -> str:
@@ -240,9 +247,12 @@ class ProfileService:
         quote_fetcher: QuoteFetcher | None = fetch_yahoo_chart,
         kb_search: kb.KnowledgeSearch | None = None,
         write_client_brain: bool = True,
+        client_kb: ClientKnowledgeBases | None = None,
     ):
         self.settings = settings
-        self.store = store
+        # Knowledge Base de chaque client : le magasin n'est enveloppé que si elle est configurée (jamais en local).
+        self.client_kb = client_kb or ClientKnowledgeBases.from_settings(settings, store, can_create=True)
+        self.store = self.client_kb.wrap(store)
         self.questionnaire = questionnaire or default_questionnaire()
         self.model_factory = model_factory or bedrock_model_factory(settings)
         self.quote_fetcher = quote_fetcher
@@ -426,11 +436,23 @@ class ProfileService:
         """``ClientState`` de la réponse; ``portfolio="load"`` relit le portefeuille enregistré."""
         view = self._portfolio(session) if portfolio == "load" else portfolio
         return client_state(
-            self.questionnaire, session, locale=locale, trace=request.trace, message=message, portfolio=view
+            self.questionnaire,
+            session,
+            locale=locale,
+            trace=request.trace,
+            message=message,
+            portfolio=view,
+            client_kb=request.client_kb,
         )
+
+    def _sync_client_kb(self, request: Request, client_id: str) -> None:
+        """Rapprochement de la Knowledge Base du client : jamais une erreur pour l'investisseur (voir client_kb)."""
+        request.client_kb = self.client_kb.sync(client_id, request.trace, create=True)
 
     def _commit(self, request: Request, session: ClientSession) -> None:
         session.commit(self.store, self.questionnaire, request.trace)
+        # Après les écritures OKF de l'action, avant la trace : la trace enregistrée montre aussi l'indexation.
+        self._sync_client_kb(request, session.client_id)
         key = trace_key(session.client_id, request.action)
         request.trace.add("storage", "store", request.trace.t("Trace enregistrée", "Trace saved"), key)
         self.store.put_json(
@@ -494,6 +516,7 @@ class ProfileService:
                     client_id,
                     outputs={"stage": existing.stage},
                 )
+                self._sync_client_kb(request, client_id)
                 return self._state(request, existing, locale, message=self._last_message(existing, locale))
         else:
             client_id = str(uuid.uuid4())
@@ -521,12 +544,14 @@ class ProfileService:
         session = self._client(request)
         locale = self._locale_param(request) or session.locale
         request.trace.locale = locale
+        self._sync_client_kb(request, session.client_id)
         return self._state(request, session, locale, message=self._last_message(session, locale))
 
     def profile_get(self, request: Request) -> dict[str, Any]:
         session = self._client(request)
         locale = self._locale_param(request) or session.locale
         request.trace.locale = locale
+        self._sync_client_kb(request, session.client_id)
         documents = [
             {"key": item["key"], "title": item["title"]}
             for item in kb.list_documents(self.store, f"clients/{session.client_id}/")
@@ -539,6 +564,7 @@ class ProfileService:
             message=self._last_message(session, locale),
             portfolio=self._portfolio(session),
             documents=documents,
+            client_kb=request.client_kb,
         )
 
     def base_answer(self, request: Request) -> dict[str, Any]:
@@ -913,6 +939,8 @@ class ProfileService:
             new_answers=new_answers,
             journal=self._journal(session),
             portfolio=portfolio_view if is_confirmed else None,
+            # Recherche dans la Knowledge Base de ce client seulement (identifiant lu dans kb.json, jamais par A1).
+            client_search=self.client_kb.searcher(session.client_id),
         )
         try:
             outcome = a1_agent.run_a1(

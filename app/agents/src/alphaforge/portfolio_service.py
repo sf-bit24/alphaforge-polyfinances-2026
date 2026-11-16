@@ -13,6 +13,10 @@ Actions (enveloppe de CONTRACTS.md, section 2) :
   ``clients/<client_id>/decisions/``. Avec ``strategy``, l'étape 0 lit ses variables dans le profil court
   (``style_inputs_from_view``), comme ``finance/debate/app.py``.
 Simulation seulement : aucune transaction, aucun conseil personnalisé.
+
+Knowledge Base du client (``profile/client_kb.py``) : le magasin est enveloppé comme dans le runtime ``profile``.
+Après ``build`` (``decisions/<id>.md``) et après une tâche d'évolution (``portefeuilles/*.md``), les documents écrits
+sont ingérés si la base du client est active, sinon gardés en attente. Ce runtime ne crée jamais de Knowledge Base.
 """
 
 from __future__ import annotations
@@ -29,6 +33,7 @@ from typing import Any
 
 from .config import Settings
 from .errors import AppError, error_response, ok_response, pick
+from .profile.client_kb import ClientKnowledgeBases
 from .store import ConflictError, Store
 
 logger = logging.getLogger("alphaforge.portfolio")
@@ -116,9 +121,12 @@ class PortfolioService:
         app: Any | None = None,
         *,
         engine: Callable[[], dict[str, Any]] | None = None,
+        client_kb: ClientKnowledgeBases | None = None,
     ):
         self.settings = settings
-        self.store = store
+        # Ingestion dans la Knowledge Base du client, jamais de création : magasin enveloppé si elle est configurée.
+        self.client_kb = client_kb or ClientKnowledgeBases.from_settings(settings, store, can_create=False)
+        self.store = self.client_kb.wrap(store)
         self.app = app
         self._engine = engine or FinanceEngine(store).load
         self._questionnaire: Any | None = None
@@ -203,6 +211,7 @@ class PortfolioService:
             out = handler(payload, store=self.store)
             if not out.get("ok"):
                 logger.warning("evolution %s %s : %s", action, payload.get("run_id"), out.get("error"))
+            self.client_kb.sync_noted()  # portefeuilles/*.md écrits par la tâche : ingérés si la base est active
         except Exception:  # noqa: BLE001 - la tâche de fond ne doit jamais tuer le runtime ; le marqueur dit l'échec
             logger.exception("evolution %s failed", action)
             try:
@@ -346,6 +355,8 @@ class PortfolioService:
                 )
                 decision_key = client_store.save_decision(result.decision, result.policy)
                 audit = self._audit(result.decision)
+            # decisions/<id>.md dans la Knowledge Base du client : jamais une erreur pour l'investisseur.
+            client_kb = None if args["persona"] else self.client_kb.sync(args["client_id"], None)
         finally:
             if telemetry is not None:
                 try:
@@ -374,6 +385,7 @@ class PortfolioService:
             ],
             "explanation_report": result.explanation_report,
             "grounding": result.grounding,
+            "client_kb": client_kb,
             "strategy": result.strategy.summary() if result.strategy is not None else None,
         }
 

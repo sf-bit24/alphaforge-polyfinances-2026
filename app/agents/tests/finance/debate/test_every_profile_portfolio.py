@@ -44,9 +44,28 @@ def _assert_portfolio(res, kind):
     return d, facts
 
 
+def test_prudent_dollar_rule_builds_a_cash_like_proposition():
+    """250 $ sur 10 000 $ (cas vu en production) : l* = 2,5 % sous toute la grille d'actions mais au-dessus de la perte
+    de planification des quasi-liquidités (dollar_rule.cash_like_point) -> proposition N0 normale, sans statut."""
+    d, facts = _assert_portfolio(build_portfolio(_profile(max_acceptable_loss_cad=250), AS_OF), "proposition")
+    assert facts["level"] == "N0" and not any(k.startswith("status.") for k in facts)
+    assert not {p.asset_id for p in d.positions} & SINGLE_OR_CRYPTO
+    assert {p.asset_id for p in d.positions} == {"ZST.TO"}  # part quasi-liquidités fixée à 100 % à l* = 2,5 %
+
+
+def test_cash_like_share_is_fixed_and_the_rest_goes_to_bonds():
+    """1 000 $ sur 10 000 $ (l* = 10 %) : part quasi-liquidités FIXÉE à c = 70 % sur la droite du point
+    quasi-liquidités, les 30 % restants en obligations ; aucune action, aucun or."""
+    d, facts = _assert_portfolio(build_portfolio(_profile(max_acceptable_loss_cad=1_000), AS_OF), "proposition")
+    weights = {p.asset_id: p.weight for p in d.positions}
+    assert facts["level"] == "N0" and abs(weights["ZST.TO"] - 0.70) < 1e-6
+    bonds = {"XBB.TO", "AGG"}
+    assert set(weights) <= {"ZST.TO"} | bonds and abs(sum(weights.get(a, 0) for a in bonds) - 0.30) < 1e-6
+
+
 def test_protection_by_the_dollar_rule_builds_the_most_prudent_portfolio():
-    """250 $ sur 10 000 $ : même sans actions, la perte de planification dépasse l* (cas vu en production)."""
-    d, facts = _assert_portfolio(build_portfolio(_profile(max_acceptable_loss_cad=250), AS_OF), "protection")
+    """100 $ sur 10 000 $ : l* = 1 % est sous la perte de planification des quasi-liquidités elles-mêmes."""
+    d, facts = _assert_portfolio(build_portfolio(_profile(max_acceptable_loss_cad=100), AS_OF), "protection")
     assert facts["status.l_star"] < facts["status.min_l_plan"]
     assert not {p.asset_id for p in d.positions} & SINGLE_OR_CRYPTO
     why = d.explanation.why[0]

@@ -1036,25 +1036,51 @@ def _loss_budget(
     return loss_budget
 
 
-def _admissible_equity_cap(max_equity_pct: int, loss_budget: float, context: _CompileContext) -> int | None:
-    """e_cap : plus grande part d'actions de la grille dont L_plan tient dans l* ; None si aucune ne tient."""
+def _cash_like_point(context: _CompileContext) -> dict | None:
+    """Point quasi-liquidites de la regle des dollars (dollar_rule.cash_like_point), ou None s'il est absent du YAML."""
+    return context.risk_levels["dollar_rule"].get("cash_like_point")
+
+
+def _cash_like_planning_loss(context: _CompileContext) -> float | None:
+    """L_plan_cash : MDD des quasi-liquidites plus leur marge quotidienne (HYPOTHESE du YAML)."""
+    point = _cash_like_point(context)
+    return None if point is None else point["mdd"] + point["daily_buffer"]
+
+
+def _envelope_equity_cap(max_equity_pct: int, loss_budget: float, context: _CompileContext) -> int | None:
+    """Plus grande part d'actions de la grille de l'enveloppe dont L_plan tient dans l* ; None si aucune ne tient."""
     admissible = [
         equity_pct
         for equity_pct in envelope.grid()
         if equity_pct <= max_equity_pct and _planning_loss(equity_pct, context) <= loss_budget + EPSILON
     ]
-    if not admissible:
+    return max(admissible) if admissible else None
+
+
+def _admissible_equity_cap(max_equity_pct: int, loss_budget: float, context: _CompileContext) -> int | None:
+    """e_cap : plus grande part d'actions dont L_plan tient dans l* ; 0 si seul le point quasi-liquidites tient ;
+    None si rien ne tient (PROTECTION)."""
+    equity_cap_pct = _envelope_equity_cap(max_equity_pct, loss_budget, context)
+    if equity_cap_pct is None:
+        cash_like_loss = _cash_like_planning_loss(context)
+        if cash_like_loss is not None and cash_like_loss <= loss_budget + EPSILON:
+            context.record(
+                "dollar_rule.e_cap",
+                {"l_star": loss_budget, "e_max_pct": max_equity_pct, "L_plan_e_cap": cash_like_loss},
+                0,
+                "dollar_rule.cash_like_point",
+            )
+            return 0
+        grid_losses = [_planning_loss(equity_pct, context) for equity_pct in envelope.grid()]
+        if cash_like_loss is not None:
+            grid_losses.append(cash_like_loss)
         context.record(
             "dollar_rule.protection",
-            {
-                "l_star": loss_budget,
-                "min_L_plan": min(_planning_loss(equity_pct, context) for equity_pct in envelope.grid()),
-            },
+            {"l_star": loss_budget, "min_L_plan": min(grid_losses)},
             "PROTECTION",
             "dollar_rule.protection",
         )
         return None
-    equity_cap_pct = max(admissible)
     context.record(
         "dollar_rule.e_cap",
         {
@@ -1066,6 +1092,45 @@ def _admissible_equity_cap(max_equity_pct: int, loss_budget: float, context: _Co
         "dollar_rule.e_cap",
     )
     return equity_cap_pct
+
+
+class _CashLikeMandate(NamedTuple):
+    """Mandat du point quasi-liquidites : l* sous toute la grille de l'enveloppe (dollar_rule.cash_like_point)."""
+
+    cash_like_min: float  # part quasi-liquidites minimale c(l*)
+    mdd_max: float  # MDD de la droite liquidites-obligations a c(l*)
+    gold_max: float
+
+
+def _cash_like_mandate(loss_budget: float, context: _CompileContext) -> _CashLikeMandate:
+    """c(l*) sur la droite entre le point quasi-liquidites (c = 1) et le point de reference HC (c = c_R), arrondi
+    au pas superieur ; la MDD admise suit la meme droite. Plus l* baisse, plus c monte (monotonie)."""
+    point = _cash_like_point(context)
+    reference_pct = point["reference"]["equity_pct"]
+    reference_cash = point["reference"]["cash_like_share"]
+    cash_like_loss = _cash_like_planning_loss(context)
+    reach = _clip((loss_budget - cash_like_loss) / (_planning_loss(reference_pct, context) - cash_like_loss))
+    cash_like_min = min(1.0, ceil_step(1 - (1 - reference_cash) * reach, point["cash_like_step"]))
+    non_cash = (1 - cash_like_min) / (1 - reference_cash)
+    mdd = point["mdd"] + (envelope.env(reference_pct, "mdd") - point["mdd"]) * non_cash
+    mandate = _CashLikeMandate(
+        cash_like_min=cash_like_min,
+        mdd_max=ceil_step(mdd, context.risk_levels["measurement"]["rounding"]["mdd"]),
+        gold_max=float(point["gold_max"]),
+    )
+    context.record(
+        "dollar_rule.cash_like_point",
+        {
+            "l_star": loss_budget,
+            "L_plan_cash": cash_like_loss,
+            "L_plan_reference": _planning_loss(reference_pct, context),
+            "reference_cash_like_share": reference_cash,
+            "envelope": f"envelope_v02.yaml#equity_pct.{reference_pct}.mdd",
+        },
+        mandate._asdict(),
+        "dollar_rule.cash_like_point",
+    )
+    return mandate
 
 
 def _level_index_holding(equity_cap_pct: int, context: _CompileContext) -> int:
@@ -1090,6 +1155,7 @@ class _LevelDecision:
     equity_cap_pct: int  # e_cap, sur la grille de 5 %
     equity_min_pct: int  # e_min de la bande du niveau
     is_protection: bool
+    cash_like: _CashLikeMandate | None = None  # l* sous la grille de l'enveloppe : mandat quasi-liquidites
 
     @property
     def level_index(self) -> int:
@@ -1108,6 +1174,8 @@ def _decide_level(profile: InvestorProfile, assessment: _RiskAssessment, context
     declared_loss = _declared_loss(profile, context)
     loss_budget = _loss_budget(max_equity_pct, declared_loss, assessment.capacity["l_cap"], context)
     admissible_cap = _admissible_equity_cap(max_equity_pct, loss_budget, context)
+    below_envelope = _envelope_equity_cap(max_equity_pct, loss_budget, context) is None
+    cash_like = _cash_like_mandate(loss_budget, context) if below_envelope and _cash_like_point(context) else None
     is_protection = profile.status is ProfileStatus.PROTECTION or admissible_cap is None
     equity_cap_pct = admissible_cap or 0
     level_index = min(_level_index_holding(equity_cap_pct, context), capped_index)
@@ -1129,6 +1197,7 @@ def _decide_level(profile: InvestorProfile, assessment: _RiskAssessment, context
         equity_cap_pct=equity_cap_pct,
         equity_min_pct=_equity_band_pct(level, context)[0],
         is_protection=is_protection,
+        cash_like=cash_like,
     )
 
 
@@ -1312,6 +1381,22 @@ class _Composition(NamedTuple):
     cash_like_min: float | None
 
 
+def _cash_like_min(decision: _LevelDecision, context: _CompileContext) -> float | None:
+    """Part quasi-liquidites minimale : celle du niveau, relevee par le point quasi-liquidites s'il s'applique."""
+    level_min = context.risk_levels["levels"][decision.level].get("cash_like_min")
+    if decision.cash_like is None:
+        return level_min
+    return max(level_min or 0.0, decision.cash_like.cash_like_min)
+
+
+def _cash_like_max(decision: _LevelDecision, defensive_share: float) -> float:
+    """Plafond des quasi-liquidites ; au point quasi-liquidites, la part est FIXEE a c(l*) (min = max) : le reste
+    (1 - c) va aux obligations, comme la tolerance place la part d'actions que la capacite plafonne."""
+    if decision.cash_like is not None:
+        return decision.cash_like.cash_like_min
+    return 1.0 if decision.level == "N0" else round(CASH_LIKE_SHARE * defensive_share, 4)
+
+
 def _composition(decision: _LevelDecision, context: _CompileContext) -> _Composition:
     rules = context.risk_levels["composition"]
     level = decision.level
@@ -1319,8 +1404,8 @@ def _composition(decision: _LevelDecision, context: _CompileContext) -> _Composi
     composition = _Composition(
         etf_equity_each_max=round(max(ETF_EQUITY_EACH_FLOOR, ETF_EQUITY_EACH_SHARE * decision.equity_cap), 4),
         etf_bond_each_max=round(ceil_step(ETF_BOND_EACH_SHARE * defensive_share, ETF_BOND_EACH_STEP), 4),
-        cash_like_max=1.0 if level == "N0" else round(CASH_LIKE_SHARE * defensive_share, 4),
-        cash_like_min=context.risk_levels["levels"][level].get("cash_like_min"),
+        cash_like_max=_cash_like_max(decision, defensive_share),
+        cash_like_min=_cash_like_min(decision, context),
     )
     context.record(
         "composition",
@@ -1331,7 +1416,7 @@ def _composition(decision: _LevelDecision, context: _CompileContext) -> _Composi
             "cash_like_max": composition.cash_like_max,
             "cash_like_min": composition.cash_like_min,
             "long_duration_max": rules["long_duration_max"][level],
-            "gold_max": rules["gold_max"][level],
+            "gold_max": _gold_max(decision, context),
         },
         "composition",
     )
@@ -1346,11 +1431,18 @@ class _Bounds(NamedTuple):
     source: str
 
 
+def _gold_max(decision: _LevelDecision, context: _CompileContext) -> float:
+    """Plafond de l'or du niveau, resserre par le point quasi-liquidites s'il s'applique."""
+    gold_max = context.risk_levels["composition"]["gold_max"][decision.level]
+    return gold_max if decision.cash_like is None else min(gold_max, decision.cash_like.gold_max)
+
+
 def _allocation_bounds(
     decision: _LevelDecision, composition: _Composition, crypto: _SourcedValue, context: _CompileContext
 ) -> dict[str, _Bounds]:
     level = decision.level
     rules = context.risk_levels["composition"]
+    cash_like_source = context.source("dollar_rule.cash_like_point")
     return {
         "alloc.growth": _Bounds(
             decision.equity_min_pct / 100,
@@ -1361,12 +1453,17 @@ def _allocation_bounds(
             composition.cash_like_min,
             composition.cash_like_max,
             context.source("composition.cash_like_max")
-            + (f" ; {context.source('levels.N0.cash_like_min')}" if composition.cash_like_min else ""),
+            + (f" ; {context.source('levels.N0.cash_like_min')}" if composition.cash_like_min else "")
+            + (f" ; {cash_like_source}" if decision.cash_like else ""),
         ),
         "alloc.long_duration": _Bounds(
             None, rules["long_duration_max"][level], context.source(f"composition.long_duration_max.{level}")
         ),
-        "alloc.gold": _Bounds(None, rules["gold_max"][level], context.source(f"composition.gold_max.{level}")),
+        "alloc.gold": _Bounds(
+            None,
+            _gold_max(decision, context),
+            context.source(f"composition.gold_max.{level}") + (f" ; {cash_like_source}" if decision.cash_like else ""),
+        ),
         "alloc.crypto": _Bounds(None, crypto.value, crypto.source),
     }
 
@@ -1522,12 +1619,23 @@ def _employer_limit(inputs: _CompileInputs, single_name: _SingleNameCaps, contex
     return limit
 
 
+def _cash_like_budgets(
+    budgets: dict[str, _SourcedValue], decision: _LevelDecision, context: _CompileContext
+) -> dict[str, _SourcedValue]:
+    """Au point quasi-liquidites, la MDD admise suit la droite liquidites-obligations (jamais au-dessus du budget)."""
+    if decision.cash_like is None:
+        return budgets
+    mdd = budgets["mdd"]
+    source = f"{mdd.source} ; {context.source('dollar_rule.cash_like_point')}"
+    return {**budgets, "mdd": _SourcedValue(min(mdd.value, decision.cash_like.mdd_max), source)}
+
+
 def _mandate_limits(
     inputs: _CompileInputs, decision: _LevelDecision, satellites: _SatelliteCaps, context: _CompileContext
 ) -> list[Limit]:
     """Limites du mandat (1:1 avec limits_template), puis celle du titre de l'employeur."""
     composition = _composition(decision, context)
-    budgets = _budgets(decision.level, decision.equity_cap_pct, context)
+    budgets = _cash_like_budgets(_budgets(decision.level, decision.equity_cap_pct, context), decision, context)
     bounds = {
         **_allocation_bounds(decision, composition, satellites.crypto, context),
         **_concentration_bounds(composition, satellites, inputs.biases, context),

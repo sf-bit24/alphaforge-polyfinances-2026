@@ -8,12 +8,11 @@
 /export/
 
 # Documents du Datathon, copies dans le Brain : non versionnes ici.
-# Exceptions : l'architecture (docs/architecture/), les cas d'utilisation
-# (docs/use-cases/) et le one-pager (docs/one-pager/).
+# Exceptions : l'architecture (docs/architecture/) et les cas d'utilisation
+# (docs/use-cases/). Les documents remis sont dans remise/, à la racine.
 /docs/*
 !/docs/architecture/
 !/docs/use-cases/
-!/docs/one-pager/
 
 # Traces du moteur de backtest (défaut ./backtest-results, où qu'on le lance)
 backtest-results/

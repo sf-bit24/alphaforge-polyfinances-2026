@@ -3,32 +3,14 @@
  * ClientState, the trace of every request, and the A1 conversation. It is a plain
  * external store (subscribe / getSnapshot) consumed with useSyncExternalStore.
  */
-import type { AnswerValue, ClientState, KnowledgeLevel, Locale, Question, Stage, TraceStep } from "@/lib/contract/schemas";
+import type { AnswerValue, ClientState, KnowledgeLevel, Locale, Question } from "@/lib/contract/schemas";
 import type { PositionInput, UploadFile } from "@/lib/contract/requests";
 import { ClientState as ClientStateSchema } from "@/lib/contract/schemas";
 import { callAgent, callAgentStream, toApiError, type ApiError, type StreamHandlers } from "./api";
+import { agentEntryOf, agentSpoke, MAX_RUNS, movedOn, newRun, uid, withNewRun, type ConversationEntry, type TraceRun } from "./session-history";
 import { clearSessionStorage, readClientId, readHistory, writeClientId, writeHistory } from "./session-storage";
 
-export interface TraceRun {
-  id: string;
-  action: string;
-  startedAt: string;
-  durationMs: number | null;
-  status: "running" | "ok" | "error";
-  streamed: boolean;
-  steps: TraceStep[];
-  error: { code: string; message: string } | null;
-}
-
-export interface AnsweredItem {
-  question_id: string;
-  prompt: string;
-  display: string;
-}
-
-export type ConversationEntry =
-  | { id: string; role: "agent"; at: string; message: string | null; questions: Question[]; stage: Stage; runId?: string }
-  | { id: string; role: "user"; at: string; answers: AnsweredItem[]; message: string | null; stop: boolean };
+export type { AnsweredItem, ConversationEntry, TraceRun } from "./session-history";
 
 export interface SessionSnapshot {
   hydrated: boolean;
@@ -53,7 +35,6 @@ export interface ErrorMessages {
   noResult: string;
 }
 
-const MAX_RUNS = 40;
 const MAX_ENTRIES = 120;
 
 const INITIAL: SessionSnapshot = {
@@ -72,12 +53,6 @@ const INITIAL: SessionSnapshot = {
   revision: 0,
 };
 
-function uid(): string {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-}
-
 interface RequestOptions {
   streamed: boolean;
   /** A new session: runs, state and conversation start empty. */
@@ -88,29 +63,25 @@ interface RequestOptions {
   userEntry?: ConversationEntry | null;
   /** Adds A1's answer to the conversation when it says something. */
   agentEntry?: boolean;
+  /**
+   * After a failure, reads the runtime's state back: the request may have written part of its work (A1 fails
+   * after the answers are saved) or all of it (the result was lost on the way, or the page was behind).
+   */
+  resync?: boolean;
+  /** Set on the retry of a failed request. */
+  retrying?: boolean;
 }
+
+/** What a request sends: `retrying` is true when the investor retries it after a failure. */
+type RequestCall = (handlers: StreamHandlers, retrying: boolean) => Promise<ClientState>;
 
 /** A request in flight: what it calls, how it shows, and the trace run that records it. */
 interface PendingRequest {
   action: string;
-  call: (handlers: StreamHandlers) => Promise<ClientState>;
+  call: RequestCall;
   options: RequestOptions;
   run: TraceRun;
   started: number;
-}
-
-function newRun(action: string, { streamed }: Pick<RequestOptions, "streamed">): TraceRun {
-  return { id: uid(), action, startedAt: new Date().toISOString(), durationMs: null, status: "running", streamed, steps: [], error: null };
-}
-
-/** Newest first, at most MAX_RUNS. */
-function withNewRun(runs: TraceRun[], run: TraceRun): TraceRun[] {
-  return [run, ...runs].slice(0, MAX_RUNS);
-}
-
-/** A1's message and questions in a ClientState, as a conversation entry. */
-function agentEntryOf(state: ClientState): Extract<ConversationEntry, { role: "agent" }> {
-  return { id: uid(), role: "agent", at: new Date().toISOString(), message: state.message, questions: state.questions, stage: state.stage };
 }
 
 /**
@@ -319,21 +290,30 @@ export class SessionStore {
         : null;
     return this.execute(
       "followup.reply",
-      (handlers) =>
-        callAgentStream(
+      (handlers, retrying) => {
+        // A retry leaves out the answers the runtime has already written: it would refuse them as not pending.
+        const sent = retrying ? this.stillPending(answers) : answers;
+        return callAgentStream(
           {
             action: "followup.reply",
             client_id: clientId,
-            ...(answers.length ? { answers: answers.map(({ question_id, value }) => ({ question_id, value })) } : {}),
+            ...(sent.length ? { answers: sent.map(({ question_id, value }) => ({ question_id, value })) } : {}),
             ...(message ? { message } : {}),
             ...(input.stop ? { stop: true } : {}),
           },
           handlers,
           this.options(),
-        ),
-      { streamed: true, userEntry, agentEntry: true },
+        );
+      },
+      { streamed: true, userEntry, agentEntry: true, resync: true },
     );
   };
+
+  /** The answers whose question the runtime still waits for, as the last state read says. */
+  private stillPending<T extends { question_id: string }>(answers: T[]): T[] {
+    const pending = new Set(this.snapshot.state?.questions.map((question) => question.id));
+    return answers.filter((answer) => pending.has(answer.question_id));
+  }
 
   updateSettings = (input: { locale?: Locale; knowledge_level?: KnowledgeLevel }): Promise<boolean> => {
     const clientId = this.requireClient();
@@ -384,21 +364,31 @@ export class SessionStore {
     }
   }
 
-  private async execute(
-    action: string,
-    call: (handlers: StreamHandlers) => Promise<ClientState>,
-    options: RequestOptions,
-  ): Promise<boolean> {
+  private async execute(action: string, call: RequestCall, options: RequestOptions): Promise<boolean> {
     if (this.snapshot.pending) return false;
     const request: PendingRequest = { action, call, options, run: newRun(action, options), started: performance.now() };
     this.beginRequest(request);
     try {
-      const result = await call(this.streamHandlers());
+      const result = await call(this.streamHandlers(), Boolean(options.retrying));
       this.completeRequest(request, result);
       return true;
     } catch (error) {
-      this.failRequest(request, toApiError(error));
+      const apiError = toApiError(error);
+      // Still `pending` while the state is read back, so nothing else is sent in between.
+      const fresh = options.resync && apiError.code !== "aborted" ? await this.readBack() : null;
+      this.failRequest(request, apiError, fresh);
       return false;
+    }
+  }
+
+  /** The state the runtime holds now (`session.resume`, no trace run); null if it cannot be read either. */
+  private async readBack(): Promise<ClientState | null> {
+    const clientId = this.snapshot.clientId;
+    if (!clientId) return null;
+    try {
+      return await callAgent({ action: "session.resume", client_id: clientId, locale: this.locale }, ClientStateSchema, this.options());
+    } catch {
+      return null;
     }
   }
 
@@ -428,10 +418,8 @@ export class SessionStore {
 
   private completeRequest({ options, run, started }: PendingRequest, result: ClientState): void {
     const finished: TraceRun = { ...run, status: "ok", steps: result.trace, durationMs: performance.now() - started };
-    // `message` is null after a deterministic transition: nothing to show then.
-    const agentSpoke = Boolean(result.message) || result.questions.length > 0;
     const conversation =
-      options.agentEntry && agentSpoke
+      options.agentEntry && agentSpoke(result)
         ? [
             ...this.snapshot.conversation,
             // Links the message to the trace of the request that produced it.
@@ -453,7 +441,8 @@ export class SessionStore {
     this.persist();
   }
 
-  private failRequest({ action, call, options, run, started }: PendingRequest, apiError: ApiError): void {
+  /** `fresh`: the state read back after the failure, if any (`resync`). */
+  private failRequest({ action, call, options, run, started }: PendingRequest, apiError: ApiError, fresh: ClientState | null): void {
     const failed: TraceRun = {
       ...run,
       status: "error",
@@ -461,18 +450,24 @@ export class SessionStore {
       durationMs: performance.now() - started,
       error: { code: apiError.code, message: apiError.message },
     };
-    this.retryLast = () => this.execute(action, call, options);
+    // The runtime is past the questions on screen (the result was lost on the way, or another tab answered):
+    // its state replaces the error, and A1's last message joins the conversation. Nothing is left to retry.
+    const caughtUp = fresh !== null && movedOn(this.snapshot.state, fresh);
+    this.retryLast = caughtUp ? null : () => this.execute(action, call, { ...options, retrying: true });
+    // The optimistic user entry is dropped: the composer keeps the text for a retry.
+    const conversation = options.userEntry
+      ? this.snapshot.conversation.filter((entry) => entry.id !== options.userEntry?.id)
+      : this.snapshot.conversation;
     this.set({
       pending: null,
       liveRun: null,
       streamText: "",
-      error: apiError,
-      errorAction: action,
+      error: caughtUp ? null : apiError,
+      errorAction: caughtUp ? null : action,
       runs: withNewRun(this.snapshot.runs, failed),
-      // The optimistic user entry is dropped: the composer keeps the text for a retry.
-      conversation: options.userEntry
-        ? this.snapshot.conversation.filter((entry) => entry.id !== options.userEntry?.id)
-        : this.snapshot.conversation,
+      conversation: caughtUp && agentSpoke(fresh) ? [...conversation, agentEntryOf(fresh)] : conversation,
+      // Answered questions leave the screen, so neither a retry nor the next answer is refused as not pending.
+      ...(fresh ? { state: fresh, revision: this.snapshot.revision + 1 } : {}),
     });
     this.persist();
   }

@@ -3,7 +3,7 @@
  * the conversation of that client, in localStorage. Storage may be full or disabled: every
  * access tolerates it, and the session still works for this tab.
  */
-import type { ConversationEntry, TraceRun } from "./session-store";
+import type { ConversationEntry, TraceRun } from "./session-history";
 
 const KEY_CLIENT = "alphaforge.client_id";
 const keyRuns = (id: string) => `alphaforge.runs.${id}`;

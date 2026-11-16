@@ -442,7 +442,7 @@ def write_general_index(store: Store, now: str) -> None:
         type="Index",
         title="Base générale",
         description=(
-            "Index de la base générale : méthodologie, notions financières, sociétés, actualités et données "
+            "Sommaire de la base générale : méthodologie, notions financières, sociétés, actualités et données "
             "publiques datées."
         ),
         tags=["index", "base-generale"],

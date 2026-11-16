@@ -30,7 +30,7 @@ from . import edgar, fetchers, staging
 
 UNITS_FR = {"percent": "%", "CAD per USD": "CAD pour 1 USD", "index": "points d'indice"}
 PROVIDER_NAMES = {
-    "boc": "Banque du Canada (API Valet)",
+    "boc": "Banque du Canada",
     "fred": "FRED, Federal Reserve Bank of St. Louis",
     "yahoo": "Yahoo Finance",
 }
@@ -281,7 +281,7 @@ def series_item(data: fetchers.SeriesData, note: str, run_id: str) -> dict[str, 
         "la date de récupération en est la borne supérieure."
     )
     if note:
-        summary += f" Pertinence (A5) : {note}"
+        summary += f" Pertinence : {note}"
     return staging.new_item(
         item_id=f"series-{staging.series_slug(data.series_id)}-{latest['date']}",
         kind="series",
@@ -324,7 +324,7 @@ def quote_item(quote: fetchers.Quote, note: str, run_id: str) -> dict[str, Any] 
         f"({quote.exchange or 'bourse non précisée'}), source Yahoo Finance; {len(closes)} clôtures quotidiennes."
     )
     if note:
-        summary += f" Pertinence (A5) : {note}"
+        summary += f" Pertinence : {note}"
     return staging.new_item(
         item_id=f"quote-{staging.series_slug(quote.symbol)}-{quote.last_date}",
         kind="quote",

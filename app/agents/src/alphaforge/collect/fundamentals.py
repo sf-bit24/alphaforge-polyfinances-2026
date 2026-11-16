@@ -65,8 +65,8 @@ def _body(item: dict[str, Any], data: dict[str, Any], block: dict[str, Any]) -> 
         "",
         f"Chiffres publiés par {block.get('issuer')} dans ses dépôts à la SEC, selon les normes "
         f"{block.get('accounting_standard')}, en millions de {block.get('reporting_currency')} (bénéfice par action "
-        f"dans la devise, par action). Lus par le code dans EDGAR `companyfacts` (CIK {data.get('cik')}, taxonomie "
-        f"`{data.get('taxonomy')}`), sans modèle. Ils servent à la simulation; rien ici ne constitue un conseil en "
+        "dans la devise, par action). Relevés tels quels dans EDGAR, la base publique de la SEC, selon des règles "
+        "fixes : aucun chiffre n'est estimé. Ils servent à la simulation; rien ici ne constitue un conseil en "
         "placement.",
         "",
         "Chaque période et chaque bilan viennent du premier dépôt qui les publie, et prennent sa date de dépôt comme "
@@ -151,14 +151,14 @@ def sector_activity_doc(item: dict[str, Any], now: str) -> tuple[str, okf.OkfDoc
     digest = staging.short_hash(f"sic|{ticker}|{sic['code']}", 8)
     key = f"{SECTOR_PREFIX}{day}-{digest}.md"
     issuer = block.get("issuer") or ticker
-    title = f"{issuer} ({ticker}) — activité : {ACTIVITY_FR[activity]} (code SIC {sic['code']})"
+    title = f"{issuer} ({ticker}) — activité : {ACTIVITY_FR[activity]}"
     licence = "Données publiques de la SEC (accès équitable : 10 requêtes par seconde, User-Agent déclaré)"
     doc = okf.new_doc(
         type="Fact",
         title=title,
         description=(
-            f"Fact : la SEC classe {issuer} sous le code SIC {sic['code']} ({sic.get('description')}), une activité "
-            f"de la catégorie « {ACTIVITY_FR[activity]} » du questionnaire."
+            f"Fait : la SEC classe l'activité principale de {issuer} comme « {sic.get('description')} », une "
+            f"activité de la catégorie « {ACTIVITY_FR[activity]} » du questionnaire."
         ),
         tags=["faits", "esg", activity, edgar.doc_slug(ticker)],
         owners=["alphaforge-a6"],
@@ -170,7 +170,7 @@ def sector_activity_doc(item: dict[str, Any], now: str) -> tuple[str, okf.OkfDoc
         sources=[
             {
                 "id": f"sec-submissions-{edgar.doc_slug(ticker)}",
-                "title": f"SEC EDGAR, submissions de {issuer} (code SIC)",
+                "title": f"SEC EDGAR, fiche de {issuer} (secteur d'activité)",
                 "resource": sic.get("url"),
                 "retrieved_at": retrieved,
                 "licence": licence,
@@ -204,14 +204,14 @@ def sector_activity_doc(item: dict[str, Any], now: str) -> tuple[str, okf.OkfDoc
                 "",
                 f"- Source : SEC EDGAR — <{sic.get('url')}>",
                 "- Source : U.S. Securities and Exchange Commission, EDGAR",
-                f"- Code SIC : {sic['code']} ({sic.get('description')})",
-                f"- Catégorie d'exclusion du questionnaire : {ACTIVITY_FR[activity]} (`{activity}`)",
+                f"- Activité déclarée à la SEC : {sic.get('description')}",
+                f"- Catégorie d'exclusion du questionnaire : {ACTIVITY_FR[activity]}",
                 f"- Relevé le : {retrieved}",
                 "",
                 "## Limites",
                 "",
-                "- Le code SIC classe l'activité principale déclarée à la SEC, pas la part de revenus par activité.",
-                "- La correspondance code → catégorie est une table fixe du code (`collect/edgar.py`), sans modèle.",
+                "- Ce classement donne l'activité principale déclarée à la SEC, pas la part de revenus par activité.",
+                "- Le lien entre ce classement et la catégorie du questionnaire suit une table fixe.",
                 "",
             ]
         ),

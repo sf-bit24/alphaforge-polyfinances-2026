@@ -31,7 +31,7 @@ function NavTabs({ pathname }: { pathname: string }) {
   const tabs = [
     { href: "/dashboard", label: t.appNav.dashboard },
     { href: "/portfolio", label: t.appNav.portfolio },
-    { href: "/", label: t.appNav.profile },
+    { href: "/profile", label: t.appNav.profile },
     { href: "/knowledge", label: t.appNav.knowledge },
   ];
   return (
@@ -40,7 +40,7 @@ function NavTabs({ pathname }: { pathname: string }) {
       className="order-last -mx-4 -mb-px flex h-11 w-[calc(100%+2rem)] min-w-0 gap-1 overflow-x-auto border-t border-line px-2 [scrollbar-width:none] sm:-mx-8 sm:w-[calc(100%+4rem)] sm:px-6 xl:order-none xl:mx-0 xl:h-16 xl:w-auto xl:border-t-0 xl:px-0"
     >
       {tabs.map((tab) => (
-        <NavTab key={tab.href} href={tab.href} label={tab.label} active={tab.href === "/" ? pathname === "/" : pathname.startsWith(tab.href)} />
+        <NavTab key={tab.href} href={tab.href} label={tab.label} active={pathname.startsWith(tab.href)} />
       ))}
     </nav>
   );

@@ -156,6 +156,18 @@ export const screensFr = {
     sampleTag: "Exemple simulé",
     exampleOnly: "Exemple : cette action n’est pas encore offerte",
   },
+  profilePage: {
+    title: "Mon profil",
+    lead: "Ce que nous savons de vous pour simuler un portefeuille qui vous ressemble. Votre situation change ? Dites-le à Yan : votre profil se met à jour.",
+    glance: "En bref",
+    update: "Mettre à jour avec Yan",
+    resume: "Reprendre le questionnaire",
+    inProgress: "Le questionnaire n’est pas terminé : continuez-le pour compléter votre profil.",
+    restart: "Recommencer à zéro",
+    noneTitle: "Vous n’avez pas encore de profil",
+    noneText: "Quelques questions simples, une à la fois, avec Yan. Environ 5 minutes.",
+    noneCta: "Découvrir mon profil",
+  },
 };
 
 export type Screens = typeof screensFr;
@@ -308,5 +320,17 @@ export const screensEn: Screens = {
     how: (count: number) => `How I answered (${count} step${count > 1 ? "s" : ""})`,
     sampleTag: "Simulated example",
     exampleOnly: "Example: this action is not available yet",
+  },
+  profilePage: {
+    title: "My profile",
+    lead: "What we know about you, to simulate a portfolio that fits you. Has your situation changed? Tell Yan: your profile updates.",
+    glance: "At a glance",
+    update: "Update with Yan",
+    resume: "Resume the questionnaire",
+    inProgress: "The questionnaire is not finished: continue it to complete your profile.",
+    restart: "Start over",
+    noneTitle: "You do not have a profile yet",
+    noneText: "A few simple questions, one at a time, with Yan. About 5 minutes.",
+    noneCta: "Discover my profile",
   },
 };

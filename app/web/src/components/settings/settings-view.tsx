@@ -110,7 +110,7 @@ function KnowledgeCard({ state, saved, busy, onSelect }: { state: ClientState | 
       ) : (
         <p className="px-5 py-4 text-sm text-ink-600">
           {t.settings.knowledgeNeedsSession}{" "}
-          <Link href="/profile" className="font-medium text-navy underline underline-offset-2">
+          <Link href="/" className="font-medium text-navy underline underline-offset-2">
             {t.home.start}
           </Link>
         </p>

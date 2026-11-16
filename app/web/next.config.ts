@@ -24,10 +24,6 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
-  // The profile is built on the journey (/) since the approved drafts; keep old links working.
-  async redirects() {
-    return [{ source: "/profile", destination: "/", permanent: false }];
-  },
 };
 
 export default nextConfig;

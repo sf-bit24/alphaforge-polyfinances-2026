@@ -18,10 +18,11 @@ Les clients ne voient aucun mot technique : ni nom de service, ni identifiant, n
 | `/dashboard` | **Tableau de bord** : tuiles d'indicateurs et assistant. L'assistant s'ouvre sur un paysage (personnage, volée d'oiseaux qui réagit au pointeur et à la saisie), puis devient la conversation avec A1 (`followup.reply`) : relances, questions structurées, arrêt dès 70 %. Chaque réponse porte ses sources et « Comment j'ai répondu », la trace de la requête. |
 | `/portfolio` | **Portefeuille simulé** : la `Decision` du runtime `portfolio` (CONTRACTS.md, section 12), affichée telle quelle pour un profil de démonstration FICTION (Amira, Mateo, Robert) ou, hors mode `mock`, pour son propre profil. Positions cœur et satellite, style et bande de part actions de l'étape 0, classement des titres individuels (momentum en sensibilité seulement), les quatre questions avec l'étiquette FAIT, HYPOTHÈSE ou FICTION de chaque énoncé et ses faits cliquables (valeur, source, étape de trace), contrefactuels, verdicts des lentilles, contrôles du Judge, trace. Bandeau permanent « Simulation éducative — aucun conseil, aucune transaction ». |
 | `/knowledge` | Base de connaissances générale, en trois onglets nommés dans l'URL : `#documents` (liste filtrable par dossiers repliables, les plus récents d'abord dans les dossiers datés, et lecteur aux métadonnées repliées, dont les liens vers un autre document l'ouvrent sur place), `#graph` (graphe des documents, des titres cotés qu'ils citent et de leurs liens, avec une recherche qui centre le nœud trouvé et une vue tableau qu'elle filtre) et `#collect` (collecte A4, A5, A6). |
+| `/profile` | **Mon profil** : ce que nous savons de l'investisseur, en pleine page (complétude, niveau de connaissances, risque effectif, les cinq dimensions, ce qui manque, ses réponses et leur origine, ses documents personnels). « Mettre à jour avec Yan » mène à l'assistant du tableau de bord, ou « Reprendre le questionnaire » au parcours tant que les questions de base ne sont pas finies; « Recommencer à zéro » demande une confirmation. Sans profil, un lien vers le parcours. Le panneau « Profil » du parcours montre les mêmes blocs. |
 | `/settings` | Réglages (langue, niveau de connaissances, session ou compte connecté). |
 | `/login` | Connexion (seulement en `AUTH_MODE=cognito`) : « Se connecter ou créer un compte », vers la connexion gérée de Cognito. |
 
-`/profile` redirige vers `/`.
+Le parcours (`/`) accueille les nouveaux clients; l'onglet « Mon profil » mène à `/profile`.
 
 ### Données d'exemple : mode `mock` seulement
 

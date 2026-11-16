@@ -26,9 +26,9 @@ https://github.com/user-attachments/assets/b2629c28-754f-4717-b255-53ac79fe743f
 
 Les trois flux de bout en bout ont chacun leur diagramme, avec ses étapes numérotées : [création du profil](docs/architecture/diagrams/alphaforge-flux-profil.png), [création du portefeuille](docs/architecture/diagrams/alphaforge-flux-portefeuille.png) et [veille web](docs/architecture/diagrams/alphaforge-flux-veille-web.png). Les sources modifiables (`.drawio`) et les images sont dans [`docs/architecture/diagrams/`](docs/architecture/diagrams/README.md). Les 8 agents déployés et les buckets sont décrits dans [`docs/architecture/agents-et-stockage.md`](docs/architecture/agents-et-stockage.md). Les trois cas d'utilisation (profil, portefeuille, veille web), avec des exemples réels, sont dans [`docs/use-cases/`](docs/use-cases/README.md).
 
-- **Profil** (runtime `profile`) : questions de base déterministes, sans modèle ; A2 lit un portefeuille existant sous n'importe quelle forme, le code le valorise ; A1 relance sur ce qui manque. La complétude est calculée par le code (seuil de 70 %, plafond affiché de 95 %). Chaque investisseur a aussi sa propre Knowledge Base, un index de recherche construit à partir de sa base OKF, où A1 retrouve un passage (une décision passée, une note) ; les chiffres viennent toujours des documents OKF.
-- **Portefeuille simulé** (runtime `portfolio`) : profil traduit en mandat, étape 0 (style et sélection), optimiseur, avocat A3 et quatre lentilles sur deux tours, Judge déterministe, explication ancrée sur des faits sourcés. Aucun poids ni chiffre ne vient d'un modèle.
-- **Veille web** (Step Functions) : collecte toutes les 6 h (A4 presse, A5 données), recherche par experts de sujet (A0, E1 à E7 et leurs chercheurs), validation par A6, puis ingestion dans la Knowledge Base.
+- **Profil** (runtime `profile`) : questions de base déterministes, sans modèle ; l'agent du portefeuille existant lit un portefeuille sous n'importe quelle forme, le code le valorise ; l'agent du profil relance sur ce qui manque. La complétude est calculée par le code (seuil de 70 %, plafond affiché de 95 %). Chaque investisseur a aussi sa propre Knowledge Base, un index de recherche construit à partir de sa base OKF, où l'agent du profil retrouve un passage (une décision passée, une note) ; les chiffres viennent toujours des documents OKF.
+- **Portefeuille simulé** (runtime `portfolio`) : profil traduit en mandat, étape 0 (style et sélection), optimiseur, un avocat et quatre lentilles critiques sur deux tours, Judge déterministe, explication ancrée sur des faits sourcés. Aucun poids ni chiffre ne vient d'un modèle.
+- **Veille web** (Step Functions) : collecte toutes les 6 h (agents de la presse et des données), recherche par experts de sujet (le routeur, les experts et leurs chercheurs), validation par le superviseur, puis ingestion dans la Knowledge Base.
 - **AWS** : 8 runtimes Bedrock AgentCore tirés d'un seul zip de code, Bedrock (Claude Opus 5.5 partout, effort réglé par agent) avec Guardrails, Knowledge Bases sur S3 Vectors (la base générale, et une par client), S3 chiffré par KMS, Step Functions et EventBridge Scheduler, SageMaker Processing, Glue et Athena pour les scénarios, DynamoDB pour la chaîne d'audit, interface sur ECS Fargate derrière un ALB et CloudFront, Cognito pour la connexion des investisseurs (un compte par profil). Détail et justification : [`infrastructure/README.md`](infrastructure/README.md).
 - **Explicabilité** : chaque requête renvoie sa trace (étape déterministe, agent, outil, modèle, stockage, garde-fou, avec leurs sources), affichée à côté du dialogue ; chaque décision de portefeuille garde sa trace X-Ray.
 
@@ -36,12 +36,12 @@ Bases OKF et Knowledge Bases : la base générale n'indexe que `general/` ; chaq
 
 ```mermaid
 flowchart LR
-    P["Runtime profile : questionnaire, A1, A2"] -->|"clients/ : source de vérité"| S3[("S3 + KMS : bases OKF")]
+    P["Runtime profile : questionnaire, agent du profil, agent du portefeuille existant"] -->|"clients/ : source de vérité"| S3[("S3 + KMS : bases OKF")]
     PF["Runtime portfolio"] -->|"decisions/"| S3
     P -->|"crée l'index et la base, IngestKnowledgeBaseDocuments"| CKB["Knowledge Base du client (une par investisseur, S3 Vectors + KMS)"]
     PF -->|"IngestKnowledgeBaseDocuments"| CKB
-    A1["A1"] -->|"Retrieve : base du client de la session"| CKB
-    A1 -->|"Retrieve"| KB["Knowledge Base générale"]
+    AP["Agent du profil"] -->|"Retrieve : base du client de la session"| CKB
+    AP -->|"Retrieve"| KB["Knowledge Base générale"]
     SF["Step Functions : collecte"] -->|"StartIngestionJob"| KB
     KB -->|"indexe general/"| S3
 ```
@@ -90,7 +90,7 @@ Un push sur `master` lance les tests, construit le zip des runtimes et l'image d
 
 - **Jeu de départ des organisateurs** (`app/agents/src/alphaforge/data/starter/`) : 31 actifs, prix quotidiens du 2021-11-12 au 2026-11-12 (Yahoo Finance via yfinance), change USD/CAD (Banque du Canada), 9 séries macroéconomiques (Banque du Canada, FRED). Libre d'utilisation dans le cadre du Datathon; sources, traitements et limites dans `sources_metadata.csv`.
 - **Données longues du moteur de backtest** (`app/agents/src/alphaforge/data/long/`) : rendements mensuels 1926-2026 (Ken French, FRED, Shiller, DataHub pour l'or, Banque du Canada, yfinance et jeu de départ). Seuls le catalogue et `SOURCES.md` sont versionnés ; les parquets se reconstruisent (licences yfinance, Moody's, OCDE), voir [`app/agents/src/alphaforge/finance/backtest/README.md`](app/agents/src/alphaforge/finance/backtest/README.md).
-- **Collecte** (A4, A5) : sources publiques sans clé (Banque du Canada Valet, FRED, Yahoo Finance, flux RSS, GDELT). A6 garde pour chaque document sa source, sa date d'observation et sa date de publication, et rejette ce qui n'en a pas.
+- **Collecte** (agents de la presse et des données) : sources publiques sans clé (Banque du Canada Valet, FRED, Yahoo Finance, flux RSS, GDELT). Le superviseur garde pour chaque document sa source, sa date d'observation et sa date de publication, et rejette ce qui n'en a pas.
 
 ## Avant la fermeture du compte AWS (lundi 16 novembre, fin de journée)
 

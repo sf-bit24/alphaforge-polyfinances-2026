@@ -1,7 +1,7 @@
 ---
 type: Methodology
 title: Tolérance, capacité et risque effectif
-description: Pourquoi la tolérance au risque et la capacité à prendre du risque sont mesurées séparément, et comment le code en tire le risque effectif.
+description: Pourquoi la tolérance au risque et la capacité à prendre du risque sont mesurées séparément, et comment AlphaForge AI en tire le risque effectif selon des règles fixes.
 tags: [methodologie, profil-investisseur, risque]
 status: stable
 owners: [alphaforge-a1]
@@ -34,14 +34,14 @@ permettre ses conséquences (atelier BNCD, diapositive 8).
 - **Risque effectif** : le minimum des deux. Une tolérance élevée ne compense pas une capacité faible, et « risque
   élevé » ne veut pas dire « tout est acceptable » (énoncé officiel, persona Amira).
 
-## Règle appliquée par le code
+## Règle appliquée par AlphaForge AI
 
-Les barèmes sont dans `questionnaire.yaml` (version 2026-11-14.1), à relire par le volet finance de l'équipe. L'échelle
-compte cinq niveaux : faible, faible à moyen, moyen, moyen à élevé, élevé (0 à 4).
+AlphaForge AI calcule le risque effectif selon des règles fixes. L'échelle compte cinq niveaux : faible, faible à
+moyen, moyen, moyen à élevé, élevé (0 à 4).
 
 1. **Tolérance** = partie entière de la moyenne des points de la réaction à une baisse de 20 % (tout vendre 0,
    vendre une partie 1, ne rien changer 3, investir davantage 4) et de l'attitude face aux variations (éviter les
-   baisses 0, petites 1, moyennes 2, fortes 4). Le comportement lors d'une baisse réelle s'y ajoute quand A1 l'a
+   baisses 0, petites 1, moyennes 2, fortes 4). Le comportement lors d'une baisse réelle s'y ajoute quand Yan l'a
    appris et que l'investisseur l'a vécue (a vendu 0, a conservé 3, a investi davantage 4).
 2. **Capacité** = partie entière de la moyenne de trois composantes : fonds d'urgence (0 mois 0, moins de 3 mois 1,
    de 3 à moins de 6 mois 3, 6 mois et plus 4), stabilité des revenus (très stables 4, plutôt stables 3, variables 1,
@@ -50,7 +50,7 @@ compte cinq niveaux : faible, faible à moyen, moyen, moyen à élevé, élevé 
    retrait d'une petite partie sous 12 mois à 3, d'une part importante à 1; effet majeur d'une perte à 1; dette à
    taux élevé à 2.
 3. **Risque effectif** = min(tolérance, capacité). Si une composante requise manque, le risque effectif reste
-   inconnu : le code ne devine aucune valeur.
+   inconnu : AlphaForge AI ne devine aucune valeur.
 
 ## Limites
 

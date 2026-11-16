@@ -52,21 +52,21 @@ soi : c'est une concentration géographique qu'il faut voir et comprendre.
 
 ## Comment AlphaForge AI le repère
 
-Le code analyse un portefeuille existant; le modèle explique. Le constat `home_bias_canada` est levé quand au moins
-60 % de la valeur hors encaisse est cotée à la Bourse de Toronto ou libellée en dollars canadiens. Ce seuil est à relire
-par le volet finance de l'équipe. Les prix viennent du jeu de départ ou de Yahoo Finance, et les positions en dollars
-américains sont converties au dernier taux USD/CAD du jeu de départ.
+Quand Yan lit votre portefeuille existant, AlphaForge AI l'analyse selon des règles fixes. Yan explique; les chiffres
+sont calculés, jamais inventés. Le constat de biais domestique apparaît quand au moins 60 % de la valeur hors encaisse
+est cotée à la Bourse de Toronto ou libellée en dollars canadiens. Les prix viennent du jeu de départ ou de Yahoo
+Finance, et les positions en dollars américains sont converties au dernier taux USD/CAD du jeu de départ.
 
 Pour un portefeuille proposé, le barème ne pose pas de plafond géographique. Ses portefeuilles de référence, qui servent
 à calibrer les niveaux de risque, répartissent le plus souvent la part actions à parts égales entre le Canada et les
-États-Unis (`risk_levels.yaml`, `reference_portfolios`).
+États-Unis.
 
 ## Limites
 
 - **Cotation, pas contenu** : le constat regarde où une position est cotée et sa devise, pas ce qu'elle détient. Un FNB
   coté à Toronto qui détient des actions américaines compte comme canadien. Il faut le lire avec les
   [expositions consolidées](expositions-consolidees.md).
-- **Positions évaluées seulement** : une ligne sans prix n'entre pas dans le calcul, et le code le signale.
+- **Positions évaluées seulement** : une ligne sans prix n'entre pas dans le calcul, et AlphaForge AI le signale.
 - **Un seul compte** : le portefeuille saisi ne montre pas les autres comptes ou actifs de l'investisseur (atelier BNCD,
   diapositive 14).
 

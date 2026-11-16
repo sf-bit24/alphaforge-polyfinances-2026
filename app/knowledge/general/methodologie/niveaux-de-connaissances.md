@@ -28,7 +28,7 @@ l'établit en premier, avant les cinq dimensions du profil, parce qu'il règle l
 
 ## Mesure
 
-Quatre questions rapides, sans modèle :
+Quatre questions rapides, notées selon des règles fixes :
 
 1. la fréquence des placements au cours des trois dernières années (0 à 3 points);
 2. la fréquence du suivi de l'actualité financière ou économique (0 à 3 points);
@@ -39,16 +39,16 @@ Quatre questions rapides, sans modèle :
 Le niveau mesuré est débutant de 0 à 2 points, intermédiaire de 3 à 5, avancé de 6 à 9. Le niveau retenu est
 **min(auto-évaluation, niveau mesuré + 1 cran)** : l'auto-évaluation peut dépasser le niveau mesuré d'un cran au plus,
 et une auto-évaluation plus modeste est respectée. L'investisseur peut changer son niveau dans les réglages; ce choix
-remplace alors le calcul. Le barème est versionné dans `questionnaire.yaml`, à relire par le volet finance de l'équipe.
+remplace alors le calcul.
 
 ## Ce que le niveau change, et ce qu'il ne change pas
 
 - **Change** : le vocabulaire et la précision. Débutant : mots de tous les jours, une idée par phrase, tout terme
   financier défini simplement. Intermédiaire : termes courants brièvement expliqués. Avancé : vocabulaire précis et
   concis.
-- **Ne change pas** : les faits, les chiffres, les sources ni les limites. Les chiffres viennent toujours du code et
-  citent leur source.
+- **Ne change pas** : les faits, les chiffres, les sources ni les limites. Les chiffres sont calculés, jamais
+  inventés, et citent leur source.
 - Une explication crédible répond aux mêmes quatre questions à tous les niveaux : quelles données, pourquoi ce choix,
   quelles limites, qu'est-ce qui changerait la réponse (atelier BNCD, diapositive 12).
-- Quel que soit le niveau, le prototype reste une simulation et ne donne aucun conseil financier personnalisé
+- Quel que soit le niveau, AlphaForge AI reste une simulation et ne donne aucun conseil financier personnalisé
   (énoncé officiel, p. 17).

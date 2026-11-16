@@ -53,22 +53,24 @@ Les chiffres, les sources et les limites sont les mêmes à tous les niveaux; se
 
 ## Comment AlphaForge AI la calcule
 
-Le code fait toutes les conversions; le modèle ne les estime jamais.
+AlphaForge AI fait toutes les conversions selon des règles fixes. Yan les explique; les chiffres sont calculés,
+jamais inventés.
 
-- **Moteur et Judge** : les rendements mensuels sont chargés dans la devise du mandat (CAD par défaut), donc taux de
-  change compris. Avant le début des données USD/CAD (1971-02), aucun rendement en CAD n'est produit.
-- **Portefeuille existant** (A2) : une position en USD est convertie en CAD au dernier taux de `fx_usdcad_daily.csv`
-  (Banque du Canada), avec sa source et sa date; le code en tire l'exposition par devise.
-- **Signal** : si l'investisseur préfère rester en CAD et que plus de 20 % de son portefeuille existant est en USD, le
-  code relève la tension pour l'expliquer.
+- **Simulateur et vérification finale** : les rendements mensuels sont calculés dans la devise du mandat (CAD par
+  défaut), donc taux de change compris. Avant le début des données USD/CAD (1971-02), aucun rendement en CAD n'est produit.
+- **Lecture de votre portefeuille existant** : quand Yan lit votre portefeuille, une position en USD est convertie en
+  CAD au dernier taux publié par la Banque du Canada, avec sa source et sa date. AlphaForge AI en tire l'exposition par
+  devise, selon des règles fixes.
+- **Signal** : si vous préférez rester en CAD et que plus de 20 % de votre portefeuille existant est en USD,
+  AlphaForge AI relève la tension pour que Yan vous l'explique.
 
 ## Limites
 
 - **Dernier taux** : la valeur en CAD d'un portefeuille existant utilise un seul taux, celui du dernier jour
   disponible.
-- **Couverture** : le moteur ne modélise pas le mécanisme de couverture; un FNB couvert est traité à partir de ses
+- **Couverture** : le simulateur ne modélise pas le mécanisme de couverture; un FNB couvert est traité à partir de ses
   propres rendements.
-- **Deux devises** : le moteur ne gère que le CAD et l'USD.
+- **Deux devises** : le simulateur ne gère que le CAD et l'USD.
 - **Passé** : les variations passées du taux ne prédisent pas les suivantes.
 
 ## À ne pas confondre

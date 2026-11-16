@@ -48,11 +48,10 @@ et tolérance au risque, contraintes et préférences, autres comptes et actifs,
 
 ## Application dans AlphaForge AI
 
-- Les questions de base, déterministes et identiques pour tous, couvrent d'abord le niveau de connaissances, puis les
-  cinq dimensions et le contexte (montant à investir), et enfin l'existence d'un portefeuille. Leur contenu est
-  versionné dans `questionnaire.yaml`, à relire par le volet finance de l'équipe.
-- L'agent A1 relance ensuite sur les champs manquants, sans s'écarter du profil; il ne devine aucune valeur.
-- La complétude est la part pondérée des champs requis connus, calculée par le code. Le profil peut servir dès 70 %,
-  et la complétude affichée plafonne à 95 % pour garder une part d'incertitude.
+- Les questions de base sont fixes et identiques pour tous. Elles couvrent d'abord le niveau de connaissances, puis
+  les cinq dimensions et le contexte (montant à investir), et enfin l'existence d'un portefeuille.
+- Yan pose ensuite des questions sur ce qui manque, sans s'écarter du profil. Yan ne devine aucune réponse.
+- La complétude est la part pondérée des réponses requises déjà connues, calculée selon des règles fixes. Le profil
+  peut servir dès 70 %, et la complétude affichée plafonne à 95 % pour garder une part d'incertitude.
 - Cadre responsable : profils et portefeuilles fictifs, simulation seulement, aucune transaction réelle ni conseil
   financier personnalisé (énoncé officiel, p. 17).

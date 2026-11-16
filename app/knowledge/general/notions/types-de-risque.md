@@ -13,7 +13,7 @@ sources:
     title: "Atelier BNCD : comprendre l'investisseur avant de bâtir la solution"
     resource: "Atelier finance du Datathon PolyFinances 2026, diapositive 8 (types de risque et risque pertinent; FINRA, CIRO)"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), sections measurement, composition et limits_template"
 data:
   aliases: [risque, risque de marché, risque de crédit, risque de liquidité, risque de taux, risque de défaut]
@@ -57,24 +57,24 @@ Les faits et les limites sont les mêmes à tous les niveaux; seuls les mots cha
 
 ## Comment AlphaForge AI l'utilise
 
-| Type | Ce que le code mesure ou limite |
+| Type | Ce qu'AlphaForge AI mesure ou limite |
 | --- | --- |
-| Marché | CVaR mensuelle, CVaR sur 12 mois, baisse maximale et stress 2022, bloquants au Judge; volatilité, non bloquante |
-| Taux et inflation | Un plafond de poids pour les obligations à longue durée (`alloc.long_duration`); le stress 2022 capte une année de hausse des taux |
+| Marché | CVaR mensuelle, CVaR sur 12 mois, baisse maximale et stress 2022, bloquants à la vérification finale; volatilité, non bloquante |
+| Taux et inflation | Un plafond de poids pour les obligations à longue durée; le stress 2022 capte une année de hausse des taux |
 | Devise | Rendements calculés en devise du mandat (CAD par défaut), donc taux de change inclus |
-| Concentration | Plafonds par titre, par FNB d'actions et d'exposition à la technologie (`conc.*`, `exp.tech`) |
+| Concentration | Plafonds par titre, par FNB d'actions et d'exposition à la technologie |
 | Crédit | Pas de mesure propre : la poche crédit d'un FNB obligataire est ignorée dans son proxy d'historique |
-| Liquidité | Pas de mesure propre dans le moteur |
+| Liquidité | Pas de mesure propre dans le simulateur |
 
-Les budgets par niveau sont dans `finance/policy/risk_levels.yaml`. Les liens détaillés :
+Chaque niveau de risque a ses propres budgets. Pour le détail :
 [Volatilité](volatilite.md), [VaR et CVaR](var-cvar.md), [Baisse maximale](baisse-maximale.md),
 [Stress test 2022](stress-test-2022.md), [Concentration](concentration.md), [Risque de change](risque-de-change.md).
 
 ## Limites
 
-- **Historique** : les mesures du code reposent sur des rendements passés; un risque qui ne s'est pas encore
+- **Historique** : les mesures d'AlphaForge AI reposent sur des rendements passés; un risque qui ne s'est pas encore
   matérialisé (un défaut, un marché qui se fige) n'y apparaît pas.
-- **Crédit et liquidité** : le moteur ne les chiffre pas; l'explication doit le dire plutôt que de les supposer
+- **Crédit et liquidité** : le simulateur ne les chiffre pas; l'explication doit le dire plutôt que de les supposer
   nuls.
 - **Interactions** : les risques se cumulent; une action américaine porte à la fois un risque de marché, de devise et
   parfois de concentration.

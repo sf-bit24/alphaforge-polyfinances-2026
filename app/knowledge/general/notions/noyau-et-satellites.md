@@ -22,7 +22,7 @@ sources:
     resource: "brain:references/recherche-profil-investisseur.md, section « A published ladder turns the profile into limits » (version française : brain:product/criteres-profil-investisseur.md, poche satellite)"
     retrieved_at: "2026-11-14"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), sections satellites (single_name, sandbox), knowledge (debutant) et status"
     retrieved_at: "2026-11-15T04:20:00Z"
 data:
@@ -66,7 +66,7 @@ Les faits et les limites sont les mêmes à tous les niveaux; seuls les mots cha
 
 ## Comment AlphaForge AI les plafonne
 
-Le code calcule les plafonds; le modèle les explique. Les règles sont dans `risk_levels.yaml`, section `satellites`.
+Les plafonds sont calculés selon des règles fixes, jamais inventés; Yan les explique.
 
 - **Chaque titre** : poids ≤ min(5 %, φ × l* / δ), arrondi au 0,25 % inférieur, avec δ = 0,80 (un titre seul peut
   perdre 80 % de sa valeur) et φ = 0,10. Exemple de calcul, pas un profil : avec une perte acceptable l* de 20 %, un
@@ -75,7 +75,8 @@ Le code calcule les plafonds; le modèle les explique. Les règles sont dans `ri
 - **Total des titres** : ≤ 0,25 × l* / δ, soit 6,25 % dans le même exemple.
 - **Profils plus fragiles** : pas de titres individuels au niveau N0; plafond de 2 % par titre pour un débutant;
   aucun titre individuel pour un profil incomplet ou en protection.
-- **Étape 0** (voir [Étape 0 : style et score des titres](../methodologie/scoring-par-style.md)) :
+- **Choix des titres selon le style** (voir
+  [Choix et score des titres selon le style](../methodologie/scoring-par-style.md)) :
   - **nombre de titres K** : 2 par défaut, 3 pour l'approche « titres individuels », et jamais plus que le plafond
     total divisé par le plafond par titre; K = 0 au niveau N0, pour un profil incomplet, pour un débutant ou en cas
     de faible littératie, et pour l'approche « fonds indiciels »;
@@ -85,17 +86,17 @@ Le code calcule les plafonds; le modèle les explique. Les règles sont dans `ri
     total partagé entre les titres retenus), avec φ = 0,5 en défensive et en dynamique, 0,75 en offensive, et au plus
     3 %. Le [style](style-de-portefeuille.md) change le choix et le plancher, jamais le plafond;
   - **excès de confiance** : un titre de moins (K − 1) et des planchers divisés par deux.
-- **Contrôle** : le Judge vérifie les plafonds par titre et total (`conc.single_each`, `conc.single_total`) et
-  refuse une proposition qui les dépasse (voir [Concentration](concentration.md)).
+- **Vérification finale** : elle contrôle le plafond par titre et le plafond total. Elle refuse une proposition qui
+  les dépasse (voir [Concentration](concentration.md)).
 
-Ces valeurs sont des hypothèses de conception, à valider par l'équipe.
+Ces valeurs sont des hypothèses de conception, encore à valider.
 
 ## Limites
 
 - **Choix de conception** : 5 %, φ = 0,10 et 0,25 ne viennent d'aucune norme.
 - **δ = 0,80 n'est pas un pire cas** : δ part du 75e centile des baisses maximales mensuelles longues des 16 actions
-  du jeu de départ, plus une marge pour les baisses quotidiennes. Une faillite fait perdre 100 %, et un univers choisi en 2026 sous-estime
-  ce risque (voir [Biais du survivant](biais-du-survivant.md)).
+  du jeu de départ, plus une marge pour les baisses quotidiennes. Une faillite fait perdre 100 %, et un univers choisi
+  en 2026 sous-estime ce risque (voir [Biais du survivant](biais-du-survivant.md)).
 - **Le noyau a ses propres concentrations** : un FNB peut être lourd en technologie ou en banques (voir
   [Expositions consolidées](expositions-consolidees.md)).
 

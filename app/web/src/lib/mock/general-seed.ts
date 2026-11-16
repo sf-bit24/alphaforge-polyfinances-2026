@@ -23,6 +23,13 @@ export interface DataSeries {
   body: string;
 }
 
+/** The starter sources under a reader's title: the dataset and its publisher, never a file name. */
+export const GENERAL_SOURCES = {
+  prices: { ...STARTER_SOURCES.prices, title: "Jeu de départ AlphaForge AI : prix quotidiens ajustés (Yahoo Finance)" },
+  fx: { ...STARTER_SOURCES.fx, title: "Jeu de départ AlphaForge AI : taux de change USD/CAD quotidien (Banque du Canada)" },
+  macro: { ...STARTER_SOURCES.macro, title: "Jeu de départ AlphaForge AI : taux et rendements obligataires (Banque du Canada, FRED)" },
+} satisfies Record<string, Source>;
+
 const BNCD: Source = {
   id: "atelier-bncd",
   title: "Atelier BNCD : comprendre l'investisseur avant de bâtir la solution",
@@ -58,7 +65,7 @@ Un profil se décrit en cinq dimensions : **objectif**, **horizon**, **risque**,
 
 ## Risque effectif
 
-Le risque effectif est le **minimum** de la tolérance et de la capacité, calculé par le code. Une tolérance élevée ne compense jamais une capacité faible.
+Le risque effectif est le **minimum** de la tolérance et de la capacité, calculé selon des règles fixes. Une tolérance élevée ne compense jamais une capacité faible.
 
 ## Niveau de connaissances
 
@@ -71,27 +78,27 @@ Voir aussi : [la complétude du profil](completude-du-profil.md) et [le cadre re
   {
     slug: "completude-du-profil",
     title: "Complétude du profil : seuil de 70 %, plafond de 95 %",
-    description: "Comment le code pondère les champs requis du profil et pourquoi l'affichage plafonne à 95 %.",
+    description: "Comment AlphaForge AI pondère les renseignements requis du profil et pourquoi l'affichage plafonne à 95 %.",
     tags: ["profil-investisseur", "gouvernance-explicabilite"],
     sources: [BNCD],
     body: `# Complétude du profil
 
-La complétude est la **part pondérée des champs requis connus**, calculée par le code, de 0 à 1.
+La complétude est la **part pondérée des renseignements requis déjà connus**, calculée selon des règles fixes, de 0 à 1.
 
 - **Seuil de 70 %** : à partir de là, le profil suffit pour continuer et l'investisseur peut s'arrêter.
 - **Plafond de 95 %** : l'affichage ne dépasse jamais 95 %. Un profil n'est jamais parfaitement connu; le plafond garde visible cette part d'incertitude.
 
-Les champs qui pèsent le plus sont l'objectif, l'horizon, la réaction à une baisse et le fonds d'urgence : ce sont eux qui changent le plus la réponse. Les dimensions elles-mêmes sont décrites dans [le profil investisseur](profil-investisseur.md).`,
+Les renseignements qui pèsent le plus sont l'objectif, l'horizon, la réaction à une baisse et le fonds d'urgence : ce sont eux qui changent le plus la réponse. Les dimensions elles-mêmes sont décrites dans [le profil investisseur](profil-investisseur.md).`,
   },
   {
     slug: "expositions-du-portefeuille",
     title: "Expositions d'un portefeuille existant",
     description: "Calcul des expositions par classe d'actifs, devise, marché et secteur, et signaux d'alerte.",
     tags: ["donnees-marche", "construction-portefeuille"],
-    sources: [STARTER_SOURCES.prices, STARTER_SOURCES.fx],
+    sources: [GENERAL_SOURCES.prices, GENERAL_SOURCES.fx],
     body: `# Expositions d'un portefeuille existant
 
-A2 propose des positions normalisées; l'investisseur les corrige puis les confirme. Le **code** calcule ensuite les expositions, jamais le modèle.
+Yan lit le portefeuille et propose la liste des positions; l'investisseur la corrige puis la confirme. Les expositions sont ensuite calculées selon des règles fixes, jamais inventées.
 
 1. Valeur de chaque position = quantité × dernier cours de clôture du jeu de départ (ou valeur déclarée).
 2. Les montants en USD sont convertis au dernier [taux USD/CAD](../donnees/usdcad/usdcad-2026-11.md) de la Banque du Canada.
@@ -110,15 +117,15 @@ Un portefeuille existant montre ce que l'investisseur possède, pas ce dont il a
   {
     slug: "cadre-responsable",
     title: "Cadre responsable d'AlphaForge AI",
-    description: "Simulation seulement, aucun conseil personnalisé, garde-fous et traces observables.",
+    description: "Simulation seulement, aucun conseil personnalisé, vérification des faits et étapes expliquées.",
     tags: ["gouvernance-explicabilite"],
     sources: [CASE],
     body: `# Cadre responsable
 
 - **Simulation seulement** : aucune transaction réelle, aucun conseil financier personnalisé, aucun compte réel.
 - **Faits, hypothèses, scénarios** : chaque chiffre cite sa source et sa date; une incertitude importante est dite clairement.
-- **Garde-fous** : les entrées et les sorties des agents du profil passent par un garde-fou (sujets interdits, renseignements personnels).
-- **Traces** : chaque requête produit une trace des actions observables (règle appliquée, outil appelé, entrées, résultat, sources), sans raisonnement interne du modèle.`,
+- **Vérification des faits** : les réponses de l'investisseur et les messages de Yan sont vérifiés (sujets interdits, renseignements personnels).
+- **Étapes suivies** : pour chaque demande, l'investisseur peut voir comment Yan a procédé (règle appliquée, calcul fait, résultat, sources).`,
   },
 ];
 
@@ -127,7 +134,7 @@ export const DATA_SERIES: DataSeries[] = [
     key: "general/donnees/usdcad/usdcad-2026-11.md",
     title: "Taux de change USD/CAD, novembre 2026",
     description: "Taux quotidien de la Banque du Canada (FXUSDCAD), dernières observations du jeu de départ.",
-    sources: [STARTER_SOURCES.fx],
+    sources: [GENERAL_SOURCES.fx],
     data: {
       series_id: "FXUSDCAD",
       unit: "CAD par USD",
@@ -157,7 +164,7 @@ Taux unique publié vers 16 h 30 (heure de l'Est); aucun taux les jours fériés
     key: "general/donnees/taux-directeur/banque-du-canada-2026-11.md",
     title: "Taux directeur de la Banque du Canada et rendements obligataires",
     description: "Taux cible du financement à un jour et rendements des obligations du Canada à 2 et 10 ans.",
-    sources: [STARTER_SOURCES.macro],
+    sources: [GENERAL_SOURCES.macro],
     data: {
       V39079: { value: 2.5, since: "2026-10-29", previous: 2.25 },
       "BD.CDN.2YR.DQ.YLD": { value: 3.33, observed_at: "2026-11-12" },

@@ -16,7 +16,7 @@ sources:
     title: "Énoncé officiel du défi AlphaForge AI (Datathon PolyFinances 2026)"
     resource: "Énoncé officiel, persona Amira (risque élevé, p. 5) et Encadrement responsable (p. 17)"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml, sections capacity, tolerance, R, biases et status"
 data:
   aliases: [tolérance au risque, capacité de risque, profil de risque, tolérance, capacité]
@@ -51,14 +51,14 @@ conséquences (atelier BNCD, diapositive 8). Les barèmes du questionnaire sont 
 
 - Le questionnaire calcule tolérance, capacité et risque effectif = min des deux; une réponse manquante laisse le risque
   inconnu plutôt que deviné.
-- Le compilateur de mandat (`risk_levels.yaml`) refait ce calcul pour fixer le niveau N0 à N5 : capacité plafonnée par
+- AlphaForge AI refait ce calcul selon des règles fixes pour fixer le niveau N0 à N5 : capacité plafonnée par
   un coussin très faible ou une dette coûteuse, tolérance resserrée par les biais détectés (par exemple l'aversion aux
   pertes ajoute une limite de CDaR). Les biais ne peuvent que resserrer, jamais relâcher.
 - Un profil incomplet est plafonné au niveau N2; un profil en protection reçoit N0 et un renvoi vers un humain.
 
 ## Limites
 
-- Les paramètres de tolérance ne sont pas calibrés psychométriquement (hypothèse notée dans `risk_levels.yaml`).
+- Les paramètres de tolérance ne sont pas calibrés psychométriquement; c'est une hypothèse déclarée.
 - Le calcul décrit un profil fictif; il ne remplace pas l'évaluation de convenance d'un conseiller (énoncé, p. 17).
 
 ## À ne pas confondre

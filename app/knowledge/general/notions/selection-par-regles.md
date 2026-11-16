@@ -22,11 +22,11 @@ sources:
     resource: "https://www.lseg.com/content/dam/ftse-russell/en_us/documents/ground-rules/ftse-global-factor-index-series-ground-rules.pdf, §5.3 (momentum), §5.7 (volatilité), §5.8 (rendement du dividende), §5.9 (bêta) et §6.1 (indices à inclinaisons multiples)"
     retrieved_at: "2026-11-15T04:10:00Z"
   - id: politique-risque
-    title: "Niveaux de risque d'AlphaForge AI (risk_levels.yaml v0.2.0)"
+    title: "Niveaux de risque d'AlphaForge AI"
     resource: "app/agents/src/alphaforge/finance/policy/risk_levels.yaml (v0.2.0), sections satellites.single_name (δ = 0,80) et reference_portfolios (noyau 50/50 CA/US)"
     retrieved_at: "2026-11-15T04:20:00Z"
   - id: starter-readme
-    title: "README du jeu de départ AlphaForge AI"
+    title: "Guide du jeu de départ AlphaForge AI"
     resource: "alphaforge_starter/README.md, section « Things to know before using the data » (biais du survivant)"
     retrieved_at: "2026-11-15T04:20:00Z"
 data:
@@ -36,7 +36,8 @@ data:
 
 # Sélection de titres par règles
 
-À l'étape 0, AlphaForge AI classe les actions individuelles du jeu de départ par des **règles fixes et publiées** :
+Lors du choix des titres selon le style, AlphaForge AI classe les actions individuelles du jeu de départ par des
+**règles fixes et publiées** :
 les mêmes données et le même profil donnent toujours le même classement. Ce classement sert à choisir quelques
 [satellites](noyau-et-satellites.md); le noyau reste en FNB larges. Il décrit des caractéristiques passées mesurées;
 ce n'est ni une prévision ni un conseil personnalisé.
@@ -59,8 +60,8 @@ Les faits et les limites sont les mêmes à tous les niveaux; seuls les mots cha
 - **Le piège à éviter** : « Celui qui a le meilleur rendement historique est le meilleur placement. » Le rendement
   passé décrit le passé (atelier BNCD, diapositive 6). L'objectif du défi n'est pas de retenir ce qui a le plus
   rapporté (énoncé, p. 3).
-- **Des règles, pas une opinion** : chaque critère, son sens et son poids sont publiés; le modèle ne classe rien, il
-  explique un classement calculé par le code.
+- **Des règles, pas une opinion** : chaque critère, son sens et son poids sont publiés. Yan ne classe rien : il
+  explique un classement calculé selon des règles fixes.
 - **Tout est visible** : chaque titre, son rang par critère, son score et la raison d'une exclusion.
 - **Ni prévision, ni conseil** : un bon rang décrit une caractéristique passée, dans une simulation (énoncé, p. 17
   et 18).
@@ -76,17 +77,17 @@ tous les titres individuels, éligibles ou non; une valeur manquante, ou un divi
 | [Bêta](beta.md) | Deux ans de rendements quotidiens contre l'indice local | FTSE §5.9 |
 | [Baisse maximale](baisse-maximale.md) longue | Historique long raccordé à un proxy d'industrie | Même δ que les satellites |
 | [Rendement du dividende](rendement-du-dividende.md) | Dividendes des 12 derniers mois / cours | FTSE §5.8 |
-| Corrélation au noyau | Rendements hebdomadaires en CAD contre un noyau moitié XIU.TO, moitié SPY | `reference_portfolios` |
+| Corrélation au noyau | Rendements hebdomadaires en CAD contre un noyau moitié XIU.TO, moitié SPY | Portefeuille de référence d'AlphaForge AI |
 
 - **Score** : moyenne des rangs pondérée selon le [style](style-de-portefeuille.md), plus 0,10 par bonus. Le style
   défensif favorise une faible volatilité, un bêta bas, une baisse longue limitée, un dividende plus élevé et une
   faible corrélation au noyau; le style dynamique favorise d'abord une faible corrélation au noyau; le style
-  offensif favorise un bêta plus élevé, mais pénalise toujours une baisse longue profonde. Un bonus vient d'un tag
-  lié au style ou d'un intérêt déclaré (sociétés canadiennes, santé, technologie); un intérêt pour les dividendes
+  offensif favorise un bêta plus élevé, mais pénalise toujours une baisse longue profonde. Un bonus vient d'une
+  étiquette du titre liée au style ou d'un intérêt déclaré (sociétés canadiennes, santé, technologie); un intérêt pour les dividendes
   augmente plutôt le poids du dividende. Une exclusion de simple préférence retire 0,10. Aucun bonus ne lève un
   plafond.
 - **Éligibilité** : un titre est écarté, raison à l'appui, si sa baisse maximale longue est inconnue ou dépasse 80 %
-  (le même δ que le plafond des satellites, `risk_levels.yaml`), si sa liquidité est insuffisante, s'il est exclu
+  (le même δ que le plafond des satellites), si sa liquidité est insuffisante, s'il est exclu
   par le mandat ou par une exclusion de valeurs, s'il s'agit d'un titre de l'employeur ou du secteur d'emploi (voir
   [Capital humain](capital-humain.md)), si l'investisseur ne veut que du CAD et que le titre est en USD, ou si son
   secteur est déjà concentré dans le portefeuille existant.
@@ -100,7 +101,7 @@ tous les titres individuels, éligibles ou non; une valeur manquante, ou un divi
 
 **Pourquoi des rangs** : FTSE Russell normalise par scores Z sur des milliers de titres. Sur une vingtaine de titres,
 un rang résiste mieux à une valeur extrême, qui ne peut pas écraser les autres critères. Les poids par style, les
-bonus et toutes les formules sont dans [Étape 0 : style et score des titres](../methodologie/scoring-par-style.md);
+bonus et toutes les formules sont dans [Choix et score des titres selon le style](../methodologie/scoring-par-style.md);
 ce sont des hypothèses de conception, à valider par l'équipe.
 
 ## Limites

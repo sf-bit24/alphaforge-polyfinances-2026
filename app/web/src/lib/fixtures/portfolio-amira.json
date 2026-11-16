@@ -11,7 +11,7 @@
   "decision_id": "dec-amira-v1-fixture",
   "profile_id": "amira",
   "profile_version": 1,
-  "created_utc": "2026-11-16T01:48:14.599474Z",
+  "created_utc": "2026-11-16T02:46:14.956890Z",
   "kind": "proposition",
   "simulation_only": true,
   "positions": [
@@ -8843,6 +8843,48 @@
      }
     ],
     "trace_id": "dec-amira-v1-fixture:t022:allocation:allocation_breakdown"
+   },
+   {
+    "fact_id": "r2.window.first_year",
+    "label_fr": "Première année des rendements mensuels mesurés (titres réels)",
+    "value": 2018,
+    "unit": "année",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "alphaforge.finance.backtest (rendements mensuels, data/long)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "début de la fenêtre 2018-10-31..2026-09-30 des mesures historiques (r2.cvar_m)"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t015:lens.risk:evidence"
+   },
+   {
+    "fact_id": "r2.window.last_year",
+    "label_fr": "Dernière année des rendements mensuels mesurés (titres réels)",
+    "value": 2026,
+    "unit": "année",
+    "currency": null,
+    "as_of": null,
+    "published": null,
+    "status": "FAIT",
+    "sources": [
+     {
+      "dataset": "alphaforge.finance.backtest (rendements mensuels, data/long)",
+      "url": null,
+      "licence": null,
+      "retrieved_utc": null,
+      "sha256": null,
+      "processing": "fin de la fenêtre 2018-10-31..2026-09-30 des mesures historiques (r2.cvar_m)"
+     }
+    ],
+    "trace_id": "dec-amira-v1-fixture:t015:lens.risk:evidence"
    }
   ],
   "constraints": [
@@ -9306,7 +9348,10 @@
    "limits": [
     {
      "text_fr": "Les chiffres décrivent le passé (2018-2026 pour les titres réels, proxys longs étiquetés HYPOTHESE) : ils ne prédisent pas les rendements futurs.",
-     "fact_ids": [],
+     "fact_ids": [
+      "r2.window.first_year",
+      "r2.window.last_year"
+     ],
      "label": "HYPOTHESE"
     },
     {
@@ -9368,8 +9413,8 @@
      "emphasis.diversity",
      "emphasis.constraints"
     ],
-    "started_utc": "2026-11-16T01:48:09.797217Z",
-    "ended_utc": "2026-11-16T01:48:10.005506Z",
+    "started_utc": "2026-11-16T02:46:11.281030Z",
+    "ended_utc": "2026-11-16T02:46:11.371747Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9398,8 +9443,8 @@
      "strat.pi",
      "strat.K"
     ],
-    "started_utc": "2026-11-16T01:48:10.044086Z",
-    "ended_utc": "2026-11-16T01:48:10.090723Z",
+    "started_utc": "2026-11-16T02:46:11.547876Z",
+    "ended_utc": "2026-11-16T02:46:11.602893Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9628,8 +9673,8 @@
      "strat.score.JPM",
      "strat.rank.JPM"
     ],
-    "started_utc": "2026-11-16T01:48:10.090781Z",
-    "ended_utc": "2026-11-16T01:48:12.165356Z",
+    "started_utc": "2026-11-16T02:46:11.602966Z",
+    "ended_utc": "2026-11-16T02:46:13.079846Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9650,8 +9695,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:12.165449Z",
-    "ended_utc": "2026-11-16T01:48:12.165712Z",
+    "started_utc": "2026-11-16T02:46:13.079904Z",
+    "ended_utc": "2026-11-16T02:46:13.080038Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9682,8 +9727,8 @@
      "strat.risk_cost",
      "strat.applied"
     ],
-    "started_utc": "2026-11-16T01:48:12.165747Z",
-    "ended_utc": "2026-11-16T01:48:13.031026Z",
+    "started_utc": "2026-11-16T02:46:13.080064Z",
+    "ended_utc": "2026-11-16T02:46:13.723093Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9709,8 +9754,8 @@
      "r1.active.strat.floor.ENB.TO[ENB.TO]:min",
      "r1.active.alloc.gold:max"
     ],
-    "started_utc": "2026-11-16T01:48:13.036069Z",
-    "ended_utc": "2026-11-16T01:48:13.141452Z",
+    "started_utc": "2026-11-16T02:46:13.729609Z",
+    "ended_utc": "2026-11-16T02:46:13.817493Z",
     "status": "ok",
     "message": null,
     "data_version": null,
@@ -9733,8 +9778,8 @@
      "r1.horizon",
      "r1.recovery"
     ],
-    "started_utc": "2026-11-16T01:48:13.141536Z",
-    "ended_utc": "2026-11-16T01:48:13.214917Z",
+    "started_utc": "2026-11-16T02:46:13.817572Z",
+    "ended_utc": "2026-11-16T02:46:13.857902Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9766,8 +9811,8 @@
      "r1.stress.2020_covid",
      "r1.stress_cad.2020_covid"
     ],
-    "started_utc": "2026-11-16T01:48:13.214970Z",
-    "ended_utc": "2026-11-16T01:48:13.342068Z",
+    "started_utc": "2026-11-16T02:46:13.857958Z",
+    "ended_utc": "2026-11-16T02:46:13.958521Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9796,8 +9841,8 @@
      "r1.lt.energy",
      "r1.lt.financials"
     ],
-    "started_utc": "2026-11-16T01:48:13.342115Z",
-    "ended_utc": "2026-11-16T01:48:13.363929Z",
+    "started_utc": "2026-11-16T02:46:13.958575Z",
+    "ended_utc": "2026-11-16T02:46:13.980710Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9819,8 +9864,8 @@
     "fact_ids": [
      "r1.n_blocking"
     ],
-    "started_utc": "2026-11-16T01:48:13.363981Z",
-    "ended_utc": "2026-11-16T01:48:13.458916Z",
+    "started_utc": "2026-11-16T02:46:13.980758Z",
+    "ended_utc": "2026-11-16T02:46:14.051512Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9879,8 +9924,8 @@
      "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:risk.vol:max",
      "dec-amira-v1-fixture:t010:lens.constraints:evidence:judge:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-16T01:48:13.364585Z",
-    "ended_utc": "2026-11-16T01:48:13.456190Z",
+    "started_utc": "2026-11-16T02:46:13.981385Z",
+    "ended_utc": "2026-11-16T02:46:14.048880Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9900,8 +9945,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:13.458969Z",
-    "ended_utc": "2026-11-16T01:48:13.459017Z",
+    "started_utc": "2026-11-16T02:46:14.051567Z",
+    "ended_utc": "2026-11-16T02:46:14.051622Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9921,8 +9966,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:13.461661Z",
-    "ended_utc": "2026-11-16T01:48:13.463601Z",
+    "started_utc": "2026-11-16T02:46:14.053810Z",
+    "ended_utc": "2026-11-16T02:46:14.054835Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9949,8 +9994,8 @@
      "r2.active.strat.floor.ENB.TO[ENB.TO]:min",
      "r2.active.alloc.gold:max"
     ],
-    "started_utc": "2026-11-16T01:48:13.464192Z",
-    "ended_utc": "2026-11-16T01:48:13.464498Z",
+    "started_utc": "2026-11-16T02:46:14.055047Z",
+    "ended_utc": "2026-11-16T02:46:14.055247Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -9973,8 +10018,8 @@
      "r2.horizon",
      "r2.recovery"
     ],
-    "started_utc": "2026-11-16T01:48:13.464542Z",
-    "ended_utc": "2026-11-16T01:48:13.515338Z",
+    "started_utc": "2026-11-16T02:46:14.055295Z",
+    "ended_utc": "2026-11-16T02:46:14.091668Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10004,10 +10049,12 @@
      "r2.stress.2022_taux",
      "r2.stress_cad.2022_taux",
      "r2.stress.2020_covid",
-     "r2.stress_cad.2020_covid"
+     "r2.stress_cad.2020_covid",
+     "r2.window.first_year",
+     "r2.window.last_year"
     ],
-    "started_utc": "2026-11-16T01:48:13.515385Z",
-    "ended_utc": "2026-11-16T01:48:13.634950Z",
+    "started_utc": "2026-11-16T02:46:14.091738Z",
+    "ended_utc": "2026-11-16T02:46:14.181389Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10036,8 +10083,8 @@
      "r2.lt.energy",
      "r2.lt.financials"
     ],
-    "started_utc": "2026-11-16T01:48:13.635043Z",
-    "ended_utc": "2026-11-16T01:48:13.650067Z",
+    "started_utc": "2026-11-16T02:46:14.181485Z",
+    "ended_utc": "2026-11-16T02:46:14.192941Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10059,8 +10106,8 @@
     "fact_ids": [
      "r2.n_blocking"
     ],
-    "started_utc": "2026-11-16T01:48:13.650113Z",
-    "ended_utc": "2026-11-16T01:48:13.724097Z",
+    "started_utc": "2026-11-16T02:46:14.192996Z",
+    "ended_utc": "2026-11-16T02:46:14.255464Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10119,8 +10166,8 @@
      "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:risk.vol:max",
      "dec-amira-v1-fixture:t017:lens.constraints:evidence:judge:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-16T01:48:13.650717Z",
-    "ended_utc": "2026-11-16T01:48:13.721969Z",
+    "started_utc": "2026-11-16T02:46:14.193878Z",
+    "ended_utc": "2026-11-16T02:46:14.253356Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10140,8 +10187,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:13.724143Z",
-    "ended_utc": "2026-11-16T01:48:13.724187Z",
+    "started_utc": "2026-11-16T02:46:14.255512Z",
+    "ended_utc": "2026-11-16T02:46:14.255560Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10161,8 +10208,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:13.726417Z",
-    "ended_utc": "2026-11-16T01:48:13.726472Z",
+    "started_utc": "2026-11-16T02:46:14.257381Z",
+    "ended_utc": "2026-11-16T02:46:14.257451Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10182,8 +10229,8 @@
     },
     "output_summary": null,
     "fact_ids": [],
-    "started_utc": "2026-11-16T01:48:13.726504Z",
-    "ended_utc": "2026-11-16T01:48:13.802215Z",
+    "started_utc": "2026-11-16T02:46:14.257488Z",
+    "ended_utc": "2026-11-16T02:46:14.326308Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10243,8 +10290,8 @@
      "dec-amira-v1-fixture:t020:judge:check:final:risk.vol:max",
      "dec-amira-v1-fixture:t020:judge:check:final:risk.stress_2022:max"
     ],
-    "started_utc": "2026-11-16T01:48:13.727308Z",
-    "ended_utc": "2026-11-16T01:48:13.799922Z",
+    "started_utc": "2026-11-16T02:46:14.258266Z",
+    "ended_utc": "2026-11-16T02:46:14.322611Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10270,8 +10317,8 @@
      "cf.style.down.n_titres",
      "cf.style.down.band_target"
     ],
-    "started_utc": "2026-11-16T01:48:13.802260Z",
-    "ended_utc": "2026-11-16T01:48:14.590752Z",
+    "started_utc": "2026-11-16T02:46:14.326390Z",
+    "ended_utc": "2026-11-16T02:46:14.941117Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",
@@ -10326,8 +10373,8 @@
      "mix.sector.communication",
      "mix.sector.materials"
     ],
-    "started_utc": "2026-11-16T01:48:14.591006Z",
-    "ended_utc": "2026-11-16T01:48:14.593712Z",
+    "started_utc": "2026-11-16T02:46:14.941475Z",
+    "ended_utc": "2026-11-16T02:46:14.944302Z",
     "status": "ok",
     "message": null,
     "data_version": "008f122d5da4f8f7",

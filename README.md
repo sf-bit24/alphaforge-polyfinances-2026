@@ -8,6 +8,8 @@ Aide à la décision d'investissement agentique et explicable, construite pour l
 
 **Architecture AWS :** la plateforme et les trois flux de bout en bout (profil, portefeuille, veille web) sont dans [`docs/architecture/`](docs/architecture/README.md).
 
+**En une page :** le [one-pager](docs/one-pager/alphaforge-one-pager.pdf) suit une vraie décision de l'application, de la demande de l'investisseur à sa trace d'audit. Les trois cas d'utilisation sont dans [`docs/use-cases/`](docs/use-cases/README.md).
+
 La mémoire du produit (besoin, personas, décisions, architecture) est le Brain de l'équipe : [`sf-bit24/brain`](https://github.com/sf-bit24/brain). Le contrat entre les composants est dans [`app/CONTRACTS.md`](app/CONTRACTS.md).
 
 ## Démo vidéo

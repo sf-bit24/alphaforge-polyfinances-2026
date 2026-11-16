@@ -49,6 +49,11 @@ web_enabled    = true
 web_vpc_id     = "vpc-069adf85dbd931d7f"
 web_subnet_ids = ["subnet-0281babfcae54063f", "subnet-0315eb8575f90e70d", "subnet-05548ee397dc9ba6b"]
 
+# Connexion des investisseurs (auth.tf) : User Pool Cognito, connexion geree,
+# un compte = un client_id. La tache ECS passe en AUTH_MODE=cognito ; le lien
+# direct de l'ALB (HTTP) ne garde alors pas de session.
+auth_enabled = true
+
 additional_tags = {
   Owner = "larpathon"
   Event = "datathon-polyfinances-2026"

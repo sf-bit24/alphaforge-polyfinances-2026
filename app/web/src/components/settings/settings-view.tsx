@@ -5,9 +5,12 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import type { ClientState, GatewayHealth, KnowledgeLevel, Locale } from "@/lib/contract/schemas";
 import { KNOWLEDGE_LEVELS } from "@/lib/contract/schemas";
+import { useAccount } from "@/lib/client/account";
+import type { AccountUser } from "@/lib/contract/auth";
 import { useHealth } from "@/lib/client/health";
 import { useSession } from "@/lib/client/session";
 import { useI18n } from "@/lib/i18n/provider";
+import { SignOutForm } from "@/components/layout/account-menu";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { cn } from "@/components/ui/cn";
@@ -140,6 +143,26 @@ function SessionCard({ clientId, copied, onCopy, onForget }: { clientId: string 
   );
 }
 
+/** With sign-in on: the account, its client_id (the same on every device) and « Se déconnecter ». */
+function AccountCard({ user, copied, onCopy }: { user: AccountUser; copied: boolean; onCopy: () => void }) {
+  const { t } = useI18n();
+  return (
+    <Card>
+      <CardHeader title={t.auth.accountCard} subtitle={t.auth.accountHelp} icon={<UserRound aria-hidden className="size-4" />} />
+      <div className="space-y-3 px-5 py-4">
+        <p className="text-sm font-medium text-navy">{user.email ?? t.auth.noEmail}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <code className="rounded-md bg-ink-50 px-2.5 py-1.5 font-mono text-sm text-ink-800 ring-1 ring-ink-150">{user.client_id}</code>
+          <Button size="sm" variant="secondary" onClick={onCopy} icon={copied ? <Check aria-hidden className="size-4" /> : <Copy aria-hidden className="size-4" />}>
+            {copied ? t.common.copied : t.common.copy}
+          </Button>
+          <SignOutForm />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function ModeRow({ health }: { health: GatewayHealth | null }) {
   const { t } = useI18n();
   return (
@@ -194,6 +217,7 @@ function EnvironmentCard({ health }: { health: GatewayHealth | null }) {
 export function SettingsView() {
   const { t, locale, setLocale } = useI18n();
   const session = useSession();
+  const account = useAccount();
   const { health } = useHealth(locale);
   const [saved, setSaved] = useState<"locale" | "knowledge" | null>(null);
   const [copied, setCopied] = useState(false);
@@ -235,7 +259,11 @@ export function SettingsView() {
 
       <LanguageCard saved={saved === "locale"} busy={busy} onSelect={changeLocale} />
       <KnowledgeCard state={state} saved={saved === "knowledge"} busy={busy} onSelect={changeLevel} />
-      <SessionCard clientId={session.clientId} copied={copied} onCopy={() => void copyId()} onForget={forget} />
+      {account.status === "signed_in" ? (
+        <AccountCard user={account.user} copied={copied} onCopy={() => void copyId()} />
+      ) : (
+        <SessionCard clientId={session.clientId} copied={copied} onCopy={() => void copyId()} onForget={forget} />
+      )}
       <EnvironmentCard health={health} />
     </div>
   );

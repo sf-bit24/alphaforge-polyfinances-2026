@@ -113,6 +113,20 @@ function agentEntryOf(state: ClientState): Extract<ConversationEntry, { role: "a
   return { id: uid(), role: "agent", at: new Date().toISOString(), message: state.message, questions: state.questions, stage: state.stage };
 }
 
+/**
+ * Where the client_id comes from (CONTRACTS.md 7.1): this browser's localStorage (sign-in off), the
+ * signed-in account (the server accepts no other), or nowhere yet (sign-in on, no session).
+ */
+export type ClientBinding = { source: "browser" } | { source: "account"; clientId: string } | { source: "none" };
+
+/** The client_id to resume. An account's id replaces the one of this browser; an anonymous profile is not migrated. */
+function initialClientId(binding: ClientBinding): string | null {
+  if (binding.source === "none") return null;
+  if (binding.source === "browser") return readClientId();
+  if (readClientId() !== binding.clientId) writeClientId(binding.clientId);
+  return binding.clientId;
+}
+
 export interface ReplyInput {
   answers?: Array<{ question_id: string; value: AnswerValue; prompt: string; display: string }>;
   message?: string;
@@ -125,6 +139,7 @@ export class SessionStore {
   private locale: Locale = "fr";
   private messages: ErrorMessages = { network: "Network error", invalidResponse: "Invalid response", noResult: "No result" };
   private initialized = false;
+  private binding: ClientBinding = { source: "browser" };
   private retryLast: (() => Promise<boolean>) | null = null;
 
   subscribe = (listener: () => void): (() => void) => {
@@ -159,11 +174,12 @@ export class SessionStore {
     return { locale: this.locale, messages: this.messages };
   }
 
-  /** Read localStorage once, then resume the stored session if any. */
-  init = async (): Promise<void> => {
+  /** Read localStorage (or the account's client_id) once, then resume the stored session if any. */
+  init = async (binding: ClientBinding = { source: "browser" }): Promise<void> => {
     if (this.initialized) return;
     this.initialized = true;
-    const clientId = readClientId();
+    this.binding = binding;
+    const clientId = initialClientId(binding);
     if (!clientId) {
       this.set({ hydrated: true });
       return;
@@ -187,7 +203,8 @@ export class SessionStore {
     );
     if (!ok && this.snapshot.error?.code === "not_found") {
       clearSessionStorage(clientId);
-      this.set({ ...INITIAL, hydrated: true, notice: "not_found" });
+      // A new account has no base yet: that is expected, `session.start` creates it.
+      this.set({ ...INITIAL, hydrated: true, notice: this.binding.source === "account" ? null : "not_found" });
     } else {
       this.seedConversation();
     }

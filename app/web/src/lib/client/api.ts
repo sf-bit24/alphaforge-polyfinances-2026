@@ -3,6 +3,7 @@
  * contract's zod schemas; streamed responses are read event by event.
  */
 import type { z } from "zod";
+import { DeleteAccountResponse } from "@/lib/contract/auth";
 import { PortfolioBuildResponse, type PortfolioBuildRequestInput } from "@/lib/contract/portfolio";
 import type { AgentRequestInput, CollectRequest } from "@/lib/contract/requests";
 import {
@@ -200,4 +201,10 @@ export async function startCollection(input: CollectRequest, options: CallOption
 export async function buildPortfolio(input: Omit<PortfolioBuildRequestInput, "action">, options: CallOptions): Promise<PortfolioBuildResponse> {
   const response = await send("/api/portfolio", { method: "POST", body: JSON.stringify({ action: "build", ...input }) }, options);
   return parseEnvelope(await readJson(response, options), PortfolioBuildResponse, options, response.status);
+}
+
+/** « Supprimer mon compte » (CONTRACTS.md 7.1): the server deletes the account's data, then its sign-in account. */
+export async function deleteAccount(confirmation: string, options: CallOptions): Promise<DeleteAccountResponse> {
+  const response = await send("/api/auth/delete-account", { method: "POST", body: JSON.stringify({ confirmation }) }, options);
+  return parseEnvelope(await readJson(response, options), DeleteAccountResponse, options, response.status);
 }

@@ -483,8 +483,25 @@ Flux (client d'application public, sans secret) :
 | `GET /api/auth/callback?code&state` | Vérifie `state`, échange le code (`/oauth2/token`), vérifie l'ID token (signature par le JWKS du User Pool, RS256, `iss`, `aud`, `exp`, `token_use = id`, `nonce`), puis pose la session et revient à `next` (un chemin de l'interface seulement : tout chemin qui, normalisé, commence par `//`, contient un antislash, ou vise `/login` ou `/api/` devient `/`). Un échec renvoie à `/login?error=denied\|state\|token`. |
 | `POST /api/auth/logout` | Efface la session, puis `/logout` de Cognito (`logout_uri` = l'interface). Un formulaire venu d'un autre site donne 403 (`forbidden`) : `Sec-Fetch-Site` autre que `same-origin` ou `none`, ou, sans cet en-tête, un `Origin` autre que `APP_URL` et que `null` (avec `Referrer-Policy: no-referrer`, Chrome envoie `Origin: null` même pour le formulaire de l'interface). |
 | `GET /api/auth/me` | `{ "ok": true, "mode": "off", "user": null }`, ou `{ "ok": true, "mode": "cognito", "user": { "email", "client_id", "groups", "admin", "expires_at" } }`; 401 en `cognito` sans session. |
+| `POST /api/auth/delete-account` | « Supprimer mon compte » : corps JSON `{ "confirmation": "SUPPRIMER" }` (ou `DELETE`, sans égard aux espaces ni à la casse). Supprime la base du compte de la session, puis son utilisateur Cognito (voir plus bas), puis répond `{ "ok": true, "deleted": { "knowledge_bases": [ids], "vector_index": "deleted" \| "absent", "objects": n, "account": "deleted" \| "absent" }, "logout_url" }` en effaçant la session ; l'interface vide le `localStorage` de ce client et suit `logout_url` (`/logout` de Cognito), puis `/login` dit « Compte supprimé » (cookie `af_notice`, 5 min, chemin `/login`). 401 sans session, 403 depuis un autre site (même règle que la déconnexion), 400 sans la confirmation, 404 en `AUTH_MODE=off`, 400 en `AGENT_MODE=local`; une étape qui échoue donne 502 (`internal`, `details.step` et `details.completed`) et garde le compte. |
 
 Session : cookie `af_session`, `httpOnly`, `SameSite=Lax`, `Secure` sauf sur `http://localhost`, chiffré et authentifié (AES-256-GCM, clé dérivée de `AUTH_SESSION_SECRET` par HKDF). Il ne contient que `sub`, `email`, `groups`, `client_id` et `exp`, jamais un jeton Cognito. Il expire avec l'ID token (`auth_session_hours`, 8 h par défaut); l'investisseur se reconnecte alors. Un changement de groupe vaut à la connexion suivante.
+
+**Suppression du compte.** Elle est faite par le serveur Next.js, en code déterministe (`app/web/src/lib/server/auth/account-deletion.ts`), jamais par un runtime ni un modèle : les runtimes gardent leur règle (aucun droit de suppression). Le serveur ne supprime que la base du `client_id` de la session, jamais un identifiant venu du corps; le `client_id` doit être un UUID v4 (jamais une base `clients/demo-*`), et chaque clé supprimée doit commencer par `clients/<client_id>/`, vérifié avant chaque appel. Étapes, dans cet ordre, chacune idempotente (ce qui est déjà absent n'est pas une erreur) :
+
+1. la Knowledge Base `<préfixe>-client-<client_id>` (section 5.3), trouvée par son nom (`ListKnowledgeBases`, sans lire `kb.json`), dont les étiquettes `alphaforge:scope=client`, `alphaforge:client_id` et `alphaforge:prefix` sont vérifiées avant `DeleteKnowledgeBase`; sa source `CUSTOM`, en `RETAIN`, part avec elle;
+2. l'index S3 Vectors `client-<client_id>` (`DeleteIndex`);
+3. toutes les versions et tous les marqueurs de suppression sous `clients/<client_id>/` (le bucket est versionné) : `ListObjectVersions` page par page, `DeleteObjects` par lots de 1000; une passe de plus rattrape une écriture encore en cours, trois passes au plus;
+4. l'utilisateur Cognito (`AdminDeleteUser`, nom d'utilisateur = `sub`).
+
+Si une étape échoue, la suite n'a pas lieu : le compte Cognito et la session restent, l'investisseur peut réessayer. Ensuite, le serveur refuse les sessions encore ouvertes de ce compte sur d'autres appareils pendant 24 h (la plus longue session possible); cette liste vit dans le processus du serveur (une tâche ECS par défaut) et se perd à son redémarrage. Une action d'un runtime encore en cours au moment de la suppression (un build du portefeuille, par exemple) peut écrire après la dernière passe.
+
+Ce qui reste, et pourquoi :
+
+- la chaîne d'audit des décisions simulées (`finance/observability/audit.py`) : dans la table DynamoDB `<préfixe>-decisions`, la tête `head#<client_id>` et un maillon par décision (empreintes, numéro, clé du corps), et le corps de chaque décision sous `decisions/<client_id>/` du bucket de traces, en Object Lock GOVERNANCE. La chaîne est faite pour ne jamais se réécrire : en retirer un maillon la rendrait invérifiable. Elle reste liée au `client_id`, qui ne mène plus à aucun courriel une fois l'utilisateur Cognito supprimé;
+- le rejeu LLM (`<préfixe>-llm-replay` et `llm-replay/` du bucket de traces), le journal des invocations Bedrock (réglage du compte AWS), les journaux CloudWatch (14 jours) et les marqueurs `staging/` (expirés par le cycle de vie) : ils ne sont pas rangés par client (clés tirées d'un SHA-256 ou d'un `run_id`).
+
+Le texte de confirmation de l'interface dit ce qui est supprimé, ce qui reste et que c'est irréversible. En `AGENT_MODE=mock`, la suppression est simulée : le client du simulateur et ses documents sont oubliés.
 
 Variables posées par Terraform sur la tâche ECS de l'interface (`web.tf`) :
 
@@ -496,6 +513,9 @@ Variables posées par Terraform sur la tâche ECS de l'interface (`web.tf`) :
 | `COGNITO_DOMAIN` | `https://alphaforge-sandbox-024848478575.auth.us-east-1.amazoncognito.com` | Domaine de la connexion gérée. |
 | `APP_URL` | `https://d2gsaqmfxygugx.cloudfront.net` | Origine publique : URL de retour et de déconnexion. |
 | `AUTH_SESSION_SECRET` | (64 caractères, `random_password`) | Clé du cookie de session. |
+| `ALPHAFORGE_BUCKET` | `alphaforge-sandbox-kb-024848478575` | Bucket des bases OKF : la suppression du compte y vide `clients/<client_id>/`. |
+| `ALPHAFORGE_CLIENT_KB_PREFIX` | `alphaforge-sandbox` | Préfixe des Knowledge Bases des clients et de leur étiquette `alphaforge:prefix`. |
+| `ALPHAFORGE_CLIENT_KB_VECTOR_BUCKET` | `alphaforge-sandbox-client-vectors` | Bucket S3 Vectors des index `client-<client_id>`. |
 
 Limite : l'ALB n'écoute qu'en HTTP (pas de certificat sans nom de domaine), d'où la connexion dans Next.js plutôt que l'action `authenticate-cognito` de l'ALB. Le lien direct de l'ALB (`web_alb_url`) ne garde pas de session : le cookie est `Secure` et Cognito n'accepte un retour en HTTP que sur `localhost`.
 

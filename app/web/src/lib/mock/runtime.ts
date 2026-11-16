@@ -159,6 +159,14 @@ export class MockRuntime {
     return openSession(record, trace);
   }
 
+  /** « Supprimer mon compte », simulated: the client and its documents are forgotten. Its document count, or null if unknown. */
+  forgetClient(id: string): number | null {
+    const record = this.clients.get(id.toLowerCase());
+    if (!record) return null;
+    this.clients.delete(record.id);
+    return record.docs.size;
+  }
+
   private client(id: string): ClientRecord {
     const record = this.clients.get(id.toLowerCase());
     if (!record) {

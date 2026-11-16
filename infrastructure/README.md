@@ -16,7 +16,7 @@ Compte AWS Workshop Studio du Datathon, `us-east-1`, environnement `sandbox`, pr
 | EventBridge Scheduler | `infra/scheduler.tf` | Veille : lance la collecte toutes les 6 heures. |
 | SageMaker Processing + Step Functions | `infra/scenarios.tf` | Scénarios probabilistes (facultatif, `scenarios_enabled`) : un job sur l'image scikit-learn d'AWS calcule la table des scénarios hors du poste, de façon reproductible (image et code figés, entrées et sorties dans S3). Step Functions le lance (`.sync`), écrit `_done.json` puis `scenarios/latest.json`. |
 | ECS Fargate + ALB + CloudFront | `infra/web.tf` | Interface Next.js (`app/web/Dockerfile`), `AGENT_MODE=aws`, image ECR `alphaforge-web:<release_id>`. CloudFront donne le HTTPS sur `*.cloudfront.net` (output `web_url`) ; l'ALB direct (`web_alb_url`, HTTP) garde la connexion 900 s pour un build du portefeuille de plus de 60 s, limite de CloudFront. Tâche en sous-réseau public avec IP publique (pas de NAT), joignable seulement depuis l'ALB. Facultatif (`web_enabled`). |
-| Cognito | `infra/auth.tf` | Connexion des investisseurs (facultatif, `auth_enabled`, activé en sandbox) : User Pool (courriel comme identifiant, inscription libre, courriel vérifié par Cognito, plan Essentials), domaine de connexion gérée (version 2, output `auth_domain`), client d'application public (code + PKCE, sans secret), groupe `admin`. La tâche ECS passe en `AUTH_MODE=cognito` avec un secret de session `random_password`. Un compte = un `client_id` (`app/CONTRACTS.md`, section 7.1). |
+| Cognito | `infra/auth.tf` | Connexion des investisseurs (facultatif, `auth_enabled`, activé en sandbox) : User Pool (courriel comme identifiant, inscription libre, courriel vérifié par Cognito, plan Essentials), domaine de connexion gérée (version 2, output `auth_domain`), client d'application public (code + PKCE, sans secret), groupe `admin`. La tâche ECS passe en `AUTH_MODE=cognito` avec un secret de session `random_password`. Un compte = un `client_id` (`app/CONTRACTS.md`, section 7.1); « Supprimer mon compte » est fait par le serveur Next.js avec les droits `account-deletion` du rôle de la tâche (voir plus bas). |
 | Glue + Athena | `infra/scenarios.tf` | Table `scenarios` (parquet, projection de partition sur `run_id`) interrogeable en SQL pour la validation et la démo, sans base à gérer; résultats chiffrés par la clé du bucket. |
 
 ```mermaid
@@ -116,6 +116,19 @@ aws cognito-idp admin-list-groups-for-user --region us-east-1 \
 ```
 
 Le courriel sert de nom d'utilisateur. Le groupe entre dans l'ID token : la personne se déconnecte puis se reconnecte pour en profiter. `admin-remove-user-from-group` le retire.
+
+Chacun supprime aussi son compte lui-même : menu du compte, « Supprimer mon compte », puis le mot `SUPPRIMER` à taper. Le serveur Next.js le fait, jamais un runtime (`app/CONTRACTS.md`, section 7.1). Droits ajoutés au rôle de la tâche ECS (`<préfixe>-web-task`, politique `account-deletion` de `infra/web.tf`, seulement avec `auth_enabled` et `web_enabled`) :
+
+| Droit | Ressource | Limite |
+| --- | --- | --- |
+| `bedrock:ListKnowledgeBases` | `*` (l'action n'accepte pas de ressource) | Lecture : trouver la base `<préfixe>-client-<client_id>` par son nom. |
+| `bedrock:GetKnowledgeBase`, `bedrock:ListTagsForResource`, `bedrock:DeleteKnowledgeBase` | `knowledge-base/*` | Étiquettes `alphaforge:scope=client` et `alphaforge:prefix=<préfixe>` exigées (`aws:ResourceTag`); refus explicite sur la base générale. Pas de `DeleteDataSource` : la source `CUSTOM`, en `RETAIN`, part avec la base. |
+| `s3vectors:DeleteIndex` | index `client-*` du bucket `<préfixe>-client-vectors` | |
+| `s3:ListBucketVersions` | bucket des bases OKF | `s3:prefix` = `clients/*` seulement. |
+| `s3:DeleteObject`, `s3:DeleteObjectVersion` | `clients/*` | Refus explicite sur `clients/demo-*`. Ni `s3:GetObject` ni KMS : rien n'est lu ni déchiffré. |
+| `cognito-idp:AdminDeleteUser` | le User Pool des investisseurs | |
+
+Le code vérifie en plus que chaque clé supprimée commence par `clients/<client_id>/` (le `client_id` de la session) et que la Knowledge Base porte l'étiquette `alphaforge:client_id` du compte. Restent après la suppression : la chaîne d'audit des décisions simulées (table `<préfixe>-decisions` et `decisions/<client_id>/` du bucket de traces, en Object Lock), faite pour ne jamais se réécrire, et les journaux qui ne sont pas rangés par client.
 
 ## Vérifier en local
 

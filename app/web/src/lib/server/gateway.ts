@@ -21,7 +21,7 @@ import { withHeartbeat } from "./heartbeat";
 import { invokeLocal } from "./local";
 import { sseResponse, sseStreamOf, type Upstream } from "./upstream";
 
-function configOrThrow(): GatewayConfig {
+export function configOrThrow(): GatewayConfig {
   try {
     return getConfig();
   } catch (error) {

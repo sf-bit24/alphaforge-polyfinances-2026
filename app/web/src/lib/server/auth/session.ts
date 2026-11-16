@@ -56,10 +56,44 @@ export function clearedSessionCookie(config: CognitoConfig): string {
   return cookieHeader(SESSION_COOKIE, "", { config, maxAge: 0 });
 }
 
-/** The session sealed in a cookie value, or null if it is missing, altered or expired. */
+/**
+ * A notice for the `/login` page after a redirect through Cognito (`account_deleted`). No secret in it: not httpOnly,
+ * so the page clears it once shown.
+ */
+export const NOTICE_COOKIE = "af_notice";
+export const NOTICE_PATH = "/login";
+
+export function noticeCookie(config: CognitoConfig, notice: "account_deleted"): string {
+  const secure = config.APP_URL.startsWith("https://") ? "; Secure" : "";
+  return `${NOTICE_COOKIE}=${notice}; Path=${NOTICE_PATH}; Max-Age=300; SameSite=Lax${secure}`;
+}
+
+/**
+ * Accounts deleted by this server process (`POST /api/auth/delete-account`), each kept until the last session it
+ * could have opened expires. A session is a sealed cookie the server cannot recall: without this list, a session
+ * still open on another device would go on, and recreate an empty base. One process only (one ECS task by default).
+ */
+const revocations = globalThis as unknown as { __alphaforgeRevoked?: Map<string, number> };
+const revoked = (revocations.__alphaforgeRevoked ??= new Map<string, number>());
+/** The longest session: `auth_session_hours` is at most 24 (variables_auth.tf). */
+const LONGEST_SESSION_SECONDS = 24 * 3600;
+
+export function revokeAccount(session: AccountSession): void {
+  revoked.set(session.sub, nowSeconds() + LONGEST_SESSION_SECONDS);
+}
+
+function isRevoked(session: AccountSession): boolean {
+  const until = revoked.get(session.sub);
+  if (until === undefined) return false;
+  if (until > nowSeconds()) return true;
+  revoked.delete(session.sub);
+  return false;
+}
+
+/** The session sealed in a cookie value, or null if it is missing, altered, expired or of a deleted account. */
 export function sessionOf(value: string | null | undefined, config: CognitoConfig): AccountSession | null {
   const parsed = AccountSession.safeParse(unseal(value, { secret: config.AUTH_SESSION_SECRET, purpose: "session" }));
-  return parsed.success ? parsed.data : null;
+  return parsed.success && !isRevoked(parsed.data) ? parsed.data : null;
 }
 
 /** The session of the request (its `af_session` cookie). */

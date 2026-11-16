@@ -134,6 +134,110 @@ resource "aws_iam_role_policy" "web_task" {
 }
 
 # -----------------------------------------------------------------------------
+# « Supprimer mon compte » (app/CONTRACTS.md section 7.1), avec la connexion
+# seulement : le serveur Next.js, en code deterministe
+# (app/web/src/lib/server/auth/account-deletion.ts), supprime la base du compte
+# de la session, puis son utilisateur Cognito. Jamais un runtime ni un modele :
+# les runtimes n'ont toujours aucun droit de suppression. Le code verifie que
+# chaque cle commence par clients/<client_id>/ ; IAM borne le reste.
+# -----------------------------------------------------------------------------
+locals {
+  web_deletion_count = var.web_enabled && var.auth_enabled ? 1 : 0
+}
+
+data "aws_iam_policy_document" "web_account_deletion" {
+  count = local.web_deletion_count
+
+  # 1. Knowledge Base du client, trouvee par son nom <prefix>-client-<client_id>
+  # (pas de kb.json a lire). ListKnowledgeBases n'accepte pas de ressource.
+  statement {
+    sid       = "FindClientKnowledgeBases"
+    actions   = ["bedrock:ListKnowledgeBases"]
+    resources = ["*"]
+  }
+
+  # Lecture (ARN, statut) et etiquettes, verifiees par le code avant la
+  # suppression ; seulement une base etiquetee alphaforge:scope=client de ce
+  # prefixe. Sa source CUSTOM, en RETAIN, part avec elle sans toucher aux
+  # vecteurs : pas de DeleteDataSource.
+  statement {
+    sid       = "DeleteClientKnowledgeBases"
+    actions   = ["bedrock:GetKnowledgeBase", "bedrock:ListTagsForResource", "bedrock:DeleteKnowledgeBase"]
+    resources = [local.client_kb_arn_pattern]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/alphaforge:scope"
+      values   = ["client"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/alphaforge:prefix"
+      values   = [local.prefix]
+    }
+  }
+
+  # La base generale ne se supprime jamais d'ici, meme etiquetee par erreur.
+  statement {
+    sid       = "KeepGeneralKnowledgeBase"
+    effect    = "Deny"
+    actions   = ["bedrock:DeleteKnowledgeBase", "bedrock:DeleteDataSource"]
+    resources = [aws_bedrockagent_knowledge_base.general.arn]
+  }
+
+  # 2. Index client-<client_id> du bucket des vecteurs des clients.
+  statement {
+    sid       = "DeleteClientIndexes"
+    actions   = ["s3vectors:DeleteIndex"]
+    resources = [local.client_kb_index_arn_pattern]
+  }
+
+  # 3. Toutes les versions et tous les marqueurs de suppression sous
+  # clients/<client_id>/ (bucket versionne). Ni lecture d'objet ni KMS : lister
+  # et supprimer des versions ne dechiffre rien.
+  statement {
+    sid       = "ListClientVersions"
+    actions   = ["s3:ListBucketVersions"]
+    resources = [aws_s3_bucket.this.arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["clients/*"]
+    }
+  }
+
+  statement {
+    sid       = "DeleteClientVersions"
+    actions   = ["s3:DeleteObject", "s3:DeleteObjectVersion"]
+    resources = ["${aws_s3_bucket.this.arn}/clients/*"]
+  }
+
+  # Les bases de demonstration FICTION (clients/demo-<persona>/) restent.
+  statement {
+    sid       = "KeepDemoBases"
+    effect    = "Deny"
+    actions   = ["s3:DeleteObject", "s3:DeleteObjectVersion"]
+    resources = ["${aws_s3_bucket.this.arn}/clients/demo-*"]
+  }
+
+  # 4. L'utilisateur, en dernier (nom d'utilisateur = sub du compte).
+  statement {
+    sid       = "DeleteInvestorUser"
+    actions   = ["cognito-idp:AdminDeleteUser"]
+    resources = [aws_cognito_user_pool.investors[0].arn]
+  }
+}
+
+resource "aws_iam_role_policy" "web_account_deletion" {
+  count  = local.web_deletion_count
+  name   = "account-deletion"
+  role   = aws_iam_role.web_task[0].id
+  policy = data.aws_iam_policy_document.web_account_deletion[0].json
+}
+
+# -----------------------------------------------------------------------------
 # Reseau : ALB public, taches joignables seulement depuis l'ALB.
 # -----------------------------------------------------------------------------
 data "aws_ec2_managed_prefix_list" "cloudfront" {
